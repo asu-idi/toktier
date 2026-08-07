@@ -1,0 +1,10 @@
+# Configure strict Python linting for the supported interpreter baseline.
+target-version = "py310"
+line-length = 88
+
+[lint]
+select = ["B", "E", "F", "I", "RUF", "SIM", "UP"]
+
+[lint.per-file-ignores]
+# The blind conformance suite inserts src on sys.path before importing.
+"tests/conformance/*" = ["E402"]

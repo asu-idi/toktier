@@ -1,0 +1,51 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software in your research, please cite the paper below.
+title: toktier
+abstract: >-
+  Correctness-first tokenization with a certified fast path: a Python library
+  that produces token IDs equal to a frozen Hugging Face tokenizers reference,
+  routes requests to GPU or CPU backends only where certification evidence
+  covers the exact tokenizer artifact, and keeps append-style session state in a
+  persistent store that is verified on hit.
+type: software
+license: Apache-2.0
+repository-code: "https://github.com/asu-idi/toktier"
+
+authors:
+  - family-names: Zhang
+    given-names: Zhenyu
+  - family-names: Cao
+    given-names: Zhichao
+
+version: "0.1.0"
+date-released: "2026-08-07"
+
+keywords:
+  - tokenization
+  - byte-pair-encoding
+  - wordpiece
+  - gpu
+  - cuda
+  - llm-serving
+  - correctness
+
+identifiers:
+  - type: other
+    value: "arXiv:2607.29678"
+    description: Paper describing the system
+
+preferred-citation:
+  type: article
+  title: >-
+    TokTier: Exact Stateful CPU+GPU Tokenization for Agentic LLM Serving
+  authors:
+    - family-names: Zhang
+      given-names: Zhenyu
+    - family-names: Cao
+      given-names: Zhichao
+  year: 2026
+  url: "https://arxiv.org/abs/2607.29678"
+  identifiers:
+    - type: other
+      value: "arXiv:2607.29678"

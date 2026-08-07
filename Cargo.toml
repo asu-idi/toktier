@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/toktier-store-core",
+    "crates/toktier-store-sqlite",
+    "crates/toktier-py",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/asu-idi/toktier"
+
+[workspace.dependencies]
+# Hash primitive for the store format (pinned; first fetch recorded
+# 2026-08-04).
+sha2 = "=0.11.0"
+# SQLite tier: bundled build so the library file is owned by this Rust
+# process alone, with no system-library skew. First fetch 2026-08-05.
+rusqlite = { version = "=0.39.0", features = ["bundled"] }
+# Python facade binding. abi3 keeps one wheel per platform;
+# extension-module leaves symbol resolution to the host interpreter.
+pyo3 = { version = "=0.23.5", features = ["abi3-py310", "extension-module"] }
+
+[profile.release]
+lto = true
+codegen-units = 1

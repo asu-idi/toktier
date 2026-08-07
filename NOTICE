@@ -1,0 +1,14 @@
+toktier — correctness-first tokenization toolkit
+Copyright 2026 The TokTier Authors
+
+This product includes software developed as part of a research project on
+tokenization correctness and certification.
+
+The core wheel includes a modified native module derived from Gigatoken,
+Copyright (c) 2026 Marcel Rød, under the MIT License. Its upstream license,
+TokTier modification notice, dependency SBOM, and complete dependency-license
+bundle accompany the distribution; see THIRD_PARTY_NOTICES.
+
+Other portions interoperate with third-party tokenizer artifacts distributed
+by their respective owners under their own licenses. Artifact provenance is
+pinned by repository revision and SHA-256 in the release manifest.

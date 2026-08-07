@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Rust
+target/
+Cargo.lock.orig
+
+# Native build output
+*.so
+*.o
+*.a
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Local scratch
+.tmp/

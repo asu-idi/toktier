@@ -1,0 +1,119 @@
+# Distribution metadata for the toktier Python package (maturin mixed layout).
+#
+# Layout: Python sources live under `src/toktier`, the compiled part is the
+# private native module built from `crates/toktier-py`. The core package has
+# no torch dependency and imports without a GPU, without CUDA and without
+# network access; the GPU path is an explicit extra.
+
+[build-system]
+requires = ["maturin>=1.9,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "toktier"
+description = "Correctness-first tokenization with a certified fast path."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES"]
+# Package version axis (versioning.md axis 1). Taken from the Cargo package
+# so that the wheel, the sdist and the crate cannot drift apart.
+dynamic = ["version"]
+authors = [
+    { name = "Zhenyu Zhang" },
+    { name = "Zhichao Cao" },
+]
+keywords = [
+    "tokenization",
+    "byte-pair-encoding",
+    "wordpiece",
+    "gpu",
+    "cuda",
+    "llm-serving",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Linguistic",
+    "Typing :: Typed",
+]
+dependencies = [
+    # Reference tokenization oracle. Deliberately not pinned here: the
+    # certified version set is expressed by the support registry, and the
+    # runtime labels a version outside that set as reference-only instead of
+    # blocking the install (registry.md section 2).
+    "tokenizers",
+    # Artifact retrieval from the upstream hub.
+    "huggingface-hub>=0.30",
+    # Platform-conventional cache and state directories (config.md section 5).
+    "platformdirs>=3.0",
+    # Compatibility TOML parser for Python 3.10; 3.11+ provides tomllib.
+    "tomli>=2.0; python_version<'3.11'",
+]
+
+[project.optional-dependencies]
+# Prebuilt delivery mode for the GPU backend: the shipped fatbin is loaded
+# through the CUDA driver API (bound via the standard library's ctypes over
+# the user's own libcuda), so no nvcc, ninja or first-load compile is needed.
+# The driver floor is the r580 generation (CUDA 13); older drivers fall back
+# to the JIT delivery with the reason stated.
+gpu = [
+    "torch~=2.11",
+    # Table export produces contiguous device-upload buffers.
+    "numpy>=1.24",
+]
+# JIT delivery mode for the GPU backend: the kernels are compiled on the
+# user's machine, which needs torch plus a matching CUDA toolkit that the
+# build system can discover (CUDA_HOME, CUDA_PATH, nvcc on PATH, or
+# /usr/local/cuda). Loose bounds on purpose; the binding to a certified
+# build is done by digest verification at load time, not by the resolver.
+gpu-jit = [
+    "torch~=2.11",
+    "ninja~=1.11",
+    # Table export produces contiguous device-upload buffers.
+    "numpy>=1.24",
+]
+
+[project.urls]
+Homepage = "https://github.com/asu-idi/toktier"
+Repository = "https://github.com/asu-idi/toktier"
+
+[dependency-groups]
+# Development groups, aligned with the checks CI runs (ruff.toml, mypy.ini).
+# jsonschema serves the registry/evidence verifiers (tools/*.py --check)
+# and the schema-validation tests; it is not a runtime dependency.
+test = ["pytest>=7.0", "jsonschema>=4.0"]
+lint = ["ruff>=0.6", "mypy>=1.11"]
+
+[tool.maturin]
+# The native module is delivered by the store lane's binding crate.
+manifest-path = "crates/toktier-py/Cargo.toml"
+python-source = "src"
+# Private, typed native module (ARCHITECTURE.md section 4). The binding
+# crate's `[lib] name` has to match the last component of this path, so the
+# crate must expose `_native`.
+module-name = "toktier._native"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+# Tests run against the source tree; an editable or wheel install is
+# exercised separately by the packaging smoke suite.
+pythonpath = ["src"]
+# importlib mode allows equal basenames across test tiers
+# (tests/test_config.py vs tests/conformance/test_config.py).
+addopts = "-ra --import-mode=importlib"
+
+[project.scripts]
+toktier = 'toktier.cli:main'

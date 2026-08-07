@@ -15,6 +15,7 @@ Cargo.lock.orig
 
 # Native build output
 *.so
+!src/toktier/_vendor/gigatoken_rs.abi3.so
 *.o
 *.a
 

@@ -1,0 +1,102 @@
+{
+  "schema": "toktier.fast_repair_families.v1",
+  "config_id": "toktier-fast-repair-v1",
+  "source": "archived frozen repair tables",
+  "pclass": {
+    "file": "repair_pclass.v1.zlib",
+    "encoding": "zlib(raw uint8[0x110000])",
+    "labels": "OSLNM",
+    "raw_sha256": "5a424dd9a272fa9fad6a125b77b89243ab77b23f817f32693ca8728ab412b202",
+    "compressed_sha256": "f72a41cd8d27cd951c037b0a1e1a8ce45a7faf91870e01e19c8f61a2373ead47"
+  },
+  "families": [
+    {
+      "family": "deepseek_v3",
+      "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
+      "margin": 23,
+      "effective_l_max": 128,
+      "has_normalizer": true,
+      "source_table_sha256": "ad2abd4083a8d33bd7ddab6da5303dfd94f5bf908c891b2bae0bc7eea803eacd"
+    },
+    {
+      "family": "deepseek_v4_flash",
+      "artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+      "margin": 36,
+      "effective_l_max": 128,
+      "has_normalizer": true,
+      "source_table_sha256": "fb71ba46424a0f34902ab58972a79adbb26d2f3005f9d18a57ab9349cf4de417"
+    },
+    {
+      "family": "glm_5_2",
+      "artifact_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+      "margin": 26,
+      "effective_l_max": 512,
+      "has_normalizer": false,
+      "source_table_sha256": "4acfed78a6771eea6d6bfacf5217b3198140296ecf37fa37dd296e0f7d314dc0"
+    },
+    {
+      "family": "gpt_oss_120b",
+      "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+      "margin": 19,
+      "effective_l_max": 128,
+      "has_normalizer": false,
+      "source_table_sha256": "55a2aaf6d0f2cd3bf0d9e4f3b23ebad5dd12c747f41e147f37ae6fd3daa37d30"
+    },
+    {
+      "family": "llama_3_1_8b",
+      "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
+      "margin": 30,
+      "effective_l_max": 128,
+      "has_normalizer": false,
+      "source_table_sha256": "ef80a63a39e130cff5687d2ef4facc6b09fb1e6381b207673e268d20a920669c"
+    },
+    {
+      "family": "minimax_m3",
+      "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
+      "margin": 31,
+      "effective_l_max": 128,
+      "has_normalizer": true,
+      "source_table_sha256": "55d8a15d224470e54b18687fc235bc09c1e17514d9e1e6413407909001de730b"
+    },
+    {
+      "family": "ministral_3_8b",
+      "artifact_sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135",
+      "margin": 18,
+      "effective_l_max": 76,
+      "has_normalizer": false,
+      "source_table_sha256": "8fdb7442b33e8d872506c8a6d87161821048b25cc424d584fbafb2c32e04baf2"
+    },
+    {
+      "family": "nemotron_3_nano_4b",
+      "artifact_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+      "margin": 18,
+      "effective_l_max": 76,
+      "has_normalizer": false,
+      "source_table_sha256": "16e19fc01e63248b2b1e2d1ea120e49922732fe553f2ccb033313a1fbb94698a"
+    },
+    {
+      "family": "olmo_3_7b",
+      "artifact_sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca",
+      "margin": 19,
+      "effective_l_max": 128,
+      "has_normalizer": false,
+      "source_table_sha256": "634aaad1d72fc123c93c3a9b1d8a92ab4415f39e441a8983cfe4f4dba1333857"
+    },
+    {
+      "family": "qwen3_5_08b",
+      "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+      "margin": 21,
+      "effective_l_max": 128,
+      "has_normalizer": true,
+      "source_table_sha256": "fadbd7e68752af2052a8e05365e0af5cd680f55830fab148b10157e0263e8857"
+    },
+    {
+      "family": "qwen3_8b",
+      "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "margin": 20,
+      "effective_l_max": 128,
+      "has_normalizer": true,
+      "source_table_sha256": "18791957b1f5b625087ec4d0914d759db7148b126ce1f83d79f0b90892ee4692"
+    }
+  ]
+}

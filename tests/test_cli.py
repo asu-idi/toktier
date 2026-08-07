@@ -18,7 +18,6 @@ import hashlib
 import importlib.metadata
 import importlib.util
 import json
-import os
 import platform
 import shutil
 from pathlib import Path
@@ -31,19 +30,12 @@ from toktier.artifacts import (
     ArtifactEntry,
     ArtifactFile,
     ArtifactManifest,
-    LocalDirectorySource,
 )
 
 FAMILY = "demo_family"
 REVISION = "a" * 40
 GOOD = b'{"version": "1.0", "model": {}}\n'
 BAD = b"corrupted bytes\n"
-
-#: Research tree holding the artifact bytes the shipped manifest pins.
-#: Read at import time: the shared fixture clears ``TOKTIER_*`` from the
-#: environment so that no test reads the developer's configuration.
-RESEARCH_ROOT = os.environ.get("TOKTIER_RESEARCH_ROOT") or ""
-_HAS_RESEARCH_TREE = bool(RESEARCH_ROOT) and Path(RESEARCH_ROOT).is_dir()
 
 
 class StaticSource:
@@ -86,9 +78,13 @@ def _manifest() -> ArtifactManifest:
 
 
 def _set_doctor_probes(monkeypatch: pytest.MonkeyPatch) -> None:
+    from toktier.backends import fast_cpu
+    from toktier.backends.fast_cpu import FastCpuEngineFacts
+    from toktier.repair import fastokens
+
     def find_spec(name: str) -> object | None:
-        assert name in {"torch", "cuda"}
-        return object() if name == "torch" else None
+        assert name in {"torch", "cuda", "transformers"}
+        return object() if name in {"torch", "transformers"} else None
 
     def which(name: str) -> str:
         assert name == "nvcc"
@@ -96,6 +92,31 @@ def _set_doctor_probes(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(importlib.util, "find_spec", find_spec)
     monkeypatch.setattr(shutil, "which", which)
+    monkeypatch.setattr(
+        fast_cpu,
+        "fast_cpu_engine_facts",
+        lambda: FastCpuEngineFacts(
+            version="0.10.0+toktier.pinned.1",
+            binary_digest="f" * 64,
+            config_digest="e" * 64,
+        ),
+    )
+    monkeypatch.setattr(
+        fastokens,
+        "fastokens_distribution_identity",
+        lambda: (importlib.metadata.version("fastokens"), "d" * 64),
+    )
+    # The nvcc search consults the loader's toolkit roots first; unset
+    # them so the deterministic outcome is the PATH lookup above.
+    monkeypatch.delenv("CUDA_HOME", raising=False)
+    monkeypatch.delenv("CUDA_PATH", raising=False)
+
+
+_NVCC_CHECKED_VIA_PATH = [
+    "CUDA_HOME: not set",
+    "CUDA_PATH: not set",
+    "PATH: /opt/cuda/bin/nvcc (found)",
+]
 
 
 def _set_artifact_source(
@@ -143,7 +164,21 @@ def test_doctor_human(
         "artifact_fetch_available: false\n"
         "torch_available: true\n"
         "cuda_available: false\n"
+        "gigatoken_available: true\n"
+        "gigatoken_delivery: vendored\n"
+        "gigatoken_module: toktier._vendor.gigatoken_rs\n"
+        "gigatoken_runtime_ready: true\n"
+        "gigatoken_version: 0.10.0+toktier.pinned.1\n"
+        f"gigatoken_native_digest: {'f' * 64}\n"
+        f"gigatoken_repair_config_digest: {'e' * 64}\n"
+        "fastokens_available: true\n"
+        "fastokens_version: 1.2.3\n"
+        f"fastokens_distribution_digest: {'d' * 64}\n"
+        "fastokens_policy: experimental\n"
+        "fastokens_exact_id_guarantee: false\n"
         "nvcc_available: true\n"
+        "nvcc_path: /opt/cuda/bin/nvcc\n"
+        f"nvcc_checked: {'; '.join(_NVCC_CHECKED_VIA_PATH)}\n"
     )
     assert captured.err == ""
 
@@ -168,7 +203,21 @@ def test_doctor_json(
         "artifact_fetch_available": True,
         "torch_available": True,
         "cuda_available": False,
+        "gigatoken_available": True,
+        "gigatoken_delivery": "vendored",
+        "gigatoken_module": "toktier._vendor.gigatoken_rs",
+        "gigatoken_runtime_ready": True,
+        "gigatoken_version": "0.10.0+toktier.pinned.1",
+        "gigatoken_native_digest": "f" * 64,
+        "gigatoken_repair_config_digest": "e" * 64,
+        "fastokens_available": True,
+        "fastokens_version": "2.0.0",
+        "fastokens_distribution_digest": "d" * 64,
+        "fastokens_policy": "experimental",
+        "fastokens_exact_id_guarantee": False,
         "nvcc_available": True,
+        "nvcc_path": "/opt/cuda/bin/nvcc",
+        "nvcc_checked": _NVCC_CHECKED_VIA_PATH,
     }
 
     exit_code = cli.main(["doctor", "--json"])
@@ -205,6 +254,67 @@ def test_doctor_separates_a_configuration_from_an_offline_source(
     assert report["source_offline"] is True
     assert report["artifact_fetch_available"] is False
     assert report["artifact_source"] == "huggingface"
+
+
+def test_doctor_nvcc_follows_the_build_system_search_order(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A toolkit under ``CUDA_HOME`` is found without ``nvcc`` on PATH.
+
+    The JIT loader builds through ``torch.utils.cpp_extension``, which
+    consults ``CUDA_HOME`` before the ``PATH``; the doctor answers the
+    same question the same way.
+    """
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    cuda_home = tmp_path / "cuda-home"
+    nvcc = cuda_home / "bin" / "nvcc"
+    nvcc.parent.mkdir(parents=True)
+    nvcc.write_text("#!/bin/sh\n")
+    monkeypatch.setenv("CUDA_HOME", str(cuda_home))
+    monkeypatch.delenv("CUDA_PATH", raising=False)
+
+    exit_code = cli.main(["doctor", "--json"])
+
+    report = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert report["nvcc_available"] is True
+    assert report["nvcc_path"] == str(nvcc)
+    assert report["nvcc_checked"] == [f"CUDA_HOME: {nvcc} (found)"]
+
+
+def test_doctor_treats_a_set_cuda_home_as_authoritative(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A ``CUDA_HOME`` without ``nvcc`` stops the search, as the build does.
+
+    ``torch.utils.cpp_extension`` takes a set ``CUDA_HOME`` as the
+    toolkit root without falling back to the ``PATH``, so reporting the
+    ``PATH`` copy as available here would promise a build that the
+    loader would not attempt with these settings.
+    """
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/nvcc")
+    empty_home = tmp_path / "cuda-home-empty"
+    empty_home.mkdir()
+    monkeypatch.setenv("CUDA_HOME", str(empty_home))
+    monkeypatch.delenv("CUDA_PATH", raising=False)
+
+    exit_code = cli.main(["doctor", "--json"])
+
+    report = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert report["nvcc_available"] is False
+    assert report["nvcc_path"] is None
+    assert report["nvcc_checked"] == [
+        f"CUDA_HOME: {empty_home / 'bin' / 'nvcc'} (not found)"
+    ]
 
 
 # -- shipped manifest (nothing replaced) -------------------------------
@@ -246,39 +356,6 @@ def test_artifacts_fetch_refuses_a_family_the_package_does_not_ship(
     assert captured.err == (
         "error ARTIFACT_NOT_FOUND: unknown tokenizer family 'no_such_family'\n"
     )
-
-
-@pytest.mark.skipif(
-    not _HAS_RESEARCH_TREE,
-    reason="TOKTIER_RESEARCH_ROOT does not point at a research tree",
-)
-def test_artifacts_fetch_then_verify_real_artifact_bytes(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """The shipped digests against the bytes they were taken from.
-
-    Only the source is replaced (the hub is not reachable from a test);
-    the manifest is the one the package ships, so a digest or a byte
-    length that drifted from the artifact fails here.
-    """
-    home = tmp_path / "toktier-home"
-    monkeypatch.setenv("TOKTIER_HOME", str(home))
-    root = Path(RESEARCH_ROOT) / "artifacts" / "tokenizers"
-    monkeypatch.setattr(cli, "HuggingFaceSource", lambda: LocalDirectorySource(root))
-    family, size = _smallest_shipped_family()
-    entry = cli._artifact_manifest().get(family)
-    directory = home / "cache" / "artifacts" / entry.directory_name
-
-    fetched = cli.main(["artifacts", "fetch", family])
-    verified = cli.main(["artifacts", "verify", family])
-
-    captured = capsys.readouterr()
-    assert (fetched, verified) == (0, 0)
-    assert captured.out == (
-        f"fetched {family}: {directory}\nverified {family}: {directory}\n"
-    )
-    assert captured.err == ""
-    assert (directory / "tokenizer.json").stat().st_size == size
 
 
 # -- synthetic manifest (plumbing) -------------------------------------

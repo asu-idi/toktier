@@ -6,6 +6,7 @@ import argparse
 import importlib.metadata
 import importlib.util
 import json
+import os
 import platform
 import shutil
 import sys
@@ -51,6 +52,53 @@ def _toktier_version() -> str:
         return __version__
 
 
+def _nvcc_search() -> tuple[str | None, list[str]]:
+    """Locate ``nvcc`` the way the JIT loader's build system does.
+
+    The kernel loader delegates compilation to the torch extension
+    build system, which resolves the CUDA toolkit in this order: the
+    ``CUDA_HOME`` environment variable, then ``CUDA_PATH``, then the
+    ``nvcc`` on ``PATH``, then the conventional ``/usr/local/cuda``
+    root. This check walks the same order without importing torch and
+    records every location it consulted, so the report names where it
+    looked rather than answering from a single ``PATH`` lookup that the
+    build system does not limit itself to.
+
+    An explicitly set ``CUDA_HOME``/``CUDA_PATH`` is authoritative for
+    the build system -- it stops the search whether or not ``nvcc`` is
+    present under it -- and the same is true here.
+
+    Environment caliber: the two variables read here are the CUDA
+    toolchain's own, not toktier configuration; they are observed and
+    reported, never stored and never acted on (``config.md`` Section 3
+    keeps toktier's environment surface to the frozen five, read once
+    by ``Config``).
+    """
+    checked: list[str] = []
+    for variable in ("CUDA_HOME", "CUDA_PATH"):
+        root = os.environ.get(variable)
+        if not root:
+            checked.append(f"{variable}: not set")
+            continue
+        candidate = os.path.join(root, "bin", "nvcc")
+        if os.path.isfile(candidate):
+            checked.append(f"{variable}: {candidate} (found)")
+            return candidate, checked
+        checked.append(f"{variable}: {candidate} (not found)")
+        return None, checked
+    from_path = shutil.which("nvcc")
+    if from_path is not None:
+        checked.append(f"PATH: {from_path} (found)")
+        return from_path, checked
+    checked.append("PATH: not found")
+    default = "/usr/local/cuda/bin/nvcc"
+    if os.path.isfile(default):
+        checked.append(f"default: {default} (found)")
+        return default, checked
+    checked.append(f"default: {default} (not found)")
+    return None, checked
+
+
 def _doctor_report(
     config: Config, *, source: ArtifactSource | None
 ) -> dict[str, object]:
@@ -62,6 +110,13 @@ def _doctor_report(
     # Looking up torch.cuda would import its parent package. The top-level
     # cuda package is the CUDA probe that preserves this command's no-import
     # guarantee for torch.
+    nvcc_path, nvcc_checked = _nvcc_search()
+    from .backends.fast_cpu import ENGINE_MODULE, fast_cpu_engine_facts
+
+    fast_cpu = fast_cpu_engine_facts()
+    from .repair.fastokens import fastokens_distribution_identity
+
+    fastokens_version, fastokens_digest = fastokens_distribution_identity()
     return {
         "python_version": platform.python_version(),
         "toktier_version": _toktier_version(),
@@ -74,13 +129,37 @@ def _doctor_report(
         "artifact_fetch_available": availability.available,
         "torch_available": importlib.util.find_spec("torch") is not None,
         "cuda_available": importlib.util.find_spec("cuda") is not None,
-        "nvcc_available": shutil.which("nvcc") is not None,
+        "gigatoken_available": fast_cpu.version is not None,
+        "gigatoken_delivery": "vendored",
+        "gigatoken_module": ENGINE_MODULE,
+        "gigatoken_runtime_ready": (
+            fast_cpu.version is not None
+            and importlib.util.find_spec("transformers") is not None
+        ),
+        "gigatoken_version": fast_cpu.version,
+        "gigatoken_native_digest": fast_cpu.binary_digest,
+        "gigatoken_repair_config_digest": fast_cpu.config_digest,
+        "fastokens_available": fastokens_version is not None,
+        "fastokens_version": fastokens_version,
+        "fastokens_distribution_digest": fastokens_digest,
+        "fastokens_policy": "experimental",
+        "fastokens_exact_id_guarantee": False,
+        "nvcc_available": nvcc_path is not None,
+        "nvcc_path": nvcc_path,
+        "nvcc_checked": nvcc_checked,
     }
 
 
 def _print_doctor_human(report: dict[str, object]) -> None:
     for name, value in report.items():
-        rendered = str(value).lower() if isinstance(value, bool) else str(value)
+        if isinstance(value, bool):
+            rendered = str(value).lower()
+        elif isinstance(value, list):
+            rendered = "; ".join(str(item) for item in value)
+        elif value is None:
+            rendered = "none"
+        else:
+            rendered = str(value)
         print(f"{name}: {rendered}")
 
 

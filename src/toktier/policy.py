@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 
 __all__ = [
+    "BACKEND_FASTOKENS",
+    "BACKEND_FAST_CPU",
     "BACKEND_GPU",
     "BACKEND_REFERENCE",
     "POLICY_ALIAS_AUTO",
@@ -32,6 +34,15 @@ BACKEND_REFERENCE: str = "hf"
 #: Backend identifier of the CUDA kernel backend (JIT delivery in the
 #: first release).
 BACKEND_GPU: str = "gpu"
+
+#: Corrected, evidence-bound Gigatoken build used by the certified CPU
+#: full-encode and session repair paths.
+BACKEND_FAST_CPU: str = "fast_cpu"
+
+#: Fastokens adapter.  This identifier is deliberately outside the set of
+#: backends a certified policy may select; it is reachable only through an
+#: explicit EXPERIMENTAL request.
+BACKEND_FASTOKENS: str = "fastokens"
 
 #: Convenience alias accepted wherever a policy is named as a string
 #: (``tier="auto"``); it selects :attr:`RoutingPolicy.CERTIFIED` and
@@ -131,11 +142,17 @@ class ReasonCode(enum.Enum):
     R_KERNEL_DIGEST_MISMATCH = "R_KERNEL_DIGEST_MISMATCH"
     #: JIT kernel build attempted at load and failed.
     R_KERNEL_BUILD_FAILED = "R_KERNEL_BUILD_FAILED"
+    #: The installed external engine differs from the version or native
+    #: binary digest bound by the support registry.
+    R_ENGINE_BINDING_MISMATCH = "R_ENGINE_BINDING_MISMATCH"
 
     # ---- run-time reasons --------------------------------------------
     #: Input contains an added-token literal; routed to the reference
     #: frontend path (part of the certified pipeline design).
     R_INPUT_ADDED_TOKEN = "R_INPUT_ADDED_TOKEN"
+    #: Input is deliberately smaller than the configured GPU crossover;
+    #: execution starts at the next eligible backend in the same plan.
+    R_INPUT_BELOW_GPU_THRESHOLD = "R_INPUT_BELOW_GPU_THRESHOLD"
     #: Reserved for the guarded fast-CPU backend (not in the first
     #: release): a guard predicate routed this input to reference.
     R_INPUT_GUARD_ROUTED = "R_INPUT_GUARD_ROUTED"

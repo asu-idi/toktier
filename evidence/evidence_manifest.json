@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "evidence_id": "ev-main-corpus-v1",
+  "generated_by": {
+    "tool": "tools/generate_evidence.py",
+    "tool_version": "1.1.0",
+    "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
+    "generated_at": "2026-08-07T10:44:36Z"
+  },
+  "root_digest": "sha256:08c2b4573ccc9a13a420874a7edc2fa643046ac399c93027e2e2ba49ce3f5752",
+  "run": {
+    "run_id": "main-corpus-differential-campaign",
+    "date": "2026-08-05",
+    "suite_version": "gpu-e2e-differential-v1"
+  },
+  "oracle": {
+    "package": "tokenizers",
+    "version": "0.22.2"
+  },
+  "artifacts": [
+    {
+      "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
+      "family": "deepseek_v3"
+    },
+    {
+      "artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+      "family": "deepseek_v4_flash"
+    },
+    {
+      "artifact_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+      "family": "glm_5_2"
+    },
+    {
+      "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+      "family": "gpt_oss_120b"
+    },
+    {
+      "artifact_sha256": "446e0b59cd941637c0ddfd84e12ee1f49480fd12097f86a9d2fec8ebd0c7ff6c",
+      "family": "hy3"
+    },
+    {
+      "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
+      "family": "llama_3_1_8b"
+    },
+    {
+      "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
+      "family": "minimax_m3"
+    },
+    {
+      "artifact_sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135",
+      "family": "ministral_3_8b"
+    },
+    {
+      "artifact_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+      "family": "nemotron_3_nano_4b"
+    },
+    {
+      "artifact_sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca",
+      "family": "olmo_3_7b"
+    },
+    {
+      "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+      "family": "qwen3_5_08b"
+    },
+    {
+      "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "family": "qwen3_8b"
+    }
+  ],
+  "corpora": [
+    {
+      "corpus_id": "nvidia/Nemotron-CC-v2.1@ba6f2aaef7ada865bb08fc08640ca292150097db",
+      "docs": 3638742395,
+      "bytes": 11728655929847
+    }
+  ],
+  "totals": {
+    "docs": 3638742395,
+    "bytes": 11728655929847,
+    "mismatches": 0,
+    "routed": 313314
+  },
+  "environment": {
+    "os": "Linux 6.17.0-35-generic x86_64 (Ubuntu)",
+    "python": "3.12.3",
+    "gpus": [
+      "NVIDIA GeForce RTX 4090",
+      "NVIDIA GeForce RTX 5090",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition"
+    ],
+    "dependencies_digest": "0de04510b4dcac41b8a8d88037e507214b32b1cf69af99cfe4b047a75b1af4d5"
+  }
+}

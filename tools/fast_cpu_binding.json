@@ -1,0 +1,77 @@
+{
+  "version": "fast-cpu-binding-v1",
+  "backend": "fast_cpu",
+  "engine": "gigatoken",
+  "engine_version": "0.10.0+toktier.pinned.1",
+  "engine_distribution": "toktier",
+  "engine_module": "toktier._vendor.gigatoken_rs",
+  "engine_delivery": "vendored",
+  "engine_wheel_sha256": "9fbfe0fda617763ec65dab98de15c28c94223f515ffd71a4a296716c60f220e7",
+  "campaign_wheel_sha256": "c207ce3196a746e979f3ec8c1b2becb559fe20bc763cfaf220c30e9741264da0",
+  "binary_digest": "9a701047dafa1cdebc168851d0548a0caaf08d0523d70911cc7a24112ccf92a3",
+  "binary_digest_of": "src/toktier/_vendor/gigatoken_rs.abi3.so (private native module vendored byte-for-byte into the toktier core wheel)",
+  "vendored_native_path": "src/toktier/_vendor/gigatoken_rs.abi3.so",
+  "vendored_manifest_path": "src/toktier/_vendor/gigatoken_build.json",
+  "vendored_sbom_path": "packaging/fast_cpu/gigatoken.cyclonedx.json",
+  "vendored_sbom_distribution_path": ".dist-info/sboms/gigatoken.cyclonedx.json",
+  "vendored_sbom_sha256": "297a257d893f9cf6502602423dfee3de044c32ff89c264459828164119168bbd",
+  "vendored_license_bundle_path": "packaging/fast_cpu/THIRD_PARTY_LICENSES-gigatoken.txt",
+  "vendored_license_bundle_sha256": "49d4311b36c8c1886f1752e3dd0c47b66520923fb70b38e7d822039029cb80d7",
+  "native_equivalence": {
+    "campaign_binary_digest": "9a701047dafa1cdebc168851d0548a0caaf08d0523d70911cc7a24112ccf92a3",
+    "release_binary_digest": "9a701047dafa1cdebc168851d0548a0caaf08d0523d70911cc7a24112ccf92a3",
+    "basis": "the campaign wheel, corrected source wheel, and toktier core wheel contain byte-identical native modules; relocation changes only the private Python import path"
+  },
+  "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+    "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
+  "patch_base": "upstream 0.10.0 @ 34a1599f0c0ae7d7cd0d1c530e6522320158b360",
+  "repair_config_id": "toktier-fast-repair-v1",
+  "oracle": {
+    "tokenizers": "0.22.2",
+    "transformers": "4.57.6"
+  },
+  "validation": {
+    "campaign_id": "gigatoken-pinned-differential-v1",
+    "documents": 3800016491,
+    "characters": 12328592579973,
+    "family_checks": 41800181401,
+    "mismatches": 0,
+    "shipped_sample": "readings/fast_cpu_sample_check.json",
+    "focused_public_api_parity": "readings/fast_cpu_focused_parity.json",
+    "scope": "eleven unique tokenizer artifacts; Nemotron-Terminal model repositories reuse the qwen3_8b artifact byte-for-byte"
+  },
+  "coverage": {
+    "unique_tokenizer_artifacts": 11,
+    "model_families": 12,
+    "exact_artifact_inheritance": {
+      "model_family": "NVIDIA Nemotron-Terminal",
+      "repositories": [
+        "nvidia/Nemotron-Terminal-8B",
+        "nvidia/Nemotron-Terminal-14B",
+        "nvidia/Nemotron-Terminal-32B"
+      ],
+      "inherits_from": "qwen3_8b",
+      "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "basis": "tokenizer.json bytes are identical"
+    }
+  },
+  "loadable_families": [
+    "deepseek_v3",
+    "deepseek_v4_flash",
+    "glm_5_2",
+    "gpt_oss_120b",
+    "llama_3_1_8b",
+    "minimax_m3",
+    "ministral_3_8b",
+    "nemotron_3_nano_4b",
+    "olmo_3_7b",
+    "qwen3_5_08b",
+    "qwen3_8b"
+  ],
+  "rejected_families": {
+    "hy3": "engine: no single-byte vocab entry for 0x0D",
+    "kimi_k3": "engine: unsupported Split regex shape (ICU class intersection)",
+    "ling_3_0_flash": "engine: unsupported Split regex shape (possessive quantifiers)",
+    "laguna_s_2_1": "engine: unsupported multi-Split chain shape"
+  }
+}

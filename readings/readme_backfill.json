@@ -1,0 +1,557 @@
+{
+  "schema_version": 1,
+  "generated_by": {
+    "tool": "tools/generate_readme_backfill.py",
+    "tool_version": "1.1.0",
+    "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
+    "generated_at": "2026-08-07T10:44:36Z"
+  },
+  "summary": {
+    "marker_keys": 0,
+    "resolved": 0,
+    "unresolved": 0,
+    "keys_not_used_by_any_marker": 77
+  },
+  "keys": {},
+  "keys_without_marker": {
+    "corpus.char_count": {
+      "kind": "number",
+      "value": 12328592579973,
+      "source": "differential campaign judgment records (aggregated), with the earlier-phase campaign ledger",
+      "note": "Unicode code points, as the judgment harness recorded them.",
+      "markers": []
+    },
+    "corpus.check_count": {
+      "kind": "number",
+      "value": 53200230874,
+      "source": "differential campaign judgment records (aggregated), with the earlier-phase campaign ledger",
+      "note": "14 families x 3,800,016,491 documents = 53,200,230,874 checks; the local phase and the earlier phase of the campaign cover disjoint corpus shards and add up to the full corpus. The per artifact readings in tables/support_registry.json sum to less than this: each record cites one evidence manifest and therefore carries only that phase's share.",
+      "markers": []
+    },
+    "corpus.doc_count": {
+      "kind": "number",
+      "value": 3800016491,
+      "source": "differential campaign judgment records (aggregated), with the earlier-phase campaign ledger",
+      "note": "Distinct documents in the judged corpus; every family was judged on all of them.",
+      "markers": []
+    },
+    "corpus.family_count": {
+      "kind": "number",
+      "value": 14,
+      "source": "differential campaign judgment records (aggregated), with the earlier-phase campaign ledger",
+      "note": "14 families x 3,800,016,491 documents = 53,200,230,874 checks; the local phase and the earlier phase of the campaign cover disjoint corpus shards and add up to the full corpus. The per artifact readings in tables/support_registry.json sum to less than this: each record cites one evidence manifest and therefore carries only that phase's share.",
+      "markers": []
+    },
+    "corpus.mismatch_count": {
+      "kind": "number",
+      "value": 0,
+      "source": "differential campaign judgment records (aggregated), with the earlier-phase campaign ledger",
+      "note": "Recorded as read across every phase.",
+      "markers": []
+    },
+    "corpus.text_tb": {
+      "kind": "number",
+      "value": 12.3286,
+      "source": "differential campaign judgment records (aggregated), with the earlier-phase campaign ledger",
+      "note": "= 12,328,592,579,973 characters / 1e12. Characters, not bytes: UTF-8 never uses fewer bytes than code points, so this understates the byte volume rather than overstating it.",
+      "markers": []
+    },
+    "evidence.manifest_path": {
+      "kind": "pending",
+      "value": "evidence/evidence_manifest.json",
+      "source": "generated in this repository",
+      "note": "A second manifest ships alongside this one and the sentence in the README should name both: evidence/evidence_manifest_added_families.json (root digest sha256:ca0641f8315c688a37ba28c91569ba4b63790e4dd3f35ef6be25d30218750877).",
+      "markers": []
+    },
+    "evidence.manifest_root_digest": {
+      "kind": "pending",
+      "value": "sha256:08c2b4573ccc9a13a420874a7edc2fa643046ac399c93027e2e2ba49ce3f5752",
+      "source": "generated in this repository",
+      "note": "A second manifest ships alongside this one and the sentence in the README should name both: evidence/evidence_manifest_added_families.json (root digest sha256:ca0641f8315c688a37ba28c91569ba4b63790e4dd3f35ef6be25d30218750877).",
+      "markers": []
+    },
+    "oracle.tokenizers_version": {
+      "kind": "pending",
+      "value": "0.22.2",
+      "source": "frozen dependency lock of the judgment environment",
+      "note": "The campaign fleet specification pins the same version.",
+      "markers": []
+    },
+    "parity.released_code_docs": {
+      "kind": "number",
+      "value": 15960166,
+      "source": "released-code parity battery summary",
+      "note": "Documents compared through the released import paths against the pinned reference, separately from the full-corpus campaigns.",
+      "markers": []
+    },
+    "parity.released_code_mismatch": {
+      "kind": "number",
+      "value": 0,
+      "source": "released-code parity battery summary",
+      "note": "Documents compared through the released import paths against the pinned reference, separately from the full-corpus campaigns.",
+      "markers": []
+    },
+    "perf.gpu_e2e_gbps_single_card": {
+      "kind": "number",
+      "value": 0.6028,
+      "source": "throughput reading records (benchmark evidence set)",
+      "note": "Released batched GPU path, single card, 2.2 GB real web text resident in RAM; includes host materialization of id arrays. Larger-document condition measured at 0.490 GB/s (larger-document reading record).",
+      "markers": []
+    },
+    "perf.gpu_kernel_preview_condition": {
+      "kind": "pending",
+      "value": "Preview, not part of this release: a prototype CUDA kernel sustains about 24.0 GB/s of raw UTF-8 input text on a single NVIDIA GeForce RTX 5090 (llama_3_1_8b tokenizer, 11.92 GB OpenWebText corpus resident in host RAM, disk input excluded) - 24.049 GB/s steady state and 23.763 GB/s whole-file wall clock, measured 2026-07-27. The GPU path shipped in this release is a different and slower engine.",
+      "source": "kernel preview evidence record",
+      "note": "Not a documentation marker: the qualifying sentence the number may not be published without.",
+      "markers": []
+    },
+    "perf.gpu_kernel_preview_gbps": {
+      "kind": "number",
+      "value": 24.0,
+      "source": "kernel preview evidence record",
+      "note": "Steady-state reading 24.049 GB/s, whole-file wall clock 23.763 GB/s. This figure belongs to a prototype kernel that is not part of this release and must be written with the qualifying sentence (perf.gpu_kernel_preview_condition below).",
+      "markers": []
+    },
+    "perf.measurement_setup": {
+      "kind": "pending",
+      "value": "GPU: released batched path, one NVIDIA RTX PRO 6000 Blackwell, 2.2 GB of RAM-resident real web text (llama_3_1_8b), UTF-8 bytes / wall clock, host id arrays materialized; reference: the released reference backend (tokenizers 0.22.2) on the same machine (2x AMD EPYC 9115) and identical input, one core, one thread. Same-input pair on larger documents (1.07 GB, avg 180 KB): 0.490 vs 0.003 GB/s.",
+      "source": "benchmark protocol record (benchmark evidence set)",
+      "note": null,
+      "markers": []
+    },
+    "perf.reference_cpu_gbps": {
+      "kind": "number",
+      "value": 0.0047,
+      "source": "throughput reading records (benchmark evidence set)",
+      "note": "Released reference backend (tokenizers 0.22.2), one core, same machine and input as the GPU reading.",
+      "markers": []
+    },
+    "support.audit_snapshot_date": {
+      "kind": "pending",
+      "value": "2026-08-04",
+      "source": "support-matrix audit record",
+      "note": null,
+      "markers": []
+    },
+    "support.certified_sm_list": {
+      "kind": "pending",
+      "value": "sm_89, sm_120",
+      "source": "kernel gate records",
+      "note": "Architectures with recorded kernel gate evidence. The campaign also ran on a server-class Blackwell card whose architecture is not recorded in the sources; confirm it separately.",
+      "markers": []
+    },
+    "support.family_count_bpe": {
+      "kind": "number",
+      "value": 15,
+      "source": "campaign fleet specification",
+      "note": "Families in the campaign roster, all byte-level BPE.",
+      "markers": []
+    },
+    "support.family_count_excluded": {
+      "kind": "number",
+      "value": 2,
+      "source": "boundary-predicate certification table",
+      "note": "Structural exclusions recorded with a reason.",
+      "markers": []
+    },
+    "support.family_count_wordpiece": {
+      "kind": "number",
+      "value": 3,
+      "source": "boundary-predicate certification table",
+      "note": "Families certified under the WordPiece boundary predicate: bert_cased, bert_multilingual_cased, bert_uncased.",
+      "markers": []
+    },
+    "support.repos_audited": {
+      "kind": "number",
+      "value": 470,
+      "source": "support-matrix audit record",
+      "note": null,
+      "markers": []
+    },
+    "support.sha.bert_cased": {
+      "kind": "number",
+      "value": "5b3360be30cd",
+      "source": "frozen-artifact audit record",
+      "note": "Prefix of 5b3360be30cdf39081153cf9d30bfb0503c011462fc9f77f097127c83ef0f4d9; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.bert_multilingual_cased": {
+      "kind": "number",
+      "value": "f4a4d5bf7301",
+      "source": "frozen-artifact audit record",
+      "note": "Prefix of f4a4d5bf7301717e261fafbe26e1eb967f6ba4cb3ae0ab7a29f4642ec229f386; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.bert_uncased": {
+      "kind": "number",
+      "value": "ce64fce797c2",
+      "source": "frozen-artifact audit record",
+      "note": "Prefix of ce64fce797c24f68df90b40a3f74f579b336a493db14bd583fd520ea0d8c9a98; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.deepseek_v3": {
+      "kind": "number",
+      "value": "621ac2e32d0d",
+      "source": "campaign fleet specification",
+      "note": "Prefix of 621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.deepseek_v4_flash": {
+      "kind": "number",
+      "value": "8f9f37ca37fd",
+      "source": "campaign fleet specification",
+      "note": "Prefix of 8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.gemma_4_e2b": {
+      "kind": "number",
+      "value": "12bac982b793",
+      "source": "frozen-artifact audit record",
+      "note": "Prefix of 12bac982b793c44b03d52a250a9f0d0b666813da566b910c24a6da0695fd11e6; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.glm_5_2": {
+      "kind": "number",
+      "value": "19e773648cb4",
+      "source": "campaign fleet specification",
+      "note": "Prefix of 19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.gpt2": {
+      "kind": "number",
+      "value": "8414cab924d8",
+      "source": "frozen-artifact audit record",
+      "note": "Prefix of 8414cab924d8b9b33013f0d221c5862f365ee9be39c5c2bfae8a5a9e970478a6; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.gpt_oss_120b": {
+      "kind": "number",
+      "value": "0614fe83cada",
+      "source": "campaign fleet specification",
+      "note": "Prefix of 0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.hy3": {
+      "kind": "number",
+      "value": "446e0b59cd94",
+      "source": "campaign fleet specification",
+      "note": "Prefix of 446e0b59cd941637c0ddfd84e12ee1f49480fd12097f86a9d2fec8ebd0c7ff6c; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.kimi_k3": {
+      "kind": "number",
+      "value": "773c2476259d",
+      "source": "campaign fleet specification",
+      "note": "Prefix of 773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.laguna_s_2_1": {
+      "kind": "number",
+      "value": "809240f7a182",
+      "source": "campaign fleet specification",
+      "note": "Prefix of 809240f7a182cde859a4fc4ebc902e619a173d507e99304c1092aa04e7a6658e; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.ling_3_0_flash": {
+      "kind": "number",
+      "value": "40fb9d7d7795",
+      "source": "campaign fleet specification",
+      "note": "Prefix of 40fb9d7d7795b8bd305aeff39ce9963f3f450915b9553f2938e009be9a1fed60; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.llama_3_1_8b": {
+      "kind": "number",
+      "value": "76e48799b099",
+      "source": "campaign fleet specification",
+      "note": "Prefix of 76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.minimax_m3": {
+      "kind": "number",
+      "value": "bb1f1626cf01",
+      "source": "campaign fleet specification",
+      "note": "Prefix of bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.ministral_3_8b": {
+      "kind": "number",
+      "value": "d5f6046775b1",
+      "source": "campaign fleet specification",
+      "note": "Prefix of d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.nemotron_3_nano_4b": {
+      "kind": "number",
+      "value": "623c34567aeb",
+      "source": "campaign fleet specification",
+      "note": "Prefix of 623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.olmo_3_7b": {
+      "kind": "number",
+      "value": "73fd5254624f",
+      "source": "campaign fleet specification",
+      "note": "Prefix of 73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.qwen3_5_08b": {
+      "kind": "number",
+      "value": "5f9e4d4901a9",
+      "source": "campaign fleet specification",
+      "note": "Prefix of 5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.qwen3_8b": {
+      "kind": "number",
+      "value": "aeb13307a71a",
+      "source": "campaign fleet specification",
+      "note": "Prefix of aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.sha.xlm_roberta_base": {
+      "kind": "number",
+      "value": "a898ea754338",
+      "source": "frozen-artifact audit record",
+      "note": "Prefix of a898ea75433890f6610f4e470b8ebeb0c21dce5c8dd61f892eb09eb5919d2e2c; the full digest is in tables/support_registry.json.",
+      "markers": []
+    },
+    "support.status.bert_cased.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "boundary-predicate certification table",
+      "note": "Certified by the boundary-predicate certification table; this family has no full-corpus differential campaign of its own.",
+      "markers": []
+    },
+    "support.status.bert_multilingual_cased.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "boundary-predicate certification table",
+      "note": "Certified by the boundary-predicate certification table; this family has no full-corpus differential campaign of its own.",
+      "markers": []
+    },
+    "support.status.bert_uncased.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "boundary-predicate certification table",
+      "note": "Certified by the boundary-predicate certification table; this family has no full-corpus differential campaign of its own.",
+      "markers": []
+    },
+    "support.status.deepseek_v3.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "tables/support_registry.json",
+      "note": "The registry holds a record for this artifact, backed by the differential campaign; the reference path is the certified definition of its output.",
+      "markers": []
+    },
+    "support.status.deepseek_v3.gpu": {
+      "kind": "pending",
+      "value": "certified_source",
+      "source": "tables/support_registry.json",
+      "note": "The GPU backend is compiled on the user's machine.",
+      "markers": []
+    },
+    "support.status.deepseek_v4_flash.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "tables/support_registry.json",
+      "note": "The registry holds a record for this artifact, backed by the differential campaign; the reference path is the certified definition of its output.",
+      "markers": []
+    },
+    "support.status.deepseek_v4_flash.gpu": {
+      "kind": "pending",
+      "value": "certified_source",
+      "source": "tables/support_registry.json",
+      "note": "The GPU backend is compiled on the user's machine.",
+      "markers": []
+    },
+    "support.status.glm_5_2.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "tables/support_registry.json",
+      "note": "The registry holds a record for this artifact, backed by the differential campaign; the reference path is the certified definition of its output.",
+      "markers": []
+    },
+    "support.status.glm_5_2.gpu": {
+      "kind": "pending",
+      "value": "certified_source",
+      "source": "tables/support_registry.json",
+      "note": "The GPU backend is compiled on the user's machine.",
+      "markers": []
+    },
+    "support.status.gpt_oss_120b.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "tables/support_registry.json",
+      "note": "The registry holds a record for this artifact, backed by the differential campaign; the reference path is the certified definition of its output.",
+      "markers": []
+    },
+    "support.status.gpt_oss_120b.gpu": {
+      "kind": "pending",
+      "value": "certified_source",
+      "source": "tables/support_registry.json",
+      "note": "The GPU backend is compiled on the user's machine.",
+      "markers": []
+    },
+    "support.status.hy3.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "tables/support_registry.json",
+      "note": "The registry holds a record for this artifact, backed by the differential campaign; the reference path is the certified definition of its output.",
+      "markers": []
+    },
+    "support.status.hy3.gpu": {
+      "kind": "pending",
+      "value": "certified_source",
+      "source": "tables/support_registry.json",
+      "note": "The GPU backend is compiled on the user's machine.",
+      "markers": []
+    },
+    "support.status.kimi_k2_7_code.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "boundary-predicate certification table",
+      "note": "Certified by the boundary-predicate certification table; this family has no full-corpus differential campaign of its own.",
+      "markers": []
+    },
+    "support.status.kimi_k3.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "boundary-predicate certification table",
+      "note": "Certified by the boundary-predicate certification table; this family has no full-corpus differential campaign of its own.",
+      "markers": []
+    },
+    "support.status.kimi_k3.gpu": {
+      "kind": "pending",
+      "value": "reference-only",
+      "source": "campaign harness kernel-coverage table",
+      "note": "No end-to-end GPU kernel exists for this family.",
+      "markers": []
+    },
+    "support.status.laguna_s_2_1.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "tables/support_registry.json",
+      "note": "The registry holds a record for this artifact, backed by the differential campaign; the reference path is the certified definition of its output. The boundary-predicate certification table has not been extended to this family yet (it predates the family being added); confirm before release.",
+      "markers": []
+    },
+    "support.status.laguna_s_2_1.gpu": {
+      "kind": "pending",
+      "value": "certified_source",
+      "source": "tables/support_registry.json",
+      "note": "The GPU backend is compiled on the user's machine. The boundary-predicate certification table has not been extended to this family yet (it predates the family being added); confirm before release.",
+      "markers": []
+    },
+    "support.status.ling_3_0_flash.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "tables/support_registry.json",
+      "note": "The registry holds a record for this artifact, backed by the differential campaign; the reference path is the certified definition of its output. The boundary-predicate certification table has not been extended to this family yet (it predates the family being added); confirm before release.",
+      "markers": []
+    },
+    "support.status.ling_3_0_flash.gpu": {
+      "kind": "pending",
+      "value": "certified_source",
+      "source": "tables/support_registry.json",
+      "note": "The GPU backend is compiled on the user's machine. The boundary-predicate certification table has not been extended to this family yet (it predates the family being added); confirm before release.",
+      "markers": []
+    },
+    "support.status.llama_3_1_8b.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "tables/support_registry.json",
+      "note": "The registry holds a record for this artifact, backed by the differential campaign; the reference path is the certified definition of its output.",
+      "markers": []
+    },
+    "support.status.llama_3_1_8b.gpu": {
+      "kind": "pending",
+      "value": "certified_source",
+      "source": "tables/support_registry.json",
+      "note": "The GPU backend is compiled on the user's machine.",
+      "markers": []
+    },
+    "support.status.minimax_m3.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "tables/support_registry.json",
+      "note": "The registry holds a record for this artifact, backed by the differential campaign; the reference path is the certified definition of its output.",
+      "markers": []
+    },
+    "support.status.minimax_m3.gpu": {
+      "kind": "pending",
+      "value": "certified_source",
+      "source": "tables/support_registry.json",
+      "note": "The GPU backend is compiled on the user's machine.",
+      "markers": []
+    },
+    "support.status.ministral_3_8b.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "tables/support_registry.json",
+      "note": "The registry holds a record for this artifact, backed by the differential campaign; the reference path is the certified definition of its output.",
+      "markers": []
+    },
+    "support.status.ministral_3_8b.gpu": {
+      "kind": "pending",
+      "value": "certified_source",
+      "source": "tables/support_registry.json",
+      "note": "The GPU backend is compiled on the user's machine.",
+      "markers": []
+    },
+    "support.status.nemotron_3_nano_4b.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "tables/support_registry.json",
+      "note": "The registry holds a record for this artifact, backed by the differential campaign; the reference path is the certified definition of its output.",
+      "markers": []
+    },
+    "support.status.nemotron_3_nano_4b.gpu": {
+      "kind": "pending",
+      "value": "certified_source",
+      "source": "tables/support_registry.json",
+      "note": "The GPU backend is compiled on the user's machine.",
+      "markers": []
+    },
+    "support.status.olmo_3_7b.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "tables/support_registry.json",
+      "note": "The registry holds a record for this artifact, backed by the differential campaign; the reference path is the certified definition of its output.",
+      "markers": []
+    },
+    "support.status.olmo_3_7b.gpu": {
+      "kind": "pending",
+      "value": "certified_source",
+      "source": "tables/support_registry.json",
+      "note": "The GPU backend is compiled on the user's machine.",
+      "markers": []
+    },
+    "support.status.qwen3_5_08b.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "tables/support_registry.json",
+      "note": "The registry holds a record for this artifact, backed by the differential campaign; the reference path is the certified definition of its output.",
+      "markers": []
+    },
+    "support.status.qwen3_5_08b.gpu": {
+      "kind": "pending",
+      "value": "certified_source",
+      "source": "tables/support_registry.json",
+      "note": "The GPU backend is compiled on the user's machine.",
+      "markers": []
+    },
+    "support.status.qwen3_8b.cpu": {
+      "kind": "pending",
+      "value": "certified",
+      "source": "tables/support_registry.json",
+      "note": "The registry holds a record for this artifact, backed by the differential campaign; the reference path is the certified definition of its output.",
+      "markers": []
+    },
+    "support.status.qwen3_8b.gpu": {
+      "kind": "pending",
+      "value": "certified_source",
+      "source": "tables/support_registry.json",
+      "note": "The GPU backend is compiled on the user's machine.",
+      "markers": []
+    }
+  }
+}

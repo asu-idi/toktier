@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "generated_by": {
+    "tool": "registry-fixture",
+    "tool_version": "1.0",
+    "source_commit": "0123456",
+    "generated_at": "2026-08-05T00:00:00Z"
+  },
+  "root_digest": "sha256:6ddb3cd5d58009ddd2d03751958f17cf1ae2e8f8ef83ffa1a7a0046a141ac378",
+  "oracles": [],
+  "pipelines": [],
+  "added_frontends": [],
+  "artifacts": [],
+  "compositions": []
+}

@@ -117,11 +117,6 @@ def check_shipped(path: Path) -> list[str]:
             f"{path}: file is not in the deterministic serialised form "
             "(regenerate with the tool rather than editing by hand)"
         )
-    # The certification registry is published in a later subsystem commit.
-    # Until it exists, this checker can still enforce parsing and deterministic
-    # serialization; the cross-registry digest check activates with that file.
-    if not REGISTRY_PATH.is_file():
-        return problems
     certified = certified_artifacts()
     shipped = set(manifest.families())
     if shipped != set(certified):

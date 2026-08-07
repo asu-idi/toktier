@@ -1,0 +1,157 @@
+{
+ "version": "fast-cpu-sample-check-v1",
+ "engine": {
+  "version": "0.10.0+toktier.pinned.1",
+  "binary_digest": "9a701047dafa1cdebc168851d0548a0caaf08d0523d70911cc7a24112ccf92a3"
+ },
+ "judge": {
+  "backend": "hf (toktier reference backend)",
+  "tokenizers": "0.22.2"
+ },
+ "docs_per_family": 10000,
+ "families": [
+  {
+   "family": "olmo_3_7b",
+   "artifact_sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca",
+   "status": "completed",
+   "docs": 10000,
+   "chars": 39938728,
+   "mismatches": 0,
+   "pointers": [],
+   "wall_s": 23.71
+  },
+  {
+   "family": "minimax_m3",
+   "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
+   "status": "completed",
+   "docs": 10000,
+   "chars": 39938728,
+   "mismatches": 0,
+   "pointers": [],
+   "wall_s": 26.48
+  },
+  {
+   "family": "ministral_3_8b",
+   "artifact_sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135",
+   "status": "completed",
+   "docs": 10000,
+   "chars": 39938728,
+   "mismatches": 0,
+   "pointers": [],
+   "wall_s": 24.37
+  },
+  {
+   "family": "qwen3_5_08b",
+   "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+   "status": "completed",
+   "docs": 10000,
+   "chars": 39938728,
+   "mismatches": 0,
+   "pointers": [],
+   "wall_s": 25.46
+  },
+  {
+   "family": "nemotron_3_nano_4b",
+   "artifact_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+   "status": "completed",
+   "docs": 10000,
+   "chars": 39938728,
+   "mismatches": 0,
+   "pointers": [],
+   "wall_s": 24.7
+  },
+  {
+   "family": "glm_5_2",
+   "artifact_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+   "status": "completed",
+   "docs": 10000,
+   "chars": 39938728,
+   "mismatches": 0,
+   "pointers": [],
+   "wall_s": 20.91
+  },
+  {
+   "family": "llama_3_1_8b",
+   "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
+   "status": "completed",
+   "docs": 10000,
+   "chars": 39938728,
+   "mismatches": 0,
+   "pointers": [],
+   "wall_s": 21.96
+  },
+  {
+   "family": "qwen3_8b",
+   "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+   "status": "completed",
+   "docs": 10000,
+   "chars": 39938728,
+   "mismatches": 0,
+   "pointers": [],
+   "wall_s": 28.57
+  },
+  {
+   "family": "gpt_oss_120b",
+   "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+   "status": "completed",
+   "docs": 10000,
+   "chars": 39938728,
+   "mismatches": 0,
+   "pointers": [],
+   "wall_s": 22.44
+  },
+  {
+   "family": "deepseek_v3",
+   "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
+   "status": "completed",
+   "docs": 10000,
+   "chars": 39938728,
+   "mismatches": 0,
+   "pointers": [],
+   "wall_s": 27.24
+  },
+  {
+   "family": "deepseek_v4_flash",
+   "artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+   "status": "completed",
+   "docs": 10000,
+   "chars": 39938728,
+   "mismatches": 0,
+   "pointers": [],
+   "wall_s": 25.52
+  },
+  {
+   "family": "hy3",
+   "artifact_sha256": "446e0b59cd941637c0ddfd84e12ee1f49480fd12097f86a9d2fec8ebd0c7ff6c",
+   "status": "load_rejected",
+   "fault_stage": "engine_load",
+   "fault_message": "fast CPU engine failed to load family 'hy3': Byte remapping failed: no single-byte vocab entry for byte 0x0d\n\nLocation:\n    src/bpe/mod.rs:88:24",
+   "docs": 0
+  },
+  {
+   "family": "kimi_k3",
+   "artifact_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
+   "status": "load_rejected",
+   "fault_stage": "engine_load",
+   "fault_message": "fast CPU engine failed to load family 'kimi_k3': Unknown pre_tokenizer Split regexes, no fast pretokenizer for: [\"[\\\\p{Han}]+|[^\\\\r\\\\n\\\\p{L}\\\\p{N}]?[\\\\p{Lu}\\\\p{Lt}\\\\p{Lm}\\\\p{Lo}\\\\p{M}&&[^\\\\p{Han}]]*[\\\\p{Ll}\\\\p{Lm}\\\\p{Lo}\\\\p{M}&&[^\\\\p{Han}]]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|[^\\\\r\\\\n\\\\p{L}\\\\p{N}]?[\\\\p{Lu}\\\\p{Lt}\\\\p{Lm}\\\\p{Lo}\\\\p{M}&&[^\\\\p{Han}]]+[\\\\p{Ll}\\\\p{Lm}\\\\p{Lo}\\\\p{M}&&[^\\\\p{Han}]]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?|\\\\p{N}{1,3}| ?[^\\\\s\\\\p{L}\\\\p{N}]+[\\\\r\\\\n]*|\\\\s*[\\\\r\\\\n]+|\\\\s+(?!\\\\S)|\\\\s+\"]\n\nLocation:\n    src/load_tokenizer/hf.rs:632:9",
+   "docs": 0
+  },
+  {
+   "family": "ling_3_0_flash",
+   "artifact_sha256": "40fb9d7d7795b8bd305aeff39ce9963f3f450915b9553f2938e009be9a1fed60",
+   "status": "load_rejected",
+   "fault_stage": "engine_load",
+   "fault_message": "fast CPU engine failed to load family 'ling_3_0_flash': Unknown pre_tokenizer Split regexes, no fast pretokenizer for: [\"'(?i:[sdmt]|ll|ve|re)|[^\\\\r\\\\n\\\\p{L}\\\\p{N}]?+\\\\p{L}+|\\\\p{N}| ?[^\\\\s\\\\p{L}\\\\p{N}]++[\\\\r\\\\n]*|\\\\s*[\\\\r\\\\n]|\\\\s+(?!\\\\S)|\\\\s+\"]\n\nLocation:\n    src/load_tokenizer/hf.rs:632:9",
+   "docs": 0
+  },
+  {
+   "family": "laguna_s_2_1",
+   "artifact_sha256": "809240f7a182cde859a4fc4ebc902e619a173d507e99304c1092aa04e7a6658e",
+   "status": "load_rejected",
+   "fault_stage": "engine_load",
+   "fault_message": "fast CPU engine failed to load family 'laguna_s_2_1': Unknown pre_tokenizer Split regexes, no fast pretokenizer for: [\"(?:\\\\r?\\\\n)+(?!\\\\r?\\\\n)\", \"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\\\r\\\\n\\\\p{L}\\\\p{N}]?\\\\p{L}+|\\\\p{N}| ?[^\\\\s\\\\p{L}\\\\p{N}]+[\\\\r\\\\n]*|\\\\s*[\\\\r\\\\n]+|\\\\s+(?!\\\\S)|\\\\s+\"]\n\nLocation:\n    src/load_tokenizer/hf.rs:632:9",
+   "docs": 0
+  }
+ ],
+ "total_mismatches": 0
+}

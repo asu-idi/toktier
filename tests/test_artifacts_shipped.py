@@ -25,7 +25,6 @@ from toktier.artifacts import ArtifactManifest
 from toktier.artifacts.tables import ARTIFACT_MANIFEST
 
 ROOT = Path(__file__).resolve().parents[1]
-REGISTRY = ROOT / "tables" / "support_registry.json"
 
 #: The one file the reference backend opens; the GPU tables are exported
 #: from the same bytes.
@@ -59,19 +58,11 @@ def test_the_shipped_manifest_pins_every_family_it_offers() -> None:
             assert item.size > 0, f"{family}/{item.name}"
 
 
-@pytest.mark.skipif(
-    not REGISTRY.is_file(),
-    reason="cross-registry verification activates with certification evidence",
-)
 def test_the_shipped_manifest_passes_its_generator_check() -> None:
     """Deterministic form, library parse, agreement with the registry."""
     assert _generator().main(["--check", "--out", str(ARTIFACT_MANIFEST)]) == 0
 
 
-@pytest.mark.skipif(
-    not REGISTRY.is_file(),
-    reason="cross-registry verification activates with certification evidence",
-)
 def test_the_generator_check_rejects_an_edited_digest(tmp_path: Path) -> None:
     """The green check above has teeth: a changed digest fails it."""
     document = json.loads(ARTIFACT_MANIFEST.read_text(encoding="utf-8"))

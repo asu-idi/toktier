@@ -1,0 +1,204 @@
+{
+  "schema": "toktier.fast_cpu.focused_parity.v2",
+  "release": {
+    "distribution": "toktier",
+    "version": "0.1.0",
+    "wheel": "toktier-0.1.0-cp310-abi3-manylinux_2_34_x86_64.whl",
+    "wheel_sha256": "c2d1f97020e74ece1a57803240476f1a3a763b574b33f5f8dfb2bb86528bd55d",
+    "external_gigatoken_distribution_present": false
+  },
+  "oracle": {
+    "package": "tokenizers",
+    "version": "0.22.2"
+  },
+  "engine": {
+    "upstream_project": "gigatoken",
+    "version": "0.10.0+toktier.pinned.1",
+    "delivery": "vendored",
+    "module": "toktier._vendor.gigatoken_rs",
+    "native_sha256": "9a701047dafa1cdebc168851d0548a0caaf08d0523d70911cc7a24112ccf92a3"
+  },
+  "unique_artifacts": 11,
+  "model_families": 12,
+  "turns_per_artifact": 4,
+  "all_ids_equal_hf": true,
+  "all_executed_gigatoken_repair": true,
+  "rows": [
+    {
+      "family": "deepseek_v3",
+      "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
+      "plan_backend": "fast_cpu",
+      "path_counts": {
+        "gigatoken_repair": 3,
+        "hf_full_window_covers_all": 1
+      },
+      "turn_token_counts": [
+        3168,
+        3178,
+        3198,
+        3220
+      ],
+      "all_turns_equal_hf": true
+    },
+    {
+      "family": "deepseek_v4_flash",
+      "artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+      "plan_backend": "fast_cpu",
+      "path_counts": {
+        "gigatoken_repair": 3,
+        "hf_full_window_covers_all": 1
+      },
+      "turn_token_counts": [
+        3168,
+        3178,
+        3198,
+        3220
+      ],
+      "all_turns_equal_hf": true
+    },
+    {
+      "family": "glm_5_2",
+      "artifact_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+      "plan_backend": "fast_cpu",
+      "path_counts": {
+        "gigatoken_repair": 3,
+        "hf_full_window_covers_all": 1
+      },
+      "turn_token_counts": [
+        2976,
+        2986,
+        3002,
+        3028
+      ],
+      "all_turns_equal_hf": true
+    },
+    {
+      "family": "gpt_oss_120b",
+      "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+      "plan_backend": "fast_cpu",
+      "path_counts": {
+        "gigatoken_repair": 3,
+        "hf_full_window_covers_all": 1
+      },
+      "turn_token_counts": [
+        2976,
+        2986,
+        3002,
+        3021
+      ],
+      "all_turns_equal_hf": true
+    },
+    {
+      "family": "llama_3_1_8b",
+      "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
+      "plan_backend": "fast_cpu",
+      "path_counts": {
+        "gigatoken_repair": 3,
+        "hf_full_window_covers_all": 1
+      },
+      "turn_token_counts": [
+        2976,
+        2986,
+        3002,
+        3024
+      ],
+      "all_turns_equal_hf": true
+    },
+    {
+      "family": "minimax_m3",
+      "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
+      "plan_backend": "fast_cpu",
+      "path_counts": {
+        "gigatoken_repair": 3,
+        "hf_full_window_covers_all": 1
+      },
+      "turn_token_counts": [
+        2976,
+        2986,
+        3002,
+        3027
+      ],
+      "all_turns_equal_hf": true
+    },
+    {
+      "family": "ministral_3_8b",
+      "artifact_sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135",
+      "plan_backend": "fast_cpu",
+      "path_counts": {
+        "gigatoken_repair": 3,
+        "hf_full_window_covers_all": 1
+      },
+      "turn_token_counts": [
+        3360,
+        3370,
+        3389,
+        3411
+      ],
+      "all_turns_equal_hf": true
+    },
+    {
+      "family": "nemotron_3_nano_4b",
+      "artifact_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+      "plan_backend": "fast_cpu",
+      "path_counts": {
+        "gigatoken_repair": 3,
+        "hf_full_window_covers_all": 1
+      },
+      "turn_token_counts": [
+        3360,
+        3370,
+        3389,
+        3411
+      ],
+      "all_turns_equal_hf": true
+    },
+    {
+      "family": "olmo_3_7b",
+      "artifact_sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca",
+      "plan_backend": "fast_cpu",
+      "path_counts": {
+        "gigatoken_repair": 3,
+        "hf_full_window_covers_all": 1
+      },
+      "turn_token_counts": [
+        3264,
+        3274,
+        3290,
+        3326
+      ],
+      "all_turns_equal_hf": true
+    },
+    {
+      "family": "qwen3_5_08b",
+      "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+      "plan_backend": "fast_cpu",
+      "path_counts": {
+        "gigatoken_repair": 3,
+        "hf_full_window_covers_all": 1
+      },
+      "turn_token_counts": [
+        3360,
+        3371,
+        3388,
+        3412
+      ],
+      "all_turns_equal_hf": true
+    },
+    {
+      "family": "qwen3_8b",
+      "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "plan_backend": "fast_cpu",
+      "path_counts": {
+        "gigatoken_repair": 3,
+        "hf_full_window_covers_all": 1
+      },
+      "turn_token_counts": [
+        3264,
+        3274,
+        3290,
+        3322
+      ],
+      "all_turns_equal_hf": true
+    }
+  ]
+}

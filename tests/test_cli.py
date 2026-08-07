@@ -1,0 +1,466 @@
+"""Command-line interface acceptance tests.
+
+Two kinds of artifact test live here, and the difference matters:
+
+* the **shipped-manifest** tests run the commands exactly as an
+  installed wheel does -- ``cli._artifact_manifest()`` is not replaced,
+  so they fail if the manifest the package ships cannot resolve a
+  family;
+* the **synthetic-manifest** tests replace the manifest and the source
+  with a small pair so that the fetch and mismatch paths can be driven
+  with bytes a test can produce. They test the plumbing, not the
+  configuration a user gets.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import importlib.metadata
+import importlib.util
+import json
+import os
+import platform
+import shutil
+from pathlib import Path
+from typing import NoReturn
+
+import pytest
+
+from toktier import __version__, cli
+from toktier.artifacts import (
+    ArtifactEntry,
+    ArtifactFile,
+    ArtifactManifest,
+    LocalDirectorySource,
+)
+
+FAMILY = "demo_family"
+REVISION = "a" * 40
+GOOD = b'{"version": "1.0", "model": {}}\n'
+BAD = b"corrupted bytes\n"
+
+#: Research tree holding the artifact bytes the shipped manifest pins.
+#: Read at import time: the shared fixture clears ``TOKTIER_*`` from the
+#: environment so that no test reads the developer's configuration.
+RESEARCH_ROOT = os.environ.get("TOKTIER_RESEARCH_ROOT") or ""
+_HAS_RESEARCH_TREE = bool(RESEARCH_ROOT) and Path(RESEARCH_ROOT).is_dir()
+
+
+class StaticSource:
+    """Serve one payload without reaching a network client."""
+
+    name = "test"
+    offline = False
+
+    def __init__(self, payload: bytes) -> None:
+        self.payload = payload
+        self.calls: list[str] = []
+
+    def fetch(
+        self,
+        entry: ArtifactEntry,
+        artifact_file: ArtifactFile,
+        destination: Path,
+    ) -> None:
+        del entry
+        self.calls.append(artifact_file.name)
+        destination.write_bytes(self.payload)
+
+
+def _manifest() -> ArtifactManifest:
+    return ArtifactManifest.from_mapping(
+        {
+            FAMILY: {
+                "repo_id": "demo/demo",
+                "revision": REVISION,
+                "files": {
+                    "tokenizer.json": {
+                        "sha256": hashlib.sha256(GOOD).hexdigest(),
+                        "size": len(GOOD),
+                    }
+                },
+            }
+        },
+        source="<cli-test>",
+    )
+
+
+def _set_doctor_probes(monkeypatch: pytest.MonkeyPatch) -> None:
+    def find_spec(name: str) -> object | None:
+        assert name in {"torch", "cuda"}
+        return object() if name == "torch" else None
+
+    def which(name: str) -> str:
+        assert name == "nvcc"
+        return "/opt/cuda/bin/nvcc"
+
+    monkeypatch.setattr(importlib.util, "find_spec", find_spec)
+    monkeypatch.setattr(shutil, "which", which)
+
+
+def _set_artifact_source(
+    monkeypatch: pytest.MonkeyPatch, source: StaticSource
+) -> None:
+    """Install the synthetic manifest and source (see the module docstring)."""
+    manifest = _manifest()
+    monkeypatch.setattr(cli, "_artifact_manifest", lambda: manifest)
+    monkeypatch.setattr(cli, "HuggingFaceSource", lambda: source)
+
+
+def _smallest_shipped_family() -> tuple[str, int]:
+    """Family of the shipped manifest with the fewest bytes to hash."""
+    manifest = cli._artifact_manifest()
+    sizes = {
+        family: sum(item.size or 0 for item in manifest.get(family).files)
+        for family in manifest.families()
+    }
+    family = min(sizes, key=lambda name: (sizes[name], name))
+    return family, sizes[family]
+
+
+def test_doctor_human(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home = tmp_path / "toktier-home"
+    monkeypatch.setenv("TOKTIER_HOME", str(home))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    _set_doctor_probes(monkeypatch)
+
+    exit_code = cli.main(["doctor"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == (
+        f"python_version: {platform.python_version()}\n"
+        "toktier_version: 1.2.3\n"
+        f"artifact_cache_dir: {home / 'cache' / 'artifacts'}\n"
+        f"kernel_cache_dir: {home / 'cache' / 'kernels'}\n"
+        f"store_state_dir: {home / 'state' / 'store'}\n"
+        "configured_offline: true\n"
+        "artifact_source: huggingface\n"
+        "source_offline: false\n"
+        "artifact_fetch_available: false\n"
+        "torch_available: true\n"
+        "cuda_available: false\n"
+        "nvcc_available: true\n"
+    )
+    assert captured.err == ""
+
+
+def test_doctor_json(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home = tmp_path / "toktier-home"
+    monkeypatch.setenv("TOKTIER_HOME", str(home))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "0")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "2.0.0")
+    _set_doctor_probes(monkeypatch)
+    expected = {
+        "python_version": platform.python_version(),
+        "toktier_version": "2.0.0",
+        "artifact_cache_dir": str(home / "cache" / "artifacts"),
+        "kernel_cache_dir": str(home / "cache" / "kernels"),
+        "store_state_dir": str(home / "state" / "store"),
+        "configured_offline": False,
+        "artifact_source": "huggingface",
+        "source_offline": False,
+        "artifact_fetch_available": True,
+        "torch_available": True,
+        "cuda_available": False,
+        "nvcc_available": True,
+    }
+
+    exit_code = cli.main(["doctor", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == json.dumps(
+        expected, sort_keys=True, separators=(",", ":")
+    ) + "\n"
+    assert json.loads(captured.out) == expected
+    assert captured.err == ""
+
+
+def test_doctor_separates_a_configuration_from_an_offline_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The case a single ``offline`` field used to hide.
+
+    The configuration allows fetching and the hub client refuses to
+    reach out, so the honest answer is that fetching is unavailable.
+    """
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "0")
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    _set_doctor_probes(monkeypatch)
+
+    exit_code = cli.main(["doctor", "--json"])
+
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert exit_code == 0
+    assert report["configured_offline"] is False
+    assert report["source_offline"] is True
+    assert report["artifact_fetch_available"] is False
+    assert report["artifact_source"] == "huggingface"
+
+
+# -- shipped manifest (nothing replaced) -------------------------------
+
+
+def test_artifacts_verify_resolves_a_shipped_family(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``verify`` reaches the cache lookup for a family the package ships.
+
+    With an empty cache the command still fails, but on the missing
+    bytes rather than on the family: an empty manifest would refuse
+    every family here, which is the failure this test exists for.
+    """
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    family, _ = _smallest_shipped_family()
+
+    exit_code = cli.main(["artifacts", "verify", family])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert captured.err == (
+        "error ARTIFACT_NOT_FOUND: artifact file 'tokenizer.json' of "
+        f"{family!r} is not in the cache and fetching is disabled (offline)\n"
+    )
+
+
+def test_artifacts_fetch_refuses_a_family_the_package_does_not_ship(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unknown family fails on the name, before any source is asked."""
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+
+    exit_code = cli.main(["artifacts", "fetch", "no_such_family"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err == (
+        "error ARTIFACT_NOT_FOUND: unknown tokenizer family 'no_such_family'\n"
+    )
+
+
+@pytest.mark.skipif(
+    not _HAS_RESEARCH_TREE,
+    reason="TOKTIER_RESEARCH_ROOT does not point at a research tree",
+)
+def test_artifacts_fetch_then_verify_real_artifact_bytes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The shipped digests against the bytes they were taken from.
+
+    Only the source is replaced (the hub is not reachable from a test);
+    the manifest is the one the package ships, so a digest or a byte
+    length that drifted from the artifact fails here.
+    """
+    home = tmp_path / "toktier-home"
+    monkeypatch.setenv("TOKTIER_HOME", str(home))
+    root = Path(RESEARCH_ROOT) / "artifacts" / "tokenizers"
+    monkeypatch.setattr(cli, "HuggingFaceSource", lambda: LocalDirectorySource(root))
+    family, size = _smallest_shipped_family()
+    entry = cli._artifact_manifest().get(family)
+    directory = home / "cache" / "artifacts" / entry.directory_name
+
+    fetched = cli.main(["artifacts", "fetch", family])
+    verified = cli.main(["artifacts", "verify", family])
+
+    captured = capsys.readouterr()
+    assert (fetched, verified) == (0, 0)
+    assert captured.out == (
+        f"fetched {family}: {directory}\nverified {family}: {directory}\n"
+    )
+    assert captured.err == ""
+    assert (directory / "tokenizer.json").stat().st_size == size
+
+
+# -- synthetic manifest (plumbing) -------------------------------------
+
+
+def test_artifacts_fetch_happy_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home = tmp_path / "toktier-home"
+    monkeypatch.setenv("TOKTIER_HOME", str(home))
+    source = StaticSource(GOOD)
+    _set_artifact_source(monkeypatch, source)
+    directory = home / "cache" / "artifacts" / f"{FAMILY}-{REVISION[:12]}"
+
+    exit_code = cli.main(["artifacts", "fetch", FAMILY, "--force"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == f"fetched {FAMILY}: {directory}\n"
+    assert captured.err == ""
+    assert source.calls == ["tokenizer.json"]
+    assert (directory / "tokenizer.json").read_bytes() == GOOD
+
+
+def test_artifacts_fetch_hash_mismatch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    source = StaticSource(BAD)
+    _set_artifact_source(monkeypatch, source)
+
+    exit_code = cli.main(["artifacts", "fetch", FAMILY])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert captured.err == (
+        "error ARTIFACT_HASH_MISMATCH: content hash mismatch for "
+        f"{FAMILY}/tokenizer.json\n"
+    )
+    assert source.calls == ["tokenizer.json", "tokenizer.json"]
+
+
+def test_artifacts_export_then_import_roundtrip(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The air-gap recipe of the README, end to end.
+
+    Fetch on one machine, export, import into a second machine's empty
+    cache, then bind the installed bytes to the shipped digests with
+    ``verify`` -- all through the command line, with no source configured
+    on the second machine.
+    """
+    online_home = tmp_path / "online-home"
+    offline_home = tmp_path / "offline-home"
+    bundle = tmp_path / "demo.tar"
+    monkeypatch.setenv("TOKTIER_HOME", str(online_home))
+    source = StaticSource(GOOD)
+    _set_artifact_source(monkeypatch, source)
+    alias = f"{FAMILY}-{REVISION[:12]}"
+
+    fetched = cli.main(["artifacts", "fetch", FAMILY])
+    exported = cli.main(["artifacts", "export", FAMILY, "--out", str(bundle)])
+    monkeypatch.setenv("TOKTIER_HOME", str(offline_home))
+    imported = cli.main(["artifacts", "import", str(bundle)])
+    verified = cli.main(["artifacts", "verify", FAMILY])
+
+    captured = capsys.readouterr()
+    installed = offline_home / "cache" / "artifacts" / alias
+    assert (fetched, exported, imported, verified) == (0, 0, 0, 0)
+    assert captured.out == (
+        f"fetched {FAMILY}: {online_home / 'cache' / 'artifacts' / alias}\n"
+        f"exported {FAMILY}: {bundle}\n"
+        f"imported {alias}: {installed}\n"
+        f"verified {FAMILY}: {installed}\n"
+    )
+    assert captured.err == ""
+    assert source.calls == ["tokenizer.json"]
+    assert (installed / "tokenizer.json").read_bytes() == GOOD
+
+
+def test_artifacts_export_refuses_an_empty_cache(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Export verifies first; with nothing cached there is nothing to pack."""
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    _set_artifact_source(monkeypatch, StaticSource(GOOD))
+    bundle = tmp_path / "demo.tar"
+
+    exit_code = cli.main(["artifacts", "export", FAMILY, "--out", str(bundle)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "ARTIFACT_NOT_FOUND" in captured.err
+    assert not bundle.exists()
+
+
+def test_artifacts_import_rejects_a_file_that_is_not_a_bundle(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home = tmp_path / "toktier-home"
+    monkeypatch.setenv("TOKTIER_HOME", str(home))
+    bundle = tmp_path / "not-a-bundle.tar"
+    bundle.write_bytes(b"these bytes are not a tar archive\n")
+
+    exit_code = cli.main(["artifacts", "import", str(bundle)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert captured.err.startswith("error BUNDLE_INVALID: ")
+    cache = home / "cache" / "artifacts"
+    assert not cache.exists() or not any(
+        path for path in cache.iterdir() if not path.name.startswith(".")
+    )
+
+
+def test_inspect_prints_one_family(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _set_artifact_source(monkeypatch, StaticSource(GOOD))
+    digest = hashlib.sha256(GOOD).hexdigest()
+
+    exit_code = cli.main(["inspect", FAMILY])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == (
+        f"family: {FAMILY}\n"
+        "repo_id: demo/demo\n"
+        f"revision: {REVISION}\n"
+        f"tokenizer.json: sha256 {digest} ({len(GOOD)} bytes)\n"
+    )
+    assert captured.err == ""
+
+
+def test_inspect_json_matches_the_shipped_manifest(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``inspect --json`` over the manifest the package actually ships."""
+    manifest = cli._artifact_manifest()
+
+    exit_code = cli.main(["inspect", "--json"])
+
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert exit_code == 0
+    assert sorted(report) == sorted(manifest.families())
+    for family, block in report.items():
+        entry = manifest.get(family)
+        assert block["repo_id"] == entry.repo_id
+        assert block["revision"] == entry.revision
+        assert block["files"] == {
+            item.name: {"sha256": item.sha256, "size": item.size}
+            for item in entry.files
+        }
+
+
+def test_inspect_refuses_an_unknown_family(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = cli.main(["inspect", "no_such_family"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err == (
+        "error ARTIFACT_NOT_FOUND: unknown tokenizer family 'no_such_family'\n"
+    )
+
+
+def test_version_uses_package_fallback(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def missing_version(name: str) -> NoReturn:
+        raise importlib.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(importlib.metadata, "version", missing_version)
+
+    exit_code = cli.main(["version"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == f"{__version__}\n"
+    assert captured.err == ""

@@ -11,10 +11,90 @@ import toktier
 from toktier.errors import (
     ArtifactHashMismatch,
     ArtifactNotFound,
+    BackendUnavailable,
     UnsupportedConfig,
+)
+from toktier.facade import api as facade_api
+from toktier.policy import (
+    BACKEND_GPU,
+    BACKEND_REFERENCE,
+    PlanReason,
+    ReasonCode,
+    RoutePlan,
+    RoutingPolicy,
 )
 
 from .conftest import Rig, build_rig
+
+
+def test_gpu_delivery_profile_detection_and_explicit_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(facade_api, "_module_present", lambda _name: False)
+    assert facade_api._resolve_gpu_delivery("auto") == "prebuilt"
+    monkeypatch.setattr(facade_api, "_module_present", lambda _name: True)
+    assert facade_api._resolve_gpu_delivery("auto") == "jit"
+    assert facade_api._resolve_gpu_delivery("prebuilt") == "prebuilt"
+    assert facade_api._resolve_gpu_delivery("jit") == "jit"
+    with pytest.raises(ValueError, match="gpu_delivery must be"):
+        facade_api._resolve_gpu_delivery("unknown")
+
+
+def _unjudged_jit_plan() -> RoutePlan:
+    return RoutePlan(
+        policy=RoutingPolicy.CERTIFIED,
+        backend=BACKEND_REFERENCE,
+        fallback_chain=(BACKEND_REFERENCE,),
+        reasons=(
+            PlanReason(
+                ReasonCode.R_UNCERTIFIED_ARTIFACT,
+                BACKEND_GPU,
+                {
+                    "cause": "toolchain_unverified",
+                    "constraint": "CUDA 13.0 / torch 2.13.0+cu130",
+                    "observed": "CUDA 13.0 / torch 2.11.0+cu130",
+                },
+            ),
+        ),
+    )
+
+
+def test_auto_device_warns_with_explicit_unjudged_jit_remedy(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(facade_api, "_resolve_gpu_delivery", lambda _value: "jit")
+    monkeypatch.setattr(facade_api, "build_plan", lambda *_args: _unjudged_jit_plan())
+
+    with pytest.warns(RuntimeWarning, match="--accept-uncertified-jit") as caught:
+        tokenizer = rig.tokenizer()
+    try:
+        message = str(caught[0].message)
+        assert "CUDA 13.0 / torch 2.11.0+cu130" in message
+        assert "CUDA 13.0 / torch 2.13.0+cu130" in message
+        assert "outside TokTier's certified exact-ID guarantee" in message
+        assert tokenizer.plan.backend == BACKEND_REFERENCE
+    finally:
+        tokenizer.close()
+
+
+def test_cuda_device_failure_carries_unjudged_jit_remedy(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(facade_api, "_resolve_gpu_delivery", lambda _value: "jit")
+    monkeypatch.setattr(facade_api, "build_plan", lambda *_args: _unjudged_jit_plan())
+
+    with pytest.raises(BackendUnavailable) as caught:
+        rig.tokenizer(device="cuda")
+
+    remedy = "toktier gpu compile tiny_bytes --accept-uncertified-jit"
+    assert caught.value.details["remedy"] == remedy
+    assert caught.value.details["reason_code"] == "R_UNCERTIFIED_ARTIFACT"
+    assert caught.value.details["reason"] == {
+        "cause": "toolchain_unverified",
+        "constraint": "CUDA 13.0 / torch 2.13.0+cu130",
+        "observed": "CUDA 13.0 / torch 2.11.0+cu130",
+    }
+    assert remedy in str(caught.value)
 
 
 def test_load_fixes_a_reference_plan(rig: Rig) -> None:
@@ -60,30 +140,31 @@ def test_explain_is_the_routing_explanation_plus_facade_keys(rig: Rig) -> None:
     assert "store" not in report  # the store has not been touched
 
 
-def test_explain_does_not_claim_a_hardware_probe_that_never_ran(rig: Rig) -> None:
-    """The facade supplies no device probe, and its report says so.
-
-    Whatever the machine carries, the facade never enumerates devices,
-    so the honest report is ``devices_probed: False`` with the GPU
-    option recorded as not importable or not adopted -- never as
-    ``R_NO_GPU_DETECTED``, which would present a fail-closed default as
-    a hardware observation.
-    """
+def test_auto_device_reports_the_hardware_probe_it_performed(rig: Rig) -> None:
+    """The automatic facade probes and distinguishes absent runtime/device."""
     report = rig.tokenizer().explain()
     probe = report["probe"]
     assert isinstance(probe, dict)
-    assert probe["devices_probed"] is False
+    assert probe["devices_probed"] is True
     reasons = report["plan_reasons"]
     assert isinstance(reasons, list)
-    gpu_codes = {
-        reason["code"] for reason in reasons if reason["backend"] == "gpu"
-    }
-    assert "R_NO_GPU_DETECTED" not in gpu_codes
-    assert gpu_codes <= {"R_BACKEND_UNAVAILABLE", "R_ACCELERATOR_NOT_ADOPTED"}
+    gpu_codes = {reason["code"] for reason in reasons if reason["backend"] == "gpu"}
+    assert "R_ACCELERATOR_NOT_ADOPTED" not in gpu_codes
+    assert gpu_codes <= {"R_BACKEND_UNAVAILABLE", "R_NO_GPU_DETECTED"}
+
+
+def test_cpu_device_deliberately_skips_the_hardware_probe(rig: Rig) -> None:
+    report = rig.tokenizer(device="cpu").explain()
+    probe = report["probe"]
+    assert isinstance(probe, dict)
+    assert probe["devices_probed"] is False
+    runtime = report["runtime_policy"]
+    assert isinstance(runtime, dict)
+    assert runtime["device"] == "cpu"
 
 
 def test_explain_separates_shipped_facts_from_adoption(rig: Rig) -> None:
-    """"Not adopted" and "not available" are distinct statements.
+    """ "Not adopted" and "not available" are distinct statements.
 
     This checkout ships the prebuilt fatbin and the JIT sources, so the
     facade must report them as shipped -- the same answer ``toktier
@@ -136,11 +217,18 @@ def test_decode_round_trips_the_core_stream(rig: Rig) -> None:
     assert tokenizer.decode(tokenizer.encode(text).ids) == text
 
 
-def test_device_other_than_cpu_is_refused(rig: Rig) -> None:
-    with pytest.raises(UnsupportedConfig) as caught:
+def test_cuda_requires_an_eligible_gpu_and_unknown_devices_are_refused(
+    rig: Rig,
+) -> None:
+    with pytest.raises(BackendUnavailable) as caught:
         rig.tokenizer(device="cuda")
-    assert caught.value.code == "UNSUPPORTED_CONFIG"
-    assert caught.value.details["option"] == "device"
+    assert caught.value.details["backend"] == "gpu"
+    with pytest.raises(ValueError, match="device must be"):
+        rig.tokenizer(device="tpu")
+    with pytest.raises(ValueError, match="gpu_min_bytes"):
+        rig.tokenizer(gpu_min_bytes=-1)
+    with pytest.raises(ValueError, match="gpu_min_bytes"):
+        rig.tokenizer(gpu_min_bytes=True)
 
 
 def test_lookup_argument_is_validated(rig: Rig) -> None:
@@ -185,6 +273,9 @@ def test_reference_policy_is_accepted(rig: Rig) -> None:
     tokenizer = rig.tokenizer(policy="reference")
     assert tokenizer.plan.policy.value == "reference"
     assert tokenizer.plan.backend == "hf"
+    probe = tokenizer.explain()["probe"]
+    assert isinstance(probe, dict)
+    assert probe["devices_probed"] is False
 
 
 def test_version_reports_the_installed_distribution() -> None:

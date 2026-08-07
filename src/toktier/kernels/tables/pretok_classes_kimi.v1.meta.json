@@ -1,0 +1,39 @@
+{
+ "table": "pretok_classes_kimi.v1.npy",
+ "class_enum": {
+  "P": 0,
+  "U": 1,
+  "L": 2,
+  "C": 3,
+  "N": 4,
+  "S": 5,
+  "M": 6,
+  "HL": 7,
+  "HN": 8,
+  "HP": 9
+ },
+ "pattern_sha256": "de5781783b193d5ccf5b1b28edfa70fa816ce78d54603fdc422cfd8d4ea4411f",
+ "families": [
+  "kimi_k3"
+ ],
+ "counts": {
+  "HL": 98685,
+  "HN": 13,
+  "HP": 332,
+  "Han": 99030
+ },
+ "class_sizes": {
+  "P": 968317,
+  "U": 1889,
+  "L": 2258,
+  "C": 38196,
+  "N": 1898,
+  "S": 25,
+  "M": 2499,
+  "HL": 98685,
+  "HN": 13,
+  "HP": 332
+ },
+ "table_sha256": "c210a8a5fe6cb4b7f568c685af5adda933ce1ebe39461abd405592b46c4b6383",
+ "source": "generate_class_tables.py (category and script masks probed from the reference engine; Han subclasses resolved at build time)"
+}

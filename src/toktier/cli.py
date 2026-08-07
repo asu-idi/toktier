@@ -10,7 +10,7 @@ import os
 import platform
 import shutil
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import NoReturn, cast
 
 from . import __version__
@@ -27,7 +27,7 @@ from .artifacts import (
 from .artifacts.store import fetch_availability
 from .artifacts.tables import ARTIFACT_MANIFEST
 from .config import Config
-from .errors import ToktierError
+from .errors import BackendUnavailable, ToktierError
 from .paths import artifact_cache_dir, kernel_cache_dir, store_state_dir
 
 _USAGE_ERROR = 64
@@ -50,6 +50,14 @@ def _toktier_version() -> str:
         return importlib.metadata.version("toktier")
     except importlib.metadata.PackageNotFoundError:
         return __version__
+
+
+def _installed_version(distribution: str) -> str | None:
+    """Installed distribution version without importing its runtime."""
+    try:
+        return importlib.metadata.version(distribution)
+    except importlib.metadata.PackageNotFoundError:
+        return None
 
 
 def _nvcc_search() -> tuple[str | None, list[str]]:
@@ -99,6 +107,22 @@ def _nvcc_search() -> tuple[str | None, list[str]]:
     return None, checked
 
 
+def _prebuilt_facts() -> tuple[bool, str | None]:
+    """Whether a servable prebuilt fatbin ships in this installation.
+
+    Read-only and torch-free, like every other probe of this command:
+    the fatbin file must be present and match the digest its build
+    manifest records. The answer comes from the one shared helper the
+    routing probe also reports through, so ``doctor`` and ``explain()``
+    cannot disagree about the shipped prebuilt state. Driver and device
+    facts are deliberately not consulted here -- they belong to the load
+    attempt, which states its own reason when it refuses.
+    """
+    from toktier.kernels.prebuilt import shipped_prebuilt_facts
+
+    return shipped_prebuilt_facts()
+
+
 def _doctor_report(
     config: Config, *, source: ArtifactSource | None
 ) -> dict[str, object]:
@@ -111,12 +135,24 @@ def _doctor_report(
     # cuda package is the CUDA probe that preserves this command's no-import
     # guarantee for torch.
     nvcc_path, nvcc_checked = _nvcc_search()
+    # The nvcc trail concerns the JIT delivery only; the prebuilt
+    # delivery loads the shipped fatbin through the driver and needs no
+    # toolkit, so the two facts are reported side by side rather than
+    # letting a missing nvcc read as "no GPU path".
+    prebuilt_available, prebuilt_digest = _prebuilt_facts()
     from .backends.fast_cpu import ENGINE_MODULE, fast_cpu_engine_facts
+    from .facade.api import DEFAULT_GPU_MIN_BYTES
 
     fast_cpu = fast_cpu_engine_facts()
     from .repair.fastokens import fastokens_distribution_identity
 
     fastokens_version, fastokens_digest = fastokens_distribution_identity()
+    torch_available = importlib.util.find_spec("torch") is not None
+    transformers_available = importlib.util.find_spec("transformers") is not None
+    ninja_available = importlib.util.find_spec("ninja") is not None
+    tokenizers_version = _installed_version("tokenizers")
+    transformers_version = _installed_version("transformers")
+    automatic_delivery = "jit" if ninja_available else "prebuilt"
     return {
         "python_version": platform.python_version(),
         "toktier_version": _toktier_version(),
@@ -127,14 +163,26 @@ def _doctor_report(
         "artifact_source": availability.source_name or "none",
         "source_offline": availability.source_offline,
         "artifact_fetch_available": availability.available,
-        "torch_available": importlib.util.find_spec("torch") is not None,
+        "tokenizers_version": tokenizers_version,
+        "transformers_version": transformers_version,
+        "certified_cpu_profile_ready": (
+            fast_cpu.version is not None
+            and tokenizers_version == "0.22.2"
+            and transformers_version == "4.57.6"
+        ),
+        "torch_available": torch_available,
+        "ninja_available": ninja_available,
+        "automatic_gpu_delivery": automatic_delivery,
+        "automatic_gpu_min_bytes": DEFAULT_GPU_MIN_BYTES,
+        "automatic_gpu_candidate": torch_available and not config.disable_gpu,
         "cuda_available": importlib.util.find_spec("cuda") is not None,
+        "prebuilt_fatbin_available": prebuilt_available,
+        "prebuilt_fatbin_digest": prebuilt_digest,
         "gigatoken_available": fast_cpu.version is not None,
         "gigatoken_delivery": "vendored",
         "gigatoken_module": ENGINE_MODULE,
         "gigatoken_runtime_ready": (
-            fast_cpu.version is not None
-            and importlib.util.find_spec("transformers") is not None
+            fast_cpu.version is not None and transformers_available
         ),
         "gigatoken_version": fast_cpu.version,
         "gigatoken_native_digest": fast_cpu.binary_digest,
@@ -175,9 +223,7 @@ def _artifact_manifest() -> ArtifactManifest:
     return ArtifactManifest.load(ARTIFACT_MANIFEST)
 
 
-def _artifact_store(
-    config: Config, *, source: ArtifactSource | None
-) -> ArtifactStore:
+def _artifact_store(config: Config, *, source: ArtifactSource | None) -> ArtifactStore:
     return ArtifactStore(_artifact_manifest(), config=config, source=source)
 
 
@@ -293,6 +339,120 @@ def _version(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _gpu_compile(arguments: argparse.Namespace) -> int:
+    """Build or reuse the JIT kernel under a certified or explicit-risk policy."""
+    from .facade import load
+
+    requested_acceptance = bool(arguments.accept_uncertified_jit)
+    accepted = False
+    policy = "certified"
+    warning: str | None = None
+    try:
+        tokenizer = load(
+            arguments.family,
+            device="cuda",
+            policy=policy,
+            gpu_delivery="jit",
+            gpu_min_bytes=0,
+        )
+    except BackendUnavailable as error:
+        reason = error.details.get("reason")
+        reason_detail = reason if isinstance(reason, Mapping) else {}
+        toolchain_only = reason_detail.get("cause") == "toolchain_unverified"
+        if not requested_acceptance or not toolchain_only:
+            raise
+        accepted = True
+        policy = "experimental"
+        observed = reason_detail.get("observed", "unknown")
+        warning = (
+            f"UNCERTIFIED JIT OPT-IN: observed {observed}; this toolchain "
+            "combination is being "
+            "compiled under EXPERIMENTAL policy. Its GPU results are outside "
+            "TokTier's certified exact-ID guarantee."
+        )
+        print(f"WARNING: {warning}", file=sys.stderr)
+        tokenizer = load(
+            arguments.family,
+            device="cuda",
+            policy=policy,
+            gpu_delivery="jit",
+            gpu_min_bytes=0,
+        )
+    try:
+        preflight = tokenizer.explain()
+        preflight_waivers = preflight.get("experimental_waivers", [])
+        if accepted and (
+            not isinstance(preflight_waivers, list)
+            or not preflight_waivers
+            or not all(_is_jit_toolchain_waiver(item) for item in preflight_waivers)
+        ):
+            raise BackendUnavailable(
+                "--accept-uncertified-jit accepts only an unjudged JIT "
+                "toolchain pair; another certification premise also failed",
+                details={
+                    "backend": "gpu",
+                    "accepted_scope": "jit_toolchain_only",
+                    "experimental_waivers": preflight_waivers,
+                },
+            )
+        tokenizer.encode("TokTier JIT compile probe", lookup="off")
+        report = tokenizer.explain()
+    finally:
+        tokenizer.close()
+    gpu_report = report.get("gpu_backend")
+    runtime = report.get("runtime_policy")
+    loaded = isinstance(gpu_report, dict) and gpu_report.get("loaded") is True
+    executed = runtime.get("last_execution") if isinstance(runtime, dict) else None
+    executed_gpu = (
+        isinstance(executed, dict) and executed.get("executed_backend") == "gpu"
+    )
+    if report.get("kernel_delivery") != "jit" or not loaded or not executed_gpu:
+        raise BackendUnavailable(
+            "the JIT compile probe did not execute the GPU backend",
+            details={
+                "backend": "gpu",
+                "kernel_delivery": report.get("kernel_delivery"),
+                "gpu_backend": gpu_report,
+                "runtime_policy": runtime,
+            },
+        )
+    payload = {
+        "family": arguments.family,
+        "jit_ready": True,
+        "kernel_delivery": "jit",
+        "policy": policy,
+        "requested_uncertified_jit_opt_in": requested_acceptance,
+        "accepted_uncertified_jit": accepted,
+        "experimental_waivers": report.get("experimental_waivers", []),
+        "warning": warning,
+    }
+    if arguments.json:
+        print(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+    else:
+        for name, value in payload.items():
+            if isinstance(value, list):
+                rendered = json.dumps(value, sort_keys=True, separators=(",", ":"))
+            elif value is None:
+                rendered = "none"
+            else:
+                rendered = str(value).lower() if isinstance(value, bool) else str(value)
+            print(f"{name}: {rendered}")
+    return 0
+
+
+def _is_jit_toolchain_waiver(value: object) -> bool:
+    """Whether a serialized waiver is exactly the CLI flag's narrow scope."""
+    if not isinstance(value, Mapping):
+        return False
+    detail = value.get("detail")
+    return (
+        value.get("backend") == "gpu"
+        and value.get("code") == "R_UNCERTIFIED_ARTIFACT"
+        and isinstance(detail, Mapping)
+        and detail.get("cause") == "toolchain_unverified"
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = _ArgumentParser(prog="toktier")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -302,9 +462,7 @@ def _build_parser() -> argparse.ArgumentParser:
     doctor.set_defaults(handler=_doctor)
 
     artifacts = commands.add_parser("artifacts", help="manage artifacts")
-    artifact_commands = artifacts.add_subparsers(
-        dest="artifact_command", required=True
-    )
+    artifact_commands = artifacts.add_subparsers(dest="artifact_command", required=True)
 
     fetch = artifact_commands.add_parser("fetch", help="fetch an artifact")
     fetch.add_argument("family", metavar="FAMILY")
@@ -339,6 +497,23 @@ def _build_parser() -> argparse.ArgumentParser:
     inspect.add_argument("family", metavar="FAMILY", nargs="?")
     inspect.add_argument("--json", action="store_true", help="emit JSON")
     inspect.set_defaults(handler=_inspect)
+
+    gpu = commands.add_parser("gpu", help="prepare and diagnose GPU delivery")
+    gpu_commands = gpu.add_subparsers(dest="gpu_command", required=True)
+    compile_jit = gpu_commands.add_parser(
+        "compile", help="build or reuse the JIT kernel for one family"
+    )
+    compile_jit.add_argument("family", metavar="FAMILY")
+    compile_jit.add_argument(
+        "--accept-uncertified-jit",
+        action="store_true",
+        help=(
+            "compile under EXPERIMENTAL policy even when the observed JIT "
+            "toolchain is outside the certified set"
+        ),
+    )
+    compile_jit.add_argument("--json", action="store_true", help="emit JSON")
+    compile_jit.set_defaults(handler=_gpu_compile)
 
     version = commands.add_parser("version", help="show the toktier version")
     version.set_defaults(handler=_version)

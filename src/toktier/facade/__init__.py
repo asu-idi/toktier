@@ -2,7 +2,8 @@
 
 Contract reference: ``docs/contracts/facade.md``. Import cost note: this
 package imports no oracle, no native store and no accelerator runtime;
-those load at construction and first use respectively.
+construction loads the oracle and may perform a lightweight GPU probe, while
+the native store and GPU engine remain lazy until their first relevant use.
 """
 
 from __future__ import annotations

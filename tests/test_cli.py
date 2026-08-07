@@ -31,6 +31,7 @@ from toktier.artifacts import (
     ArtifactFile,
     ArtifactManifest,
 )
+from toktier.errors import BackendUnavailable
 
 FAMILY = "demo_family"
 REVISION = "a" * 40
@@ -83,7 +84,7 @@ def _set_doctor_probes(monkeypatch: pytest.MonkeyPatch) -> None:
     from toktier.repair import fastokens
 
     def find_spec(name: str) -> object | None:
-        assert name in {"torch", "cuda", "transformers"}
+        assert name in {"torch", "cuda", "transformers", "ninja"}
         return object() if name in {"torch", "transformers"} else None
 
     def which(name: str) -> str:
@@ -119,9 +120,18 @@ _NVCC_CHECKED_VIA_PATH = [
 ]
 
 
-def _set_artifact_source(
-    monkeypatch: pytest.MonkeyPatch, source: StaticSource
-) -> None:
+def _shipped_prebuilt_digest() -> str:
+    """Digest of the fatbin shipped in this source tree.
+
+    The doctor probe reports the real package data, so the expectation
+    is computed from the same shipped bytes rather than monkeypatched.
+    """
+    from toktier.kernels.prebuilt import fatbin_digest, fatbin_path
+
+    return fatbin_digest(fatbin_path().read_bytes())
+
+
+def _set_artifact_source(monkeypatch: pytest.MonkeyPatch, source: StaticSource) -> None:
     """Install the synthetic manifest and source (see the module docstring)."""
     manifest = _manifest()
     monkeypatch.setattr(cli, "_artifact_manifest", lambda: manifest)
@@ -162,8 +172,17 @@ def test_doctor_human(
         "artifact_source: huggingface\n"
         "source_offline: false\n"
         "artifact_fetch_available: false\n"
+        "tokenizers_version: 1.2.3\n"
+        "transformers_version: 1.2.3\n"
+        "certified_cpu_profile_ready: false\n"
         "torch_available: true\n"
+        "ninja_available: false\n"
+        "automatic_gpu_delivery: prebuilt\n"
+        "automatic_gpu_min_bytes: 65536\n"
+        "automatic_gpu_candidate: true\n"
         "cuda_available: false\n"
+        "prebuilt_fatbin_available: true\n"
+        f"prebuilt_fatbin_digest: {_shipped_prebuilt_digest()}\n"
         "gigatoken_available: true\n"
         "gigatoken_delivery: vendored\n"
         "gigatoken_module: toktier._vendor.gigatoken_rs\n"
@@ -201,8 +220,17 @@ def test_doctor_json(
         "artifact_source": "huggingface",
         "source_offline": False,
         "artifact_fetch_available": True,
+        "tokenizers_version": "2.0.0",
+        "transformers_version": "2.0.0",
+        "certified_cpu_profile_ready": False,
         "torch_available": True,
+        "ninja_available": False,
+        "automatic_gpu_delivery": "prebuilt",
+        "automatic_gpu_min_bytes": 65536,
+        "automatic_gpu_candidate": True,
         "cuda_available": False,
+        "prebuilt_fatbin_available": True,
+        "prebuilt_fatbin_digest": _shipped_prebuilt_digest(),
         "gigatoken_available": True,
         "gigatoken_delivery": "vendored",
         "gigatoken_module": "toktier._vendor.gigatoken_rs",
@@ -224,9 +252,10 @@ def test_doctor_json(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert captured.out == json.dumps(
-        expected, sort_keys=True, separators=(",", ":")
-    ) + "\n"
+    assert (
+        captured.out
+        == json.dumps(expected, sort_keys=True, separators=(",", ":")) + "\n"
+    )
     assert json.loads(captured.out) == expected
     assert captured.err == ""
 
@@ -541,3 +570,149 @@ def test_version_uses_package_fallback(
     assert exit_code == 0
     assert captured.out == f"{__version__}\n"
     assert captured.err == ""
+
+
+class _FakeJitTokenizer:
+    def __init__(self, *, waivers: list[dict[str, object]] | None = None) -> None:
+        self.encoded: list[tuple[str, str]] = []
+        self.closed = False
+        self._waivers = waivers or []
+
+    def encode(self, text: str, *, lookup: str) -> object:
+        self.encoded.append((text, lookup))
+        return object()
+
+    def explain(self) -> dict[str, object]:
+        return {
+            "kernel_delivery": "jit",
+            "gpu_backend": {"loaded": True},
+            "runtime_policy": {"last_execution": {"executed_backend": "gpu"}},
+            "experimental_waivers": self._waivers,
+        }
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_gpu_compile_uses_certified_policy_by_default(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from toktier import facade
+
+    calls: list[tuple[str, dict[str, object]]] = []
+    tokenizer = _FakeJitTokenizer()
+
+    def fake_load(family: str, **keywords: object) -> _FakeJitTokenizer:
+        calls.append((family, keywords))
+        return tokenizer
+
+    monkeypatch.setattr(facade, "load", fake_load)
+
+    exit_code = cli.main(["gpu", "compile", "qwen3_8b", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert calls == [
+        (
+            "qwen3_8b",
+            {
+                "device": "cuda",
+                "policy": "certified",
+                "gpu_delivery": "jit",
+                "gpu_min_bytes": 0,
+            },
+        )
+    ]
+    assert tokenizer.encoded == [("TokTier JIT compile probe", "off")]
+    assert tokenizer.closed is True
+    assert json.loads(captured.out) == {
+        "accepted_uncertified_jit": False,
+        "experimental_waivers": [],
+        "family": "qwen3_8b",
+        "jit_ready": True,
+        "kernel_delivery": "jit",
+        "policy": "certified",
+        "requested_uncertified_jit_opt_in": False,
+        "warning": None,
+    }
+    assert captured.err == ""
+
+
+def test_gpu_compile_requires_a_loud_explicit_opt_in_for_unjudged_jit(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from toktier import facade
+
+    waiver: dict[str, object] = {
+        "backend": "gpu",
+        "code": "R_UNCERTIFIED_ARTIFACT",
+        "detail": {
+            "cause": "toolchain_unverified",
+            "observed": "CUDA 13.0 / torch 2.11.0+cu130",
+        },
+    }
+    calls: list[tuple[str, dict[str, object]]] = []
+    tokenizer = _FakeJitTokenizer(waivers=[waiver])
+
+    def fake_load(family: str, **keywords: object) -> _FakeJitTokenizer:
+        calls.append((family, keywords))
+        if keywords["policy"] == "certified":
+            raise BackendUnavailable(
+                "unjudged JIT toolchain",
+                details={"reason": waiver["detail"]},
+            )
+        return tokenizer
+
+    monkeypatch.setattr(facade, "load", fake_load)
+
+    exit_code = cli.main(
+        [
+            "gpu",
+            "compile",
+            "qwen3_8b",
+            "--accept-uncertified-jit",
+            "--json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert [call[1]["policy"] for call in calls] == ["certified", "experimental"]
+    report = json.loads(captured.out)
+    assert report["accepted_uncertified_jit"] is True
+    assert report["requested_uncertified_jit_opt_in"] is True
+    assert report["policy"] == "experimental"
+    assert report["experimental_waivers"] == [waiver]
+    assert "UNCERTIFIED JIT OPT-IN" in captured.err
+    assert "outside TokTier's certified exact-ID guarantee" in captured.err
+
+
+def test_gpu_compile_risk_flag_cannot_waive_a_different_premise(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from toktier import facade
+
+    calls: list[dict[str, object]] = []
+
+    def fake_load(_family: str, **keywords: object) -> _FakeJitTokenizer:
+        calls.append(keywords)
+        raise BackendUnavailable(
+            "uncertified architecture",
+            details={
+                "reason": {
+                    "cause": "architecture_unverified",
+                    "observed": "sm_130",
+                }
+            },
+        )
+
+    monkeypatch.setattr(facade, "load", fake_load)
+
+    exit_code = cli.main(["gpu", "compile", "qwen3_8b", "--accept-uncertified-jit"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert [call["policy"] for call in calls] == ["certified"]
+    assert captured.out == ""
+    assert "error BACKEND_UNAVAILABLE: uncertified architecture" in captured.err
+    assert "UNCERTIFIED JIT OPT-IN" not in captured.err

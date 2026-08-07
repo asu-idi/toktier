@@ -1,0 +1,23 @@
+{
+ "table": "nfc_quick_check.v1.npy",
+ "semantics": {
+  "0": "safe starter",
+  "1..K": "combining class rank",
+  "255": "unsafe, take the slow path"
+ },
+ "predicate": "pass <=> no 255 and no adjacent v[i-1] > v[i] != 0; pass implies the reference normalizer leaves the string unchanged",
+ "K": 54,
+ "judge": {
+  "lib": "tokenizers",
+  "version": "0.22.2",
+  "api": "normalizers.NFC/NFD .normalize_str"
+ },
+ "table_sha256": "1e49ad7f3dd5b4692023224b52ec1e40db54858896af96597eb43b758eb6b591",
+ "histogram": {
+  "safe_starter(0)": 1109955,
+  "safe_nonstarter(1..K)": 771,
+  "unsafe(255)": 3386
+ },
+ "separator_note": "batch probes are separated by U+0020, which has no canonical composition or decomposition role; the second-element scan covers (x, U+0020) for every first element x",
+ "source": "generate_class_tables.py (reference normalizer probed over the whole codepoint space: single-character identity, first elements against the whole space by bisection, combining class order by NFD reordering probes)"
+}

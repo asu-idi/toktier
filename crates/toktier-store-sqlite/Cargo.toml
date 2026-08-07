@@ -1,0 +1,16 @@
+[package]
+name = "toktier-store-sqlite"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "SQLite persistence tier for the toktier session store. The database file is owned exclusively by this Rust layer; records travel in store format v1."
+
+[dependencies]
+toktier-store-core = { path = "../toktier-store-core" }
+rusqlite.workspace = true
+
+[dev-dependencies]
+toktier-store-core = { path = "../toktier-store-core", features = ["testing"] }
+rusqlite.workspace = true
+tempfile = "3"

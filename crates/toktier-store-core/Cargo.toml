@@ -1,0 +1,20 @@
+[package]
+name = "toktier-store-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Session store core for toktier: append-only text-to-token-ids sessions with certified extension, block-hash prefix sharing, and a strict on-disk record format (format v1)."
+
+[features]
+# Test-support helpers (deterministic mock encoders, corruption injection).
+# Not part of the release API surface; enabled by the crate's own tests and
+# by downstream test suites.
+testing = []
+
+[dependencies]
+sha2.workspace = true
+
+[dev-dependencies]
+# The crate's own integration tests use the testing helpers.
+toktier-store-core = { path = ".", features = ["testing"] }

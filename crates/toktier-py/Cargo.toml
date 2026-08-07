@@ -1,0 +1,22 @@
+[package]
+name = "toktier-py"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Thin Python facade over the toktier session store (pyo3)."
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[features]
+# Binds the core's corruption-injection helper into the extension for
+# the behavioral test suites. Never enabled in release wheels: the
+# default build carries no test-only capability.
+testing = ["toktier-store-core/testing"]
+
+[dependencies]
+toktier-store-core = { path = "../toktier-store-core" }
+toktier-store-sqlite = { path = "../toktier-store-sqlite" }
+pyo3.workspace = true

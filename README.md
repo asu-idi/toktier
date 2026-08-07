@@ -14,8 +14,9 @@ offers a certified GPU path for fresh or large requests. Both fast paths return 
   (12.33 trillion characters), with zero observed divergence.
 - **Fast on both paths.** On the recorded benchmark battery, the GPU path
   encodes a fresh 4-million-character request (~786K tokens) in
-  **3.88 ms**. CPU repair answers a 256-character append to a 4.19M-character
-  session in **1.68 ms**.
+  **3.88 ms**. The bounded CPU repair operation for a 256-character append to
+  a 4.19M-character session takes **1.68 ms**, before materializing the full
+  Python ID tuple.
 - **Certified before acceleration.** Fast paths are admitted only for the exact
   tokenizer artifact, oracle version, kernel delivery, and architecture covered
   by recorded evidence. `explain()` reports the route and its reasons.
@@ -95,6 +96,12 @@ The install profile and input shape then determine the automatic route:
 `explain()` reports the fixed chain, the 64 KiB decision, the backend that
 actually returned the last result, and every fallback counter.
 
+Since 0.1.1, the UTF-8 crossover and no-hit added-token prefilter execute in
+one allocation-free Rust selector call. On the recorded RTX 5090 host, its
+4M-byte control-plane microprofile fell from 2.97 ms to 0.052 ms (57.5x); this
+is a routing-only measurement, separate from tokenization and Python result
+materialization. See [`docs/native-routing.md`](docs/native-routing.md).
+
 ## Install
 
 ```bash
@@ -156,7 +163,7 @@ before opening the route. The core wheel carries Gigatoken's MIT license,
 TokTier's modification notice, the dependency SBOM, and the dependency-license
 bundle.
 
-Version 0.1.0 is published as an ABI3 Linux x86-64 wheel, not an sdist: the
+TokTier is published as an ABI3 Linux x86-64 wheel, not an sdist: the
 certified CPU binary requires glibc 2.34 or newer, and silently rebuilding it
 during an sdist install would create different, uncertified bytes. The tagged
 repository contains the complete source and pinned reproduction recipe.

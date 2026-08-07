@@ -148,7 +148,7 @@ jobs:
             twine==7.0.0 \
             check-wheel-contents==0.6.3 \
             auditwheel==6.7.0
-          python tools/verify_release_identity.py --tag v0.1.0
+          python tools/verify_release_identity.py --tag v0.1.1
           python tools/generate_registry.py --release-check
           maturin build --locked --release --out dist
           python tools/verify_release_artifacts.py dist

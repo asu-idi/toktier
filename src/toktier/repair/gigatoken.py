@@ -321,6 +321,25 @@ class GigatokenRepair:
     def config_id(self) -> str:
         return CONFIG_ID
 
+    @property
+    def bpe_sync_pclass(self) -> bytes:
+        """Frozen O/S/L/N/M table consumed by the native seal predicate."""
+        return self._pclass
+
+    @property
+    def minimum_seal_tail_chars(self) -> int:
+        """Smallest retained tail that can enter a Gigatoken window.
+
+        Sealing closer to the end would remain correct, but the next append
+        would immediately take the HF ``window_covers_all`` path. Keep the
+        first power-of-two repair window whose usable overlap can exceed the
+        family's certified ``effective_l_max``.
+        """
+        window = self.spec.window_chars
+        while window - self.spec.margin <= self.spec.effective_l_max:
+            window *= 2
+        return window + 1
+
     def _count(self, path: str) -> None:
         self._path_counts[path] = self._path_counts.get(path, 0) + 1
 

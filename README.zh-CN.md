@@ -12,8 +12,9 @@ GPU 路径。两条快速路径返回的 token ID 都与 Hugging Face（HF）`to
 - **大规模精确验证。** 发布验证覆盖 14 个 tokenizer 工件、38 亿篇真实文档，
   共记录 **532 亿次检查**（12.33 万亿字符），未观察到任何分歧。
 - **CPU 与 GPU 两条快路径。** 在归档基准中，GPU 路径处理一个全新的
-  400 万字符请求（约 78.6 万 token）仅需 **3.88 ms**；CPU 修复路径向
-  419 万字符会话追加 256 个字符仅需 **1.68 ms**。
+  400 万字符请求（约 78.6 万 token）仅需 **3.88 ms**；对 419 万字符
+  会话追加 256 个字符的有界 CPU repair 操作仅需 **1.68 ms**，该数字不含
+  完整 Python ID tuple 的物化时间。
 - **先认证，再加速。** 只有 tokenizer 工件、参考版本、kernel 交付形式和
   GPU 架构都落在证据覆盖范围内时，系统才会采用快速路径。`explain()` 会
   说明实际路线及其原因。
@@ -90,6 +91,12 @@ tok = toktier.load("qwen3_8b", policy=RoutingPolicy.CERTIFIED)
 `explain()` 会报告冻结的后端链、64 KiB 判定、最后实际返回结果的后端，以及
 每类 fallback 计数。
 
+从 0.1.1 开始，UTF-8 阈值判定与 added-token 未命中预筛会在一次无额外
+`bytes` 分配的 Rust selector 调用中完成。在归档 RTX 5090 主机上，4M-byte
+输入的 routing-only 微基准由 2.97 ms 降至 0.052 ms（57.5 倍）；该数字不含
+tokenization 与 Python 返回值物化。详见
+[`docs/native-routing.md`](docs/native-routing.md)。
+
 ## 安装
 
 ```bash
@@ -144,7 +151,7 @@ TOKTIER_GIGATOKEN_BUILD_ROOT="$PWD/.build/gigatoken" \
 Core wheel 同时携带 Gigatoken 的 MIT 许可证、TokTier 修改声明、依赖 SBOM 和
 完整依赖许可证束。
 
-0.1.0 只发布 ABI3 Linux x86-64 wheel，不发布 sdist：认证 CPU 二进制要求
+TokTier 只发布 ABI3 Linux x86-64 wheel，不发布 sdist：认证 CPU 二进制要求
 glibc 2.34 或更新版本，而在 sdist 安装阶段静默重编译会产生不同、未认证的
 字节。对应 git tag 包含完整源码与固定版本的复现配方。
 

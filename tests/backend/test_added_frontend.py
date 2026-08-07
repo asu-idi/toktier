@@ -21,6 +21,7 @@ from typing import Any
 import _support as support
 import pytest
 
+from toktier import _native
 from toktier.errors import ArtifactHashMismatch, UnsupportedConfig
 from toktier.frontend.added import (
     AddedTokenFrontend,
@@ -253,6 +254,9 @@ def test_prefilter_never_vetoes_a_real_literal() -> None:
     frontend = AddedTokenFrontend(
         {"family": "prefilter", "normalizer": None, "added_tokens": effective}
     )
+    prefixes = frontend._native_prefilter_prefixes()
+    assert prefixes is not None
+    native_selector = _native.RouteSelector((0, 0), 1, False, 2, prefixes)
     fragments = [
         "<|end|>",
         "<|end",
@@ -282,6 +286,7 @@ def test_prefilter_never_vetoes_a_real_literal() -> None:
         oracle_ids = set(full.encode(text, add_special_tokens=False).ids)
         oracle_found = bool(oracle_ids & literal_ids)
         if oracle_found:
+            assert native_selector.route(text)[3] is True, text
             assert frontend.scan(text) is not None, text
     assert _differential(frontend, full, bare, documents) == []
 

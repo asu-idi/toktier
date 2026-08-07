@@ -150,7 +150,13 @@ def test_auto_device_reports_the_hardware_probe_it_performed(rig: Rig) -> None:
     assert isinstance(reasons, list)
     gpu_codes = {reason["code"] for reason in reasons if reason["backend"] == "gpu"}
     assert "R_ACCELERATOR_NOT_ADOPTED" not in gpu_codes
-    assert gpu_codes <= {"R_BACKEND_UNAVAILABLE", "R_NO_GPU_DETECTED"}
+    assert gpu_codes <= {
+        "R_BACKEND_UNAVAILABLE",
+        "R_NO_GPU_DETECTED",
+        # On a machine with an installed CUDA runtime and a real device, the
+        # synthetic fixture reaches the later (and more precise) artifact gate.
+        "R_UNCERTIFIED_ARTIFACT",
+    }
 
 
 def test_cpu_device_deliberately_skips_the_hardware_probe(rig: Rig) -> None:

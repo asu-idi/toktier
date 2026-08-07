@@ -54,3 +54,17 @@ class AddedTokenRouter:
     def holds_literal(self, text: str) -> bool:
         """Whether ``text`` holds at least one added-token literal."""
         return self._frontend.scan(text) is not None
+
+    def _native_prefilter_prefixes(self) -> tuple[tuple[int, int], ...] | None:
+        """Return a sound native prefilter, or ``None`` to ask every time.
+
+        Third-party/test scanners need not implement this private hook. Their
+        absence is fail-closed for speed only: the exact scanner still runs.
+        """
+        provider = getattr(self._frontend, "_native_prefilter_prefixes", None)
+        if not callable(provider):
+            return None
+        result = provider()
+        if result is None:
+            return None
+        return tuple((int(first), int(second)) for first, second in result)

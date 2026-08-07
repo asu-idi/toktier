@@ -445,6 +445,26 @@ class AddedTokenFrontend:
         """Added-frontend capability identity of this table."""
         return added_frontend_fingerprint(self._added_tokens)
 
+    def _native_prefilter_prefixes(self) -> tuple[tuple[int, int], ...] | None:
+        """Frozen one-/two-byte necessary conditions for the Rust router.
+
+        ``None`` means this frontend cannot soundly reject a document before
+        the exact layer (for example normalized-face literals under a
+        non-identity normalizer). A second value of ``-1`` denotes a
+        one-byte literal. This is private plumbing, not a second matcher: a
+        positive result still runs :meth:`scan` and only a negative result is
+        final.
+        """
+        if not self._prefilter_exact:
+            return None
+        prefixes: set[tuple[int, int]] = set()
+        for token in self._added_tokens:
+            encoded = str(token["content"]).encode("utf-8")
+            if not encoded:
+                return None
+            prefixes.add((encoded[0], encoded[1] if len(encoded) > 1 else -1))
+        return tuple(sorted(prefixes))
+
     # -- scanning ------------------------------------------------------
 
     def _prefilter_hit(self, raw: bytes) -> bool:

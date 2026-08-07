@@ -17,6 +17,7 @@ crate-type = ["cdylib"]
 testing = ["toktier-store-core/testing"]
 
 [dependencies]
+toktier-routing-core = { path = "../toktier-routing-core" }
 toktier-store-core = { path = "../toktier-store-core" }
 toktier-store-sqlite = { path = "../toktier-store-sqlite" }
 pyo3.workspace = true

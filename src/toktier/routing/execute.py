@@ -111,6 +111,26 @@ class RoutedExecutor:
                 "the reference backend cannot have an input-size threshold"
             )
         self._minimum_input_bytes = thresholds
+        from .. import _native as native
+
+        if added_router is None:
+            literal_mode = 0
+            literal_prefixes: tuple[tuple[int, int], ...] = ()
+        else:
+            discovered = added_router._native_prefilter_prefixes()
+            if discovered is None:
+                literal_mode = 1
+                literal_prefixes = ()
+            else:
+                literal_mode = 2
+                literal_prefixes = discovered
+        self._native_selector = native.RouteSelector(
+            [thresholds.get(backend_id, 0) for backend_id in route_plan.fallback_chain],
+            len(route_plan.fallback_chain) - 1,
+            route_plan.fallback_chain[0] == BACKEND_GPU,
+            literal_mode,
+            literal_prefixes,
+        )
         self._counts: dict[ReasonCode, int] = {}
         self._events: list[FallbackEvent] = []
         self._execution_counts: dict[str, int] = {}
@@ -173,11 +193,12 @@ class RoutedExecutor:
 
     def encode(self, text: str, *, add_special_tokens: bool = True) -> list[int]:
         """Encode one document along the plan's chain."""
-        input_bytes, start = self._starting_index(text)
+        input_bytes, start, holds_literal = self._starting_route(text)
         return self._encode_from(
             start,
             text,
             add_special_tokens=add_special_tokens,
+            holds_literal=holds_literal,
             input_bytes=input_bytes,
             selected_start=start,
         )
@@ -206,8 +227,8 @@ class RoutedExecutor:
         """
         if not texts:
             return []
-        routes = [self._starting_index(text) for text in texts]
-        literals = self._literal_flags(texts)
+        routes = [self._starting_route(text) for text in texts]
+        literals = [route[2] for route in routes]
         if any(literals):
             return [
                 self._encode_from(
@@ -218,12 +239,12 @@ class RoutedExecutor:
                     input_bytes=input_bytes,
                     selected_start=start,
                 )
-                for text, flag, (input_bytes, start) in zip(
+                for text, flag, (input_bytes, start, _literal) in zip(
                     texts, literals, routes, strict=True
                 )
             ]
         groups: dict[int, list[int]] = {}
-        for position, (_input_bytes, start) in enumerate(routes):
+        for position, (_input_bytes, start, _literal) in enumerate(routes):
             groups.setdefault(start, []).append(position)
         output: list[list[int] | None] = [None] * len(texts)
         for start, indices in groups.items():
@@ -242,26 +263,26 @@ class RoutedExecutor:
             raise RuntimeError("a routed batch did not produce every output row")
         return cast(list[list[int]], output)
 
-    def _starting_index(self, text: str) -> tuple[int | None, int]:
-        """Return ``(utf8 bytes, first eligible chain index)`` for one input."""
-        try:
-            input_bytes = len(text.encode("utf-8"))
-        except UnicodeEncodeError:
-            return None, self._reference_index()
+    def _starting_route(self, text: str) -> tuple[int | None, int, bool]:
+        """Return byte size, first chain index, and exact literal decision."""
+        input_bytes, index, below_gpu, literal_candidate = (
+            self._native_selector.route(text)
+        )
         chain = self._plan.fallback_chain
-        for index, backend_id in enumerate(chain):
-            threshold = self._minimum_input_bytes.get(backend_id, 0)
-            if input_bytes >= threshold:
-                if index and chain[0] == BACKEND_GPU:
-                    self._record(
-                        ReasonCode.R_INPUT_BELOW_GPU_THRESHOLD,
-                        backend=BACKEND_GPU,
-                        target=backend_id,
-                        input_bytes=input_bytes,
-                        threshold_bytes=self._minimum_input_bytes.get(BACKEND_GPU, 0),
-                    )
-                return input_bytes, index
-        return input_bytes, self._reference_index()  # pragma: no cover
+        if below_gpu:
+            self._record(
+                ReasonCode.R_INPUT_BELOW_GPU_THRESHOLD,
+                backend=BACKEND_GPU,
+                target=chain[index],
+                input_bytes=input_bytes,
+                threshold_bytes=self._minimum_input_bytes.get(BACKEND_GPU, 0),
+            )
+        holds_literal = bool(
+            literal_candidate
+            and self._added_router is not None
+            and self._added_router.holds_literal(text)
+        )
+        return input_bytes, index, holds_literal
 
     def _record_execution(
         self,
@@ -315,12 +336,6 @@ class RoutedExecutor:
                 selected_start=selected_start,
             )
         return rows
-
-    def _literal_flags(self, texts: Sequence[str]) -> list[bool]:
-        """Which inputs hold an added-token literal (all False without a router)."""
-        if self._added_router is None:
-            return [False] * len(texts)
-        return [self._added_router.holds_literal(text) for text in texts]
 
     def _reference_index(self) -> int:
         return len(self._plan.fallback_chain) - 1

@@ -24,8 +24,11 @@ use std::ffi::CStr;
 use pyo3::exceptions::{PyKeyError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::GILOnceCell;
-use pyo3::types::{PyBytes, PyDict};
+use pyo3::types::{PyBytes, PyDict, PyString, PyStringMethods};
 
+use toktier_routing_core::{
+    BpeSyncBoundary, LiteralMode, LiteralPrefix, RouteSelector as CoreRouteSelector,
+};
 use toktier_store_core::{
     AppendReport, BoundaryCut, Encoding, EngineError, KeyId, SemanticFingerprint, SessionEncoder,
     SessionHandle, StoreConfig, StoreError, TailState, WitnessCategory,
@@ -199,6 +202,88 @@ fn fingerprint_of(raw: &[u8]) -> PyResult<SemanticFingerprint> {
         .map_err(|_| PyValueError::new_err("fingerprint must be exactly 32 bytes"))
 }
 
+// --------------------------------------------------------------- route --
+
+/// Allocation-free per-input selector over one immutable fallback chain.
+///
+/// Python owns the public RoutePlan and diagnostics. This private helper reads
+/// CPython's cached UTF-8 view without creating a `bytes` object, applies the
+/// byte crossover, and runs the exact frontend's necessary-condition literal
+/// gate in the same pass.
+#[pyclass(name = "RouteSelector", module = "toktier._native")]
+struct NativeRouteSelector {
+    inner: CoreRouteSelector,
+}
+
+#[pymethods]
+impl NativeRouteSelector {
+    #[new]
+    #[pyo3(signature = (
+        thresholds,
+        reference_index,
+        gpu_head,
+        literal_mode = 0,
+        literal_prefixes = Vec::new()
+    ))]
+    fn new(
+        thresholds: Vec<u64>,
+        reference_index: usize,
+        gpu_head: bool,
+        literal_mode: u8,
+        literal_prefixes: Vec<(u8, i16)>,
+    ) -> PyResult<Self> {
+        let mode = match literal_mode {
+            0 => LiteralMode::Disabled,
+            1 => LiteralMode::AlwaysCandidate,
+            2 => LiteralMode::Prefixes,
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "unknown literal prefilter mode {other}"
+                )))
+            }
+        };
+        let prefixes = literal_prefixes
+            .into_iter()
+            .map(|(first, raw_second)| {
+                let second = match raw_second {
+                    -1 => None,
+                    0..=255 => Some(raw_second as u8),
+                    _ => {
+                        return Err(PyValueError::new_err(
+                            "literal prefix second byte must be -1 or 0..255",
+                        ))
+                    }
+                };
+                Ok(LiteralPrefix { first, second })
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        let inner = CoreRouteSelector::new(thresholds, reference_index, gpu_head, mode, prefixes)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        Ok(Self { inner })
+    }
+
+    /// `(input_bytes, start_index, below_gpu_threshold, literal_candidate)`.
+    fn route(&self, text: &Bound<'_, PyString>) -> (Option<u64>, usize, bool, bool) {
+        // `to_str()` borrows CPython's cached UTF-8 representation. A lone
+        // surrogate has no valid UTF-8 view; matching the Python executor's
+        // historical behavior, route it to the reference backend so that the
+        // oracle raises the original user-facing error.
+        let input = text.to_str().ok().map(str::as_bytes);
+        let decision = self.inner.decide(input);
+        (
+            decision.input_bytes,
+            decision.start_index,
+            decision.below_gpu_threshold,
+            decision.literal_candidate,
+        )
+    }
+
+    #[getter]
+    fn reference_index(&self) -> usize {
+        self.inner.reference_index()
+    }
+}
+
 // -------------------------------------------------------------- encoder --
 
 /// Python-callable encoder adapter.
@@ -211,6 +296,9 @@ fn fingerprint_of(raw: &[u8]) -> PyResult<SemanticFingerprint> {
 /// * `boundary_cb(tail_text, tail_ids, tail_spans, floor_char,
 ///   ceil_char) -> (cut_tokens, cut_char) | None` -- certified boundary
 ///   probe; optional, defaults to never sealing.
+/// * `bpe_sync_pclass` -- the frozen 0x110000-byte O/S/L/N/M property
+///   table. When present, the boundary probe runs directly in Rust and
+///   `boundary_cb` is only a compatibility fallback.
 /// * `witness_category` -- frozen registry value (u16) matching the
 ///   certificates the callbacks implement.
 #[pyclass(module = "toktier._native")]
@@ -219,25 +307,45 @@ struct CallbackEncoder {
     encode_cb: Py<PyAny>,
     append_cb: Option<Py<PyAny>>,
     boundary_cb: Option<Py<PyAny>>,
+    bpe_sync: Option<BpeSyncBoundary>,
 }
 
 #[pymethods]
 impl CallbackEncoder {
     #[new]
-    #[pyo3(signature = (witness_category, encode_cb, append_cb = None, boundary_cb = None))]
+    #[pyo3(signature = (
+        witness_category,
+        encode_cb,
+        append_cb = None,
+        boundary_cb = None,
+        bpe_sync_pclass = None
+    ))]
     fn new(
         witness_category: u16,
         encode_cb: Py<PyAny>,
         append_cb: Option<Py<PyAny>>,
         boundary_cb: Option<Py<PyAny>>,
+        bpe_sync_pclass: Option<Bound<'_, PyBytes>>,
     ) -> PyResult<Self> {
         let witness = WitnessCategory::from_u16(witness_category)
             .map_err(|_| PyValueError::new_err("unknown witness category"))?;
+        let bpe_sync = bpe_sync_pclass
+            .map(|raw| {
+                BpeSyncBoundary::new(raw.as_bytes().to_vec())
+                    .map_err(|error| PyValueError::new_err(error.to_string()))
+            })
+            .transpose()?;
+        if bpe_sync.is_some() && witness != WitnessCategory::BpeSyncTransition {
+            return Err(PyValueError::new_err(
+                "a BPE sync table requires the BPE sync witness category",
+            ));
+        }
         Ok(CallbackEncoder {
             witness,
             encode_cb,
             append_cb,
             boundary_cb,
+            bpe_sync,
         })
     }
 
@@ -317,6 +425,21 @@ impl SessionEncoder for CallbackEncoder {
         floor_char: u64,
         ceil_char: u64,
     ) -> Result<Option<BoundaryCut>, EngineError> {
+        if let Some(predicate) = &self.bpe_sync {
+            return Ok(predicate
+                .last_boundary(
+                    tail.text(),
+                    tail.text_chars(),
+                    tail.span_starts(),
+                    tail.span_ends(),
+                    floor_char,
+                    ceil_char,
+                )
+                .map(|cut| BoundaryCut {
+                    cut_tokens: cut.cut_tokens,
+                    cut_char: cut.cut_char,
+                }));
+        }
         let Some(cb) = &self.boundary_cb else {
             return Ok(None);
         };
@@ -652,6 +775,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     m.add_class::<SessionStore>()?;
     m.add_class::<CallbackEncoder>()?;
+    m.add_class::<NativeRouteSelector>()?;
     // Convenience re-exports of the classes this boundary raises. These
     // are the public `toktier.errors` objects themselves (or, only under
     // standalone loading, the private shim); the extension defines no

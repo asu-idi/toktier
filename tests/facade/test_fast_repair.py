@@ -300,6 +300,54 @@ def test_public_session_append_executes_certified_gigatoken_callback(
     assert records.decode_record(record_path.read_bytes()).witness_category == 1
 
 
+def test_long_session_seals_natively_and_keeps_gigatoken_repair_active(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A tail above the hard cap is sealed before its first strict append."""
+    import tokenizers
+
+    live = tokenizers.Tokenizer.from_file(str(rig.artifact_path))
+    engine = _CountingEngine(live)
+    backend = _FakeFastBackend(rig.family, engine, live)
+    registry = _registry(rig)
+    _install_certified_probe(monkeypatch, rig, registry)
+    monkeypatch.setattr(facade_api, "family_spec", lambda *_args: _spec(rig))
+    monkeypatch.setattr(
+        FastCpuBackend,
+        "open",
+        classmethod(lambda _cls, _artifact: backend),
+    )
+
+    tokenizer = rig.tokenizer(store=rig.store_path())
+    base = ("alpha 123 beta 456 " * 4000) + "tail"
+    grown = base + " appended text 789"
+    tokenizer.encode(base, session="long")
+    actual = tokenizer.encode(grown, session="long")
+    assert list(actual.ids) == list(live.encode(grown, add_special_tokens=False).ids)
+
+    report = tokenizer.explain()
+    store = report["store"]
+    assert isinstance(store, dict)
+    assert store["append_paths"]["gigatoken_repair"] == 1
+    assert tokenizer._entry_store is not None
+    assert tokenizer._entry_store._store is not None
+    native_stats = tokenizer._entry_store._store.stats()
+    seals = native_stats["seals"]
+    hard_cap_degrades = native_stats["hard_cap_degrades"]
+    assert isinstance(seals, int)
+    assert isinstance(hard_cap_degrades, int)
+    assert seals >= 1
+    assert hard_cap_degrades == 0
+    repair = report["session_repair"]
+    assert isinstance(repair, dict)
+    assert repair["path_counts"]["gigatoken_repair"] == 1
+
+    (record_path,) = (rig.store_path() / "entries").glob("*.rec")
+    view = records.decode_record(record_path.read_bytes())
+    assert view.witness_category == 1
+    assert view.stable_prefix_byte_length > 0
+
+
 def test_automatic_facade_routes_short_cpu_and_large_gpu(
     rig: Rig, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -194,6 +194,8 @@ class EntryStore:
         append: AppendEncode | None = None,
         append_stats: Callable[[], dict[str, object]] | None = None,
         certified_bpe_witness: bool = False,
+        bpe_sync_pclass: bytes | None = None,
+        seal_end_guard_chars: int = 0,
         directory: Path | None = None,
         cache_budget_bytes: int = DEFAULT_CACHE_BUDGET_BYTES,
     ) -> None:
@@ -202,6 +204,10 @@ class EntryStore:
         self._append = append
         self._append_stats = append_stats
         self._certified_bpe_witness = certified_bpe_witness
+        self._bpe_sync_pclass = bpe_sync_pclass
+        if type(seal_end_guard_chars) is not int or seal_end_guard_chars < 0:
+            raise ValueError("seal_end_guard_chars must be a non-negative integer")
+        self._seal_end_guard_chars = seal_end_guard_chars
         self._directory = directory
         self._budget = max(0, int(cache_budget_bytes))
         self._entries: dict[str, _Entry] = {}
@@ -231,8 +237,12 @@ class EntryStore:
                 witness,
                 self._encode,
                 self._append,
+                None,
+                self._bpe_sync_pclass,
             )
-            self._key_id = store.register_fingerprint(self._fingerprint, 0)
+            self._key_id = store.register_fingerprint(
+                self._fingerprint, self._seal_end_guard_chars
+            )
             self._store = store
             self._encoder = encoder
         return self._store, self._encoder

@@ -6,12 +6,18 @@ schedule.
 
 ## Native request path: Rust routing behind a thin Python binding
 
-The first release has native engines but a Python control plane. Artifact and
-registry views, probe/plan/execute, the per-input size decision, fallback
-accounting, facade orchestration, and part of the content-prefix index live in
-Python. The persistent token-state store and corrected Gigatoken engine are
-Rust, while GPU BPE runs in CUDA, so a request can still cross the Python/Rust
-boundary several times before its ids are returned.
+Version 0.1.1 begins this migration: the UTF-8 size crossover and the
+added-token necessary-condition gate now run together in the pure-Rust
+`toktier-routing-core` crate, and the session store evaluates the certified BPE
+seal predicate there without materializing token/span lists in Python. The
+measured scope and remaining boundary are documented in
+[`docs/native-routing.md`](docs/native-routing.md).
+
+Artifact and registry views, probe/plan construction, fallback invocation and
+accounting, facade orchestration, and part of the content-prefix index still
+live in Python. The persistent token-state store and corrected Gigatoken engine
+are Rust, while GPU BPE runs in CUDA, so a request can still cross the
+Python/Rust boundary several times before its ids are returned.
 
 The direction is one native request pipeline behind the existing Python API:
 

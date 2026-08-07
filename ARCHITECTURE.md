@@ -14,8 +14,8 @@ keep across releases.
 │    typed errors with .code · CLI (artifacts / doctor / inspect)      │
 ├──────────────────────────────────────────────────────────────────────┤
 │ 2. Routing                                                           │
-│    probe → plan → execute · RoutingPolicy · immutable RoutePlan      │
-│    fallback chain with reason codes                                  │
+│    probe → plan → execute · native per-input selector                 │
+│    RoutingPolicy · immutable fallback chain with reason codes        │
 ├──────────────────────────────────────────────────────────────────────┤
 │ 3. Backends                                                          │
 │    HF reference · corrected Gigatoken CPU repair · GPU prebuilt/JIT  │
@@ -58,7 +58,12 @@ immutable value (`Config`, `RoutePlan`, `SessionUpdate`) or a typed error.
 
 ### 1.2 Routing
 
-See section 2 — the three stages are the substance of this layer.
+See section 2 — the three stages are the substance of this layer. The public
+plan and diagnostic records are Python value objects; the hot UTF-8 byte
+crossover and added-token necessary-condition gate are projected once into
+`toktier-routing-core` and evaluated through the private PyO3 module without a
+temporary Python `bytes` allocation. A possible added-token hit still goes
+through the exact reference frontend.
 
 ### 1.3 Backends
 
@@ -137,6 +142,11 @@ See section 2 — the three stages are the substance of this layer.
   only for an admitted binding, the corrected-Gigatoken append callback. The
   callback returns IDs, spans, kept-token count, and an execution-path label;
   the native transaction commits only after its invariants pass.
+- For the certified BPE repair roster, the digest-checked O/S/L/N/M table is
+  installed once in the native encoder adapter. Stable-prefix seal decisions
+  then execute in Rust with the frozen synchronizing-transition predicate,
+  byte-fallback clean-cut rule, added-literal end guard, and a retained repair
+  window. No per-seal Python token/span list is materialized.
 - Files are created with restrictive permissions, logs do not contain source
   text, and capacity limits, TTL, per-session deletion and a full wipe are part
   of the interface.
@@ -189,6 +199,7 @@ one is not, by itself, a reason to change another.
 src/toktier/            Python package (maturin mixed layout, abi3)
   artifacts/            manifests, sources, fetch, verification, storage
 crates/                 Rust workspace
+  toktier-routing-core/  per-input threshold/literal routing + BPE seal predicate
   store-core/            record format, hash chain, verification (no bindings)
   store-sqlite/          exclusive owner of the database file
   toktier-py/            thin binding facade

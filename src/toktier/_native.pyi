@@ -23,6 +23,19 @@ _BoundaryCb = Callable[
     [str, list[int], _Spans, int, int], tuple[int, int] | None
 ]
 
+class RouteSelector:
+    def __init__(
+        self,
+        thresholds: Sequence[int],
+        reference_index: int,
+        gpu_head: bool,
+        literal_mode: int = 0,
+        literal_prefixes: Sequence[tuple[int, int]] = (),
+    ) -> None: ...
+    def route(self, text: str) -> tuple[int | None, int, bool, bool]: ...
+    @property
+    def reference_index(self) -> int: ...
+
 class CallbackEncoder:
     def __init__(
         self,
@@ -30,6 +43,7 @@ class CallbackEncoder:
         encode_cb: _EncodeCb,
         append_cb: _AppendCb | None = None,
         boundary_cb: _BoundaryCb | None = None,
+        bpe_sync_pclass: bytes | None = None,
     ) -> None: ...
     @property
     def witness_category(self) -> int: ...

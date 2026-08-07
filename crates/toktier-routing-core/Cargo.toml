@@ -1,0 +1,10 @@
+[package]
+name = "toktier-routing-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Allocation-free per-request routing and certified BPE boundary selection for TokTier."
+
+[dependencies]
+memchr.workspace = true

@@ -1,6 +1,6 @@
 # toktier
 
-**English** | [简体中文](https://github.com/asu-idi/toktier/blob/v0.1.0/README.zh-CN.md)
+**English** | [简体中文](https://github.com/asu-idi/toktier/blob/v0.1.1/README.zh-CN.md)
 
 **Tokenize the conversation once — after that, only what's new.**
 
@@ -14,18 +14,19 @@ offers a certified GPU path for fresh or large requests. Both fast paths return 
   (12.33 trillion characters), with zero observed divergence.
 - **Fast on both paths.** On the recorded benchmark battery, the GPU path
   encodes a fresh 4-million-character request (~786K tokens) in
-  **3.88 ms**. CPU repair answers a 256-character append to a 4.19M-character
-  session in **1.68 ms**.
+  **3.88 ms**. The bounded CPU repair operation for a 256-character append to
+  a 4.19M-character session takes **1.68 ms**, before materializing the full
+  Python ID tuple.
 - **Certified before acceleration.** Fast paths are admitted only for the exact
   tokenizer artifact, oracle version, kernel delivery, and architecture covered
   by recorded evidence. `explain()` reports the route and its reasons.
 
-![Latency head-to-head: TokTier versus full re-encode across three workloads of a 4M-character session](https://raw.githubusercontent.com/asu-idi/toktier/v0.1.0/docs/figures/hero_session_vs_reencode.svg)
+![Latency head-to-head: TokTier versus full re-encode across three workloads of a 4M-character session](https://raw.githubusercontent.com/asu-idi/toktier/v0.1.1/docs/figures/hero_session_vs_reencode.svg)
 
 Every bar is a measured median. Exact values, workload sizes, and sample counts
 are in
-[`hero_session_vs_reencode.data.json`](https://github.com/asu-idi/toktier/blob/v0.1.0/docs/figures/hero_session_vs_reencode.data.json);
-the complete sweeps are in [`docs/benchmarks.md`](https://github.com/asu-idi/toktier/blob/v0.1.0/docs/benchmarks.md).
+[`hero_session_vs_reencode.data.json`](https://github.com/asu-idi/toktier/blob/v0.1.1/docs/figures/hero_session_vs_reencode.data.json);
+the complete sweeps are in [`docs/benchmarks.md`](https://github.com/asu-idi/toktier/blob/v0.1.1/docs/benchmarks.md).
 
 ## Quick start
 
@@ -90,6 +91,12 @@ The install profile and input shape then determine the automatic route:
 `explain()` reports the fixed chain, the 64 KiB decision, the backend that
 actually returned the last result, and every fallback counter.
 
+Since 0.1.1, the UTF-8 crossover and no-hit added-token prefilter execute in
+one allocation-free Rust selector call. On the recorded RTX 5090 host, its
+4M-byte control-plane microprofile fell from 2.97 ms to 0.052 ms (57.5x); this
+is a routing-only measurement, separate from tokenization and Python result
+materialization. See [`docs/native-routing.md`](https://github.com/asu-idi/toktier/blob/v0.1.1/docs/native-routing.md).
+
 ## Install
 
 ```bash
@@ -143,7 +150,7 @@ TOKTIER_GIGATOKEN_BUILD_ROOT="$PWD/.build/gigatoken" \
   packaging/fast_cpu/build_pinned.sh
 ```
 
-The [reproducible build recipe](https://github.com/asu-idi/toktier/blob/v0.1.0/packaging/fast_cpu/README.md) pins the upstream
+The [reproducible build recipe](https://github.com/asu-idi/toktier/blob/v0.1.1/packaging/fast_cpu/README.md) pins the upstream
 commit, patch, Unicode inputs, compiler, and build backend. Its output is a
 reproduction artifact, not another runtime install. The registry verifies the
 vendored module digest, repair configuration, oracle, and tokenizer artifact
@@ -151,7 +158,7 @@ before opening the route. The core wheel carries Gigatoken's MIT license,
 TokTier's modification notice, the dependency SBOM, and the dependency-license
 bundle.
 
-Version 0.1.0 is published as an ABI3 Linux x86-64 wheel, not an sdist: the
+TokTier is published as an ABI3 Linux x86-64 wheel, not an sdist: the
 certified CPU binary requires glibc 2.34 or newer, and silently rebuilding it
 during an sdist install would create different, uncertified bytes. The tagged
 repository contains the complete source and pinned reproduction recipe.
@@ -164,7 +171,7 @@ the default facade, `toktier[gpu]` chooses this prebuilt delivery lazily and
 override profile detection. The
 JIT delivery is `certified_source` on `sm_89` and `sm_120`, meaning its
 certificate binds source, class tables, flags, and toolchain constraints rather
-than a machine-local binary. See [`docs/gpu-jit.md`](https://github.com/asu-idi/toktier/blob/v0.1.0/docs/gpu-jit.md) for the
+than a machine-local binary. See [`docs/gpu-jit.md`](https://github.com/asu-idi/toktier/blob/v0.1.1/docs/gpu-jit.md) for the
 automatic facade, explicit engine API, and delivery diagnostics.
 
 Tokenizer artifacts are fetched from pinned upstream revisions and verified by
@@ -211,14 +218,14 @@ routing is disabled and the request remains on the installed reference path.
 | Corrected Gigatoken CPU repair | 11 unique artifacts × 3,800,016,491 documents = **41,800,181,401 checks** (12 model families by exact-artifact inheritance) | 0 |
 
 The machine-readable records are
-[`evidence/evidence_manifest.json`](https://github.com/asu-idi/toktier/blob/v0.1.0/evidence/evidence_manifest.json),
-[`evidence/evidence_manifest_added_families.json`](https://github.com/asu-idi/toktier/blob/v0.1.0/evidence/evidence_manifest_added_families.json),
-and [`tables/support_registry.json`](https://github.com/asu-idi/toktier/blob/v0.1.0/tables/support_registry.json). Shipped
+[`evidence/evidence_manifest.json`](https://github.com/asu-idi/toktier/blob/v0.1.1/evidence/evidence_manifest.json),
+[`evidence/evidence_manifest_added_families.json`](https://github.com/asu-idi/toktier/blob/v0.1.1/evidence/evidence_manifest_added_families.json),
+and [`tables/support_registry.json`](https://github.com/asu-idi/toktier/blob/v0.1.1/tables/support_registry.json). Shipped
 per-artifact readings account for 49,920,199,013 checks; an archived earlier
 phase accounts for the remaining 3,280,031,861. Together they produce the
 headline total above. A focused end-to-end rerun through the released public
 session API covers all 11 CPU-fast artifacts in
-[`readings/fast_cpu_focused_parity.json`](https://github.com/asu-idi/toktier/blob/v0.1.0/readings/fast_cpu_focused_parity.json).
+[`readings/fast_cpu_focused_parity.json`](https://github.com/asu-idi/toktier/blob/v0.1.1/readings/fast_cpu_focused_parity.json).
 
 Three status values keep evidence and runtime behavior distinct:
 
@@ -253,7 +260,7 @@ same-host throughput measurement:
 
 This pair uses 2.2 GB of RAM-resident real web text and reports UTF-8 bytes over
 wall clock with host ID arrays materialized. Full protocols, all cells, and
-provenance are in [`docs/benchmarks.md`](https://github.com/asu-idi/toktier/blob/v0.1.0/docs/benchmarks.md).
+provenance are in [`docs/benchmarks.md`](https://github.com/asu-idi/toktier/blob/v0.1.1/docs/benchmarks.md).
 
 The primary study used an RTX PRO 6000 Blackwell, but a same-protocol consumer
 RTX 5090 sweep was **11–17% faster** (4.24–5.50 GB/s across the reported
@@ -262,13 +269,13 @@ mode: the RTX 4090 also passed the `sm_89` correctness and prebuilt-delivery
 battery. These observations do not promise the same speedup for every GPU;
 architecture, workload, and host delivery still matter.
 
-![Single-request latency](https://raw.githubusercontent.com/asu-idi/toktier/v0.1.0/docs/figures/f1_single_request_latency.svg)
+![Single-request latency](https://raw.githubusercontent.com/asu-idi/toktier/v0.1.1/docs/figures/f1_single_request_latency.svg)
 
-![Session tail latency](https://raw.githubusercontent.com/asu-idi/toktier/v0.1.0/docs/figures/f2_session_tail_latency.svg)
+![Session tail latency](https://raw.githubusercontent.com/asu-idi/toktier/v0.1.1/docs/figures/f2_session_tail_latency.svg)
 
-![Session state memory](https://raw.githubusercontent.com/asu-idi/toktier/v0.1.0/docs/figures/f3_session_state_memory.svg)
+![Session state memory](https://raw.githubusercontent.com/asu-idi/toktier/v0.1.1/docs/figures/f3_session_state_memory.svg)
 
-![Repair-path equivalent throughput](https://raw.githubusercontent.com/asu-idi/toktier/v0.1.0/docs/figures/f4_repair_equivalent_throughput.svg)
+![Repair-path equivalent throughput](https://raw.githubusercontent.com/asu-idi/toktier/v0.1.1/docs/figures/f4_repair_equivalent_throughput.svg)
 
 The figures name Hugging Face (HF) `tokenizers` explicitly and link to their
 machine-readable `docs/figures/*.data.json` files. The benchmark document also
@@ -283,7 +290,7 @@ shows the regimes where direct use of another engine is faster.
 | WordPiece | 3 | CPU evidence |
 | Structural exclusions | 2 | reason recorded |
 
-[`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.1.0/docs/support-matrix.md) lists every anchor artifact,
+[`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.1.1/docs/support-matrix.md) lists every anchor artifact,
 SHA-256, backend status, and **210 verified model repositories** that share an
 identical or serialization-equivalent tokenizer. Coverage follows tokenizer
 content, not repository naming.
@@ -310,17 +317,17 @@ Serving projects such as `llm-tokenizer` and NVIDIA Dynamo's
 | Reuse boundary | certified tokenizer boundary | typically special-token boundary |
 | Surface | Python library for session-owning applications | serving-gateway component |
 
-See [`docs/integration/dynamo.md`](https://github.com/asu-idi/toktier/blob/v0.1.0/docs/integration/dynamo.md) for using the two
+See [`docs/integration/dynamo.md`](https://github.com/asu-idi/toktier/blob/v0.1.1/docs/integration/dynamo.md) for using the two
 layers together.
 
 ## Documentation
 
-- [`ARCHITECTURE.md`](https://github.com/asu-idi/toktier/blob/v0.1.0/ARCHITECTURE.md) — layers, routing, and store format.
-- [`ROADMAP.md`](https://github.com/asu-idi/toktier/blob/v0.1.0/ROADMAP.md) — release scope and planned integration.
-- [`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.1.0/docs/support-matrix.md) — artifacts and covered repositories.
-- [`docs/gpu-jit.md`](https://github.com/asu-idi/toktier/blob/v0.1.0/docs/gpu-jit.md) — prebuilt and JIT GPU deliveries.
-- [`docs/integration/dynamo.md`](https://github.com/asu-idi/toktier/blob/v0.1.0/docs/integration/dynamo.md) — Dynamo integration.
-- [`docs/paper/toktier-preprint.pdf`](https://github.com/asu-idi/toktier/blob/v0.1.0/docs/paper/toktier-preprint.pdf) — current preprint.
+- [`ARCHITECTURE.md`](https://github.com/asu-idi/toktier/blob/v0.1.1/ARCHITECTURE.md) — layers, routing, and store format.
+- [`ROADMAP.md`](https://github.com/asu-idi/toktier/blob/v0.1.1/ROADMAP.md) — release scope and planned integration.
+- [`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.1.1/docs/support-matrix.md) — artifacts and covered repositories.
+- [`docs/gpu-jit.md`](https://github.com/asu-idi/toktier/blob/v0.1.1/docs/gpu-jit.md) — prebuilt and JIT GPU deliveries.
+- [`docs/integration/dynamo.md`](https://github.com/asu-idi/toktier/blob/v0.1.1/docs/integration/dynamo.md) — Dynamo integration.
+- [`docs/paper/toktier-preprint.pdf`](https://github.com/asu-idi/toktier/blob/v0.1.1/docs/paper/toktier-preprint.pdf) — current preprint.
 
 ## Acknowledgements
 
@@ -341,12 +348,12 @@ Fastokens 0.3.1 remains an explicit experimental alternative. TokTier does not
 claim exact-ID equivalence for that adapter and never chooses it automatically.
 Fastokens is Apache-2.0 and Gigatoken is MIT; exact revisions, license copies,
 the Gigatoken patch, and modification notices are in
-[`THIRD_PARTY_NOTICES`](https://github.com/asu-idi/toktier/blob/v0.1.0/THIRD_PARTY_NOTICES) and [`packaging/`](https://github.com/asu-idi/toktier/tree/v0.1.0/packaging).
+[`THIRD_PARTY_NOTICES`](https://github.com/asu-idi/toktier/blob/v0.1.1/THIRD_PARTY_NOTICES) and [`packaging/`](https://github.com/asu-idi/toktier/tree/v0.1.1/packaging).
 
 ## License and citation
 
-toktier is licensed under the [Apache License 2.0](https://github.com/asu-idi/toktier/blob/v0.1.0/LICENSE); see
-[`NOTICE`](https://github.com/asu-idi/toktier/blob/v0.1.0/NOTICE) for attribution information.
+toktier is licensed under the [Apache License 2.0](https://github.com/asu-idi/toktier/blob/v0.1.1/LICENSE); see
+[`NOTICE`](https://github.com/asu-idi/toktier/blob/v0.1.1/NOTICE) for attribution information.
 
 **Paper:** [*TokTier: Exact Stateful CPU+GPU Tokenization for Agentic LLM
 Serving*](https://arxiv.org/abs/2607.29678) ·
@@ -368,4 +375,4 @@ If you use toktier in your research, please cite:
 ```
 
 Machine-readable citation metadata is available in
-[`CITATION.cff`](https://github.com/asu-idi/toktier/blob/v0.1.0/CITATION.cff).
+[`CITATION.cff`](https://github.com/asu-idi/toktier/blob/v0.1.1/CITATION.cff).

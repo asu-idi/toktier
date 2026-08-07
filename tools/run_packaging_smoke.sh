@@ -36,7 +36,7 @@ from toktier.backends.fast_cpu import ENGINE_MODULE, fast_cpu_engine_facts
 repository = Path(os.environ["TOKTIER_REPOSITORY_ROOT"]).resolve()
 installed = Path(toktier.__file__).resolve()
 assert repository not in installed.parents, installed
-assert toktier.__version__ == "0.1.0"
+assert toktier.__version__ == "0.1.1"
 assert tokenizers.__version__ == "0.22.2"
 assert transformers.__version__ == "4.57.6"
 assert importlib.util.find_spec("gigatoken") is None

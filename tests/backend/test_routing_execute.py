@@ -131,6 +131,39 @@ def test_added_token_literal_routes_the_input() -> None:
     assert executor.fallback_counts == {ReasonCode.R_INPUT_ADDED_TOKEN.value: 1}
 
 
+def test_native_literal_prefilter_skips_the_exact_scanner_on_proven_misses() -> None:
+    """The Rust necessary-condition gate is fast, while positives stay exact."""
+
+    class PrefixScanner:
+        def __init__(self) -> None:
+            self.scans: list[str] = []
+
+        def _native_prefilter_prefixes(self) -> tuple[tuple[int, int], ...]:
+            return ((ord("<"), ord("s")),)
+
+        def scan(self, text: str) -> list[tuple[str, int | None]] | None:
+            self.scans.append(text)
+            if "<sep>" not in text:
+                return None
+            head, _, tail = text.partition("<sep>")
+            return [(head, None), ("<sep>", 99), (tail, None)]
+
+    scanner = PrefixScanner()
+    gpu = support.FakeBackend(BACKEND_GPU, base=1000)
+    reference = support.FakeBackend(BACKEND_REFERENCE)
+    executor = RoutedExecutor(
+        ACCELERATED_PLAN,
+        {BACKEND_GPU: gpu, BACKEND_REFERENCE: reference},
+        added_router=AddedTokenRouter(scanner),
+    )
+
+    assert executor.encode("plain text") == [1010, 1]
+    assert scanner.scans == []
+    assert executor.encode("a<sep>b") == [7, 1]
+    assert scanner.scans == ["a<sep>b"]
+    assert reference.calls == ["a<sep>b"]
+
+
 def test_batch_rows_match_single_encodes() -> None:
     """encode_batch is row-for-row equal to encode."""
     executor, _, _ = _executor()
@@ -227,6 +260,26 @@ def test_gpu_crossover_measures_utf8_bytes_not_code_points() -> None:
     assert executor.encode("\u4f60a") == [1002, 1]
     assert reference.calls == ["\u4f60"]
     assert gpu.calls == ["\u4f60a"]
+
+
+def test_unpaired_surrogate_stays_on_the_reference_path() -> None:
+    """An invalid UTF-8 view is not allowed to enter an accelerated backend."""
+    gpu = support.FakeBackend(BACKEND_GPU, base=1000)
+    reference = support.FakeBackend(BACKEND_REFERENCE)
+    executor = RoutedExecutor(
+        ACCELERATED_PLAN,
+        {BACKEND_GPU: gpu, BACKEND_REFERENCE: reference},
+    )
+
+    text = "\ud800"
+    assert executor.encode(text) == [1, 1]
+    assert gpu.calls == []
+    assert reference.calls == [text]
+    assert executor.last_execution == {
+        "input_bytes": None,
+        "selected_start": BACKEND_REFERENCE,
+        "executed_backend": BACKEND_REFERENCE,
+    }
 
 
 def test_gpu_crossover_partitions_mixed_batches_and_preserves_order() -> None:

@@ -1,13 +1,14 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/toktier-routing-core",
     "crates/toktier-store-core",
     "crates/toktier-store-sqlite",
     "crates/toktier-py",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/asu-idi/toktier"
@@ -22,6 +23,9 @@ rusqlite = { version = "=0.39.0", features = ["bundled"] }
 # Python facade binding. abi3 keeps one wheel per platform;
 # extension-module leaves symbol resolution to the host interpreter.
 pyo3 = { version = "=0.23.5", features = ["abi3-py310", "extension-module"] }
+# SIMD-accelerated byte search for the added-token necessary-condition
+# prefilter in the native request router.
+memchr = "=2.8.3"
 
 [profile.release]
 lto = true

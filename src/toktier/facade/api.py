@@ -242,6 +242,15 @@ class Tokenizer:
         self._artifact_handle = handle
         self._backend = HfBackend.open(handle)
         document = json.loads(self._backend.tokenizer_path.read_text(encoding="utf-8"))
+        added_token_rows = document.get("added_tokens") or []
+        self._seal_end_guard_chars = max(
+            (
+                len(str(row.get("content", "")))
+                for row in added_token_rows
+                if isinstance(row, Mapping)
+            ),
+            default=0,
+        )
         try:
             frontend = AddedTokenFrontend(
                 {
@@ -629,6 +638,19 @@ class Tokenizer:
                 append=repair,
                 append_stats=repair.stats if repair is not None else None,
                 certified_bpe_witness=isinstance(repair, GigatokenRepair),
+                bpe_sync_pclass=(
+                    repair.bpe_sync_pclass
+                    if isinstance(repair, GigatokenRepair)
+                    else None
+                ),
+                seal_end_guard_chars=(
+                    max(
+                        self._seal_end_guard_chars,
+                        repair.minimum_seal_tail_chars,
+                    )
+                    if isinstance(repair, GigatokenRepair)
+                    else 0
+                ),
                 directory=self._store_directory,
                 cache_budget_bytes=self._cache_budget,
             )

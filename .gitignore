@@ -26,3 +26,4 @@ Cargo.lock.orig
 
 # Local scratch
 .tmp/
+.build/

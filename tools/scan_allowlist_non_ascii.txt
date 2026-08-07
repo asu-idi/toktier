@@ -1,0 +1,15 @@
+# Documentation contains intentional non-ASCII typography.
+README.md
+README.pypi.md
+README.zh-CN.md
+ARCHITECTURE.md
+docs/**
+ROADMAP.md
+# The vendored-engine SBOM preserves upstream author names verbatim.
+packaging/fast_cpu/gigatoken.cyclonedx.json
+# RFC 8785 conformance vectors use non-ASCII text as test data.
+tests/test_jcs.py
+# The prebuilt-delivery smoke encodes multilingual text on purpose.
+tests/gpu/test_prebuilt.py
+# The focused CPU parity runner deliberately exercises multilingual input.
+tools/run_fast_cpu_focused_parity.py

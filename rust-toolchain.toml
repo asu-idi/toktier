@@ -1,5 +1,5 @@
 # Pin the Rust tools used by local development and CI.
 [toolchain]
-channel = "stable"
+channel = "1.93.1"
 profile = "minimal"
 components = ["clippy", "rustfmt"]

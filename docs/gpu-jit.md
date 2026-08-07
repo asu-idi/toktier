@@ -1,0 +1,359 @@
+# The GPU backend (kernel deliveries)
+
+This note describes how the CUDA backend is delivered, what a
+certificate for each delivery binds, and how the settings that used to
+be environment variables are expressed now.
+
+## 1. Two deliveries: prebuilt binary first, JIT fallback
+
+The kernels reach a process in one of two forms, and the loader prefers
+the first whenever it can serve:
+
+**Prebuilt (the `gpu` extra, default).** The wheel ships the kernels as
+a multi-architecture fatbin (`sm_75/80/86/89/90/100/120` plus a
+`compute_75` PTX fallback) together with a build manifest that pins the
+fatbin digest, per-architecture image digests and the full compiler
+invocation. The loader verifies the fatbin against the manifest and
+loads it through the CUDA driver API (bound via the standard library's
+`ctypes` over the user's own `libcuda`; no new dependency). It needs an
+r580-generation (CUDA 13) or newer driver, `torch` for tensors and
+streams, and nothing else: no `nvcc`, no `ninja`, no first-load
+compile. Because the judged binary *is* the shipped binary, the
+registry records this delivery as `certified`, bound to the fatbin's
+binary digest, on the architectures its verdict battery ran (sm_89 and
+sm_120); the other embedded architectures are labeled `experimental`.
+When the prebuilt delivery cannot serve — old driver, missing torch,
+digest mismatch — the loader falls back to JIT (when installed) or to
+the reference path, and the reason is recorded, never silent. An
+explicit `delivery="prebuilt"` or `delivery="jit"` request that cannot
+be served raises instead of substituting.
+
+**JIT (the `gpu-jit` extra, fallback).** The wheel also ships the
+kernel as CUDA source. The first time a process needs it, the loader
+compiles it with `torch.utils.cpp_extension` into the cache directory
+(`docs/contracts/config.md` Section 5). Compilation needs `torch` and
+`ninja`, plus a CUDA toolchain (the build system resolves it through
+`CUDA_HOME`, `CUDA_PATH`, the `nvcc` on `PATH`, or `/usr/local/cuda`,
+in that order; `toktier doctor` reports the same search). A minimal
+construction and encode example is in Section 9.
+
+Because a JIT build product is machine-local, it is not bit-identical
+to the build the certification runs judged. The registry therefore
+records the JIT delivery as `certified_source` rather than `certified`,
+and binds:
+
+| Bound value | Where it comes from |
+|---|---|
+| kernel source digest | `toktier.kernels.kernel_source_digest()` |
+| build flags digest | `BuildFlags.digest()` |
+| toolchain constraints | recorded from the loading process |
+| device architecture list | the architectures actually judged |
+| class table digest | `ClassTableStore.binding_digest()` |
+
+`certified_source` is reported distinctly from `certified` everywhere
+they appear, on both reporting surfaces: the facade's `explain()`
+reports which delivery the process runs (`kernel_delivery`), the
+shipped availability of each delivery, and a per-architecture status
+map for each under `kernel_deliveries`; the explicit engine's
+`explain()` (Section 9) reports the same dimensions for the loaded
+process, oracle state included. That distinction is contract, not
+presentation.
+
+## 2. One loader, one flag set
+
+A `certified_source` certificate covers exactly one kernel build
+configuration per process. `toktier.engine.gpu.loader.KernelLoader` is
+the only place in the package that compiles the kernel, and the first
+successful build fixes the flag set for the process.
+
+Asking for a second, different flag set does not produce a second build:
+it raises `KernelIncompatible` (`R_KERNEL_DIGEST_MISMATCH`) and marks the
+process certificate void, so anything reported afterwards says
+uncertified rather than claiming a certificate whose premise is gone.
+Two host tests keep this honest: one asserts that exactly one module
+mentions `cpp_extension`, the other exercises the runtime refusal.
+
+Build products live under `<cache>/kernels/<extension>-<flag digest>`.
+Nothing sets `TORCH_EXTENSIONS_DIR`, and no path is hardcoded.
+
+The same one-per-process rule applies to the delivery: the first load
+fixes it, and an explicit request for the other delivery afterwards
+raises and voids the process certificate rather than serving two kernel
+identities under one report.
+
+## 3. Generated lookup tables are artifacts
+
+Kernel split behaviour depends on character-class tables derived from
+the reference tokenizer package, and therefore from its Unicode version.
+Generating them lazily inside the load path -- as the prototype did
+-- would let a reference-package upgrade change split behaviour silently
+while the certificate stayed green.
+
+So generation is an explicit command, run from a source checkout:
+
+```
+python tools/generate_class_tables.py --table cl100k_v3 --out-dir DIR
+python tools/generate_class_tables.py --out-dir DIR --manifest MANIFEST
+python tools/generate_class_tables.py --out-dir DIR --check --manifest MANIFEST
+```
+
+Artifact inputs for the full run: most tables are probed from the
+reference engine alone, but `deepseek_v1` reads split patterns from its
+band's artifacts (`deepseek_v3`, `deepseek_v4_flash`, `hy3`) and
+`kimi_v1` checks the frozen splitter fingerprint of `kimi_k3`. A
+`--manifest` is a JSON object mapping family name to `{"local_dir":
+...}`; families it does not define are looked up in the local toktier
+artifact cache (`toktier artifacts fetch <family>`, honoring
+`TOKTIER_HOME`), so the three deepseek-band families need no manifest
+once fetched. `kimi_k3` ships no artifact identity in the packaged
+manifest in this release, so the full check needs an explicit manifest
+entry for it; without one, check everything else by selection:
+
+```
+python tools/generate_class_tables.py --out-dir src/toktier/kernels/tables \
+    --check --table cl100k_v3 --table cl100k_m2l_v3 --table deepseek_v1 \
+    --table o200k_v4 --table nfc_qc_v1
+```
+
+Each table is written with a sha256, the digests go into the routing
+data, and the loader verifies the bytes before use. A table that does
+not match closes the accelerated path with `R_KERNEL_DIGEST_MISMATCH`,
+exactly as a kernel source mismatch would.
+
+Delivery: the generated tables ship in the wheel, pre-generated and
+digest-pinned in the packaged `toktier/kernels/tables/` directory, so
+installing either GPU extra is sufficient to construct the engine --
+nothing is generated at install time or on first use, and the shipped
+bytes are byte-identical to the tables the certification campaigns
+judged against. The engine still looks for each table in order: an
+explicit `table_dir` handed to `ClassTableStore`, the packaged
+directory, then `class_tables/` under the resolved cache directory.
+When a required table is absent or does not match its bound digest,
+engine construction refuses with `KernelIncompatible`
+(`R_KERNEL_DIGEST_MISMATCH`) naming the table id, its bound digest,
+every searched path, and the generating command as a remedy. To supply
+tables yourself (a source checkout without packaged tables, or a
+staging directory), run the generator with `--out-dir` pointing at
+`<cache>/class_tables` (without `--out-dir` it writes into the cache
+directory the command's own environment resolves -- export
+`TOKTIER_HOME` first when you keep a workspace-local cache), or copy
+files generated elsewhere into that directory; the digest check binds
+them either way. Because generation probes the reference package, the
+tables depend on that package where they are *produced*; shipping them
+pre-generated is exactly what makes the installed GPU path independent
+of the local reference package's Unicode tables at run time.
+
+## 4. Routing data has one source
+
+`src/toktier/kernels/tables/kernel_families.v1.json` is generated by the
+registry tooling and is the only place a family is named. It carries,
+per family: the kernel band, the ruleset selector, the digits-per-piece
+bound (or `null` when the class-table metadata carries it), the class
+table id, whether the splitter has the contraction alternative, and any
+shared-model relationship.
+
+Runtime code carries no parallel copy: the encoder dispatch keys on
+bands, and a host test parses every module to assert that no family name
+appears as a string literal anywhere in the package. This is not
+fastidiousness. When the mapping lived in two places, adding a family
+meant editing both, and a release once did it in one place only.
+
+## 5. Settings that used to be environment variables
+
+The configuration contract keeps five long-term environment variables
+and forbids any switch that can change output correctness from existing
+in environment or configuration form. Everything the GPU path used to
+read from the environment is now an explicit field of
+`toktier.engine.gpu.options.GpuOptions`, an argument, or gone.
+
+| Prototype environment variable | Released form |
+|---|---|
+| `*_CACHE_DIR` | `Config.cache_dir` (via `TOKTIER_HOME`) |
+| `*_MANIFEST_EXTRA` | explicit overlay argument to `load_manifest` |
+| `*_ADDED_FRONT` | `GpuOptions.added_token_frontend` |
+| `*_MEMO` | `GpuOptions.piece_memoization` |
+| `*_NVCC_EXTRA` | `BuildFlags` (bound by the certificate) |
+| `*_O200K_CUDA` | `GpuOptions.o200k_cuda_starts` |
+| `*_O200K_HOST_WIN` | `GpuOptions.o200k_host_windows` |
+| `*_O200K_BATCH_CUDA_MIN` | `GpuOptions.o200k_batch_cuda_min` |
+| `*_O200K_GRAPH_MAX` | `GpuOptions.graph_max_bytes` |
+| `*_KIMI_CUDA` | `GpuOptions.kimi_cuda_starts` |
+| `*_BPE_MONO_GUARD` | **removed**; the guard is unconditional |
+| `*_PAR_MERGE_NONEXACT` | **removed from the kernel source** |
+| `*_CONTENT_CHECK` | kernel build-time macro, default off |
+| `*_L2_PIN` | removed (measured to give nothing) |
+| `*_GPU_DIGEST`, `*_HOST_AMORTIZE` | removed (judgement harness only) |
+| campaign and site variables | removed |
+
+Two of those removals matter for correctness:
+
+- The **non-monotone merge table guard** is what keeps batched merging
+  exact for merge tables that are not rank-monotone. An option to switch
+  it off is an option to produce ids that differ from the reference, so
+  there is none. Families with a monotone table pass an empty bitmap and
+  take the kernel's unchanged path.
+- The **non-exact parallel plateau merge** was a prototype mode whose
+  exactness would need an offline vocabulary certificate, and for which
+  counterexamples exist where equal-rank merges interact. It is not
+  switched off in the released kernel; it is not in it.
+
+## 6. Bands and what each one supports
+
+| Band | End to end | Notes |
+|---|---|---|
+| cl100k | yes | GPT-style splitter; a variant adds a stage-0 newline-run cut |
+| deepseek | yes | three-splitter ruleset, single-pass kernel |
+| o200k | yes | fused entry is CUDA-Graph capturable |
+| kimi | **no** | split layer only; encode falls back to reference |
+
+The split-only band is declared as such in the routing data. Reporting
+it as GPU-certified end to end would be a claim the evidence does not
+support, so the engine refuses the request instead.
+
+## 7. Normalization
+
+Artifacts declare no normalizer, an empty normalizer sequence, or NFC;
+anything else is refused at construction. For NFC families the text is
+normalized before encoding, and the normalization is performed by the
+reference package's own normalizer -- never by another implementation.
+The reason is concrete: the reference package's normalizer and its regex
+engine were built against different Unicode versions, so a third-party
+normalizer will apply compositions the reference engine does not know,
+and the ids then differ.
+
+A quick check runs on the device over the bytes that are being copied
+there anyway. Passing it proves the reference normalizer is the identity
+on this text, so nothing has to be done. Failing it goes to an exact
+decision on the host, which cuts the text at safe starters and asks the
+reference normalizer only about the segments that need it.
+
+## 8. Running the tests
+
+Host tests (no GPU, no torch) run in ordinary CI:
+
+```
+pytest tests/gpu
+```
+
+The hardware suite:
+
+```
+pytest tests/gpu -m gpu \
+    --artifact-manifest /path/to/tokenizer_manifest.json \
+    --class-table-dir /path/to/generated/tables
+```
+
+It compiles the kernel once, compares every certified end-to-end family
+against the reference tokenizer, checks that the eager, fused and graph
+forms agree, checks the batched channel element by element against
+per-document encoding, and checks the frozen invariants of the ragged
+batch shape.
+
+## 9. Automatic facade and explicit engine
+
+The normal entry point is automatic. With `toktier[gpu]`, the facade lazily
+loads the shipped prebuilt kernel only when an eligible cold/plain input is at
+least 64 KiB; smaller inputs and session appends use the corrected Gigatoken
+CPU path. With `toktier[gpu-jit]`, the routing semantics are identical and only
+kernel delivery changes to a local JIT build:
+
+```python
+import toktier
+
+tok = toktier.load("qwen3_8b")
+long_text = "TokTier routes this request automatically. " * 2048
+ids = tok.encode(long_text).ids
+print(tok.explain()["runtime_policy"])
+```
+
+`gpu_delivery="prebuilt"` or `gpu_delivery="jit"` overrides automatic profile
+detection, and `gpu_min_bytes=` changes the UTF-8 byte crossover. The explicit
+engine below remains available for benchmarking and low-level integration.
+
+The JIT toolchain gate is fail-closed. A registry-judged CUDA/PyTorch pair can
+be compiled or warmed explicitly without weakening the policy:
+
+```bash
+toktier gpu compile qwen3_8b
+```
+
+If the pair is not judged, that command and `device="cuda"` fail with
+`BACKEND_UNAVAILABLE`; the error names the observed pair, the certified
+constraint, and the exact opt-in command. The default `device="auto"` path
+instead emits a `RuntimeWarning` and continues through the corrected
+Gigatoken → HF chain.
+
+There is one deliberately loud escape hatch for experiments:
+
+```bash
+toktier gpu compile qwen3_8b --accept-uncertified-jit
+```
+
+The flag selects `EXPERIMENTAL` for that command only. It prints
+`UNCERTIFIED JIT OPT-IN`, compiles and executes a probe, and returns the
+machine-readable `experimental_waivers`. It neither edits the registry nor
+persists permission for another process. Code that later executes the cached
+kernel must opt in again:
+
+```python
+tok = toktier.load(
+    "qwen3_8b", policy="experimental", gpu_delivery="jit"
+)
+print(tok.explain()["experimental_waivers"])
+```
+
+Those outputs are outside TokTier's certified exact-ID guarantee.
+Prerequisites for either surface, all covered above:
+
+1. the `gpu` extra installed with an r580-or-newer driver (or the
+   `gpu-jit` extra with a CUDA toolchain the build system can find;
+   Section 1);
+2. the artifact fetched and verified (`toktier artifacts fetch <family>`,
+   or a source that may fetch in the snippet below).
+
+The generated class tables ship in the wheel (Section 3); construction
+refuses with the searched paths and the remedy in the exceptional case
+that a table is absent or fails its digest check.
+
+```python
+import toktier
+from toktier.artifacts import ArtifactManifest, ArtifactStore
+from toktier.artifacts.tables import ARTIFACT_MANIFEST
+from toktier.config import Config
+from toktier.engine.gpu import GpuEngine
+
+config = Config.resolve()
+manifest = ArtifactManifest.load(ARTIFACT_MANIFEST)
+# source=None stays offline; HuggingFaceSource() would allow fetching.
+store = ArtifactStore(manifest, config=config, source=None)
+
+engine = GpuEngine.from_store(store, ["qwen3_8b"], config=config)
+encoder = engine.encoder("qwen3_8b", kind="fused")
+
+ids = encoder.encode("hello world")          # list[int]
+reference = toktier.load("qwen3_8b")
+assert ids == list(reference.encode("hello world").ids)
+print(engine.binding_set())                  # the values a certificate binds
+print(engine.explain())                      # delivery, certification, oracle
+```
+
+`engine.explain()` is the explicit-engine counterpart of the facade's
+`explain()`: it reports the kernel delivery this process actually
+loaded, the shipped prebuilt fact (the same answer `toktier doctor`
+gives), the observed device architecture, the installed oracle version
+against the certified set (`oracle`, with `uncertified_oracle: true`
+whenever the installed version falls outside it -- the certificate does
+not attach to such a process), and one certification verdict per
+family (`state` plus machine-readable `reasons`) for the delivery,
+architecture and oracle in effect. `binding_set()` carries the same
+oracle block, so a logged binding set is never silent about the
+reference version it ran against (registry.md Section 2).
+
+Under the prebuilt delivery the engine is ready as soon as the fatbin
+is verified and loaded; under the JIT delivery the first `encode`
+triggers the one build of the process (Section 2) and later processes
+reuse the cached build. The engine returns raw id
+lists; the routing layer's guarantees (fallback accounting, plan
+reasons) live above this entry point and are not part of it in this
+release. The hardware test suite (Section 8) is the recorded form of
+the reference comparison shown inline here.

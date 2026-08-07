@@ -1,0 +1,13 @@
+{
+  "figure": "hero_session_vs_reencode",
+  "readings": [
+    "readings/f1_s5s8/*.jsonl",
+    "readings/f1_s5s8/f1_s5s8_aggregate.json",
+    "readings/f4/*.jsonl",
+    "readings/f4/f4_aggregate.json"
+  ],
+  "archive": "readings, window records, harness scripts and palette validation are archived with the evidence set behind docs/benchmarks.md",
+  "protocol": "docs/benchmarks.md, measurement discipline section, plus recorded amendments a1-a6",
+  "toktier_commit_at_measurement": "41c7b38",
+  "notes": "three workloads of one 4M-char session, linear axis shared across panels, our lane vs each engine's full re-encode; single-request panel = the 4 MB concatenated-real-text tier of the single-request battery (median token count recomputed from the per-sample records); append panels = the 4M-context cells of the append grid (delta 65,536 and 256 chars, n=19); the repair bars name their window engine \u2014 the gigatoken-window and HF-window configurations are the same repair path with different window encode engines, both verified token-identical per call; the two machines are never compared to each other"
+}

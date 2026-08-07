@@ -1,0 +1,13 @@
+{
+  "figure": "f1_single_request_latency",
+  "readings": [
+    "readings/f1/*.jsonl",
+    "readings/f1/f1_aggregate.json",
+    "readings/f1_s5s8/*.jsonl",
+    "readings/f1_s5s8/f1_s5s8_aggregate.json"
+  ],
+  "archive": "readings, window records, harness scripts and palette validation are archived with the evidence set behind docs/benchmarks.md",
+  "protocol": "docs/benchmarks.md, measurement discipline section, plus recorded amendments a1-a6",
+  "toktier_commit_at_measurement": "41c7b38",
+  "notes": "p50 bars + p99 ticks; S2/S4 drawn as natural documents, S6/S8 drawn under the concatenated-real-text caliber of amendment A6 (marked in the caption); zero cross-sample document reuse; GPU-lane added-token domain handled at assembly; full eight-tier table in docs/benchmarks.md"
+}

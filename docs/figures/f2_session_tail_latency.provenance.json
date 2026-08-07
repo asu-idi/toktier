@@ -1,0 +1,11 @@
+{
+  "figure": "f2_session_tail_latency",
+  "readings": [
+    "readings/f2/*.jsonl",
+    "readings/f2/f2_aggregate.json"
+  ],
+  "archive": "readings, window records, harness scripts and palette validation are archived with the evidence set behind docs/benchmarks.md",
+  "protocol": "docs/benchmarks.md, measurement discipline section, plus recorded amendments a1-a5",
+  "toktier_commit_at_measurement": "89eb6ef10d4843f2a46cdfa1a487ec2cf4833caa",
+  "notes": "reference-engine pair drawn (A3 ruling); all six lanes in benchmarks table"
+}

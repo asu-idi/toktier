@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="562" viewBox="0 0 920 562">
+<rect width="920" height="562" rx="8" fill="#fcfcfb"/>
+<text x="20.0" y="30.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="15" fill="#0b0b0b" text-anchor="start" font-weight="600">Latency head-to-head: toktier vs full re-encode (linear scale)</text>
+<text x="20.0" y="48.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#898781" text-anchor="start" font-weight="normal">llama-3.1-8b tokenizer · one call per reading, bars = medians · linear axis shared across panels · lower is better</text>
+<line x1="260.0" y1="66.0" x2="260.0" y2="449.0" stroke="#e1e0d9" stroke-width="1" stroke-linecap="butt"/>
+<line x1="352.9" y1="66.0" x2="352.9" y2="449.0" stroke="#e1e0d9" stroke-width="1" stroke-linecap="butt"/>
+<line x1="445.7" y1="66.0" x2="445.7" y2="449.0" stroke="#e1e0d9" stroke-width="1" stroke-linecap="butt"/>
+<line x1="538.6" y1="66.0" x2="538.6" y2="449.0" stroke="#e1e0d9" stroke-width="1" stroke-linecap="butt"/>
+<line x1="631.4" y1="66.0" x2="631.4" y2="449.0" stroke="#e1e0d9" stroke-width="1" stroke-linecap="butt"/>
+<line x1="724.3" y1="66.0" x2="724.3" y2="449.0" stroke="#e1e0d9" stroke-width="1" stroke-linecap="butt"/>
+<line x1="260.0" y1="449.0" x2="724.3" y2="449.0" stroke="#c3c2b7" stroke-width="1" stroke-linecap="butt"/>
+<text x="260.0" y="465.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="middle" font-weight="normal">0</text>
+<text x="352.9" y="465.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="middle" font-weight="normal">250</text>
+<text x="445.7" y="465.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="middle" font-weight="normal">500</text>
+<text x="538.6" y="465.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="middle" font-weight="normal">750</text>
+<text x="631.4" y="465.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="middle" font-weight="normal">1,000</text>
+<text x="724.3" y="465.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="middle" font-weight="normal">1,250</text>
+<text x="492.1" y="479.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal">wall clock per call (ms, linear)</text>
+<text x="20.0" y="82.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600">One fresh request — encode 4,000,000 chars (~786K tokens)</text>
+<path d="M260.0,95.0 L260.0,95.0 Q263.0,95.0 263.0,98.0 L263.0,107.0 Q263.0,110.0 260.0,110.0 L260.0,110.0 Z" fill="#2a78d6"/>
+<text x="248.0" y="106.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="600">toktier GPU (fused)</text>
+<text x="271.0" y="106.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="600">3.88 ms · 1×</text>
+<path d="M260.0,116.0 L260.0,116.0 Q263.3,116.0 263.3,119.3 L263.3,127.7 Q263.3,131.0 260.0,131.0 L260.0,131.0 Z" fill="#eda100"/>
+<text x="248.0" y="127.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="end" font-weight="normal">gigatoken 0.10 warm</text>
+<text x="271.3" y="127.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">8.82 ms · 2.3×</text>
+<path d="M260.0,137.0 L272.1,137.0 Q276.1,137.0 276.1,141.0 L276.1,148.0 Q276.1,152.0 272.1,152.0 L260.0,152.0 Z" fill="#eda100"/>
+<text x="248.0" y="148.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="end" font-weight="normal">gigatoken 0.10 cold</text>
+<text x="284.1" y="148.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">43.2 ms · 11.1×</text>
+<path d="M260.0,158.0 L282.1,158.0 Q286.1,158.0 286.1,162.0 L286.1,169.0 Q286.1,173.0 282.1,173.0 L260.0,173.0 Z" fill="#1baf7a"/>
+<text x="248.0" y="169.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="end" font-weight="normal">fastokens 0.2.0</text>
+<text x="294.1" y="169.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">70.3 ms · 18.1×</text>
+<path d="M260.0,179.0 L720.7,179.0 Q724.7,179.0 724.7,183.0 L724.7,190.0 Q724.7,194.0 720.7,194.0 L260.0,194.0 Z" fill="#eb6834"/>
+<text x="248.0" y="190.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="end" font-weight="normal">HF tokenizers 0.22.2</text>
+<text x="732.7" y="190.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">1,251 ms · 322×</text>
+<text x="20.0" y="229.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600">Long append — +65,536 chars to a 4,194,304-char session</text>
+<path d="M260.0,242.0 L260.0,242.0 Q263.0,242.0 263.0,245.0 L263.0,254.0 Q263.0,257.0 260.0,257.0 L260.0,257.0 Z" fill="#2a78d6"/>
+<text x="248.0" y="253.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="600">toktier repair (gigatoken window)</text>
+<text x="271.0" y="253.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="600">2.39 ms · 1×</text>
+<path d="M260.0,263.0 L260.0,263.0 Q263.0,263.0 263.0,266.0 L263.0,275.0 Q263.0,278.0 260.0,278.0 L260.0,278.0 Z" fill="#eda100"/>
+<text x="248.0" y="274.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="end" font-weight="normal">gigatoken 0.10 full</text>
+<text x="271.0" y="274.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">7.66 ms · 3.2×</text>
+<path d="M260.0,284.0 L264.9,284.0 Q268.9,284.0 268.9,288.0 L268.9,295.0 Q268.9,299.0 264.9,299.0 L260.0,299.0 Z" fill="#1baf7a"/>
+<text x="248.0" y="295.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="end" font-weight="normal">fastokens 0.2.0 full</text>
+<text x="276.9" y="295.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">23.9 ms · 10.0×</text>
+<path d="M260.0,305.0 L763.3,305.0 Q767.3,305.0 767.3,309.0 L767.3,316.0 Q767.3,320.0 763.3,320.0 L260.0,320.0 Z" fill="#eb6834"/>
+<text x="248.0" y="316.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="end" font-weight="normal">HF tokenizers 0.22.2 full</text>
+<text x="775.3" y="316.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">1,366 ms · 572×</text>
+<text x="20.0" y="355.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600">Short append (tool-result scale) — +256 chars to a 4,194,304-char session</text>
+<path d="M260.0,368.0 L260.0,368.0 Q263.0,368.0 263.0,371.0 L263.0,380.0 Q263.0,383.0 260.0,383.0 L260.0,383.0 Z" fill="#2a78d6"/>
+<text x="248.0" y="379.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="600">toktier repair (HF tokenizers window)</text>
+<text x="271.0" y="379.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="600">1.68 ms · 1×</text>
+<path d="M260.0,389.0 L260.0,389.0 Q263.0,389.0 263.0,392.0 L263.0,401.0 Q263.0,404.0 260.0,404.0 L260.0,404.0 Z" fill="#eda100"/>
+<text x="248.0" y="400.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="end" font-weight="normal">gigatoken 0.10 full</text>
+<text x="271.0" y="400.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">7.43 ms · 4.4×</text>
+<path d="M260.0,410.0 L265.1,410.0 Q269.1,410.0 269.1,414.0 L269.1,421.0 Q269.1,425.0 265.1,425.0 L260.0,425.0 Z" fill="#1baf7a"/>
+<text x="248.0" y="421.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="end" font-weight="normal">fastokens 0.2.0 full</text>
+<text x="277.1" y="421.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">24.5 ms · 14.6×</text>
+<path d="M260.0,431.0 L757.7,431.0 Q761.7,431.0 761.7,435.0 L761.7,442.0 Q761.7,446.0 757.7,446.0 L260.0,446.0 Z" fill="#eb6834"/>
+<text x="248.0" y="442.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="end" font-weight="normal">HF tokenizers 0.22.2 full</text>
+<text x="769.7" y="442.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">1,351 ms · 806×</text>
+<text x="20.0" y="495.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="start" font-weight="normal">single-request panel: GPU machine (2x AMD EPYC 9115 + NVIDIA RTX PRO 6000 Blackwell, one card; n=500, gigatoken cold n=250)</text>
+<text x="20.0" y="508.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="start" font-weight="normal">append panels: CPU machine (AMD Ryzen 9 9950X, one core; n=19 per cell) · one boundary-repair call on the session store (window engine named per bar)</text>
+<text x="20.0" y="521.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="start" font-weight="normal">vs each engine re-encoding context+delta in full · every timed output verified token-identical to the Hugging Face (HF) tokenizers 0.22.2 reference</text>
+<text x="20.0" y="534.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="start" font-weight="normal">fastokens lanes: two-core affinity mask, single-threaded compute · comparisons are within a panel (the two machines are not compared to each other)</text>
+<text x="20.0" y="547.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="start" font-weight="normal">full sweeps, calibers and hardware: docs/benchmarks.md · per-bar readings and provenance: docs/figures/hero_session_vs_reencode.data.json</text>
+</svg>

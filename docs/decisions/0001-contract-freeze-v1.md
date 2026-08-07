@@ -67,8 +67,9 @@ alternatives.
 ## D-06 Backend identifier vocabulary
 
 - **Decision**: backend ids are lowercase strings; v1 assigns `hf`
-  (reference) and `gpu`; the table is append-only and ids are never
-  renamed or reused.
+  (reference), `gpu`, `fast_cpu`, and the explicit experimental session
+  adapter `fastokens`; the table is append-only and ids are never renamed or
+  reused.
 - **Rationale**: short stable ids keep registry entries, plans, and
   reason details consistent; append-only mirrors the other namespaces.
 - **Rejected**: dotted taxonomies like `cpu.reference.hf` (structure
@@ -78,12 +79,12 @@ alternatives.
 
 - **Decision**: one `R_*` namespace split into plan-time and run-time
   tables; append-only; consumers must tolerate unknown codes.
-  `R_INPUT_GUARD_ROUTED` is reserved now even though the guarded
-  fast-CPU backend is not in the first release.
+  `R_INPUT_GUARD_ROUTED` records a per-input premise failure in the guarded
+  fast-CPU backend shipped in the first release.
 - **Rationale**: the split matches the probe/plan/execute structure and
   keeps `REQUIRE_ACCELERATED` semantics crisp (plan-time only).
-  Reserving the guard code now means the namespace does not move when
-  that backend lands.
+  Keeping the guard distinct from engine-load faults makes per-input
+  reference routing auditable.
 - **Rejected**: separate enums per phase (two namespaces to version);
   omitting the guard code (would force a later addition under time
   pressure).

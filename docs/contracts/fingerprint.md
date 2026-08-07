@@ -86,13 +86,15 @@ registry-level aliases with no semantic content beyond the artifact they
 resolve to; binding them would make renames invalidate stores without
 any behavioral change.
 
-Considered and not bound: a backend/engine identity field. Certified
-backends are, by definition, id-equal to the reference oracle, so the
-producing backend adds no semantic information to a certified stream.
-The gap this leaves -- streams from uncertified backends -- is closed
-structurally instead: sessions under `EXPERIMENTAL` policy never write
-to persistent stores (`routing.md`, `store-format-v1.md`), so every
-stored stream is a certified stream.
+The frozen v1 preimage above describes certified streams, whose producing
+backend is id-equal to the reference. The 0.x facade also exposes an explicit
+experimental repair adapter, so its concrete persistent-entry key uses the
+separate domain `toktier.facade.fingerprint.v1\0` and additionally binds the
+repair backend, repair configuration, engine version, native-module
+digest, and repair-table digest. This stronger 0.x key prevents state created by
+Fastokens, corrected Gigatoken, or HF-only execution from crossing engine
+meanings. It does not alter the frozen field ids above; the facade contract is
+the operative 0.x surface.
 
 The redundancy among `0x0001`, `0x0002`, and `0x0003` (the artifact hash
 already covers pipeline and added tokens) is intentional: the fingerprint

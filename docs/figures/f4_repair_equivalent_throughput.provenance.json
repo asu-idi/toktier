@@ -1,0 +1,11 @@
+{
+  "figure": "f4_repair_equivalent_throughput",
+  "readings": [
+    "readings/f4/*.jsonl",
+    "readings/f4/f4_aggregate.json"
+  ],
+  "archive": "readings, window records, harness scripts and palette validation are archived with the evidence set behind docs/benchmarks.md",
+  "protocol": "docs/benchmarks.md, measurement discipline section, plus recorded amendments a1-a6",
+  "toktier_commit_at_measurement": "41c7b38",
+  "notes": "single-request caliber: each point is the median wall clock of one append(delta) repair call; equivalent throughput = (context + delta) chars / that call's wall clock; figure draws the frozen grid (context up to 4M chars), 8M/16M off-grid low-sample rows live in the benchmarks table only"
+}

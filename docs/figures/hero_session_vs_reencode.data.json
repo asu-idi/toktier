@@ -1,0 +1,110 @@
+{
+  "single_request_4m": {
+    "title": "One fresh request \u2014 encode 4,000,000 chars (~786K tokens)",
+    "workload": {
+      "chars": 4000000,
+      "median_tokens": 786100,
+      "source": "single-request battery, 4 MB concatenated-real-text tier"
+    },
+    "lanes": {
+      "toktier-gpu": {
+        "label": "toktier GPU (fused)",
+        "median_ms": 3.8822,
+        "n": 500,
+        "multiplier_vs_toktier": 1.0
+      },
+      "gt-warm": {
+        "label": "gigatoken 0.10 warm",
+        "median_ms": 8.8172,
+        "n": 500,
+        "multiplier_vs_toktier": 2.27
+      },
+      "gt-cold": {
+        "label": "gigatoken 0.10 cold",
+        "median_ms": 43.2163,
+        "n": 250,
+        "multiplier_vs_toktier": 11.13
+      },
+      "fastokens": {
+        "label": "fastokens 0.2.0",
+        "median_ms": 70.3333,
+        "n": 500,
+        "multiplier_vs_toktier": 18.12
+      },
+      "hf": {
+        "label": "HF tokenizers 0.22.2",
+        "median_ms": 1250.9852,
+        "n": 500,
+        "multiplier_vs_toktier": 322.24
+      }
+    }
+  },
+  "long_append_64k": {
+    "title": "Long append \u2014 +65,536 chars to a 4,194,304-char session",
+    "workload": {
+      "context_chars": 4194304,
+      "delta_chars": 65536,
+      "source": "append grid, 4M x 65536 cell"
+    },
+    "lanes": {
+      "repair-gt-steady-v3": {
+        "label": "toktier repair (gigatoken window)",
+        "median_ms": 2.3888,
+        "n": 19,
+        "multiplier_vs_toktier": 1.0
+      },
+      "full-gt": {
+        "label": "gigatoken 0.10 full",
+        "median_ms": 7.6639,
+        "n": 19,
+        "multiplier_vs_toktier": 3.21
+      },
+      "full-fastokens": {
+        "label": "fastokens 0.2.0 full",
+        "median_ms": 23.9281,
+        "n": 19,
+        "multiplier_vs_toktier": 10.02
+      },
+      "full-hf": {
+        "label": "HF tokenizers 0.22.2 full",
+        "median_ms": 1365.7507,
+        "n": 19,
+        "multiplier_vs_toktier": 571.73
+      }
+    }
+  },
+  "short_append_256": {
+    "title": "Short append (tool-result scale) \u2014 +256 chars to a 4,194,304-char session",
+    "workload": {
+      "context_chars": 4194304,
+      "delta_chars": 256,
+      "source": "append grid, 4M x 256 cell"
+    },
+    "lanes": {
+      "repair-hf-steady-v3": {
+        "label": "toktier repair (HF tokenizers window)",
+        "median_ms": 1.6754,
+        "n": 19,
+        "multiplier_vs_toktier": 1.0
+      },
+      "full-gt": {
+        "label": "gigatoken 0.10 full",
+        "median_ms": 7.4308,
+        "n": 19,
+        "multiplier_vs_toktier": 4.44
+      },
+      "full-fastokens": {
+        "label": "fastokens 0.2.0 full",
+        "median_ms": 24.5183,
+        "n": 19,
+        "multiplier_vs_toktier": 14.63
+      },
+      "full-hf": {
+        "label": "HF tokenizers 0.22.2 full",
+        "median_ms": 1350.6628,
+        "n": 19,
+        "multiplier_vs_toktier": 806.17
+      }
+    }
+  }
+}

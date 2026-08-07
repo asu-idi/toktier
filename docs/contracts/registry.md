@@ -82,13 +82,22 @@ Each record carries per-backend entries with one of:
 
 | Status | Meaning |
 |---|---|
-| `certified` | The judged binary itself is bound: the record carries a binary digest, and the loader must match it before the backend opens under `CERTIFIED`. (The prebuilt/fatbin GPU delivery in this release.) |
+| `certified` | The judged binary itself is bound: the record carries a binary digest, and the loader must match it before the backend opens under `CERTIFIED`. This covers the prebuilt GPU delivery and the corrected-Gigatoken native module. |
 | `certified_source` | The certification binds the kernel **source digest, build flags, toolchain constraints, and the class-table digest** (Section 3.1) -- the JIT delivery mode, where the machine-local build product is not bit-identical to the judged build. Eligible under `CERTIFIED` when every bound constraint verifies (source digest match, flags match, toolchain within constraint, device architecture listed, class-table digest match). Reported distinctly from `certified` everywhere (registry, `explain()`, docs): this honesty distinction is contract, not presentation. |
 | `experimental` | Present but not certified; reachable only under `EXPERIMENTAL` policy. |
 | `unsupported` | Known not to work; never planned. |
 
 The reference backend needs no status: it is always available and is
 the definition of correct output for certified configurations.
+
+CPU engines additionally bind `engine`, exact `engine_version`,
+`engine_delivery`, `engine_module`, `patch_sha256`, `config_id`, and
+`config_digest`. For the first release, `engine_delivery=vendored` and
+`engine_module=toktier._vendor.gigatoken_rs`: no separately installed
+Gigatoken distribution participates. The loader hashes the shipped native
+module without importing it; any unavailable or mismatched axis closes the route with
+`R_ENGINE_BINDING_MISMATCH`. Unicode-data and patch descriptions are provenance
+bound transitively by the native binary, not a substitute for hashing it.
 
 Device-architecture rule (frozen): kernel records list the exact GPU
 architectures judged. Loading selects the image or build for a listed
@@ -142,7 +151,7 @@ aliases), pipeline id and added-frontend id, oracle block (package,
 certified versions, semantic id), certification suite version, evidence
 id (pointing into an evidence manifest), readings (documents judged,
 bytes judged, mismatch count), and per-backend entries (status plus the
-digests/flags/toolchain/devices the status requires).
+digests/flags/toolchain/devices or CPU-engine binding the status requires).
 
 Mismatch counts are recorded as read, whatever they are; the registry
 never rounds a nonzero to zero.

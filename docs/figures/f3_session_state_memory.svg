@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="452" viewBox="0 0 760 452">
+<rect width="760" height="452" rx="8" fill="#fcfcfb"/>
+<text x="20.0" y="30.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="15" fill="#0b0b0b" text-anchor="start" font-weight="600">Per-session state to resume tokenization (log scale)</text>
+<text x="20.0" y="48.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#898781" text-anchor="start" font-weight="normal">toktier: durable, revision-checked, usable across processes and restarts · llama-3.1-8b</text>
+<line x1="70.0" y1="324.0" x2="740.0" y2="324.0" stroke="#e1e0d9" stroke-width="1" stroke-linecap="butt"/>
+<text x="64.0" y="328.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="end" font-weight="normal">1 KB</text>
+<line x1="70.0" y1="287.7" x2="740.0" y2="287.7" stroke="#e1e0d9" stroke-width="1" stroke-linecap="butt"/>
+<text x="64.0" y="291.7" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="end" font-weight="normal">10 KB</text>
+<line x1="70.0" y1="251.4" x2="740.0" y2="251.4" stroke="#e1e0d9" stroke-width="1" stroke-linecap="butt"/>
+<text x="64.0" y="255.4" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="end" font-weight="normal">100 KB</text>
+<line x1="70.0" y1="215.1" x2="740.0" y2="215.1" stroke="#e1e0d9" stroke-width="1" stroke-linecap="butt"/>
+<text x="64.0" y="219.1" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="end" font-weight="normal">1 MB</text>
+<line x1="70.0" y1="178.9" x2="740.0" y2="178.9" stroke="#e1e0d9" stroke-width="1" stroke-linecap="butt"/>
+<text x="64.0" y="182.9" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="end" font-weight="normal">10 MB</text>
+<line x1="70.0" y1="142.6" x2="740.0" y2="142.6" stroke="#e1e0d9" stroke-width="1" stroke-linecap="butt"/>
+<text x="64.0" y="146.6" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="end" font-weight="normal">100 MB</text>
+<line x1="70.0" y1="106.3" x2="740.0" y2="106.3" stroke="#e1e0d9" stroke-width="1" stroke-linecap="butt"/>
+<text x="64.0" y="110.3" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="end" font-weight="normal">1 GB</text>
+<line x1="70.0" y1="70.0" x2="740.0" y2="70.0" stroke="#e1e0d9" stroke-width="1" stroke-linecap="butt"/>
+<text x="64.0" y="74.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="end" font-weight="normal">10 GB</text>
+<line x1="70.0" y1="324.0" x2="740.0" y2="324.0" stroke="#c3c2b7" stroke-width="1" stroke-linecap="butt"/>
+<path d="M99.0,324.0 L99.0,279.6 Q99.0,275.6 103.0,275.6 L119.0,275.6 Q123.0,275.6 123.0,279.6 L123.0,324.0 Z" fill="#2a78d6"/>
+<text x="95.0" y="279.6" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="9" fill="#0b0b0b" text-anchor="end" font-weight="600">21.5 KB</text>
+<path d="M125.0,324.0 L125.0,258.3 Q125.0,254.3 129.0,254.3 L145.0,254.3 Q149.0,254.3 149.0,258.3 L149.0,324.0 Z" fill="#eb6834"/>
+<path d="M151.0,324.0 L151.0,302.6 Q151.0,298.6 155.0,298.6 L171.0,298.6 Q175.0,298.6 175.0,302.6 L175.0,324.0 Z" fill="#1baf7a"/>
+<text x="137.0" y="342.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal">4K chars</text>
+<path d="M233.0,324.0 L233.0,242.8 Q233.0,238.8 237.0,238.8 L253.0,238.8 Q257.0,238.8 257.0,242.8 L257.0,324.0 Z" fill="#2a78d6"/>
+<text x="229.0" y="242.8" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="9" fill="#0b0b0b" text-anchor="end" font-weight="600">222.7 KB</text>
+<path d="M259.0,324.0 L259.0,226.7 Q259.0,222.7 263.0,222.7 L279.0,222.7 Q283.0,222.7 283.0,226.7 L283.0,324.0 Z" fill="#eb6834"/>
+<path d="M285.0,324.0 L285.0,240.2 Q285.0,236.2 289.0,236.2 L305.0,236.2 Q309.0,236.2 309.0,240.2 L309.0,324.0 Z" fill="#1baf7a"/>
+<text x="271.0" y="342.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal">32K chars</text>
+<path d="M367.0,324.0 L367.0,221.5 Q367.0,217.5 371.0,217.5 L387.0,217.5 Q391.0,217.5 391.0,221.5 L391.0,324.0 Z" fill="#2a78d6"/>
+<text x="363.0" y="221.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="9" fill="#0b0b0b" text-anchor="end" font-weight="600">860.1 KB</text>
+<path d="M393.0,324.0 L393.0,199.6 Q393.0,195.6 397.0,195.6 L413.0,195.6 Q417.0,195.6 417.0,199.6 L417.0,324.0 Z" fill="#eb6834"/>
+<path d="M419.0,324.0 L419.0,172.1 Q419.0,168.1 423.0,168.1 L439.0,168.1 Q443.0,168.1 443.0,172.1 L443.0,324.0 Z" fill="#1baf7a"/>
+<text x="405.0" y="342.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal">262K chars</text>
+<path d="M501.0,324.0 L501.0,210.5 Q501.0,206.5 505.0,206.5 L521.0,206.5 Q525.0,206.5 525.0,210.5 L525.0,324.0 Z" fill="#2a78d6"/>
+<text x="497.0" y="210.5" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="9" fill="#0b0b0b" text-anchor="end" font-weight="600">1.7 MB</text>
+<path d="M527.0,324.0 L527.0,177.6 Q527.0,173.6 531.0,173.6 L547.0,173.6 Q551.0,173.6 551.0,177.6 L551.0,324.0 Z" fill="#eb6834"/>
+<path d="M553.0,324.0 L553.0,129.2 Q553.0,125.2 557.0,125.2 L573.0,125.2 Q577.0,125.2 577.0,129.2 L577.0,324.0 Z" fill="#1baf7a"/>
+<text x="539.0" y="342.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal">1M chars</text>
+<path d="M635.0,324.0 L635.0,192.8 Q635.0,188.8 639.0,188.8 L655.0,188.8 Q659.0,188.8 659.0,192.8 L659.0,324.0 Z" fill="#2a78d6"/>
+<text x="631.0" y="192.8" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="9" fill="#0b0b0b" text-anchor="end" font-weight="600">5.3 MB</text>
+<path d="M661.0,324.0 L661.0,155.5 Q661.0,151.5 665.0,151.5 L681.0,151.5 Q685.0,151.5 685.0,155.5 L685.0,324.0 Z" fill="#eb6834"/>
+<path d="M687.0,324.0 L687.0,85.4 Q687.0,81.4 691.0,81.4 L707.0,81.4 Q711.0,81.4 711.0,85.4 L711.0,324.0 Z" fill="#1baf7a"/>
+<text x="699.0" y="75.4" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="9" fill="#0b0b0b" text-anchor="middle" font-weight="normal">4.9 GB</text>
+<text x="673.0" y="342.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal">4M chars</text>
+<circle cx="74.0" cy="382.0" r="6" fill="#fcfcfb"/><circle cx="74.0" cy="382.0" r="4" fill="#2a78d6"/>
+<text x="84.0" y="386.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="start" font-weight="normal">toktier store record (durable)</text>
+<circle cx="320.0" cy="382.0" r="6" fill="#fcfcfb"/><circle cx="320.0" cy="382.0" r="4" fill="#eb6834"/>
+<text x="330.0" y="386.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="start" font-weight="normal">plain Python dict {text, ids} (in-memory)</text>
+<circle cx="74.0" cy="398.0" r="6" fill="#fcfcfb"/><circle cx="74.0" cy="398.0" r="4" fill="#1baf7a"/>
+<text x="84.0" y="402.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#52514e" text-anchor="start" font-weight="normal">dynamo-tokenizers 1.8.0 L1 cache (in-memory, per session)</text>
+<text x="70.0" y="420.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="start" font-weight="normal">L1 measured capacity-lifted so nothing evicts; by design it keeps the full cumulative id vector at every special-token boundary</text>
+<text x="70.0" y="432.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="start" font-weight="normal">(its cross-boundary reuse mechanism) — process-local, volatile, 64 MiB default budget.</text>
+<text x="70.0" y="444.0" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" fill="#898781" text-anchor="start" font-weight="normal">For scale: a long-lived gigatoken engine grew +1.5 GB RSS over ~915 docs (per-process warm cache, not per-session state).</text>
+</svg>

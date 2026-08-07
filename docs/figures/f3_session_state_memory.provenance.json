@@ -1,0 +1,11 @@
+{
+  "figure": "f3_session_state_memory",
+  "readings": [
+    "readings/f3/toktier_store_readings.json",
+    "readings/f3/third_pillar_readings.json"
+  ],
+  "archive": "readings, window records, harness scripts and palette validation are archived with the evidence set behind docs/benchmarks.md",
+  "protocol": "docs/benchmarks.md, measurement discipline section, plus recorded amendments a1-a5",
+  "toktier_commit_at_measurement": "89eb6ef10d4843f2a46cdfa1a487ec2cf4833caa",
+  "notes": "gigatoken warm-cache scale annotation from F1 gt-warm RSS sampling (amendment A2.2/ruling: annotation, not a bar)"
+}

@@ -14,9 +14,11 @@ offers a certified GPU path for fresh or large requests. Both fast paths return 
   (12.33 trillion characters), with zero observed divergence.
 - **Fast on both paths.** On the recorded benchmark battery, the GPU path
   encodes a fresh 4-million-character request (~786K tokens) in
-  **3.88 ms**. The bounded CPU repair operation for a 256-character append to
-  a 4.19M-character session takes **1.68 ms**, before materializing the full
-  Python ID tuple.
+  **3.88 ms**. The bounded native CPU repair for a 256-character append to a
+  4.19M-character session takes **1.68 ms**. This measures the repair operation
+  itself; it excludes materializing the full historical token sequence as a
+  Python tuple. A native Rust serving integration can avoid this full-sequence
+  materialization by retaining session state and consuming only the repaired suffix.
 - **Certified before acceleration.** Fast paths are admitted only for the exact
   tokenizer artifact, oracle version, kernel delivery, and architecture covered
   by recorded evidence. `explain()` reports the route and its reasons.

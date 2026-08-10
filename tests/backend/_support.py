@@ -51,6 +51,9 @@ ORACLE_VERSION = "0.22.2"
 DEVICE = DeviceInfo(index=0, name="test device", architecture="sm_120")
 BUILD_FLAGS = ENGINE_BINDINGS.build_flags
 TOOLCHAIN = ">=12.0"
+HOST_SOURCE_DIGEST = "1" * 64
+HOST_BUILD_FLAGS = ("profile=release", "target=x86_64-unknown-linux-gnu")
+HOST_TOOLCHAIN = "rustc 1.93.1 (01f9b12 2026-02-09)"
 
 
 # ---------------------------------------------------------------------
@@ -78,6 +81,9 @@ def certified_entry(**overrides: Any) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "status": "certified",
         "binary_digest": BINARY_DIGEST,
+        "host_source_digest": HOST_SOURCE_DIGEST,
+        "host_build_flags": list(HOST_BUILD_FLAGS),
+        "host_toolchain": HOST_TOOLCHAIN,
         "devices": [DEVICE.architecture],
         "driver_min": "560.0",
     }
@@ -172,6 +178,9 @@ def gpu_ready_kernel_cache(**overrides: Any) -> KernelCacheState:
         toolchain="12.4",
         toolchain_satisfied=True,
         loaded_flag_sets=1,
+        host_source_digest=HOST_SOURCE_DIGEST,
+        host_build_flags=HOST_BUILD_FLAGS,
+        host_toolchain=HOST_TOOLCHAIN,
     )
     return dataclasses.replace(state, **overrides) if overrides else state
 

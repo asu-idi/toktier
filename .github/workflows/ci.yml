@@ -95,6 +95,7 @@ jobs:
       - run: python tools/generate_evidence.py --check --campaign extra
       - run: python tools/generate_readme_backfill.py --check
       - run: python tools/generate_artifact_manifest.py --check
+      - run: python tools/generate_sibling_aliases.py --check
       - run: python tools/generate_pypi_readme.py --check
 
   rust:
@@ -118,7 +119,17 @@ jobs:
       - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
         run: cargo clippy -- -D warnings
       - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
+        # The published toktier crate has features the default build
+        # never compiles (serde, and jit -- a certified second build).
+        # This step type-checks them. It stays scoped to the crate: a
+        # workspace-wide --all-features would pull gigatoken-core's
+        # upstream-tests feature, whose vendored inline tests are a
+        # known red outside this workflow's scope.
+        run: cargo clippy --all-features --all-targets -p toktier -- -D warnings
+      - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
         run: cargo test
+      - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
+        run: python3 tools/generate_native_legal.py --check
 
   wheel:
     runs-on: ubuntu-24.04
@@ -148,8 +159,9 @@ jobs:
             twine==7.0.0 \
             check-wheel-contents==0.6.3 \
             auditwheel==6.7.0
-          python tools/verify_release_identity.py --tag v0.1.1
+          python tools/verify_release_identity.py --tag v0.2.0
           python tools/generate_registry.py --release-check
+          python tools/generate_sibling_aliases.py --check
           maturin build --locked --release --out dist
           python tools/verify_release_artifacts.py dist
           twine check --strict dist/*.whl

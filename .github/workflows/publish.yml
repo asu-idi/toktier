@@ -45,6 +45,7 @@ jobs:
           python tools/generate_pypi_readme.py --check
           python tools/update_fast_cpu_registry.py --check
           python tools/generate_registry.py --release-check
+          python tools/generate_sibling_aliases.py --check
       - name: Build the single core wheel
         run: maturin build --locked --release --out dist
       - name: Audit the exact artifact set

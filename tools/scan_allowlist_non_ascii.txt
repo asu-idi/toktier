@@ -7,8 +7,33 @@ docs/**
 ROADMAP.md
 # The vendored-engine SBOM preserves upstream author names verbatim.
 packaging/fast_cpu/gigatoken.cyclonedx.json
+# The audited Gigatoken source import preserves upstream Unicode test vectors
+# and explanatory comments verbatim; TokTier-owned source remains scanned.
+crates/toktier-gigatoken-core/**
+# Native reference/repair unit tests intentionally use Unicode scalar vectors.
+crates/toktier-routing-core/src/fast_cpu.rs
+crates/toktier-routing-core/src/reference.rs
+# Public Rust examples and store regressions intentionally exercise Unicode.
+crates/toktier/examples/batch.rs
+crates/toktier/examples/correctness_campaign.rs
+crates/toktier/examples/cpu.rs
+crates/toktier/examples/direct_jit_matrix.rs
+crates/toktier/examples/lifecycle_bench.rs
+crates/toktier/examples/native_jit.rs
+crates/toktier/examples/persistent_session.rs
+crates/toktier/examples/prebuilt_gpu.rs
+crates/toktier/examples/rust_api_bench.rs
+crates/toktier/examples/rust_api_matrix.rs
+crates/toktier/examples/serving_bench.rs
+crates/toktier/examples/session.rs
+crates/toktier/tests/lifecycle.rs
+crates/toktier-store-core/tests/store_behavior.rs
+crates/toktier-store-sqlite/tests/roundtrip.rs
 # RFC 8785 conformance vectors use non-ASCII text as test data.
 tests/test_jcs.py
+# Facade GIL and persistence regressions intentionally exercise Unicode input.
+tests/facade/test_facade_api.py
+tests/facade/test_facade_store.py
 # The prebuilt-delivery smoke encodes multilingual text on purpose.
 tests/gpu/test_prebuilt.py
 # The focused CPU parity runner deliberately exercises multilingual input.

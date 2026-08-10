@@ -31,11 +31,11 @@ def test_pypi_readme_has_no_repository_relative_targets() -> None:
     assert _RELATIVE_HTML.search(payload) is None
     assert "<picture>" not in payload
     assert (
-        "https://raw.githubusercontent.com/asu-idi/toktier/v0.1.1/"
+        "https://raw.githubusercontent.com/asu-idi/toktier/v0.2.0/"
         "docs/figures/hero_session_vs_reencode.svg"
     ) in payload
     assert (
-        "https://github.com/asu-idi/toktier/blob/v0.1.1/README.zh-CN.md"
+        "https://github.com/asu-idi/toktier/blob/v0.2.0/README.zh-CN.md"
     ) in payload
 
 

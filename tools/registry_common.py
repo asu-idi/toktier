@@ -39,6 +39,7 @@ REGISTRY_DOMAIN_TAG = b"toktier.registry.v1\x00"
 EVIDENCE_DOMAIN_TAG = b"toktier.evidence.v1\x00"
 PIPELINE_DOMAIN_TAG = b"toktier.pipeline.v1\x00"
 ADDED_FRONTEND_DOMAIN_TAG = b"toktier.added_frontend.v1\x00"
+SIBLING_ALIAS_DOMAIN_TAG = b"toktier.sibling_aliases.v1\x00"
 
 #: Digest stand-in for a binding that another lane owns. It is a syntactically
 #: valid sha256 that cannot be a real digest of anything anyone shipped, so a

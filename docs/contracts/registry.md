@@ -4,7 +4,8 @@ Status: frozen for the first public release: the three-identity model,
 the status vocabulary, the oracle version policy, the root digest rule,
 and the generative discipline. The JSON shapes are normatively defined
 by the schemas in `schemas/` (`support_registry.schema.json`,
-`evidence_manifest.schema.json`); this document explains their meaning.
+`evidence_manifest.schema.json`, and `sibling_aliases.schema.json`); this
+document explains their meaning.
 
 Framing rule: the registry states exactly what has been certified, no
 more. Anything not certified runs as reference and is labeled as such.
@@ -45,6 +46,13 @@ artifact when either:
 `EXPERIMENTAL` policy may route beyond these rules; its outputs are not
 covered by certification claims (see `routing.md`).
 
+For the Rust API runtime, this section is necessary but not sufficient:
+certified acceleration additionally requires the executing build to match an
+eligible entry in the registry's `runtime_builds` block (exact facade source
+identity, features/profile, exact rustc, and the fast-CPU/native-host
+digests). An unregistered build falls back to HF under `CERTIFIED`, and an
+explicit CUDA request reports `UNCERTIFIED_RUNTIME` (see `docs/rust-api.md`).
+
 ## 2. Oracle version policy (frozen)
 
 - Each record names the oracle package, the exact package versions
@@ -58,9 +66,11 @@ covered by certification claims (see `routing.md`).
     the state is reported as reference-only (`R_ORACLE_MISMATCH`);
   - artifact not in the registry at all -> reference, reported
     uncertified (`R_UNCERTIFIED_ARTIFACT`).
-- Package metadata does **not** pin the oracle package version; the
-  registry expresses the certified set and the runtime enforces honest
-  labeling instead of blocking installs.
+- Package metadata pins the released oracle exactly (`tokenizers==0.22.2`;
+  the Python package also pins its loader, `transformers==4.57.6`). The
+  registry still expresses the certified set independently, and the runtime
+  enforces honest labeling for environments whose installed oracle
+  nevertheless differs from the pin.
 - Explicit-engine rule (same policy, below routing): the explicit GPU
   engine (`toktier.engine.gpu`) sits below the routing layer and
   constructs and runs regardless of the installed oracle version --
@@ -82,8 +92,8 @@ Each record carries per-backend entries with one of:
 
 | Status | Meaning |
 |---|---|
-| `certified` | The judged binary itself is bound: the record carries a binary digest, and the loader must match it before the backend opens under `CERTIFIED`. This covers the prebuilt GPU delivery and the corrected-Gigatoken native module. |
-| `certified_source` | The certification binds the kernel **source digest, build flags, toolchain constraints, and the class-table digest** (Section 3.1) -- the JIT delivery mode, where the machine-local build product is not bit-identical to the judged build. Eligible under `CERTIFIED` when every bound constraint verifies (source digest match, flags match, toolchain within constraint, device architecture listed, class-table digest match). Reported distinctly from `certified` everywhere (registry, `explain()`, docs): this honesty distinction is contract, not presentation. |
+| `certified` | The judged binary itself is bound: the record carries a binary digest, and the loader must match it before the backend opens under `CERTIFIED`. In this release, the prebuilt GPU delivery also binds the source/build identity of the Rust host paired with that binary; either mismatch closes the route. |
+| `certified_source` | The judged implementation is bound by source identity plus its reproducibility inputs instead of by one platform-specific output binary. Every backend must match its schema-defined source digest, build flags, and toolchain exactly. GPU JIT additionally binds the generated class table, selected NVCC, torch runtime CUDA, exact PyTorch version, and judged device architecture. The integrated CPU engine binds its Rust/Python source set, Cargo release profile, exact rustc, repair configuration, patch, oracle, and artifact. This status is eligible under `CERTIFIED` only when every applicable axis verifies and is reported distinctly from `certified` everywhere. |
 | `experimental` | Present but not certified; reachable only under `EXPERIMENTAL` policy. |
 | `unsupported` | Known not to work; never planned. |
 
@@ -91,13 +101,26 @@ The reference backend needs no status: it is always available and is
 the definition of correct output for certified configurations.
 
 CPU engines additionally bind `engine`, exact `engine_version`,
-`engine_delivery`, `engine_module`, `patch_sha256`, `config_id`, and
-`config_digest`. For the first release, `engine_delivery=vendored` and
-`engine_module=toktier._vendor.gigatoken_rs`: no separately installed
-Gigatoken distribution participates. The loader hashes the shipped native
-module without importing it; any unavailable or mismatched axis closes the route with
-`R_ENGINE_BINDING_MISMATCH`. Unicode-data and patch descriptions are provenance
-bound transitively by the native binary, not a substitute for hashing it.
+`engine_delivery`, `engine_module`, `source_digest`, `build_flags`, exact
+`toolchain`, `patch_sha256`, `config_id`, and `config_digest`. The corrected
+Gigatoken implementation in this release is compiled into the single private
+`toktier._native` extension (`engine_delivery=integrated`); no separately
+installed Gigatoken distribution or second native extension participates. Its
+build script embeds the source identity, Cargo release profile, and rustc
+identity in the extension, and the planner compares those facts without
+executing an untrusted sidecar. Any unavailable or mismatched axis closes the
+route with `R_ENGINE_BINDING_MISMATCH`. Historical standalone-binary digests
+remain provenance for the earlier differential campaign, not authority for the
+engine that executes in this release.
+
+For a prebuilt GPU delivery, `binary_digest` binds the fatbin and
+`architecture_digests` bind every embedded image. The same delivery row also
+binds `host_source_digest`, `host_build_flags`, and exact `host_toolchain` for
+the Rust request host that selects the image, launches it, splits results, owns
+store/routing state, and performs reference fallback. The extension embeds
+those host facts at build time; a stable fatbin therefore cannot certify a
+drifted host. Hardware parity readings must carry the same host identity before
+the generator may mark the delivery `certified`.
 
 Device-architecture rule (frozen): kernel records list the exact GPU
 architectures judged. Loading selects the image or build for a listed
@@ -127,13 +150,16 @@ Contract:
 
 ### 3.2 Single loader, single flag set (frozen)
 
-A `certified_source` certificate covers exactly one kernel build
-configuration per process: one loader, one bound flag set. If more than
-one build of the kernel with differing flags is loaded in the same
-process, the certificate's premises no longer hold and the status
-degrades to uncertified for that process (accelerated path closes,
-reference runs). Multiple loaders or divergent flag sets are a
-certificate-invalidation condition, not a tolerated variation.
+A `certified_source` certificate covers exactly one build configuration per
+process: one implementation identity, one toolchain, and one bound flag set.
+If more than one build with differing facts is loaded in the same process, the
+certificate's premises no longer hold and the status degrades to uncertified
+(the accelerated path closes and reference runs). Multiple loaders or
+divergent flag sets are a certificate-invalidation condition, not a tolerated
+variation. For GPU JIT, the cache identity includes the resolved compiler path,
+parsed release/build, torch runtime CUDA, and PyTorch distribution version, so
+a local product cannot cross an unverified compiler boundary through cache
+reuse. The integrated CPU extension exposes one immutable embedded fact set.
 
 ### 3.3 Single source of truth for routing data (frozen)
 
@@ -152,6 +178,9 @@ certified versions, semantic id), certification suite version, evidence
 id (pointing into an evidence manifest), readings (documents judged,
 bytes judged, mismatch count), and per-backend entries (status plus the
 digests/flags/toolchain/devices or CPU-engine binding the status requires).
+Alongside the artifact records, the registry carries the top-level
+`runtime_builds` block of Section 1.1: the evidence-bound native serving
+builds allowed to admit accelerated routes for the Rust API.
 
 Mismatch counts are recorded as read, whatever they are; the registry
 never rounds a nonzero to zero.
@@ -161,6 +190,24 @@ Artifact manifests (the fetch-side companion of the registry) pin
 repository revision. Verification is per file against these digests;
 a revision pin without content digests is not sufficient under this
 contract.
+
+### 4.1 Verified sibling mappings
+
+`src/toktier/artifacts/tables/sibling_aliases.v1.json` is an admission-side
+companion, normatively shaped by `schemas/sibling_aliases.schema.json`. Each
+row records a model repository, full audit revision, source file name/length/
+sha256, comparison basis, canonical family/anchor sha256, and whether that
+anchor is present in the wheel. Its public source projection contains exactly
+the 210 rows enumerated in `docs/support-matrix.md`.
+
+The repository and revision only choose bytes to inspect. Runtime admission
+requires the sha256 of the bytes actually resolved to match a table row (or an
+exact packaged anchor); familiar names with changed bytes do not match. A
+canonicalisation or serialisation match selects and executes the recorded
+canonical anchor so existing backend certificates and binding checks remain
+unchanged. Conflicting digest-to-family mappings, duplicate repositories,
+count drift, malformed identities, or disagreement with the artifact manifest
+raise `REGISTRY_INVALID`.
 
 ## 5. Evidence manifests (frozen relationship)
 
@@ -176,11 +223,13 @@ contract.
 
 ## 6. Root digest (frozen construction)
 
-Both files carry a `root_digest` field:
+The support registry, evidence manifests, and sibling mapping carry a
+`root_digest` field:
 
 ```
 root_digest = "sha256:" + hex( SHA-256(
     "toktier.registry.v1\0"          # or "toktier.evidence.v1\0"
+                                      # or "toktier.sibling_aliases.v1\0"
     || canonical_json(document with the root_digest member removed)
 ) )
 ```
@@ -191,7 +240,7 @@ root_digest = "sha256:" + hex( SHA-256(
 
 ## 7. Generative discipline (frozen)
 
-- Registry and evidence manifests are **generated by tooling only**,
+- Registry, sibling mappings, and evidence manifests are **generated by tooling only**,
   from judgment outputs; hand edits are prohibited.
 - The generator supports `--check`: regenerate in memory, compare
   canonical forms, verify `root_digest`, and validate against the JSON

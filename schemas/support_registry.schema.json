@@ -31,6 +31,11 @@
       "type": "array",
       "items": { "$ref": "#/$defs/added_frontend" }
     },
+    "runtime_builds": {
+      "type": "array",
+      "description": "Evidence-bound native serving hosts allowed to admit accelerated routes.",
+      "items": { "$ref": "#/$defs/runtime_build" }
+    },
     "artifacts": {
       "type": "array",
       "items": { "$ref": "#/$defs/artifact_record" }
@@ -105,6 +110,50 @@
         "description": { "type": "string" }
       }
     },
+    "runtime_build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime",
+        "source_digest",
+        "build_flags",
+        "toolchain",
+        "fast_cpu_source_digest",
+        "native_host_source_digest",
+        "evidence_id"
+      ],
+      "properties": {
+        "runtime": { "const": "rust_api" },
+        "source_digest": { "$ref": "#/$defs/sha256_hex" },
+        "build_flags": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "toolchain": { "type": "string" },
+        "fast_cpu_source_digest": { "$ref": "#/$defs/sha256_hex" },
+        "native_host_source_digest": { "$ref": "#/$defs/sha256_hex" },
+        "evidence_id": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "direct_jit_toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "release",
+        "build",
+        "compiler_sha256",
+        "architecture",
+        "evidence_id"
+      ],
+      "properties": {
+        "release": { "type": "string", "minLength": 1 },
+        "build": { "type": "string", "minLength": 1 },
+        "compiler_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "architecture": { "type": "string", "pattern": "^sm_[0-9]+$" },
+        "evidence_id": { "$ref": "#/$defs/identifier" }
+      }
+    },
     "readings": {
       "type": "object",
       "additionalProperties": false,
@@ -144,6 +193,44 @@
           "type": "string",
           "description": "Toolchain constraint expression for certified_source (for example a CUDA toolkit version range)."
         },
+        "host_source_digest": {
+          "$ref": "#/$defs/sha256_hex",
+          "description": "Domain-separated digest of the Rust request host paired with a certified prebuilt GPU image. The release verifier requires it on every prebuilt delivery marked certified."
+        },
+        "host_build_flags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Exact release build facts embedded by the native prebuilt request host."
+        },
+        "host_toolchain": {
+          "type": "string",
+          "description": "Exact Rust compiler identity embedded by the native prebuilt request host."
+        },
+        "direct_source_digest": {
+          "$ref": "#/$defs/sha256_hex",
+          "description": "Domain-separated digest of the exact standalone NVCC source set used by the Rust-native JIT compiler."
+        },
+        "direct_host_source_digest": {
+          "$ref": "#/$defs/sha256_hex",
+          "description": "Domain-separated digest of the Rust CUDA Driver request host that loads a direct-JIT product."
+        },
+        "direct_build_flags": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "Exact invariant direct-NVCC flag prefix; device and path arguments are bound separately in the per-product manifest."
+        },
+        "direct_devices": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^sm_[0-9]+$" }
+        },
+        "direct_toolchains": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/direct_jit_toolchain" },
+          "description": "Exact compiler-binary/architecture tuples admitted for automatic Rust-native direct JIT."
+        },
         "class_table_digest": {
           "$ref": "#/$defs/sha256_hex",
           "description": "Digest of the generated lookup tables (character-class tables) the kernel consumes. Part of the certificate binding set; a mismatch closes the accelerated path."
@@ -173,12 +260,12 @@
           "description": "Exact external engine version in the certified binding."
         },
         "engine_delivery": {
-          "enum": ["vendored"],
-          "description": "How the CPU engine is delivered. The first release admits only the private module vendored in the core wheel."
+          "enum": ["integrated", "vendored"],
+          "description": "How the CPU engine is delivered. 'integrated' means the corrected implementation is linked into the core TokTier extension; 'vendored' is retained only for reading the 0.1.0 lineage."
         },
         "engine_module": {
           "type": "string",
-          "const": "toktier._vendor.gigatoken_rs",
+          "enum": ["toktier._native", "toktier._vendor.gigatoken_rs"],
           "description": "Private import path of the bound CPU engine; no top-level Gigatoken package participates in routing."
         },
         "engine_unicode_data": {
@@ -204,7 +291,7 @@
             "jit": { "$ref": "#/$defs/backend_entry" },
             "prebuilt": { "$ref": "#/$defs/backend_entry" }
           },
-          "description": "Per-delivery refinement of this entry. 'jit' binds the source digest set (certified_source), 'prebuilt' binds the shipped fatbin binary digest (certified). The top-level fields remain the JIT-era view for readers that predate deliveries."
+          "description": "Per-delivery refinement of this entry. 'jit' binds the kernel source digest set (certified_source); 'prebuilt' binds the shipped fatbin binary plus the source/build identity of its Rust request host (certified). The top-level fields remain the JIT-era view for readers that predate deliveries."
         }
       },
       "allOf": [
@@ -218,11 +305,16 @@
             "required": [
               "source_digest",
               "build_flags",
-              "toolchain",
-              "devices",
-              "class_table_digest"
+              "toolchain"
             ]
           }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "certified_source" } },
+            "not": { "required": ["engine"] }
+          },
+          "then": { "required": ["devices", "class_table_digest"] }
         }
       ]
     },

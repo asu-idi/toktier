@@ -38,7 +38,7 @@ def test_fast_cpu_registry_counts_unique_artifacts_without_inflation() -> None:
         for row in artifacts
         if isinstance(row, dict) and "fast_cpu" in row["backends"]
     }
-    assert sum(status == "certified" for status in states.values()) == 11
+    assert sum(status == "certified_source" for status in states.values()) == 11
     assert {
         family for family, status in states.items() if status == "unsupported"
     } == {"hy3", "laguna_s_2_1", "ling_3_0_flash"}
@@ -56,20 +56,16 @@ def test_fast_cpu_registry_counts_unique_artifacts_without_inflation() -> None:
     assert len(repositories) == 3
 
 
-def test_corrected_gigatoken_patch_and_notices_are_digest_bound() -> None:
+def test_integrated_gigatoken_sources_patch_and_notices_are_bound() -> None:
     binding = _json("tools/fast_cpu_binding.json")
-    manifest = _json("src/toktier/_vendor/gigatoken_build.json")
     assert binding["engine_distribution"] == "toktier"
-    assert binding["engine_delivery"] == "vendored"
-    assert binding["engine_module"] == "toktier._vendor.gigatoken_rs"
-    assert manifest["module"] == binding["engine_module"]
-    assert manifest["native_sha256"] == binding["binary_digest"]
-    assert _sha256(str(binding["vendored_native_path"])) == binding["binary_digest"]
-    assert _sha256(str(binding["vendored_sbom_path"])) == binding[
-        "vendored_sbom_sha256"
-    ]
-    assert _sha256(str(binding["vendored_license_bundle_path"])) == binding[
-        "vendored_license_bundle_sha256"
+    assert binding["engine_delivery"] == "integrated"
+    assert binding["engine_module"] == "toktier._native"
+    legal = binding["legal"]
+    assert isinstance(legal, dict)
+    assert _sha256(str(legal["sbom_path"])) == legal["sbom_sha256"]
+    assert _sha256(str(legal["license_bundle_path"])) == legal[
+        "license_bundle_sha256"
     ]
     assert binding["patch_sha256"] == _sha256(
         "packaging/fast_cpu/gigatoken-toktier-pinned-1.patch"
@@ -89,32 +85,41 @@ def test_corrected_gigatoken_patch_and_notices_are_digest_bound() -> None:
     assert "NOTICE-TOKTIER.md" in recipe
     assert "diff --git a/NOTICE-TOKTIER.md b/NOTICE-TOKTIER.md" in patch
 
-    assert binding["engine_wheel_sha256"] == (
+    lineage = binding["lineage"]
+    assert isinstance(lineage, dict)
+    assert lineage["engine_wheel_sha256"] == (
         "9fbfe0fda617763ec65dab98de15c28c94223f515ffd71a4a296716c60f220e7"
     )
-    equivalence = binding["native_equivalence"]
-    assert isinstance(equivalence, dict)
-    assert equivalence["campaign_binary_digest"] == binding["binary_digest"]
-    assert equivalence["release_binary_digest"] == binding["binary_digest"]
+    assert lineage["campaign_binary_digest"] == lineage["release_binary_digest"]
+
+    import subprocess
+    import sys
+
+    observed = subprocess.run(
+        [sys.executable, str(ROOT / "tools/fast_cpu_source_identity.py")],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert observed == binding["source_digest"]
 
 
-def test_focused_public_api_parity_covers_every_certified_artifact() -> None:
+def test_native_frontend_parity_covers_every_certified_artifact() -> None:
     binding = _json("tools/fast_cpu_binding.json")
-    reading = _json("readings/fast_cpu_focused_parity.json")
-    assert reading["schema"] == "toktier.fast_cpu.focused_parity.v2"
-    release = reading["release"]
-    assert isinstance(release, dict)
-    assert release["distribution"] == "toktier"
-    assert release["external_gigatoken_distribution_present"] is False
+    reading = _json("readings/fast_cpu_native_frontend_parity.json")
+    assert reading["schema"] == "toktier.fast_cpu.native_frontend_parity.v1"
     engine = reading["engine"]
     assert isinstance(engine, dict)
-    assert engine["delivery"] == "vendored"
-    assert engine["module"] == "toktier._vendor.gigatoken_rs"
-    assert engine["native_sha256"] == binding["binary_digest"]
+    assert engine["delivery"] == "integrated"
+    assert engine["module"] == "toktier._native"
+    assert engine["source_digest"] == binding["source_digest"]
+    assert engine["build_flags"] == binding["build_flags"]
+    assert engine["toolchain"] == binding["toolchain"]
     assert reading["unique_artifacts"] == 11
     assert reading["model_families"] == 12
     assert reading["all_ids_equal_hf"] is True
-    assert reading["all_executed_gigatoken_repair"] is True
+    assert reading["one_python_to_rust_call_per_batch"] is True
+    assert reading["gil_released"] is True
     rows = reading["rows"]
     assert isinstance(rows, list)
     by_family = {
@@ -123,11 +128,8 @@ def test_focused_public_api_parity_covers_every_certified_artifact() -> None:
     loadable = binding["loadable_families"]
     assert isinstance(loadable, list)
     assert set(by_family) == set(loadable)
-    assert all(row["all_turns_equal_hf"] is True for row in by_family.values())
-    assert all(
-        int(row["path_counts"].get("gigatoken_repair", 0)) >= 1
-        for row in by_family.values()
-    )
+    assert all(row["full_encode_equal_hf"] is True for row in by_family.values())
+    assert all(row["repair_equal_hf"] is True for row in by_family.values())
 
 
 def test_fastokens_v031_license_materials_are_exact_upstream_files() -> None:

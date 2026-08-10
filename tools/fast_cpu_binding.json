@@ -1,34 +1,45 @@
 {
-  "version": "fast-cpu-binding-v1",
+  "version": "fast-cpu-binding-v2",
   "backend": "fast_cpu",
   "engine": "gigatoken",
   "engine_version": "0.10.0+toktier.pinned.1",
   "engine_distribution": "toktier",
-  "engine_module": "toktier._vendor.gigatoken_rs",
-  "engine_delivery": "vendored",
-  "engine_wheel_sha256": "9fbfe0fda617763ec65dab98de15c28c94223f515ffd71a4a296716c60f220e7",
-  "campaign_wheel_sha256": "c207ce3196a746e979f3ec8c1b2becb559fe20bc763cfaf220c30e9741264da0",
-  "binary_digest": "9a701047dafa1cdebc168851d0548a0caaf08d0523d70911cc7a24112ccf92a3",
-  "binary_digest_of": "src/toktier/_vendor/gigatoken_rs.abi3.so (private native module vendored byte-for-byte into the toktier core wheel)",
-  "vendored_native_path": "src/toktier/_vendor/gigatoken_rs.abi3.so",
-  "vendored_manifest_path": "src/toktier/_vendor/gigatoken_build.json",
-  "vendored_sbom_path": "packaging/fast_cpu/gigatoken.cyclonedx.json",
-  "vendored_sbom_distribution_path": ".dist-info/sboms/gigatoken.cyclonedx.json",
-  "vendored_sbom_sha256": "297a257d893f9cf6502602423dfee3de044c32ff89c264459828164119168bbd",
-  "vendored_license_bundle_path": "packaging/fast_cpu/THIRD_PARTY_LICENSES-gigatoken.txt",
-  "vendored_license_bundle_sha256": "49d4311b36c8c1886f1752e3dd0c47b66520923fb70b38e7d822039029cb80d7",
-  "native_equivalence": {
-    "campaign_binary_digest": "9a701047dafa1cdebc168851d0548a0caaf08d0523d70911cc7a24112ccf92a3",
-    "release_binary_digest": "9a701047dafa1cdebc168851d0548a0caaf08d0523d70911cc7a24112ccf92a3",
-    "basis": "the campaign wheel, corrected source wheel, and toktier core wheel contain byte-identical native modules; relocation changes only the private Python import path"
-  },
+  "engine_module": "toktier._native",
+  "engine_delivery": "integrated",
+  "source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+  "source_digest_of": "domain-separated, path-bound source/build set enumerated identically by tools/fast_cpu_source_identity.py and crates/toktier-py/build.rs",
+  "build_flags": [
+    "profile=release",
+    "opt-level=3",
+    "lto=fat",
+    "codegen-units=1",
+    "panic=unwind",
+    "target=x86_64-unknown-linux-gnu",
+    "pyo3=abi3-py310+extension-module"
+  ],
+  "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
   "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
-    "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
+  "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
   "patch_base": "upstream 0.10.0 @ 34a1599f0c0ae7d7cd0d1c530e6522320158b360",
   "repair_config_id": "toktier-fast-repair-v1",
   "oracle": {
     "tokenizers": "0.22.2",
     "transformers": "4.57.6"
+  },
+  "legal": {
+    "sbom_path": "packaging/fast_cpu/gigatoken.cyclonedx.json",
+    "sbom_distribution_path": ".dist-info/sboms/gigatoken.cyclonedx.json",
+    "sbom_sha256": "51f8a5f551386f48523829a7eede9ae9497d6e9116eba7036ce837720dd6ad92",
+    "license_bundle_path": "packaging/fast_cpu/THIRD_PARTY_LICENSES-gigatoken.txt",
+    "license_bundle_sha256": "7a0da46670c248bcf317697c1acb4cc008c5aa0ce29fe6d31bea17d704fba1ec"
+  },
+  "lineage": {
+    "campaign_id": "gigatoken-pinned-differential-v1",
+    "engine_wheel_sha256": "9fbfe0fda617763ec65dab98de15c28c94223f515ffd71a4a296716c60f220e7",
+    "campaign_wheel_sha256": "c207ce3196a746e979f3ec8c1b2becb559fe20bc763cfaf220c30e9741264da0",
+    "campaign_binary_digest": "9a701047dafa1cdebc168851d0548a0caaf08d0523d70911cc7a24112ccf92a3",
+    "release_binary_digest": "9a701047dafa1cdebc168851d0548a0caaf08d0523d70911cc7a24112ccf92a3",
+    "basis": "the historical 12.4-TB campaign judged the byte-identical corrected 0.10.0+pinned.1 binary; the active integrated source is separately admitted only by the native-frontend parity reading"
   },
   "validation": {
     "campaign_id": "gigatoken-pinned-differential-v1",
@@ -37,7 +48,8 @@
     "family_checks": 41800181401,
     "mismatches": 0,
     "shipped_sample": "readings/fast_cpu_sample_check.json",
-    "focused_public_api_parity": "readings/fast_cpu_focused_parity.json",
+    "historical_public_api_parity": "readings/fast_cpu_focused_parity.json",
+    "native_frontend_parity": "readings/fast_cpu_native_frontend_parity.json",
     "scope": "eleven unique tokenizer artifacts; Nemotron-Terminal model repositories reuse the qwen3_8b artifact byte-for-byte"
   },
   "coverage": {

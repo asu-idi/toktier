@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the exact, single-wheel artifact set allowed for release 0.1.1."""
+"""Verify the exact, single-wheel artifact set allowed for release 0.2.0."""
 
 from __future__ import annotations
 
@@ -18,11 +18,7 @@ from pathlib import Path
 from typing import NoReturn
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_WHEEL = "toktier-0.1.1-cp310-abi3-manylinux_2_34_x86_64.whl"
-EXPECTED_VENDOR_DIGEST = (
-    "9a701047dafa1cdebc168851d0548a0ca"
-    "af08d0523d70911cc7a24112ccf92a3"
-)
+EXPECTED_WHEEL = "toktier-0.2.0-cp310-abi3-manylinux_2_34_x86_64.whl"
 
 
 def _fail(message: str) -> NoReturn:
@@ -91,31 +87,50 @@ def verify(wheel: Path) -> None:
             for name in names
         ):
             _fail("core wheel exposes a top-level Gigatoken package")
-
-        native_name = _one(names, "toktier/_vendor/gigatoken_rs.abi3.so")
-        native = archive.read(native_name)
-        if not native.startswith(b"\x7fELF"):
-            _fail("vendored Gigatoken module is not an ELF binary")
-        if hashlib.sha256(native).hexdigest() != EXPECTED_VENDOR_DIGEST:
-            _fail("vendored Gigatoken native digest differs from the certificate")
-
-        manifest_name = _one(names, "toktier/_vendor/gigatoken_build.json")
-        manifest = json.loads(archive.read(manifest_name))
-        if (
-            manifest.get("delivery") != "vendored"
-            or manifest.get("module") != "toktier._vendor.gigatoken_rs"
-            or manifest.get("native_sha256") != EXPECTED_VENDOR_DIGEST
+        if any(
+            name.endswith("toktier/_vendor/gigatoken_rs.abi3.so")
+            or name.endswith("toktier/_vendor/gigatoken_build.json")
+            for name in names
         ):
-            _fail("vendored Gigatoken manifest has a different identity")
+            _fail("wheel still carries the obsolete second CPU extension")
+
+        native_name = _one(names, "toktier/_native.abi3.so")
+        if not archive.read(native_name).startswith(b"\x7fELF"):
+            _fail("TokTier core extension is not an ELF binary")
+
+        binding = json.loads((ROOT / "tools/fast_cpu_binding.json").read_bytes())
         sbom_name = _one(names, ".dist-info/sboms/gigatoken.cyclonedx.json")
-        if hashlib.sha256(archive.read(sbom_name)).hexdigest() != manifest.get(
+        legal = binding.get("legal") or {}
+        if hashlib.sha256(archive.read(sbom_name)).hexdigest() != legal.get(
             "sbom_sha256"
         ):
-            _fail("vendored Gigatoken SBOM digest differs from its manifest")
+            _fail("integrated Gigatoken SBOM digest differs from its binding")
+
+        registry_name = _one(
+            names, "toktier/routing/tables/support_registry.v1.json"
+        )
+        registry = json.loads(archive.read(registry_name))
+        certified_cpu = [
+            row["backends"]["fast_cpu"]
+            for row in registry.get("artifacts", [])
+            if row.get("backends", {}).get("fast_cpu", {}).get("status")
+            == "certified_source"
+        ]
+        if len(certified_cpu) != 11:
+            _fail("wheel registry does not certify eleven integrated CPU artifacts")
+        for entry in certified_cpu:
+            if (
+                entry.get("engine_delivery") != "integrated"
+                or entry.get("engine_module") != "toktier._native"
+                or entry.get("source_digest") != binding.get("source_digest")
+                or entry.get("build_flags") != binding.get("build_flags")
+                or entry.get("toolchain") != binding.get("toolchain")
+            ):
+                _fail("wheel registry carries another integrated CPU identity")
 
         metadata_name = _one(names, ".dist-info/METADATA")
         metadata = BytesParser(policy=default).parsebytes(archive.read(metadata_name))
-        if metadata["Name"] != "toktier" or metadata["Version"] != "0.1.1":
+        if metadata["Name"] != "toktier" or metadata["Version"] != "0.2.0":
             _fail("wheel metadata has the wrong distribution identity")
         requirements = metadata.get_all("Requires-Dist", failobj=[])
         if any(re.match(r"(?i)^gigatoken(?:\s|\[|;|$)", item) for item in requirements):
@@ -142,6 +157,20 @@ def verify(wheel: Path) -> None:
             _fail("toktier CLI entry point is missing")
         if "gigatoken" in entry_points.lower():
             _fail("core wheel exposes the upstream Gigatoken CLI")
+
+        alias_name = _one(
+            names, "toktier/artifacts/tables/sibling_aliases.v1.json"
+        )
+        alias_source = (
+            ROOT
+            / "src"
+            / "toktier"
+            / "artifacts"
+            / "tables"
+            / "sibling_aliases.v1.json"
+        )
+        if archive.read(alias_name) != alias_source.read_bytes():
+            _fail("wheel sibling registry differs from the generated source")
 
         _verify_legal_material(archive, names)
         _verify_record(archive, names)

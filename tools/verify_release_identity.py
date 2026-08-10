@@ -32,7 +32,7 @@ def verify(tag: str) -> None:
     citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
     if f'version: "{version}"' not in citation:
         raise ValueError("CITATION.cff version differs from Cargo.toml")
-    if 'date-released: "2026-08-07"' not in citation:
+    if 'date-released: "2026-08-09"' not in citation:
         raise ValueError("CITATION.cff does not carry the frozen release date")
 
     generator = (ROOT / "tools" / "generate_pypi_readme.py").read_text(

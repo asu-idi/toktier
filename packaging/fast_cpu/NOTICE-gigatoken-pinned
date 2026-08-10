@@ -25,10 +25,11 @@ Embedded components of this build:
 - unicode-normalization-alignments 0.1.12, dual-licensed
   MIT OR Apache-2.0; it is redistributed here under the MIT license.
 
-- The remaining Rust dependency closure (dashmap, rayon, pyo3 0.29 and
-  others) uses the license expressions listed in the bundled CycloneDX SBOM.
-  The core TokTier wheel also carries the corresponding source license and
-  notice files, deduplicated byte-for-byte, as
+- The remaining Rust dependency closure of the integrated build (for
+  example rayon 1.11.0 and pyo3 0.23.5, exactly as resolved by the
+  workspace Cargo.lock) uses the license expressions listed in the bundled
+  CycloneDX SBOM. The core TokTier wheel also carries the corresponding
+  source license and notice files, deduplicated byte-for-byte, as
   THIRD_PARTY_LICENSES-gigatoken.txt.
 
 The TokTier core wheel carries this notice under ``dist-info/licenses``. The

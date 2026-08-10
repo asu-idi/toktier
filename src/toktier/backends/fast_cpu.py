@@ -1,26 +1,26 @@
-"""Fast CPU backend: a vendored, data-version-pinned native engine.
+"""Fast CPU backend: an integrated, data-version-pinned native engine.
 
 Contract reference: ``docs/contracts/routing.md`` Section 4 (backend id
-``fast_cpu``), ``docs/contracts/registry.md`` Sections 2-3 (status
-vocabulary; the entry binds the engine binary digest), and the remediation
-record of the pinned build: the engine is derived from
+``fast_cpu``), ``docs/contracts/registry.md`` Sections 2-3 (status vocabulary;
+the entry binds the integrated engine source/build identity), and the
+remediation record of the pinned build: the engine is derived from
 `gigatoken <https://github.com/marcelroed/gigatoken>`_, MIT licensed,
 rebuilt as ``0.10.0+toktier.pinned.1`` so that its Unicode data versions
-match the reference stack this project certifies against, and shipped as the
-private module ``toktier._vendor.gigatoken_rs``.  No separately installed
-package named ``gigatoken`` participates in routing.
+match the reference stack this project certifies against, and linked directly
+into ``toktier._native``. No separately installed package named ``gigatoken``
+participates in routing.
 
 The certificate binding set has four axes, spelled out in the registry
 entry and verified before the backend is planned or opened:
 
 1. engine version (``engine_version``, exact string match against the
    shipped provenance manifest);
-2. the engine's Unicode data versions (``engine_unicode_data``,
-   declarative: they are properties of the pinned build and are bound
-   transitively by the binary digest);
+2. the engine's Unicode data versions (``engine_unicode_data``), bound by the
+   integrated source identity and pinned provenance record;
 3. oracle version (the record's oracle id; the shared oracle check);
-4. patch-set digest (``patch_sha256``, declarative, same transitivity),
-   with the engine's native module bound directly by ``binary_digest``.
+4. patch-set digest (``patch_sha256``), with the compiled implementation
+   bound by a domain-separated ``source_digest``, exact Rust toolchain, and
+   release build flags reported by the extension itself.
 
 Any mismatch closes the accelerated entry and the plan degrades to the
 reference backend with reason ``R_ENGINE_BINDING_MISMATCH``.
@@ -28,13 +28,13 @@ reference backend with reason ``R_ENGINE_BINDING_MISMATCH``.
 Three loading-surface rules are this backend's own (they are the
 package-side form of the judged front-end constraints):
 
-- **Live-object construction only.** The engine's own path/repository
-  loading does not see added tokens that exist only in the tokenizer
-  configuration file, so this backend never hands the engine a path: the
-  tokenizer is materialized as a live Hugging Face object first (via
-  ``transformers``, from the verified artifact directory, local files
-  only) and the live object is passed to the engine. A path-like value
-  offered as a live object is refused with a specific error.
+- **Exact materialization.** When ``tokenizer.json`` already carries every
+  added token, the integrated engine consumes those verified bytes directly
+  and shares the Rust HF reference parsed from the same digest. If
+  ``tokenizer_config.json`` contributes an otherwise missing token, the
+  backend instead materializes a live Hugging Face object locally and
+  serializes that exact live state. A caller-injected tokenizer must likewise
+  be a live object; path-like substitutes are refused.
 - **No silently ignored options.** The one call surface is the
   :class:`~toktier.backends.protocol.Backend` protocol; ``open`` refuses
   every engine option instead of dropping it, and nothing here forwards
@@ -45,7 +45,8 @@ package-side form of the judged front-end constraints):
   engine; the pinned build additionally validates UTF-8 at its own
   input boundaries, so this pre-check is a second, independent guard.
 
-The engine loads lazily on the first encode. A load failure raises
+The single corrected-Gigatoken core is validated when the native runtime is
+constructed, while payload-sized batch worker caches remain lazy. A load failure raises
 :class:`~toktier.errors.BackendExecutionFault`, so the routing executor
 re-runs the affected input on the reference backend and counts the
 degradation; nothing is silently different. This module imports neither
@@ -59,7 +60,10 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol, cast
+
+if TYPE_CHECKING:
+    from .._native import ReferenceEngine
 
 from ..errors import (
     ArtifactHashMismatch,
@@ -71,6 +75,7 @@ from ..policy import BACKEND_FAST_CPU
 from .protocol import TOKENIZER_FILE, ArtifactHandle
 
 __all__ = [
+    "ENGINE_DELIVERY",
     "ENGINE_MODULE",
     "ENGINE_PACKAGE",
     "PINNED_ENGINE_VERSION",
@@ -83,21 +88,18 @@ __all__ = [
 #: diagnostics that historically called this value the engine package.
 ENGINE_PACKAGE = "toktier"
 
-#: Private import path of the vendored native module.
-ENGINE_MODULE = "toktier._vendor.gigatoken_rs"
+#: Private import path of the extension that owns the integrated engine.
+ENGINE_MODULE = "toktier._native"
+
+#: The corrected implementation is linked into the core extension rather
+#: than imported from a second private extension module.
+ENGINE_DELIVERY = "integrated"
 
 #: Version string of the pinned build this project ships certificates
 #: for. Informational here: the certified value lives in the registry
 #: entry (``engine_version``) and the planner verifies against that, so
 #: there is exactly one authoritative copy per record.
 PINNED_ENGINE_VERSION = "0.10.0+toktier.pinned.1"
-
-#: File suffixes that identify the engine's native extension module.
-_NATIVE_SUFFIXES = (".so", ".pyd", ".dylib")
-
-_VENDOR_DIR = Path(__file__).resolve().parents[1] / "_vendor"
-_VENDOR_MANIFEST = _VENDOR_DIR / "gigatoken_build.json"
-_VENDOR_SCHEMA = "toktier.vendored_gigatoken.v1"
 
 #: Exception types the engine is expected to raise for input- or
 #: state-dependent failures. These become recoverable faults; any other
@@ -120,21 +122,28 @@ class FastCpuEngineFacts:
 
     #: Installed distribution version, from package metadata.
     version: str | None = None
-    #: SHA-256 of the engine's installed native extension module. The
-    #: registry entry binds this as ``binary_digest``.
+    #: Legacy binary identity slot. Integrated source-certified builds leave
+    #: it unset; retained so injected older probe fixtures fail closed rather
+    #: than changing shape abruptly.
     binary_digest: str | None = None
+    #: Domain-separated digest of every source/build input that can affect
+    #: corrected full encode or append repair.
+    source_digest: str | None = None
+    #: Exact release build description emitted by Cargo's build script.
+    build_flags: tuple[str, ...] = ()
+    #: Exact Rust compiler identity used for this extension.
+    toolchain: str | None = None
     #: SHA-256 of the packaged repair-family table.  This binds the exact
     #: margins, normalizer guards, retry limits and pclass table identity.
     config_digest: str | None = None
 
 
 def fast_cpu_engine_facts() -> FastCpuEngineFacts:
-    """Observe the vendored engine without importing it.
+    """Read the integrated engine identity emitted by the native build.
 
-    The version and expected path come from the shipped provenance manifest;
-    the executable bytes are always hashed independently.  A missing,
-    malformed or self-inconsistent manifest yields empty facts and therefore
-    fails the certified route closed.
+    Importing the core extension executes no tokenizer work. A missing or
+    malformed fact closes the certified route; package metadata is never
+    allowed to speak on behalf of different executing code.
     """
 
     repair_table = (
@@ -148,37 +157,36 @@ def fast_cpu_engine_facts() -> FastCpuEngineFacts:
     except OSError:
         config_digest = None
     try:
-        manifest = json.loads(_VENDOR_MANIFEST.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        from .. import _native
+
+        observed: object = _native.fast_cpu_build_facts()
+    except (ImportError, RuntimeError, TypeError, ValueError):
         return FastCpuEngineFacts(config_digest=config_digest)
-    if not isinstance(manifest, dict) or manifest.get("schema") != _VENDOR_SCHEMA:
+    if not isinstance(observed, Mapping):
         return FastCpuEngineFacts(config_digest=config_digest)
+    source_digest = observed.get("source_digest")
+    build_flags = observed.get("build_flags")
+    toolchain = observed.get("toolchain")
     if (
-        manifest.get("engine") != "gigatoken"
-        or manifest.get("engine_version") != PINNED_ENGINE_VERSION
-        or manifest.get("delivery") != "vendored"
-        or manifest.get("module") != ENGINE_MODULE
+        observed.get("engine") != "gigatoken"
+        or observed.get("engine_version") != PINNED_ENGINE_VERSION
+        or observed.get("engine_delivery") != ENGINE_DELIVERY
+        or observed.get("engine_module") != ENGINE_MODULE
+        or not isinstance(source_digest, str)
+        or len(source_digest) != 64
+        or any(character not in "0123456789abcdef" for character in source_digest)
+        or not isinstance(build_flags, list)
+        or not build_flags
+        or not all(isinstance(value, str) for value in build_flags)
+        or not isinstance(toolchain, str)
+        or not toolchain
     ):
-        return FastCpuEngineFacts(config_digest=config_digest)
-    native_name = manifest.get("native_file")
-    expected_digest = manifest.get("native_sha256")
-    if (
-        not isinstance(native_name, str)
-        or Path(native_name).name != native_name
-        or not native_name.endswith(_NATIVE_SUFFIXES)
-        or not isinstance(expected_digest, str)
-    ):
-        return FastCpuEngineFacts(config_digest=config_digest)
-    try:
-        raw = (_VENDOR_DIR / native_name).read_bytes()
-    except OSError:
-        return FastCpuEngineFacts(config_digest=config_digest)
-    observed_digest = hashlib.sha256(raw).hexdigest()
-    if observed_digest != expected_digest:
         return FastCpuEngineFacts(config_digest=config_digest)
     return FastCpuEngineFacts(
         version=PINNED_ENGINE_VERSION,
-        binary_digest=observed_digest,
+        source_digest=source_digest,
+        build_flags=tuple(build_flags),
+        toolchain=toolchain,
         config_digest=config_digest,
     )
 
@@ -194,7 +202,7 @@ class _EngineTokenizer(Protocol):
     def encode(self, text: str) -> Sequence[int]:
         """Core-stream token ids for one document."""
 
-    def encode_batch(self, texts: Sequence[str]) -> Sequence[Sequence[int]]:
+    def encode_batch(self, texts: list[str]) -> list[list[int]]:
         """Per-document id rows for one batch."""
 
     @property
@@ -206,51 +214,11 @@ class _EngineTokenizer(Protocol):
         """Number of vocabulary ids addressable by the engine."""
 
 
-class _NativeEngine(Protocol):
-    def encode_batch_list(
-        self, texts: list[str], *, parallel: bool
-    ) -> list[list[int]]: ...
-
-    @property
-    def vocab(self) -> Mapping[int, bytes]: ...
-
-    @property
-    def vocab_size(self) -> int: ...
-
-
 class _EngineFactory(Protocol):
     """Builds the engine tokenizer from a live HF tokenizer object."""
 
     def __call__(self, hf_tokenizer: object) -> _EngineTokenizer:
         """Construct the engine over the live object."""
-
-
-class _VendoredEngine:
-    """Small TokTier-owned adapter over the judged native call surface.
-
-    ``encode_batch_list`` returns ordinary Python lists and therefore avoids
-    Gigatoken's optional NumPy/Awkward result adapters.  The core wheel ships
-    only the native module; its unrelated CLI, loaders and compatibility
-    wrappers are deliberately absent.
-    """
-
-    def __init__(self, native: _NativeEngine) -> None:
-        self._native = native
-
-    def encode(self, text: str) -> Sequence[int]:
-        rows = self._native.encode_batch_list([text], parallel=False)
-        return rows[0]
-
-    def encode_batch(self, texts: Sequence[str]) -> Sequence[Sequence[int]]:
-        return self._native.encode_batch_list(list(texts), parallel=True)
-
-    @property
-    def vocab(self) -> Mapping[int, bytes]:
-        return self._native.vocab
-
-    @property
-    def vocab_size(self) -> int:
-        return int(self._native.vocab_size)
 
 
 def _live_tokenizer_json(hf_tokenizer: object) -> str:
@@ -281,13 +249,34 @@ def _live_tokenizer_json(hf_tokenizer: object) -> str:
     return data
 
 
-def _default_engine_factory(hf_tokenizer: object) -> _EngineTokenizer:
-    """Lazily import the private native module and load the live tokenizer."""
-    from importlib import import_module
+def _native_engine_factory(family: str, artifact_sha256: str) -> _EngineFactory:
+    """Build the corrected engine inside TokTier's one-call Rust runtime."""
 
-    engine = import_module(ENGINE_MODULE)
-    native = engine.load_hf_json(_live_tokenizer_json(hf_tokenizer))
-    return _VendoredEngine(native)
+    def build(hf_tokenizer: object) -> _EngineTokenizer:
+        from .. import _native
+        from ..repair.registry import family_spec, pclass_table
+
+        spec = family_spec(family, artifact_sha256)
+        if spec is None:
+            raise UnsupportedConfig(
+                "the artifact is not in the certified repair roster",
+                details={
+                    "backend": BACKEND_FAST_CPU,
+                    "family": family,
+                    "artifact_sha256": artifact_sha256,
+                },
+            )
+        return _native.CallbackEncoder.native_fast_cpu(
+            _live_tokenizer_json(hf_tokenizer).encode("utf-8"),
+            spec.family,
+            spec.artifact_sha256,
+            spec.margin,
+            spec.effective_l_max,
+            spec.has_normalizer,
+            pclass_table(),
+        )
+
+    return build
 
 
 #: Name of the loader-side configuration sidecar; the file that can
@@ -295,7 +284,9 @@ def _default_engine_factory(hf_tokenizer: object) -> _EngineTokenizer:
 _TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
 
-def _config_only_added_tokens(root: Path) -> list[str]:
+def _config_only_added_tokens(
+    root: Path, artifact: Mapping[str, object] | None = None
+) -> list[str]:
     """Added-token literals declared only in the configuration sidecar.
 
     These are the tokens a ``tokenizer.json``-only construction cannot
@@ -317,13 +308,20 @@ def _config_only_added_tokens(root: Path) -> list[str]:
     ]
     if not declared:
         return []
-    artifact = json.loads((root / TOKENIZER_FILE).read_text(encoding="utf-8"))
+    if artifact is None:
+        loaded = json.loads((root / TOKENIZER_FILE).read_text(encoding="utf-8"))
+        if not isinstance(loaded, Mapping):
+            return declared
+        artifact = loaded
+    raw_added_tokens = artifact.get("added_tokens")
+    added_tokens = raw_added_tokens if isinstance(raw_added_tokens, list) else ()
     carried = {
         token.get("content")
-        for token in artifact.get("added_tokens") or ()
+        for token in added_tokens
         if isinstance(token, dict)
     }
-    vocabulary = artifact.get("model", {}).get("vocab", {})
+    model = artifact.get("model")
+    vocabulary = model.get("vocab", {}) if isinstance(model, Mapping) else {}
     return [
         content
         for content in declared
@@ -425,16 +423,22 @@ class FastCpuBackend:
         family: str,
         artifact_sha256: str,
         root: Path,
+        artifact_json: bytes,
+        config_only_added_tokens: tuple[str, ...],
         adds_special_tokens: bool,
         hf_tokenizer: object | None,
         engine_factory: _EngineFactory,
+        integrated_factory: bool,
     ) -> None:
         self._family = family
         self._artifact_sha256 = artifact_sha256
         self._root = root
+        self._artifact_json = artifact_json
+        self._config_only_added_tokens = config_only_added_tokens
         self._adds_special_tokens = adds_special_tokens
         self._hf_tokenizer = hf_tokenizer
         self._engine_factory = engine_factory
+        self._integrated_factory = integrated_factory
         self._engine: _EngineTokenizer | None = None
         self._load_error: BackendExecutionFault | None = None
         self._closed = False
@@ -452,10 +456,11 @@ class FastCpuBackend:
     ) -> FastCpuBackend:
         """Open the fast CPU backend over a verified artifact.
 
-        ``hf_tokenizer`` optionally injects an already-loaded live
-        tokenizer object (it is checked against the live-object rule);
-        by default the object is materialized from the verified artifact
-        directory. ``engine_options`` exists only so that a caller who
+        ``hf_tokenizer`` optionally injects an already-loaded live tokenizer
+        object (it is checked against the live-object rule). By default the
+        integrated engine uses the verified artifact bytes, escalating to a
+        local live-object load only for configuration-only added tokens.
+        ``engine_options`` exists only so that a caller who
         tries to pass one receives a documented refusal instead of
         having the option silently dropped -- the engine runs in exactly
         the configuration the certificates were judged in.
@@ -503,17 +508,33 @@ class FastCpuBackend:
                 },
             )
         document = json.loads(raw.decode("utf-8"))
-        inserts = (
-            isinstance(document, dict)
-            and document.get("post_processor") is not None
-        )
+        if not isinstance(document, Mapping):
+            raise UnsupportedConfig(
+                f"{TOKENIZER_FILE} is not a JSON object",
+                details={
+                    "option": TOKENIZER_FILE,
+                    "value": str(path),
+                    "reason": "unexpected artifact shape",
+                },
+            )
+        inserts = document.get("post_processor") is not None
+        integrated_factory = engine_factory is None
         return cls(
             family=artifact.family,
             artifact_sha256=observed,
             root=path.parent,
+            artifact_json=raw,
+            config_only_added_tokens=tuple(
+                _config_only_added_tokens(path.parent, document)
+            ),
             adds_special_tokens=bool(inserts),
             hf_tokenizer=hf_tokenizer,
-            engine_factory=engine_factory or _default_engine_factory,
+            engine_factory=(
+                engine_factory
+                if engine_factory is not None
+                else _native_engine_factory(artifact.family, observed)
+            ),
+            integrated_factory=integrated_factory,
         )
 
     # -- identity ------------------------------------------------------
@@ -556,8 +577,7 @@ class FastCpuBackend:
             self._engine = self._engine_factory(live)
         except Exception as exc:
             fault = BackendExecutionFault(
-                f"fast CPU engine failed to load family "
-                f"{self._family!r}: {exc}",
+                f"fast CPU engine failed to load family {self._family!r}: {exc}",
                 details={
                     "backend": BACKEND_FAST_CPU,
                     "stage": "engine_load",
@@ -582,6 +602,73 @@ class FastCpuBackend:
         if live is None:  # pragma: no cover - guarded by _live
             raise RuntimeError("fast CPU backend lost its live tokenizer")
         return engine, live
+
+    def materialized_tokenizer_json(self) -> str:
+        """Return the exact tokenizer JSON without loading Gigatoken.
+
+        The verified artifact is already the exact live document when no
+        configuration-only added token exists, so the common certified path
+        reads it directly and avoids importing ``transformers``. An injected
+        live object, or a sidecar that contributes an otherwise missing added
+        token, is serialized through the Hugging Face loader instead. Both
+        branches preserve the same added-token contract.
+        """
+        if self._closed:
+            raise RuntimeError("backend is closed")
+        try:
+            live = self._hf_tokenizer
+            if live is None and not self._config_only_added_tokens:
+                return self._artifact_json.decode("utf-8")
+            if live is None:
+                live = _load_live_tokenizer(self._root)
+                live = _require_live_object(live)
+                self._hf_tokenizer = live
+            return _live_tokenizer_json(live)
+        except Exception as exc:
+            fault = BackendExecutionFault(
+                f"fast CPU live tokenizer failed to load family "
+                f"{self._family!r}: {exc}",
+                details={
+                    "backend": BACKEND_FAST_CPU,
+                    "stage": "native_engine_materialization",
+                    "family": self._family,
+                    "error": type(exc).__name__,
+                },
+            )
+            self._load_error = fault
+            raise fault from exc
+
+    def native_session_engine(self, reference: object | None = None) -> object | None:
+        """Return the shared Rust engine when the default factory owns it."""
+        if self._integrated_factory and self._engine is None:
+            from .. import _native
+            from ..repair.registry import family_spec, pclass_table
+
+            spec = family_spec(self._family, self._artifact_sha256)
+            if spec is None:
+                return None
+            shared_reference = cast(
+                "ReferenceEngine | None",
+                reference if not self._config_only_added_tokens else None,
+            )
+            self._engine = _native.CallbackEncoder.native_fast_cpu(
+                self.materialized_tokenizer_json().encode("utf-8"),
+                spec.family,
+                spec.artifact_sha256,
+                spec.margin,
+                spec.effective_l_max,
+                spec.has_normalizer,
+                pclass_table(),
+                shared_reference,
+            )
+            return self._engine
+        engine = self._live()
+        return engine if getattr(engine, "native_request_path", False) else None
+
+    @property
+    def postprocessor_adds_tokens(self) -> bool:
+        """Whether the verified artifact inserts tokens when requested."""
+        return self._adds_special_tokens
 
     def _require_core_stream(self, add_special_tokens: bool) -> None:
         if add_special_tokens and self._adds_special_tokens:

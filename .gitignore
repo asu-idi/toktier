@@ -4,6 +4,11 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+# The compiled-in identity facts below must be present in any archive/CI
+# checkout; freshness is enforced by the identity --check tooling.
+!crates/toktier/data/build/
+crates/toktier/data/build/*
+!crates/toktier/data/build/source_identity.json
 .venv/
 .pytest_cache/
 .mypy_cache/

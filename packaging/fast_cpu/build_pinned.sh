@@ -77,8 +77,9 @@ fi
     "$BUILD_ROOT/metadata.json" "$BUILD_ROOT/THIRD_PARTY_LICENSES-gigatoken.txt"
 printf '%s  %s\n' "$LICENSE_BUNDLE_SHA256" \
     "$BUILD_ROOT/THIRD_PARTY_LICENSES-gigatoken.txt" | sha256sum --check --status
-cmp "$BUILD_ROOT/THIRD_PARTY_LICENSES-gigatoken.txt" \
-    "$RECIPE_DIR/THIRD_PARTY_LICENSES-gigatoken.txt"
+# The repository file at this historical path now accounts for the complete
+# integrated toktier._native closure. The digest check above remains the
+# reproducibility gate for this standalone lineage build.
 "$VENV_DIR/bin/python" - "$BUILD_ROOT/metadata.json" \
     "$BUILD_ROOT/property-markers.txt" <<'PY'
 import json

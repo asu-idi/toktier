@@ -13,6 +13,13 @@ from __future__ import annotations
 
 from ..paths import artifact_cache_dir, kernel_cache_dir, store_state_dir
 from .bundle import export_bundle, import_bundle
+from .conversion import (
+    CONVERSIONS,
+    ConversionRecipe,
+    ConvertingSource,
+    conversion_report,
+    recipe_for,
+)
 from .manifest import ArtifactEntry, ArtifactFile, ArtifactManifest
 from .mirror import MirrorFetcher
 from .sibling_aliases import (
@@ -32,12 +39,15 @@ from .sources import (
 from .store import ArtifactStore, VerifiedArtifact, sha256_file
 
 __all__ = [
+    "CONVERSIONS",
     "AirgapBundleSource",
     "ArtifactEntry",
     "ArtifactFile",
     "ArtifactManifest",
     "ArtifactSource",
     "ArtifactStore",
+    "ConversionRecipe",
+    "ConvertingSource",
     "HubFetcher",
     "HuggingFaceSource",
     "LocalDirectorySource",
@@ -47,10 +57,12 @@ __all__ = [
     "SiblingAliasRegistry",
     "VerifiedArtifact",
     "artifact_cache_dir",
+    "conversion_report",
     "export_bundle",
     "import_bundle",
     "kernel_cache_dir",
     "load_sibling_aliases",
+    "recipe_for",
     "sha256_file",
     "shipped_sibling_aliases",
     "store_state_dir",

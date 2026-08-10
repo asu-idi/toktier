@@ -22,6 +22,11 @@ from .artifacts import (
     export_bundle,
     import_bundle,
 )
+from .artifacts.conversion import (
+    ConvertingSource,
+    conversion_report,
+    recipe_for,
+)
 from .artifacts.store import fetch_availability
 from .artifacts.tables import ARTIFACT_MANIFEST
 from .config import Config
@@ -397,11 +402,22 @@ def _print_artifact(action: str, artifact: VerifiedArtifact) -> None:
     print(f"{action} {artifact.family}: {artifact.directory}")
 
 
+def _fetch_source() -> ArtifactSource:
+    """The source every fetching command uses, built one way.
+
+    The hub supplies the bytes; the conversion wrapper decides, per
+    family, whether those bytes are the artifact or the pinned inputs of
+    a local conversion. Families without a recipe are untouched by it,
+    and it imports no hub client of its own.
+    """
+    return ConvertingSource(HuggingFaceSource())
+
+
 def _doctor(arguments: argparse.Namespace) -> int:
     # The same source ``artifacts fetch`` would use, constructed the same
     # way. It reads its environment and imports no hub client, so the
     # report describes the fetch path this machine would actually take.
-    report = _doctor_report(Config.resolve(), source=HuggingFaceSource())
+    report = _doctor_report(Config.resolve(), source=_fetch_source())
     if arguments.json:
         print(json.dumps(report, sort_keys=True, separators=(",", ":")))
     else:
@@ -409,9 +425,65 @@ def _doctor(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _artifacts_check_conversion(arguments: argparse.Namespace) -> int:
+    """Re-run the conversion gate of a locally derived artifact.
+
+    Prints the report and fails when any of its three claims does:
+    the conversion is deterministic, its bytes are the digest the
+    shipped manifest pins, and the added-token block is the contiguous,
+    fully described table the certified artifact carries.
+    """
+    manifest = _artifact_manifest()
+    entry = manifest.get(arguments.family)
+    recipe = recipe_for(entry.family)
+    if recipe is None:
+        print(
+            f"{entry.family}: this family is downloaded whole, not converted; "
+            f"use 'toktier artifacts verify {entry.family}'",
+            file=sys.stderr,
+        )
+        return _TOKTIER_ERROR
+    report = conversion_report(
+        entry, recipe, HuggingFaceSource(), repeats=arguments.repeats
+    )
+    if arguments.json:
+        print(json.dumps(report, sort_keys=True, separators=(",", ":")))
+    else:
+        print(f"family: {report['family']}")
+        print(f"converter: {report['converter']}")
+        print(f"upstream: {report['upstream_repo']}@{report['upstream_revision']}")
+        for item in report["upstream_inputs"]:
+            print(f"  input {item['name']}: sha256 {item['sha256']}")
+        print(f"runs: {report['runs']} (deterministic: {report['deterministic']})")
+        print(f"produced sha256: {report['observed_sha256']}")
+        print(f"pinned sha256:   {report['expected_sha256']}")
+        print(
+            f"added tokens: {report['added_tokens']} "
+            f"({report['added_tokens_special']} special, contiguous from "
+            f"{report['added_tokens_first_id']})"
+        )
+    failures = [
+        name
+        for name in (
+            "deterministic",
+            "identity_matches",
+            "added_tokens_contiguous",
+            "added_tokens_fully_described",
+        )
+        if not report[name]
+    ]
+    if failures:
+        print(
+            f"error: conversion gate failed: {', '.join(failures)}",
+            file=sys.stderr,
+        )
+        return _TOKTIER_ERROR
+    return 0
+
+
 def _artifacts_fetch(arguments: argparse.Namespace) -> int:
     config = Config.resolve()
-    store = _artifact_store(config, source=HuggingFaceSource())
+    store = _artifact_store(config, source=_fetch_source())
     if arguments.force:
         artifact = store.verify(arguments.family)
     else:
@@ -638,6 +710,21 @@ def _build_parser() -> argparse.ArgumentParser:
     verify = artifact_commands.add_parser("verify", help="verify an artifact")
     verify.add_argument("family", metavar="FAMILY")
     verify.set_defaults(handler=_artifacts_verify)
+
+    check_conversion = artifact_commands.add_parser(
+        "check-conversion",
+        help="re-run the conversion gate of a locally derived artifact",
+    )
+    check_conversion.add_argument("family", metavar="FAMILY")
+    check_conversion.add_argument(
+        "--repeats",
+        type=int,
+        default=2,
+        metavar="N",
+        help="independent conversions to compare (default 2)",
+    )
+    check_conversion.add_argument("--json", action="store_true", help="emit JSON")
+    check_conversion.set_defaults(handler=_artifacts_check_conversion)
 
     export = artifact_commands.add_parser(
         "export", help="write a verified artifact as an air-gap bundle"

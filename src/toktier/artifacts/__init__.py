@@ -15,6 +15,12 @@ from ..paths import artifact_cache_dir, kernel_cache_dir, store_state_dir
 from .bundle import export_bundle, import_bundle
 from .manifest import ArtifactEntry, ArtifactFile, ArtifactManifest
 from .mirror import MirrorFetcher
+from .sibling_aliases import (
+    SiblingAliasRecord,
+    SiblingAliasRegistry,
+    load_sibling_aliases,
+    shipped_sibling_aliases,
+)
 from .sources import (
     AirgapBundleSource,
     ArtifactSource,
@@ -37,11 +43,15 @@ __all__ = [
     "LocalDirectorySource",
     "MirrorFetcher",
     "MirrorSource",
+    "SiblingAliasRecord",
+    "SiblingAliasRegistry",
     "VerifiedArtifact",
     "artifact_cache_dir",
     "export_bundle",
     "import_bundle",
     "kernel_cache_dir",
+    "load_sibling_aliases",
     "sha256_file",
+    "shipped_sibling_aliases",
     "store_state_dir",
 ]

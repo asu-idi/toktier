@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toktier:schema:sibling-aliases:1",
+  "title": "TokTier packaged verified sibling registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_by",
+    "root_digest",
+    "provenance",
+    "counts",
+    "aliases"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "generated_by": { "$ref": "#/$defs/generated_by" },
+    "root_digest": { "$ref": "#/$defs/sha256_prefixed" },
+    "provenance": { "$ref": "#/$defs/provenance" },
+    "counts": { "$ref": "#/$defs/counts" },
+    "aliases": {
+      "type": "array",
+      "minItems": 210,
+      "maxItems": 210,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/alias" }
+    }
+  },
+  "$defs": {
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "sha256_prefixed": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "family": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$",
+      "maxLength": 128
+    },
+    "repo_id": {
+      "type": "string",
+      "pattern": "^[^\\s/]+/[^\\s/]+$",
+      "maxLength": 192
+    },
+    "basis": {
+      "enum": [
+        "identical",
+        "identical_source",
+        "equivalent_canonicalisation",
+        "equivalent_serialisation"
+      ]
+    },
+    "generated_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "tool_version", "source_commit", "generated_at"],
+      "properties": {
+        "tool": { "const": "tools/generate_sibling_aliases.py" },
+        "tool_version": { "type": "string", "minLength": 1 },
+        "source_commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+        "generated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "audit_date",
+        "audit_rows",
+        "audit_sha256",
+        "support_matrix_sha256",
+        "selection"
+      ],
+      "properties": {
+        "audit_date": { "type": "string", "format": "date" },
+        "audit_rows": { "const": 470 },
+        "audit_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "support_matrix_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "selection": { "type": "string", "minLength": 1 }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identical",
+        "identical_source",
+        "equivalent_canonicalisation",
+        "equivalent_serialisation",
+        "total",
+        "packaged",
+        "reference_only"
+      ],
+      "properties": {
+        "identical": { "const": 150 },
+        "identical_source": { "const": 12 },
+        "equivalent_canonicalisation": { "const": 10 },
+        "equivalent_serialisation": { "const": 38 },
+        "total": { "const": 210 },
+        "packaged": { "const": 191 },
+        "reference_only": { "const": 19 }
+      }
+    },
+    "alias": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repo_id",
+        "revision",
+        "source_file",
+        "source_sha256",
+        "source_size",
+        "canonical_family",
+        "canonical_anchor_sha256",
+        "basis",
+        "canonical_packaged"
+      ],
+      "properties": {
+        "repo_id": { "$ref": "#/$defs/repo_id" },
+        "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "source_file": { "enum": ["tokenizer.json", "tiktoken.model"] },
+        "source_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "source_size": { "type": "integer", "minimum": 1 },
+        "canonical_family": { "$ref": "#/$defs/family" },
+        "canonical_anchor_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "basis": { "$ref": "#/$defs/basis" },
+        "canonical_packaged": { "type": "boolean" }
+      }
+    }
+  }
+}

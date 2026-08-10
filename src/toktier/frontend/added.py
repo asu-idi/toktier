@@ -163,6 +163,13 @@ class _CrateTokenizer(Protocol):
 
 
 def _canonical_body(table: Mapping[str, Any]) -> str:
+    # Frozen serialization, deliberately not RFC 8785 (`toktier._jcs`):
+    # every exported table records a content_sha256 over exactly this
+    # byte form (sorted keys, literal non-ASCII, default separators).
+    # Changing the form would refuse previously exported tables, so any
+    # migration needs a table-version bump rather than an edit here.
+    # The golden digest test in tests/backend/test_added_frontend.py
+    # pins this form.
     body = {key: table[key] for key in sorted(table) if key != "content_sha256"}
     return json.dumps(body, ensure_ascii=False, sort_keys=True)
 

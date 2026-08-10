@@ -16,10 +16,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-__all__ = ["ARTIFACT_MANIFEST", "TABLE_DIR"]
+__all__ = ["ARTIFACT_MANIFEST", "SIBLING_ALIASES", "TABLE_DIR"]
 
 #: Directory of the shipped data files.
 TABLE_DIR = Path(__file__).resolve().parent
 
 #: The artifact manifest shipped with the package.
 ARTIFACT_MANIFEST = TABLE_DIR / "artifact_manifest.v1.json"
+
+#: Digest-protected mappings from audited model repositories to canonical
+#: tokenizer artifacts.  Repository names are lookup hints; runtime admission
+#: is based on the downloaded file's sha256.
+SIBLING_ALIASES = TABLE_DIR / "sibling_aliases.v1.json"

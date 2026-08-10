@@ -343,6 +343,30 @@ def _table(tmp_path: Path, **overrides: Any) -> Path:
     return path
 
 
+def test_table_content_hash_byte_form_is_frozen() -> None:
+    """The recorded content hash binds one exact serialization.
+
+    Every exported table records ``content_sha256`` over the
+    sorted-keys, literal non-ASCII, default-separator ``json.dumps``
+    form -- deliberately not RFC 8785 (``toktier._jcs``). Changing that
+    byte form would refuse previously exported tables, so this golden
+    vector pins it; a migration needs a table-version bump instead.
+    """
+    table: dict[str, Any] = {
+        "table_version": "added-v1",
+        "family": "golden_family",
+        "tokenizer_json_sha256": "0" * 64,
+        "normalizer": None,
+        "added_tokens": [{"content": "<|end \u4e2d|>", "id": 7, "special": True}],
+    }
+    golden = "693f141347548241edfa3fbfe1ed3fdeb3854f7351eb3bc5b73d35fbc2b0d946"
+    assert table_content_sha256(table) == golden
+    # A recorded content_sha256 itself stays outside the hashed body.
+    stamped = dict(table)
+    stamped["content_sha256"] = "ff" * 32
+    assert table_content_sha256(stamped) == golden
+
+
 def test_table_round_trips_and_binds_to_its_artifact(tmp_path: Path) -> None:
     """A good table loads and can name the artifact it came from."""
     path = _table(tmp_path)
@@ -436,6 +460,7 @@ def _frozen_tables() -> list[tuple[str, Path, Path]]:
 FROZEN_TABLES = _frozen_tables()
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not FROZEN_TABLES, reason="no local added-token tables")
 @pytest.mark.parametrize(
     ("family", "table_path", "directory"),

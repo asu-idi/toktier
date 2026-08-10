@@ -40,7 +40,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Protocol, cast
 
-from .._oracle import ORACLE_PACKAGE, import_oracle, oracle_version
+from .._oracle import ORACLE_PACKAGE, oracle_version
 from ..errors import (
     ArtifactHashMismatch,
     ArtifactNotFound,
@@ -75,27 +75,28 @@ REJECTED_LOADER_FLAGS: Mapping[str, str] = {
 _REWRITING_SECTIONS = ("truncation", "padding")
 
 
-class _CrateEncoding(Protocol):
-    @property
-    def ids(self) -> Sequence[int]:
-        """Token ids of one encoded sequence."""
-
-
 class _CrateTokenizer(Protocol):
     def encode(
         self, sequence: str, add_special_tokens: bool = True
-    ) -> _CrateEncoding:
+    ) -> Sequence[int]:
         """Encode one sequence."""
 
     def encode_batch(
         self, input: Sequence[str], add_special_tokens: bool = True
-    ) -> Sequence[_CrateEncoding]:
+    ) -> Sequence[Sequence[int]]:
         """Encode a batch of sequences."""
 
 
 def _load_crate_tokenizer(path: Path) -> _CrateTokenizer:
-    """Open a verified ``tokenizer.json`` through the oracle package."""
-    return cast(_CrateTokenizer, import_oracle().Tokenizer.from_file(str(path)))
+    """Open a verified ``tokenizer.json`` through the native oracle.
+
+    The Rust crate is exactly ``tokenizers==0.22.2``, matching the Python
+    package used for certification. Request execution releases the GIL and no
+    longer calls through the Python wrapper.
+    """
+    from .. import _native
+
+    return cast(_CrateTokenizer, _native.ReferenceEngine(str(path)))
 
 
 class HfBackend:
@@ -245,10 +246,14 @@ class HfBackend:
             raise RuntimeError("backend is closed")
         return tokenizer
 
+    def native_engine(self) -> object:
+        """Return the shared native reference handle for the Rust runtime."""
+        return self._live()
+
     def encode(self, text: str, *, add_special_tokens: bool = True) -> list[int]:
         """Encode one document to token ids."""
-        encoding = self._live().encode(text, add_special_tokens=add_special_tokens)
-        return [int(token_id) for token_id in encoding.ids]
+        encoded = self._live().encode(text, add_special_tokens=add_special_tokens)
+        return [int(token_id) for token_id in encoded]
 
     def encode_batch(
         self,
@@ -259,10 +264,10 @@ class HfBackend:
         """Encode a batch; row ``i`` equals ``encode(texts[i])``."""
         if not texts:
             return []
-        encodings = self._live().encode_batch(
+        rows = self._live().encode_batch(
             list(texts), add_special_tokens=add_special_tokens
         )
-        return [[int(token_id) for token_id in item.ids] for item in encodings]
+        return [[int(token_id) for token_id in item] for item in rows]
 
     def close(self) -> None:
         """Release the loaded tokenizer. Idempotent."""

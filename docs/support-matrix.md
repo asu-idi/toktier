@@ -19,7 +19,7 @@ audit records behind this document and does not ship inside the package.
 | Status | Meaning |
 |---|---|
 | `certified` | Evidence on file for this artifact and this backend, with the backend identified by a binary digest. The prebuilt GPU kernel delivery in this release is in this state on its judged architectures (sm_89 and sm_120). |
-| `certified_source` | The same evidence, but the backend is compiled on the user's machine; the certificate binds the kernel source digest, build flags and toolchain constraints rather than a binary. The JIT GPU delivery in this release is in this state. |
+| `certified_source` | Evidence binds source identity, build flags, and exact toolchain rather than one platform-specific binary. The integrated corrected-Gigatoken CPU engine and the locally compiled GPU JIT use this state; each also binds its backend-specific inputs. |
 | `reference-only` | No accelerated route is offered. The reference implementation runs and the reason is reported by `explain()`. This is also the state when the installed reference version differs from the certified one. |
 | `experimental` | Available only by explicit opt-in; no certified exact-ID claim applies. Fastokens is exposed only in this state. |
 | `unsupported` | The named engine is known not to load or represent this artifact and is never planned. |
@@ -30,10 +30,13 @@ registry keeps both.
 
 ## Certified CPU fast repair
 
-The default CPU repair-window engine is the corrected Gigatoken
-`0.10.0+toktier.pinned.1` native module vendored privately in the core
-`toktier` wheel. The `fast` extra adds its exact HF loader/oracle companions;
-there is no separately installed Gigatoken distribution. Its route is
+The default CPU full-encode and repair-window engine is the corrected
+Gigatoken `0.10.0+toktier.pinned.1` implementation compiled directly into the
+single private `toktier._native` extension in the core wheel. Its exact HF
+loader/oracle companions (`tokenizers==0.22.2`, `transformers==4.57.6`) are
+mandatory base dependencies of that wheel -- the shipped extras are
+`fastokens`, `gpu`, and `gpu-jit` -- and there is no separately installed
+Gigatoken distribution or second native extension. Its route is
 certified for **11 unique
 tokenizer artifacts** after 41,800,181,401 document-artifact checks over
 3,800,016,491 documents and 12,328,592,579,973 characters, with zero observed
@@ -46,16 +49,19 @@ is the additional lineage: its 8B, 14B, and 32B repositories ship the
 inherits the same artifact-bound certificate; it is not counted as a twelfth
 independent tokenizer implementation.
 
-The route opens only when the vendored delivery identity, native-module digest,
-repair-table digest, oracle version, and tokenizer artifact all match the
-registry. Otherwise the facade runs HF and gives the failed axis in
-`explain()`. Fastokens 0.3.1 is a separate explicit experimental full-session
-adapter and has no TokTier exact-ID guarantee.
+The route opens only when the integrated module, domain-separated source
+digest, Cargo release flags, exact rustc, repair-table digest, patch, oracle
+version, and tokenizer artifact all match the registry. Otherwise the facade
+runs HF and gives the failed axis in `explain()`. Fastokens 0.3.1 is a separate
+explicit experimental full-session adapter and has no TokTier exact-ID
+guarantee.
 
 The exact engine binding and native-equivalence record are in
 [`tools/fast_cpu_binding.json`](../tools/fast_cpu_binding.json). A focused
 released-API rerun over every row is in
-[`readings/fast_cpu_focused_parity.json`](../readings/fast_cpu_focused_parity.json).
+[`readings/fast_cpu_focused_parity.json`](../readings/fast_cpu_focused_parity.json),
+and the one-call native-front-end rerun is in
+[`readings/fast_cpu_native_frontend_parity.json`](../readings/fast_cpu_native_frontend_parity.json).
 
 ## Byte-level BPE families
 
@@ -82,8 +88,9 @@ Pinned upstream revisions are recorded per row as
 them at fetch time.
 
 GPU status names the prebuilt kernel delivery: `certified (prebuilt)` is
-binary-digest bound to the shipped fatbin and judged on sm_89 and
-sm_120. The JIT delivery of the same kernels remains `certified_source`;
+binary-digest bound to the shipped fatbin, source/build bound to its Rust
+request host, and judged on sm_89 and sm_120. The JIT delivery of the same
+kernels remains `certified_source`;
 the registry records both, per delivery, and the loader verifies the
 delivery it actually runs.
 
@@ -184,6 +191,13 @@ verbatim, and six `nvidia/Llama-3.x-Nemotron-*` repositories carry the
 the artifact that covers them, not under the organisation that published them,
 which is the same rule the loader applies.
 
+The executable counterpart is `toktier.from_pretrained(repo_id)`. It resolves
+and hashes the repository's tokenizer file, then selects the canonical anchor
+only for an exact entry in the packaged, root-digested sibling registry. The
+accelerated engines receive the canonical bytes that were certified, not an
+unreviewed alternate serialisation. Unknown or changed content stays on the HF
+reference route.
+
 ### Counts per artifact
 
 The last column is not part of the verified total. It counts repositories whose
@@ -224,8 +238,10 @@ other official repository shipping that artifact.
 Rows are grouped by the artifact that covers them and sorted by repository
 name. The anchor repository of each family is not repeated here; it is the row
 in the family matrix above. The revision column records where the repository's
-default branch stood at the snapshot, as provenance for the comparison; it is
-not a pin, and only the anchor revisions are pinned by the package.
+default branch stood at the snapshot. `from_pretrained()` expands it to the
+audited full commit and uses that immutable revision by default; callers may
+request another revision, but the resulting file must still match by content
+before acceleration is admitted.
 
 #### `qwen3_8b` (110 repositories)
 

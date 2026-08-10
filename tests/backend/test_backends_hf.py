@@ -173,6 +173,7 @@ def _parity(
     return mismatches
 
 
+@pytest.mark.slow
 def test_parity_against_the_oracle_synthetic(
     tmp_path: Path, parity_documents: tuple[list[str], str]
 ) -> None:
@@ -220,6 +221,7 @@ def _local_artifacts() -> list[tuple[str, Path]]:
 LOCAL_ARTIFACTS = _local_artifacts()
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(
     not LOCAL_ARTIFACTS, reason="no local artifacts (set TOKTIER_TEST_ARTIFACTS)"
 )
@@ -244,6 +246,7 @@ def test_parity_against_local_artifacts(
     assert mismatches == 0
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(
     os.environ.get("TOKTIER_TEST_REFERENCE_CROSSCHECK") != "1",
     reason="cross-check against the wrapper library is opt-in",

@@ -1,0 +1,97 @@
+{
+  "schema": "toktier.seed_digest_overlap.cpu.v1",
+  "product_commit": "pre-release certified tree during the 0.2.0 release preparation (sources bound by the source_identities in this record)",
+  "source_identities": {
+    "fast_cpu": "8029ebb517b28ef6546e7b2a27353c27708219f52a34fb2c2093626ebf50cdb4",
+    "native_host": "a49323f0741076dd5e5ff74f2d5c80261bef099be0579ce2637ae67655f80f3e",
+    "rust_api": "9f9cabd5c77fcd8e9732802211ce8716d2815aad74d6bd495d28a4adf087de03"
+  },
+  "workload": {
+    "family": "qwen3_8b",
+    "input_bytes": 4194304,
+    "token_count": 2348809,
+    "host": "a 2x AMD EPYC 9115 host",
+    "route": "corrected Gigatoken CPU seed into the lazy shared store shape",
+    "thread_environment": {
+      "MKL_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "RAYON_NUM_THREADS": "1",
+      "TOKENIZERS_PARALLELISM": "false"
+    },
+    "protocol": "fresh processes per cell; the overlap cell asserts in process, outside the timed region, that the content digest is bit-identical to a direct serial scan; every observation is checked for exact IDs against the frozen Hugging Face reference after its timer; zero rejected samples"
+  },
+  "release_tree_31_processes": {
+    "description": "The measurement the release notes quote. Same host, tool, and protocol as the pre-release cell below, re-run on the released tree with 31 fresh processes per cell.",
+    "samples_per_cell": 31,
+    "product_commit": "pre-release certified tree during the 0.2.0 release preparation (sources bound by the source_identities in this record)",
+    "store_seed_lazy_shape": {
+      "overlap_off_p50_ms": 26.473,
+      "overlap_off_p95_ms": 26.74,
+      "overlap_on_p50_ms": 21.466,
+      "overlap_on_p95_ms": 21.725,
+      "p50_change_percent": -18.9
+    },
+    "store_seed_lazy_shape_unicode": {
+      "overlap_off_p50_ms": 163.546,
+      "overlap_off_p95_ms": 164.662,
+      "overlap_on_p50_ms": 158.99,
+      "overlap_on_p95_ms": 160.091,
+      "p50_change_percent": -2.8
+    }
+  },
+  "pre_release_9_processes": {
+    "description": "The pre-release cell the change was developed against, at 9 fresh processes per cell. Recorded here as an independent confirmation of the same pair on the same host, not as the quoted figure.",
+    "samples_per_cell": 9,
+    "product_commit": "pre-release certified tree during the 0.2.0 release preparation (sources bound by the source_identities in this record)",
+    "store_seed_lazy_shape": {
+      "overlap_off_p50_ms": 26.47,
+      "overlap_off_p95_ms": 26.756,
+      "overlap_on_p50_ms": 21.47,
+      "overlap_on_p95_ms": 21.627,
+      "p50_change_percent": -18.9
+    },
+    "store_seed_lazy_shape_unicode": {
+      "overlap_off_p50_ms": 161.784,
+      "overlap_off_p95_ms": 166.742,
+      "overlap_on_p50_ms": 156.809,
+      "overlap_on_p95_ms": 159.068,
+      "p50_change_percent": -3.1
+    },
+    "four_concurrent_seeds": {
+      "description": "Four calling threads, each with its own store and engine set, released from a barrier; the cell reports the wall clock to the last commit. Two pool shapes were measured so that the overlap worker cannot be credited with the calling threads' own parallelism.",
+      "one_overlap_worker": {
+        "overlap_off_p50_ms": 31.149,
+        "overlap_off_p95_ms": 32.529,
+        "overlap_on_p50_ms": 28.98,
+        "overlap_on_p95_ms": 30.801
+      },
+      "four_overlap_workers": {
+        "overlap_off_p50_ms": 32.217,
+        "overlap_off_p95_ms": 32.728,
+        "overlap_on_p50_ms": 27.011,
+        "overlap_on_p95_ms": 27.493
+      },
+      "note": "overlap on is at or below overlap off in both shapes; no throughput was traded for the hidden digest"
+    },
+    "long_run": {
+      "description": "40 overlap-on seeds in one process, 9 processes; resident set size is read after the first and the last round.",
+      "rounds": 40,
+      "rss_kb_after_first_round": 235692,
+      "rss_kb_after_last_round": 235692,
+      "note": "byte-identical resident set at start and end"
+    }
+  },
+  "interpretation": [
+    "RuntimeBuilder::seed_digest_overlap(bool) runs a seed's content digest on the shared bounded Rayon pool concurrently with the seed encode; the digest bytes, validation ordering, error codes, and failure atomicity are identical to the serial path, and only wall-clock scheduling changes.",
+    "On this host the option hides 5.007 ms of a 4 MiB store-shape CPU seed (26.473 -> 21.466 ms p50, -18.9%), which is the pair quoted in docs/releases/v0.2.0.md.",
+    "The pre-release cell at a third of the sample count reproduces the same pair within 0.005 ms on both sides, so the figure is not an artifact of one campaign.",
+    "The Unicode-heavy row hides a comparable absolute amount (about 4.6-5.0 ms) of a much longer encode, which is what a fixed digest cost overlapped with a variable encode should look like.",
+    "Concurrency and long-run cells show no throughput loss and a byte-identical resident set, and the default remains off: the first overlap-on seed instantiates the global Rayon pool, which is a new footprint for a pure library embedding.",
+    "The GPU-routed counterpart of this option is measured separately in readings/rust_zero_copy_seed_w5.json (about 1.0 ms, -9.0%, on the RTX 5090 host)."
+  ],
+  "evidence_sha256": {
+    "w4c_concurrent_rayon4.json": "0124a6417abcf934dc125d4281ee442a85a0dcbb41d107fee49cd6ed0cb38bb1",
+    "w4c_seed_overlap.json": "c2aa69b9c0812896fd6f340592fdcb43170376e92db714252bcf2820d211ea74",
+    "w5_shipgate_epyc9115.json": "06f20228140d2ae920bbda3ce03fa2adada0ed2eb3d033932a6a4b8685f99e7a"
+  }
+}

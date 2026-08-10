@@ -1,0 +1,54 @@
+{
+  "cpu_epyc_9115": {
+    "note": "not re-measured for this confirmation; the pre-release measurement (readings/rust_zero_copy_seed_w5.json) carries over under the version-metadata-only tree delta recorded below"
+  },
+  "evidence_sha256": {
+    "appends1500_candidate_w6prep.json": "dd5ac6c880ebd70c425d041e6473604e1ce0fccb7046e46845f4fba2330ebbce",
+    "appends1500_candidate_w6prep_run2.json": "a3e19a1a5be5ef92b7a7d03065004d8e5e359fa223405868d9993f560e04caf3",
+    "latency_candidate_w6prep_matched21.json": "c4d84bc8bba95a3bac723fcb6f65b1c4cb4c7061ad9631ad45e32753fa031af3",
+    "w6prep_gpu_rtx5090.json": "3094564221dedc1c780a24ccf3c3993a3c2143e12622ebc5872ef25fdde5b2b3",
+    "w6prep_shipgate_rtx5090host.json": "02fc7cd4eed4d8fde3ac5583d6679ec03fefd9c43da59aa046d8b13974c30159"
+  },
+  "gpu_rtx_5090_host": {
+    "description": "Same host, driver, tool, and protocol as readings/rust_zero_copy_seed_w5.json; 31 fresh processes per cell; post-timing exact-ID check in every process.",
+    "public_encode_id_only_p50_ms": 3.99,
+    "public_encode_offsets_p50_ms": 18.591,
+    "public_seed_memory_p50_ms": 11.277,
+    "public_seed_memory_p95_ms": 12.89,
+    "public_seed_sqlite_p50_ms": 50.956,
+    "python_facade_21_samples": {
+      "first_append_1500_ms_two_runs": [14.248, 14.553],
+      "first_append_256_ms": 8.968,
+      "note": "warm distributions and the first 256-char append land on the pre-release values; the single-observation first 1,500-char append read higher than its pre-release single observation (11.525 ms) on both runs and is recorded as-is",
+      "warm_append_1500_p50_ms": 9.549,
+      "warm_append_256_p50_ms": 8.677
+    },
+    "same_tree_dual_route_store_shape": {
+      "lazy_shared_route_p50_ms": 18.92,
+      "lazy_shared_route_p95_ms": 19.306,
+      "retained_soa_materialized_route_p50_ms": 26.021,
+      "retained_soa_materialized_route_p95_ms": 28.665
+    }
+  },
+  "interpretation": [
+    "This reading confirms the pre-release measurements on the released 0.2.0 tree after the recertification campaigns; the tree delta from the measured commit is version metadata, generated legal artifacts, and documentation only (the version-only diff is archived with the evidence).",
+    "The public in-memory 4 MiB GPU-routed seed is 11.277 ms p50 / 12.890 ms p95 on the release tree (pre-release measurement: 11.145 / 12.010 ms; same host and protocol).",
+    "The GPU ID-only route is 3.990 ms p50 and the explicit offsets contrast is 14.601 ms (pre-release: 4.113 ms and 15.820 ms).",
+    "The same-tree dual-route store-shape contrast reproduces: retained SoA/materialized route 26.021 ms p50 versus lazy/shared route 18.920 ms p50.",
+    "The SQLite durable tier read 50.956 ms p50 on this run (pre-release 45.743 ms); the durable increment is disk-state sensitive and the cell is recorded as-is.",
+    "Every observation was checked for exact IDs after its timer; no sample was rejected."
+  ],
+  "product_commit": "pre-release certified tree during the 0.2.0 release preparation (sources bound by the source_identities in this record)",
+  "schema": "toktier.rust_zero_copy_seed_release_confirmation.w6prep.v1",
+  "source_identities": {
+    "fast_cpu": "e9f1e6282273d9a6b70ec274ec1ef47f96d0754fdf938032cd42a63e80e2dcca",
+    "native_host": "b6e12e77d8bf68313254fb1b1c578b265a58e9aa9efa2f9239e95176a0cf3ac3",
+    "rust_api": "0bb716436df739a4ccd14db5af3dfa380ce04908e031e93e3fe89369e335997d"
+  },
+  "workload": {
+    "family": "qwen3_8b",
+    "input_bytes": 4194304,
+    "protocol": "31 fresh processes per cell (seed/encode/offsets/store-shape); 21-sample Python-facade append batteries; post-timing exact-ID checks against the frozen Hugging Face reference",
+    "token_count": 2348809
+  }
+}

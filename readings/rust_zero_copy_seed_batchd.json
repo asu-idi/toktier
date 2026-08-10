@@ -1,0 +1,59 @@
+{
+  "cpu_epyc_9115": {
+    "note": "not re-measured for this confirmation; the pre-release measurement (readings/rust_zero_copy_seed_w5.json) carries over under the metadata-only tree delta recorded below"
+  },
+  "evidence_sha256": {
+    "appends1500_candidate_batchd.json": "2006e8771cb136bcf10e0baecad87afdf35c333df7b9b6a43b0963807ced48f5",
+    "batchd_gpu_rtx5090.json": "429189392583cdb3a6538c08de18768bfce4e0859f53b0a38ae43da36ba68096",
+    "batchd_shipgate_rtx5090host.json": "fecfc856d2e82af6281d77ea5273fae903e94878e919eb3cb41f03d57bde4a7e",
+    "latency_candidate_batchd_matched21.json": "b686e3c0546a4f0fd78b6ff32d88dc2e702c132e2b7b0937e20661afcae26b27"
+  },
+  "gpu_rtx_5090_host": {
+    "description": "Same host, driver, tool, and protocol as readings/rust_zero_copy_seed_w6prep.json; 31 fresh processes per cell; post-timing exact-ID check in every process.",
+    "public_encode_id_only_p50_ms": 3.94,
+    "public_encode_offsets_p50_ms": 17.802,
+    "public_seed_memory_p50_ms": 11.08,
+    "public_seed_memory_p95_ms": 12.315,
+    "public_seed_sqlite_p50_ms": 45.19,
+    "python_facade_21_samples": {
+      "first_append_1500_ms": 11.757,
+      "first_append_256_ms": 8.717,
+      "warm_append_1500_p50_ms": 9.795,
+      "warm_append_256_p50_ms": 8.651
+    },
+    "same_tree_dual_route_store_shape": {
+      "lazy_shared_route_overlap_p50_ms": 16.821,
+      "lazy_shared_route_overlap_p95_ms": 17.566,
+      "lazy_shared_route_p50_ms": 18.784,
+      "lazy_shared_route_p95_ms": 19.29,
+      "retained_soa_materialized_route_p50_ms": 25.958,
+      "retained_soa_materialized_route_p95_ms": 27.95
+    },
+    "span_bridge_direct": {
+      "spans_direct_p50_ms": 21.574,
+      "spans_soa_direct_p50_ms": 4.778
+    }
+  },
+  "interpretation": [
+    "This reading confirms the released 0.2.0 measurements on the crates.io-ready tree after its recertification campaigns; the tree delta from the previously measured commit is Rust manifest version metadata, generated legal artifacts, one test file, and documentation only. No certified source changed.",
+    "The public in-memory 4 MiB GPU-routed seed is 11.080 ms p50 / 12.315 ms p95 (previous release-tree measurement: 11.277 / 12.890 ms; pre-release: 11.145 / 12.010 ms; same host and protocol).",
+    "The GPU ID-only route is 3.940 ms p50 and the explicit offsets contrast is 13.862 ms (previous release tree: 3.990 ms and 14.601 ms).",
+    "The same-tree dual-route store-shape contrast reproduces: retained SoA/materialized route 25.958 ms p50 / 27.950 ms p95 versus lazy/shared route 18.784 ms p50 / 19.290 ms p95 (-27.6% / -31.0%); with the optional digest overlap enabled the lazy route reads 16.821 / 17.566 ms.",
+    "The SQLite durable tier read 45.190 ms p50 on this run; the durable increment is disk-state sensitive and the previous release-tree run recorded 50.956 ms.",
+    "The single-observation first 1,500-character append read 11.757 ms, back at the pre-release value; the higher pair recorded on the previous release-tree run did not recur.",
+    "Every observation was checked for exact IDs after its timer; no sample was rejected."
+  ],
+  "product_commit": "v0.2.0 release tree (sources bound by the source_identities in this record; the measured tree preceded only this record file and its release-note pointers)",
+  "schema": "toktier.rust_zero_copy_seed_release_confirmation.batchd.v1",
+  "source_identities": {
+    "fast_cpu": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+    "native_host": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+    "rust_api": "44313872dc4b9368a93cf2901bd924fbad41c83d02296720a26efbc89518af8c"
+  },
+  "workload": {
+    "family": "qwen3_8b",
+    "input_bytes": 4194304,
+    "protocol": "31 fresh processes per cell (seed/encode/offsets/store-shape); 21-sample Python-facade append batteries; post-timing exact-ID checks against the frozen Hugging Face reference",
+    "token_count": 2348809
+  }
+}

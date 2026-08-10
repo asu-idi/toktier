@@ -1,0 +1,43 @@
+{
+  "schema": "toktier.rust_distribution.performance.v1",
+  "measured_at": "2026-08-08",
+  "host": {
+    "architecture": "x86_64",
+    "cpu": "AMD EPYC 9115 16-Core Processor",
+    "logical_cpus": 32,
+    "os": "Linux 7.0.0-28-generic",
+    "rustc": "1.93.1 (01f6ddf75 2026-02-11)"
+  },
+  "release_binary": {
+    "no_default_features_bytes": 14053688,
+    "default_features_bytes": 16026424,
+    "default_plus_jit_bytes": 16257392
+  },
+  "doctor_cold_start": {
+    "measurement": "/usr/bin/time -f %e,%M <binary> doctor",
+    "no_default_features": {
+      "elapsed_seconds": 0.0,
+      "maximum_resident_kib": 4248
+    },
+    "default_features": {
+      "elapsed_seconds": 0.95,
+      "maximum_resident_kib": 106168,
+      "note": "Includes the fail-closed CUDA driver/device probe."
+    },
+    "default_plus_jit": {
+      "elapsed_seconds": 0.68,
+      "maximum_resident_kib": 106780,
+      "note": "Includes the fail-closed CUDA driver/device probe; it does not compile a kernel."
+    }
+  },
+  "offline_distribution": {
+    "deterministic_rebuilds": 2,
+    "manifest_files": 14179,
+    "cargo_package_files": 69,
+    "cargo_package_uncompressed_bytes": 13341225,
+    "cargo_package_bytes": 1254774,
+    "offline_no_default_tests_passed": true,
+    "offline_all_feature_tests_passed": true,
+    "offline_packaged_crate_check_passed": true
+  }
+}

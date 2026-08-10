@@ -1,0 +1,26 @@
+[package]
+name = "toktier-seed-breakdown"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Keep this diagnostic project outside the product workspace. In particular,
+# adding it must not alter the source identities certified by TokTier.
+[workspace]
+
+[dependencies]
+aho-corasick = "=1.1.3"
+flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.151"
+sha2 = "=0.11.0"
+toktier = { path = "../../crates/toktier" }
+toktier-routing-core = { path = "../../crates/toktier-routing-core" }
+toktier-store-core = { path = "../../crates/toktier-store-core" }
+toktier-store-sqlite = { path = "../../crates/toktier-store-sqlite" }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "unwind"

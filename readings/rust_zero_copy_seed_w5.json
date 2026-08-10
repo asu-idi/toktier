@@ -1,0 +1,71 @@
+{
+  "cpu_epyc_9115": {
+    "description": "Same host and protocol as the retained pre-change study.",
+    "fast_cpu_encode_p50_ms": 47.209,
+    "public_encode_stateless_p50_ms": 14.375,
+    "public_seed_memory_p50_ms": 26.465,
+    "public_seed_sqlite_p50_ms": 70.142
+  },
+  "evidence_sha256": {
+    "w5_cpu_epyc9115_public.json": "f6e0f505ec5e22ed51d0fb388fa3285a6d7349790f973f99b04548fe9ee9b2da",
+    "w5_gpu_overlap_probe.json": "04a2a3247e697c9bfb4577a3d2af54ba7a82acb2fc950f68be69d32d5e89666f",
+    "w5_gpu_rtx5090.json": "e7812b31245af11dba1b2a101afd472912b023902800c5ecffbd3bc6aec7484b",
+    "w5_shipgate_epyc9115.json": "06f20228140d2ae920bbda3ce03fa2adada0ed2eb3d033932a6a4b8685f99e7a",
+    "w5_shipgate_rtx5090host.json": "406b17344a26c8b2926d9ca493b4a88b34064058dd43dc4fe9dbf347e0a50a4d"
+  },
+  "gpu_rtx_5090_host": {
+    "description": "Same host, driver, tool, and protocol as the retained pre-change study (readings/rust_session_seed_breakdown.json).",
+    "public_encode_id_only_p50_ms": 4.113,
+    "public_encode_offsets_p50_ms": 19.933,
+    "public_seed_memory_p50_ms": 11.145,
+    "public_seed_memory_p95_ms": 12.01,
+    "public_seed_sqlite_p50_ms": 45.743,
+    "retained_pair_bridge_spans_direct_p50_ms": 21.456,
+    "same_tree_dual_route_store_shape": {
+      "lazy_shared_route_p50_ms": 18.85,
+      "lazy_shared_route_p95_ms": 19.311,
+      "note": "both routes share the same corrected-CPU full encode; the public GPU seed contrast above isolates the shipped route",
+      "retained_soa_materialized_route_p50_ms": 26.095,
+      "retained_soa_materialized_route_p95_ms": 27.923
+    },
+    "seed_digest_overlap": {
+      "note": "independent probe distribution; the off cell agrees with the profiler public_seed_memory cell within 0.07 ms",
+      "off_p50_ms": 11.078,
+      "off_p95_ms": 12.399,
+      "on_p50_ms": 10.081,
+      "on_p95_ms": 10.816,
+      "workers": 1
+    }
+  },
+  "interpretation": [
+    "The in-memory 4 MiB GPU-routed public seed moved from 59.739 ms to 11.145 ms p50 (-81.3%) and from 67.717 ms to 12.010 ms p95 (-82.3%) on the same host and protocol.",
+    "The explicit offsets/state encode contrast is now 15.820 ms against the former 39.047 ms known-ID span-bridge contrast (2.47x lower).",
+    "The GPU ID-only route improved from 5.181 ms to 4.113 ms p50; the corrected-CPU engine itself is unchanged (47.454 ms before, 47.209 ms now).",
+    "SQLite remains a separately measured durable tier; its increment over the in-memory seed is 34.6 ms on the GPU host and 43.7 ms on the EPYC host.",
+    "The optional seed-digest overlap hides about 1.0 ms of the GPU-routed seed (9%) and about 5.0 ms of the CPU-routed store-shape seed on the EPYC host; it stays off by default.",
+    "Every observation was checked for exact IDs after its timer; no sample was rejected."
+  ],
+  "pre_change_context_p50_ms": {
+    "cpu_public_seed_memory": 67.395,
+    "cpu_public_seed_sqlite": 115.325,
+    "gpu_known_id_span_bridge_contrast": 39.047,
+    "gpu_public_encode_id_only": 5.181,
+    "gpu_public_seed_memory": 59.739,
+    "gpu_public_seed_memory_p95": 67.717,
+    "gpu_public_seed_sqlite": 98.309,
+    "source": "readings/rust_session_seed_breakdown.json (pre-change, pre-release certified tree during the 0.2.0 release preparation, with sources bound by that reading's source_identities; same hosts)"
+  },
+  "product_commit": "pre-release certified tree during the 0.2.0 release preparation (sources bound by the source_identities in this record)",
+  "schema": "toktier.rust_zero_copy_seed_recertification.w5.v1",
+  "source_identities": {
+    "fast_cpu": "8029ebb517b28ef6546e7b2a27353c27708219f52a34fb2c2093626ebf50cdb4",
+    "native_host": "a49323f0741076dd5e5ff74f2d5c80261bef099be0579ce2637ae67655f80f3e",
+    "rust_api": "9f9cabd5c77fcd8e9732802211ce8716d2815aad74d6bd495d28a4adf087de03"
+  },
+  "workload": {
+    "family": "qwen3_8b",
+    "input_bytes": 4194304,
+    "protocol": "31 fresh processes per cell; post-timing exact-ID check against the frozen Hugging Face reference in every process; zero rejected samples",
+    "token_count": 2348809
+  }
+}

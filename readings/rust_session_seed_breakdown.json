@@ -1,0 +1,74 @@
+{
+  "schema": "toktier.rust_session_seed_breakdown.v1",
+  "product_commit": "pre-release certified tree during the 0.2.0 release preparation (sources bound by the source_identities in this record)",
+  "source_identities": {
+    "rust_api": "f1f1706aa0887cea655f67fc507115f3ca4827411e80185bd59a1a766b75dbdd",
+    "fast_cpu": "03865f67599ae07e8d43abde54cf119a885bb74503df07cc8cacc6a6dd9824e5",
+    "native_host": "9798332d807335f7d8c6905403f607a96b2d383eb8573687d25ed269ec8ea499"
+  },
+  "workload": {
+    "family": "qwen3_8b",
+    "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+    "generator": "agent-history-0123456789\\n repeated and truncated",
+    "input_bytes": 4194304,
+    "input_chars": 4194304,
+    "token_count": 2348809,
+    "samples_per_phase": 31,
+    "independent_processes": true,
+    "threads": 1
+  },
+  "cpu_epyc_9115": {
+    "host": "2x AMD EPYC 9115; memory bound to NUMA nodes 0,1",
+    "public_seed_memory": {"min_ns": 63393008, "p50_ns": 67394716, "p95_ns": 69046041, "p99_ns": 69306168.6, "max_ns": 69395664, "mad_ns": 1043603},
+    "public_seed_sqlite": {"min_ns": 113758805, "p50_ns": 115324917, "p95_ns": 119625077, "p99_ns": 121477236.6, "max_ns": 121580841, "mad_ns": 830726},
+    "fast_cpu_encode": {"p50_ns": 47454018, "p95_ns": 48377718},
+    "router_encode": {"p50_ns": 48738931, "p95_ns": 49801370},
+    "router_append": {"p50_ns": 52812559, "p95_ns": 53972053},
+    "precomputed_append": {"p50_ns": 4753611, "p95_ns": 4887393},
+    "precomputed_store_put": {"p50_ns": 18507452, "p95_ns": 19162493},
+    "content_digest": {"p50_ns": 5064171, "p95_ns": 5091647},
+    "recovery_sha256": {"p50_ns": 2066469, "p95_ns": 2079258},
+    "boundary_search": {"p50_ns": 608156, "p95_ns": 614182},
+    "all_ids": {"p50_ns": 220008, "p95_ns": 259389},
+    "sqlite_save": {"p50_ns": 41572888, "p95_ns": 47029353},
+    "sqlite_load_and_verify": {"p50_ns": 17272673, "p95_ns": 17612222},
+    "reference_encode_core": {"p50_ns": 2108082152, "p95_ns": 2147311292}
+  },
+  "gpu_rtx_5090": {
+    "host": "Intel Core Ultra 9 285K + NVIDIA GeForce RTX 5090",
+    "architecture": "sm_120",
+    "driver": "595.84",
+    "public_encode_id_only": {"p50_ns": 5180724, "p95_ns": 8057626},
+    "public_encode_with_offsets": {"p50_ns": 44227640, "p95_ns": 53006676},
+    "public_seed_memory": {"min_ns": 47726941, "p50_ns": 59739048, "p95_ns": 67716884, "p99_ns": 69397419.4, "max_ns": 69946030, "mad_ns": 2840051},
+    "public_seed_sqlite": {"min_ns": 81678429, "p50_ns": 98309310, "p95_ns": 106929293.5, "p99_ns": 110174278.2, "max_ns": 111013128, "mad_ns": 3487267}
+  },
+  "derived_p50_contrasts_ns": {
+    "cpu_router_after_engine": 1284913,
+    "cpu_empty_tail_population": 4073628,
+    "cpu_store_after_precomputed_append": 13753841,
+    "cpu_public_closure_remainder": 828316,
+    "cpu_content_tracking": 5147488,
+    "cpu_recovery_tracking": 2047410,
+    "cpu_sqlite_increment": 47930201,
+    "gpu_known_id_span_bridge": 39046916,
+    "gpu_state_store_and_return_after_spans": 15511408,
+    "gpu_sqlite_increment": 38570262
+  },
+  "factorial_p50_contrasts_ns": {
+    "block_chain_only": 450511,
+    "boundary_seal_only": -630305,
+    "production_block_and_boundary": -399680,
+    "interaction": -219886
+  },
+  "evidence_sha256": {
+    "cpu_aggregate": "3390b998dc4f3b869ac2473455b04b678e817685dedccb363d759dbfef3fe890",
+    "cpu_raw_jsonl": "7084ac6a55f768250ae5cd033620f142f457729f488f7e2e9379dbede2a6cde3",
+    "cpu_correction_aggregate": "cddbab2fa0d5ea21cc594de33b74b9d0762ded5fb2c6164036bf819dac00c19a",
+    "cpu_correction_raw_jsonl": "b9e12b81fd2e15c76ef4fe04e80009a8d4626f03d4d7267f2ddbfaa2ac24cbc3",
+    "gpu_aggregate": "d8a82b6ba5a1e56ccbe977c03a75309e66902ffb934f8cba1898214ddf2df4e4",
+    "gpu_raw_jsonl": "8c57e47283af9c9bc4222356d2555e3bde665759e4e8b3c64caf4f23c5d60688",
+    "analysis": "a3c74deb057331bd88d30b90646aa4a933b492b53f515df9ab85f52afe178a3a"
+  },
+  "interpretation": "Direct values are 31-process medians. Derived values are differences of independent medians or an explicitly labelled algebraic residual, not source-internal exclusive timers. CPU and GPU totals use different host CPUs."
+}

@@ -347,7 +347,7 @@
       "kind": "pending",
       "value": "certified_source",
       "source": "tables/support_registry.json",
-      "note": "The GPU backend is compiled on the user's machine.",
+      "note": "certified_source is the backend-level status and describes the locally compiled JIT delivery. The default delivery is the shipped prebuilt fatbin, which is a judged binary and is recorded as certified on the architectures its verdict battery ran; see the per-delivery rows in tables/support_registry.json.",
       "markers": []
     },
     "support.status.deepseek_v4_flash.cpu": {
@@ -361,7 +361,7 @@
       "kind": "pending",
       "value": "certified_source",
       "source": "tables/support_registry.json",
-      "note": "The GPU backend is compiled on the user's machine.",
+      "note": "certified_source is the backend-level status and describes the locally compiled JIT delivery. The default delivery is the shipped prebuilt fatbin, which is a judged binary and is recorded as certified on the architectures its verdict battery ran; see the per-delivery rows in tables/support_registry.json.",
       "markers": []
     },
     "support.status.glm_5_2.cpu": {
@@ -375,7 +375,7 @@
       "kind": "pending",
       "value": "certified_source",
       "source": "tables/support_registry.json",
-      "note": "The GPU backend is compiled on the user's machine.",
+      "note": "certified_source is the backend-level status and describes the locally compiled JIT delivery. The default delivery is the shipped prebuilt fatbin, which is a judged binary and is recorded as certified on the architectures its verdict battery ran; see the per-delivery rows in tables/support_registry.json.",
       "markers": []
     },
     "support.status.gpt_oss_120b.cpu": {
@@ -389,7 +389,7 @@
       "kind": "pending",
       "value": "certified_source",
       "source": "tables/support_registry.json",
-      "note": "The GPU backend is compiled on the user's machine.",
+      "note": "certified_source is the backend-level status and describes the locally compiled JIT delivery. The default delivery is the shipped prebuilt fatbin, which is a judged binary and is recorded as certified on the architectures its verdict battery ran; see the per-delivery rows in tables/support_registry.json.",
       "markers": []
     },
     "support.status.hy3.cpu": {
@@ -403,7 +403,7 @@
       "kind": "pending",
       "value": "certified_source",
       "source": "tables/support_registry.json",
-      "note": "The GPU backend is compiled on the user's machine.",
+      "note": "certified_source is the backend-level status and describes the locally compiled JIT delivery. The default delivery is the shipped prebuilt fatbin, which is a judged binary and is recorded as certified on the architectures its verdict battery ran; see the per-delivery rows in tables/support_registry.json.",
       "markers": []
     },
     "support.status.kimi_k2_7_code.cpu": {
@@ -438,7 +438,7 @@
       "kind": "pending",
       "value": "certified_source",
       "source": "tables/support_registry.json",
-      "note": "The GPU backend is compiled on the user's machine. The boundary-predicate certification table has not been extended to this family yet (it predates the family being added); confirm before release.",
+      "note": "certified_source is the backend-level status and describes the locally compiled JIT delivery. The default delivery is the shipped prebuilt fatbin, which is a judged binary and is recorded as certified on the architectures its verdict battery ran; see the per-delivery rows in tables/support_registry.json. The boundary-predicate certification table has not been extended to this family yet (it predates the family being added); confirm before release.",
       "markers": []
     },
     "support.status.ling_3_0_flash.cpu": {
@@ -452,7 +452,7 @@
       "kind": "pending",
       "value": "certified_source",
       "source": "tables/support_registry.json",
-      "note": "The GPU backend is compiled on the user's machine. The boundary-predicate certification table has not been extended to this family yet (it predates the family being added); confirm before release.",
+      "note": "certified_source is the backend-level status and describes the locally compiled JIT delivery. The default delivery is the shipped prebuilt fatbin, which is a judged binary and is recorded as certified on the architectures its verdict battery ran; see the per-delivery rows in tables/support_registry.json. The boundary-predicate certification table has not been extended to this family yet (it predates the family being added); confirm before release.",
       "markers": []
     },
     "support.status.llama_3_1_8b.cpu": {
@@ -466,7 +466,7 @@
       "kind": "pending",
       "value": "certified_source",
       "source": "tables/support_registry.json",
-      "note": "The GPU backend is compiled on the user's machine.",
+      "note": "certified_source is the backend-level status and describes the locally compiled JIT delivery. The default delivery is the shipped prebuilt fatbin, which is a judged binary and is recorded as certified on the architectures its verdict battery ran; see the per-delivery rows in tables/support_registry.json.",
       "markers": []
     },
     "support.status.minimax_m3.cpu": {
@@ -480,7 +480,7 @@
       "kind": "pending",
       "value": "certified_source",
       "source": "tables/support_registry.json",
-      "note": "The GPU backend is compiled on the user's machine.",
+      "note": "certified_source is the backend-level status and describes the locally compiled JIT delivery. The default delivery is the shipped prebuilt fatbin, which is a judged binary and is recorded as certified on the architectures its verdict battery ran; see the per-delivery rows in tables/support_registry.json.",
       "markers": []
     },
     "support.status.ministral_3_8b.cpu": {
@@ -494,7 +494,7 @@
       "kind": "pending",
       "value": "certified_source",
       "source": "tables/support_registry.json",
-      "note": "The GPU backend is compiled on the user's machine.",
+      "note": "certified_source is the backend-level status and describes the locally compiled JIT delivery. The default delivery is the shipped prebuilt fatbin, which is a judged binary and is recorded as certified on the architectures its verdict battery ran; see the per-delivery rows in tables/support_registry.json.",
       "markers": []
     },
     "support.status.nemotron_3_nano_4b.cpu": {
@@ -508,7 +508,7 @@
       "kind": "pending",
       "value": "certified_source",
       "source": "tables/support_registry.json",
-      "note": "The GPU backend is compiled on the user's machine.",
+      "note": "certified_source is the backend-level status and describes the locally compiled JIT delivery. The default delivery is the shipped prebuilt fatbin, which is a judged binary and is recorded as certified on the architectures its verdict battery ran; see the per-delivery rows in tables/support_registry.json.",
       "markers": []
     },
     "support.status.olmo_3_7b.cpu": {
@@ -522,7 +522,7 @@
       "kind": "pending",
       "value": "certified_source",
       "source": "tables/support_registry.json",
-      "note": "The GPU backend is compiled on the user's machine.",
+      "note": "certified_source is the backend-level status and describes the locally compiled JIT delivery. The default delivery is the shipped prebuilt fatbin, which is a judged binary and is recorded as certified on the architectures its verdict battery ran; see the per-delivery rows in tables/support_registry.json.",
       "markers": []
     },
     "support.status.qwen3_5_08b.cpu": {
@@ -536,7 +536,7 @@
       "kind": "pending",
       "value": "certified_source",
       "source": "tables/support_registry.json",
-      "note": "The GPU backend is compiled on the user's machine.",
+      "note": "certified_source is the backend-level status and describes the locally compiled JIT delivery. The default delivery is the shipped prebuilt fatbin, which is a judged binary and is recorded as certified on the architectures its verdict battery ran; see the per-delivery rows in tables/support_registry.json.",
       "markers": []
     },
     "support.status.qwen3_8b.cpu": {
@@ -550,7 +550,7 @@
       "kind": "pending",
       "value": "certified_source",
       "source": "tables/support_registry.json",
-      "note": "The GPU backend is compiled on the user's machine.",
+      "note": "certified_source is the backend-level status and describes the locally compiled JIT delivery. The default delivery is the shipped prebuilt fatbin, which is a judged binary and is recorded as certified on the architectures its verdict battery ran; see the per-delivery rows in tables/support_registry.json.",
       "markers": []
     }
   }

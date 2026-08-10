@@ -1,0 +1,133 @@
+{
+  "all_ids_equal_hf": true,
+  "characters": 4437141060,
+  "documents": 1437469,
+  "engine": {
+    "build_flags": [
+      "profile=release",
+      "opt-level=3",
+      "lto=fat",
+      "codegen-units=1",
+      "panic=unwind",
+      "target=x86_64-unknown-linux-gnu",
+      "pyo3=abi3-py310+extension-module"
+    ],
+    "delivery": "integrated",
+    "module": "toktier._native",
+    "source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+    "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+    "upstream_project": "gigatoken",
+    "version": "0.10.0+toktier.pinned.1"
+  },
+  "gil_released": true,
+  "mismatches": 0,
+  "model_families": 12,
+  "one_python_to_rust_call_per_batch": true,
+  "oracle": {
+    "package": "tokenizers",
+    "version": "0.22.2"
+  },
+  "rows": [
+    {
+      "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
+      "characters": 403376460,
+      "documents": 130679,
+      "family": "deepseek_v3",
+      "full_encode_equal_hf": true,
+      "mismatches": 0,
+      "repair_equal_hf": true
+    },
+    {
+      "artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+      "characters": 403376460,
+      "documents": 130679,
+      "family": "deepseek_v4_flash",
+      "full_encode_equal_hf": true,
+      "mismatches": 0,
+      "repair_equal_hf": true
+    },
+    {
+      "artifact_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+      "characters": 403376460,
+      "documents": 130679,
+      "family": "glm_5_2",
+      "full_encode_equal_hf": true,
+      "mismatches": 0,
+      "repair_equal_hf": true
+    },
+    {
+      "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+      "characters": 403376460,
+      "documents": 130679,
+      "family": "gpt_oss_120b",
+      "full_encode_equal_hf": true,
+      "mismatches": 0,
+      "repair_equal_hf": true
+    },
+    {
+      "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
+      "characters": 403376460,
+      "documents": 130679,
+      "family": "llama_3_1_8b",
+      "full_encode_equal_hf": true,
+      "mismatches": 0,
+      "repair_equal_hf": true
+    },
+    {
+      "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
+      "characters": 403376460,
+      "documents": 130679,
+      "family": "minimax_m3",
+      "full_encode_equal_hf": true,
+      "mismatches": 0,
+      "repair_equal_hf": true
+    },
+    {
+      "artifact_sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135",
+      "characters": 403376460,
+      "documents": 130679,
+      "family": "ministral_3_8b",
+      "full_encode_equal_hf": true,
+      "mismatches": 0,
+      "repair_equal_hf": true
+    },
+    {
+      "artifact_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+      "characters": 403376460,
+      "documents": 130679,
+      "family": "nemotron_3_nano_4b",
+      "full_encode_equal_hf": true,
+      "mismatches": 0,
+      "repair_equal_hf": true
+    },
+    {
+      "artifact_sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca",
+      "characters": 403376460,
+      "documents": 130679,
+      "family": "olmo_3_7b",
+      "full_encode_equal_hf": true,
+      "mismatches": 0,
+      "repair_equal_hf": true
+    },
+    {
+      "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+      "characters": 403376460,
+      "documents": 130679,
+      "family": "qwen3_5_08b",
+      "full_encode_equal_hf": true,
+      "mismatches": 0,
+      "repair_equal_hf": true
+    },
+    {
+      "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "characters": 403376460,
+      "documents": 130679,
+      "family": "qwen3_8b",
+      "full_encode_equal_hf": true,
+      "mismatches": 0,
+      "repair_equal_hf": true
+    }
+  ],
+  "schema": "toktier.fast_cpu.native_frontend_parity.v1",
+  "unique_artifacts": 11
+}

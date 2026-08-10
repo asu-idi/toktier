@@ -1,0 +1,27 @@
+{
+  "schema": "toktier.rust_gpu_serving.performance.v1",
+  "documents": 256,
+  "bytes_per_document": 65536,
+  "utf8_bytes": 16777216,
+  "devices": [
+    0
+  ],
+  "worker_threads": 1,
+  "queued_total_us": 70936,
+  "docs_per_second": 3608.8746739325343,
+  "gib_per_second": 0.22026822961014003,
+  "response_total_p50_us": 40953,
+  "response_total_p95_us": 70856,
+  "response_total_p99_us": 70867,
+  "queue_p50_us": 24387,
+  "queue_p95_us": 54987,
+  "queue_p99_us": 54989,
+  "engine_p50_us": 15814,
+  "engine_p95_us": 24178,
+  "engine_p99_us": 24178,
+  "maximum_observed_batch_rows": 64,
+  "device_rows": {
+    "0": 256
+  },
+  "exact_matches": 256
+}

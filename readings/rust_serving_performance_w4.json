@@ -1,0 +1,22 @@
+{
+  "schema": "toktier.rust_serving.performance.v1",
+  "documents": 1024,
+  "utf8_bytes": 3173729,
+  "worker_threads": 4,
+  "sync_total_us": 59508,
+  "queued_total_us": 151521,
+  "sync_docs_per_second": 17207.513028725625,
+  "queued_docs_per_second": 6758.11973401651,
+  "response_total_p50_us": 133685,
+  "response_total_p95_us": 150979,
+  "response_total_p99_us": 151052,
+  "queue_p50_us": 123165,
+  "queue_p95_us": 142564,
+  "queue_p99_us": 142572,
+  "engine_p50_us": 10421,
+  "engine_p95_us": 123051,
+  "engine_p99_us": 123051,
+  "materialization_p50_us": 0,
+  "maximum_observed_batch_rows": 64,
+  "exact_matches": 1024
+}

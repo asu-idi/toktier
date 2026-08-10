@@ -225,6 +225,38 @@ bytes / wall clock:
 | 1.07 GB larger documents (avg 180 KB) | toktier GPU batched (1 card) | 0.490 | 143.7 |
 | 1.07 GB larger documents (avg 180 KB) | reference backend, 1 core | 0.003 | 0.9 |
 
+## Session seed and append latency (0.2.0 recertified tree)
+
+The F1-F4 batteries above are the retained release batteries with their
+own recorded provenance. The 0.2.0 seed-path rework was measured
+separately, on an earlier certified tree during the 0.2.0 release
+preparation (since superseded by the release recertification, and differing
+from the v0.2.0 release tree only in version metadata and documentation),
+with 31 fresh processes per cell and a post-timing exact-ID check against
+the frozen HF reference in every process. Hosts:
+"RTX 5090 host" is an Intel Core Ultra 9 285K with a GeForce RTX 5090
+(driver 595.84); "EPYC host" is a 2x AMD EPYC 9115. Workload: a 4 MiB
+(4,194,304-character) `qwen3_8b` transcript, 2,348,809 tokens.
+
+| Cell (p50 unless noted) | Before (pre-0.2.0 tree) | 0.2.0 |
+|---|---:|---:|
+| GPU public in-memory `Session::seed`, RTX 5090 host | 59.739 ms | **11.145 ms** (p95 12.010 ms) |
+| GPU ID-only `encode`, RTX 5090 host | 5.181 ms | 4.113 ms |
+| Explicit offsets contrast (`encode(offsets) - encode`), RTX 5090 host | 39.047 ms (span bridge) | 15.820 ms |
+| GPU SQLite-backed seed, RTX 5090 host | 98.309 ms | 45.743 ms |
+| CPU public in-memory seed, EPYC host | 67.395 ms | 26.465 ms |
+| CPU SQLite-backed seed, EPYC host | 115.325 ms | 70.142 ms |
+| Corrected-CPU engine control cell, EPYC host | 47.454 ms | 47.209 ms |
+| Warm 256-char append (Python facade, 21 samples, RTX 5090 host) | 11.445 ms | 8.697 ms |
+| Warm 1,500-char append (Python facade, 21 samples, RTX 5090 host) | 12.826 ms | 9.417 ms |
+
+The machine-readable aggregate is
+[`readings/rust_zero_copy_seed_w5.json`](../readings/rust_zero_copy_seed_w5.json);
+the retained pre-0.2.0 breakdown study is
+[`rust-session-seed-breakdown.md`](rust-session-seed-breakdown.md). The
+optional `seed_digest_overlap` runtime switch and its measured effect are
+described in the [0.2.0 release notes](releases/v0.2.0.md).
+
 ## Correctness gates behind these numbers
 
 - Every timed lane verifies its token output against the pinned

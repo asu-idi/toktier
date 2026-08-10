@@ -1,0 +1,20 @@
+{
+  "schema": "toktier.rust_lifecycle.performance.v1",
+  "family": "qwen3_8b",
+  "artifact_bytes": 11422654,
+  "bundle_bytes": 24438784,
+  "cold_local_acquire_us": 29008,
+  "verified_cache_hit_us": 13036,
+  "mirror_us": 25297,
+  "export_us": 93944,
+  "import_us": 87360,
+  "offline_load_us": 578659,
+  "offline_encode_us": 605,
+  "session_seed_chars": 4194304,
+  "session_seed_us": 68980,
+  "append_chars": 275,
+  "session_append_us": 7060,
+  "snapshot_us": 1447,
+  "exact_patch": true,
+  "backend": "FastCpu"
+}

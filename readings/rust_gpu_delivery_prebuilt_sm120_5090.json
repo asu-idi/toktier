@@ -1,0 +1,18 @@
+{
+  "schema": "toktier.rust_gpu_delivery.performance.v1",
+  "delivery": "prebuilt",
+  "input_bytes": 4194304,
+  "iterations": 20,
+  "load_us": 903114,
+  "encode_p50_us": 2132,
+  "encode_p95_us": 2275,
+  "encode_p99_us": 2275,
+  "gib_per_second_p50": 1.832199812382739,
+  "exact_iterations": 20,
+  "backend": "Gpu",
+  "source": "prebuilt",
+  "runtime_build_certified": true,
+  "jit_cache_hit": null,
+  "jit_product_sha256": null,
+  "jit_certified": null
+}

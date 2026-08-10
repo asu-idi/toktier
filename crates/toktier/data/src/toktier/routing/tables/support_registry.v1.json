@@ -1,0 +1,1998 @@
+{
+  "schema_version": 1,
+  "generated_by": {
+    "tool": "tools/generate_registry.py",
+    "tool_version": "1.2.0",
+    "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
+    "generated_at": "2026-08-07T10:44:36Z"
+  },
+  "root_digest": "sha256:e461bc770976c2f306f974908a7c0fec8f779de2351a34f60eea3ca393313201",
+  "oracles": [
+    {
+      "oracle_id": "tokenizers",
+      "package": "tokenizers",
+      "certified_versions": [
+        "0.22.2"
+      ],
+      "semantic_id": "tokenizers.0.22.2"
+    }
+  ],
+  "pipelines": [
+    {
+      "pipeline_id": "pipeline.030372fa6b14b229",
+      "pipeline_fingerprint": "030372fa6b14b22925deab8d32e7d7aecdfd20b59abbfb4d0799521b3cc7cb62",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: ling_3_0_flash."
+    },
+    {
+      "pipeline_id": "pipeline.48ff98bb0b788e51",
+      "pipeline_fingerprint": "48ff98bb0b788e51705c5c438ce567ef323b0507407a4b8723e15dd1e62d7ed8",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: glm_5_2."
+    },
+    {
+      "pipeline_id": "pipeline.59b9c3a611148dad",
+      "pipeline_fingerprint": "59b9c3a611148dade3dd5c21f83db9abf0406a369ed6c1fedc14ad4562249f1b",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: deepseek_v3, deepseek_v4_flash."
+    },
+    {
+      "pipeline_id": "pipeline.75aef07b9b165fa7",
+      "pipeline_fingerprint": "75aef07b9b165fa7cea0cf0eb556bda2c61c803ad5dd9794d51d1cf83c132a34",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: nemotron_3_nano_4b."
+    },
+    {
+      "pipeline_id": "pipeline.7d75b953f0224ebd",
+      "pipeline_fingerprint": "7d75b953f0224ebd713d6522326d4376a3cd8feeb1a6fb216f92c900b5997600",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: qwen3_8b."
+    },
+    {
+      "pipeline_id": "pipeline.b02978f65dde5481",
+      "pipeline_fingerprint": "b02978f65dde548132720e5e1d224921f024fd279a407bceaed1a1a113312734",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: hy3."
+    },
+    {
+      "pipeline_id": "pipeline.bc687a3b57eba58b",
+      "pipeline_fingerprint": "bc687a3b57eba58b265c72735c25ba0d7c355985ef23516d002e0c6b201c5e9c",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: qwen3_5_08b."
+    },
+    {
+      "pipeline_id": "pipeline.c1f53da33939f469",
+      "pipeline_fingerprint": "c1f53da33939f469170d6b9cd1a4b80757bd0b009243491798c546a1bc7e308b",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: laguna_s_2_1."
+    },
+    {
+      "pipeline_id": "pipeline.c52a38e257eede13",
+      "pipeline_fingerprint": "c52a38e257eede1394aece208482d77e0c79f696579f44820855f45bbb451783",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: olmo_3_7b."
+    },
+    {
+      "pipeline_id": "pipeline.e39f44697f3d0b0e",
+      "pipeline_fingerprint": "e39f44697f3d0b0eeff6b4203721e9891e09b971e4f541900c3690847b68bfa9",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: ministral_3_8b."
+    },
+    {
+      "pipeline_id": "pipeline.eb3b41ea275dabaa",
+      "pipeline_fingerprint": "eb3b41ea275dabaa6a8b5b76206ff5945dcfcf22b60ebe4826b72db7faa25e8a",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: minimax_m3."
+    },
+    {
+      "pipeline_id": "pipeline.ef65569b2ee98da3",
+      "pipeline_fingerprint": "ef65569b2ee98da32f7181f3396cd69f4ca4779613c44670674476a1a869425a",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: gpt_oss_120b."
+    },
+    {
+      "pipeline_id": "pipeline.ff6dd044a1cb9ba5",
+      "pipeline_fingerprint": "ff6dd044a1cb9ba5927beb58b080538dbedf397fad8b6aaf6c4a756ad4abade8",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: llama_3_1_8b."
+    }
+  ],
+  "added_frontends": [
+    {
+      "added_frontend_id": "added-frontend.091f91a7da522aa4",
+      "added_frontend_fingerprint": "091f91a7da522aa43082218205f87a0c599b076f3e295b6605c13d78a6e7a611",
+      "description": "Added-token table of olmo_3_7b (22 entries)."
+    },
+    {
+      "added_frontend_id": "added-frontend.2ad65676cbf6bb4d",
+      "added_frontend_fingerprint": "2ad65676cbf6bb4d5b1585bad5c58dac9a440daf41871d2d48a35bad590a376f",
+      "description": "Added-token table of qwen3_5_08b (26 entries)."
+    },
+    {
+      "added_frontend_id": "added-frontend.2b0fa8d5e8acac7d",
+      "added_frontend_fingerprint": "2b0fa8d5e8acac7d598dfb2786257ebb0b237516a151748f82cd69774698226d",
+      "description": "Added-token table of minimax_m3 (61 entries)."
+    },
+    {
+      "added_frontend_id": "added-frontend.39dc60b16a182c81",
+      "added_frontend_fingerprint": "39dc60b16a182c81e6c0a998fc5a5905be93ef132789447dbc31464e5369d250",
+      "description": "Added-token table of deepseek_v3 (818 entries)."
+    },
+    {
+      "added_frontend_id": "added-frontend.58c2cb163f177e71",
+      "added_frontend_fingerprint": "58c2cb163f177e71ff176bd277d4447220c10e5eaca81a364b818fe228fa0946",
+      "description": "Added-token table of deepseek_v4_flash (1283 entries)."
+    },
+    {
+      "added_frontend_id": "added-frontend.5fe9cef0194e9457",
+      "added_frontend_fingerprint": "5fe9cef0194e94574a35a1a37f921d3611e2912d2f8221231a5a324a2695444d",
+      "description": "Added-token table of ministral_3_8b (1000 entries)."
+    },
+    {
+      "added_frontend_id": "added-frontend.685a4802a948b81f",
+      "added_frontend_fingerprint": "685a4802a948b81fbd82875d4bc258908548ded4506e82530edef616b5b48067",
+      "description": "Added-token table of hy3 (818 entries)."
+    },
+    {
+      "added_frontend_id": "added-frontend.8212579fa65ce401",
+      "added_frontend_fingerprint": "8212579fa65ce401ba5b765839dea0d212d2f3a7487480a40f3ccee43d5698d0",
+      "description": "Added-token table of llama_3_1_8b (256 entries)."
+    },
+    {
+      "added_frontend_id": "added-frontend.90b04a1dbd156198",
+      "added_frontend_fingerprint": "90b04a1dbd1561986d38cfbf4aac76fdb7ac2c270bfbf2cd2d46bd7029360805",
+      "description": "Added-token table of nemotron_3_nano_4b (1000 entries)."
+    },
+    {
+      "added_frontend_id": "added-frontend.9c491824b879fcbf",
+      "added_frontend_fingerprint": "9c491824b879fcbf35bcaf1d5468c87442731e561698e42c5ac91966a54a2a4c",
+      "description": "Added-token table of ling_3_0_flash (262 entries)."
+    },
+    {
+      "added_frontend_id": "added-frontend.b2ae9b9ff5cca742",
+      "added_frontend_fingerprint": "b2ae9b9ff5cca7421e7b7235a12c9de7113ccc4f9cdce4f5c2b37e2af383ef43",
+      "description": "Added-token table of glm_5_2 (36 entries)."
+    },
+    {
+      "added_frontend_id": "added-frontend.b7e34a654da9e67e",
+      "added_frontend_fingerprint": "b7e34a654da9e67e5e5efc83d7a47bafef3891ea072b8b6324076e21a0248b91",
+      "description": "Added-token table of gpt_oss_120b (21 entries)."
+    },
+    {
+      "added_frontend_id": "added-frontend.dd5aea1ad87550cf",
+      "added_frontend_fingerprint": "dd5aea1ad87550cf465354b054de93609b0f6e32aafdd8fda40eeb2388a08d33",
+      "description": "Added-token table of qwen3_8b (26 entries)."
+    },
+    {
+      "added_frontend_id": "added-frontend.eea96ebb36f6b2f3",
+      "added_frontend_fingerprint": "eea96ebb36f6b2f3481955248fe92c4a14d30795fb0e56ef8b6b5c272618eb37",
+      "description": "Added-token table of laguna_s_2_1 (70 entries)."
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
+      "family": "deepseek_v3",
+      "pipeline_id": "pipeline.59b9c3a611148dad",
+      "added_frontend_id": "added-frontend.39dc60b16a182c81",
+      "oracle_id": "tokenizers",
+      "suite_version": "gpu-e2e-differential-v1",
+      "evidence_id": "ev-main-corpus-v1",
+      "readings": {
+        "docs": 3638742395,
+        "bytes": 11728655929847,
+        "mismatches": 0
+      },
+      "backends": {
+        "gpu": {
+          "status": "certified_source",
+          "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+          "build_flags": [
+            "-O3"
+          ],
+          "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "devices": [
+            "sm_89",
+            "sm_120"
+          ],
+          "deliveries": {
+            "jit": {
+              "status": "certified_source",
+              "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+              "build_flags": [
+                "-O3"
+              ],
+              "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "devices": [
+                "sm_89",
+                "sm_120"
+              ],
+              "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
+              "direct_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "direct_build_flags": [
+                "-fatbin",
+                "-O3",
+                "-std=c++17",
+                "--expt-relaxed-constexpr",
+                "-DTOKTIER_DEVICE_ONLY"
+              ],
+              "direct_devices": [
+                "sm_120"
+              ],
+              "direct_toolchains": [
+                {
+                  "release": "13.2",
+                  "build": "V13.2.86",
+                  "compiler_sha256": "e0341e832da4c4c9c412c0722ac1a9e6944d0c0fcb36f3cd51d2fe11435f46e5",
+                  "architecture": "sm_120",
+                  "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
+                }
+              ]
+            },
+            "prebuilt": {
+              "status": "certified",
+              "binary_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
+              "toolchain": "cuda 13.2 (V13.2.78)",
+              "devices": [
+                "sm_120",
+                "sm_89"
+              ],
+              "devices_experimental": [
+                "sm_100",
+                "sm_75",
+                "sm_80",
+                "sm_86",
+                "sm_90"
+              ],
+              "architecture_digests": {
+                "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
+                "sm_100": "b462cda8d49d165790170d0776b3fd50750482647c01f32eb12a3669e5e62ee2",
+                "sm_120": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
+                "sm_75": "5d4783f7f8b2d33b9cfad57e41526b81b02abee0ec14ab58b2176065ed7d7e86",
+                "sm_80": "5f89e3aab43c01b12d2744da6f02886d4a04a53a54cb3029fc75e5f0156729fc",
+                "sm_86": "624ea52142d0a44122d47a5e9ac7f3a9279ec2dd5c3e8f59ef0e003842c29d41",
+                "sm_89": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
+                "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
+              },
+              "driver_min": "580.65.06",
+              "host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "host_build_flags": [
+                "profile=release",
+                "opt-level=3",
+                "lto=fat",
+                "codegen-units=1",
+                "panic=unwind",
+                "target=x86_64-unknown-linux-gnu",
+                "pyo3=abi3-py310+extension-module"
+              ],
+              "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+            }
+          }
+        },
+        "fast_cpu": {
+          "status": "certified_source",
+          "source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+          "build_flags": [
+            "profile=release",
+            "opt-level=3",
+            "lto=fat",
+            "codegen-units=1",
+            "panic=unwind",
+            "target=x86_64-unknown-linux-gnu",
+            "pyo3=abi3-py310+extension-module"
+          ],
+          "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+          "engine": "gigatoken",
+          "engine_version": "0.10.0+toktier.pinned.1",
+          "engine_delivery": "integrated",
+          "engine_module": "toktier._native",
+          "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+          "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
+          "config_id": "toktier-fast-repair-v1",
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+        }
+      }
+    },
+    {
+      "artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+      "family": "deepseek_v4_flash",
+      "pipeline_id": "pipeline.59b9c3a611148dad",
+      "added_frontend_id": "added-frontend.58c2cb163f177e71",
+      "oracle_id": "tokenizers",
+      "suite_version": "gpu-e2e-differential-v1",
+      "evidence_id": "ev-main-corpus-v1",
+      "readings": {
+        "docs": 3638742395,
+        "bytes": 11728655929847,
+        "mismatches": 0
+      },
+      "backends": {
+        "gpu": {
+          "status": "certified_source",
+          "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+          "build_flags": [
+            "-O3"
+          ],
+          "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "devices": [
+            "sm_89",
+            "sm_120"
+          ],
+          "deliveries": {
+            "jit": {
+              "status": "certified_source",
+              "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+              "build_flags": [
+                "-O3"
+              ],
+              "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "devices": [
+                "sm_89",
+                "sm_120"
+              ],
+              "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
+              "direct_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "direct_build_flags": [
+                "-fatbin",
+                "-O3",
+                "-std=c++17",
+                "--expt-relaxed-constexpr",
+                "-DTOKTIER_DEVICE_ONLY"
+              ],
+              "direct_devices": [
+                "sm_120"
+              ],
+              "direct_toolchains": [
+                {
+                  "release": "13.2",
+                  "build": "V13.2.86",
+                  "compiler_sha256": "e0341e832da4c4c9c412c0722ac1a9e6944d0c0fcb36f3cd51d2fe11435f46e5",
+                  "architecture": "sm_120",
+                  "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
+                }
+              ]
+            },
+            "prebuilt": {
+              "status": "certified",
+              "binary_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
+              "toolchain": "cuda 13.2 (V13.2.78)",
+              "devices": [
+                "sm_120",
+                "sm_89"
+              ],
+              "devices_experimental": [
+                "sm_100",
+                "sm_75",
+                "sm_80",
+                "sm_86",
+                "sm_90"
+              ],
+              "architecture_digests": {
+                "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
+                "sm_100": "b462cda8d49d165790170d0776b3fd50750482647c01f32eb12a3669e5e62ee2",
+                "sm_120": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
+                "sm_75": "5d4783f7f8b2d33b9cfad57e41526b81b02abee0ec14ab58b2176065ed7d7e86",
+                "sm_80": "5f89e3aab43c01b12d2744da6f02886d4a04a53a54cb3029fc75e5f0156729fc",
+                "sm_86": "624ea52142d0a44122d47a5e9ac7f3a9279ec2dd5c3e8f59ef0e003842c29d41",
+                "sm_89": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
+                "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
+              },
+              "driver_min": "580.65.06",
+              "host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "host_build_flags": [
+                "profile=release",
+                "opt-level=3",
+                "lto=fat",
+                "codegen-units=1",
+                "panic=unwind",
+                "target=x86_64-unknown-linux-gnu",
+                "pyo3=abi3-py310+extension-module"
+              ],
+              "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+            }
+          }
+        },
+        "fast_cpu": {
+          "status": "certified_source",
+          "source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+          "build_flags": [
+            "profile=release",
+            "opt-level=3",
+            "lto=fat",
+            "codegen-units=1",
+            "panic=unwind",
+            "target=x86_64-unknown-linux-gnu",
+            "pyo3=abi3-py310+extension-module"
+          ],
+          "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+          "engine": "gigatoken",
+          "engine_version": "0.10.0+toktier.pinned.1",
+          "engine_delivery": "integrated",
+          "engine_module": "toktier._native",
+          "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+          "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
+          "config_id": "toktier-fast-repair-v1",
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+        }
+      }
+    },
+    {
+      "artifact_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+      "family": "glm_5_2",
+      "pipeline_id": "pipeline.48ff98bb0b788e51",
+      "added_frontend_id": "added-frontend.b2ae9b9ff5cca742",
+      "oracle_id": "tokenizers",
+      "suite_version": "gpu-e2e-differential-v1",
+      "evidence_id": "ev-main-corpus-v1",
+      "readings": {
+        "docs": 3638742395,
+        "bytes": 11728655929847,
+        "mismatches": 0
+      },
+      "backends": {
+        "gpu": {
+          "status": "certified_source",
+          "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+          "build_flags": [
+            "-O3"
+          ],
+          "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "devices": [
+            "sm_89",
+            "sm_120"
+          ],
+          "deliveries": {
+            "jit": {
+              "status": "certified_source",
+              "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+              "build_flags": [
+                "-O3"
+              ],
+              "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "devices": [
+                "sm_89",
+                "sm_120"
+              ],
+              "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
+              "direct_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "direct_build_flags": [
+                "-fatbin",
+                "-O3",
+                "-std=c++17",
+                "--expt-relaxed-constexpr",
+                "-DTOKTIER_DEVICE_ONLY"
+              ],
+              "direct_devices": [
+                "sm_120"
+              ],
+              "direct_toolchains": [
+                {
+                  "release": "13.2",
+                  "build": "V13.2.86",
+                  "compiler_sha256": "e0341e832da4c4c9c412c0722ac1a9e6944d0c0fcb36f3cd51d2fe11435f46e5",
+                  "architecture": "sm_120",
+                  "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
+                }
+              ]
+            },
+            "prebuilt": {
+              "status": "certified",
+              "binary_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
+              "toolchain": "cuda 13.2 (V13.2.78)",
+              "devices": [
+                "sm_120",
+                "sm_89"
+              ],
+              "devices_experimental": [
+                "sm_100",
+                "sm_75",
+                "sm_80",
+                "sm_86",
+                "sm_90"
+              ],
+              "architecture_digests": {
+                "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
+                "sm_100": "b462cda8d49d165790170d0776b3fd50750482647c01f32eb12a3669e5e62ee2",
+                "sm_120": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
+                "sm_75": "5d4783f7f8b2d33b9cfad57e41526b81b02abee0ec14ab58b2176065ed7d7e86",
+                "sm_80": "5f89e3aab43c01b12d2744da6f02886d4a04a53a54cb3029fc75e5f0156729fc",
+                "sm_86": "624ea52142d0a44122d47a5e9ac7f3a9279ec2dd5c3e8f59ef0e003842c29d41",
+                "sm_89": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
+                "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
+              },
+              "driver_min": "580.65.06",
+              "host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "host_build_flags": [
+                "profile=release",
+                "opt-level=3",
+                "lto=fat",
+                "codegen-units=1",
+                "panic=unwind",
+                "target=x86_64-unknown-linux-gnu",
+                "pyo3=abi3-py310+extension-module"
+              ],
+              "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+            }
+          }
+        },
+        "fast_cpu": {
+          "status": "certified_source",
+          "source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+          "build_flags": [
+            "profile=release",
+            "opt-level=3",
+            "lto=fat",
+            "codegen-units=1",
+            "panic=unwind",
+            "target=x86_64-unknown-linux-gnu",
+            "pyo3=abi3-py310+extension-module"
+          ],
+          "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+          "engine": "gigatoken",
+          "engine_version": "0.10.0+toktier.pinned.1",
+          "engine_delivery": "integrated",
+          "engine_module": "toktier._native",
+          "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+          "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
+          "config_id": "toktier-fast-repair-v1",
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+        }
+      }
+    },
+    {
+      "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+      "family": "gpt_oss_120b",
+      "pipeline_id": "pipeline.ef65569b2ee98da3",
+      "added_frontend_id": "added-frontend.b7e34a654da9e67e",
+      "oracle_id": "tokenizers",
+      "suite_version": "gpu-e2e-differential-v1",
+      "evidence_id": "ev-main-corpus-v1",
+      "readings": {
+        "docs": 3638742395,
+        "bytes": 11728655929847,
+        "mismatches": 0
+      },
+      "backends": {
+        "gpu": {
+          "status": "certified_source",
+          "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+          "build_flags": [
+            "-O3"
+          ],
+          "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "devices": [
+            "sm_89",
+            "sm_120"
+          ],
+          "deliveries": {
+            "jit": {
+              "status": "certified_source",
+              "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+              "build_flags": [
+                "-O3"
+              ],
+              "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "devices": [
+                "sm_89",
+                "sm_120"
+              ],
+              "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
+              "direct_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "direct_build_flags": [
+                "-fatbin",
+                "-O3",
+                "-std=c++17",
+                "--expt-relaxed-constexpr",
+                "-DTOKTIER_DEVICE_ONLY"
+              ],
+              "direct_devices": [
+                "sm_120"
+              ],
+              "direct_toolchains": [
+                {
+                  "release": "13.2",
+                  "build": "V13.2.86",
+                  "compiler_sha256": "e0341e832da4c4c9c412c0722ac1a9e6944d0c0fcb36f3cd51d2fe11435f46e5",
+                  "architecture": "sm_120",
+                  "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
+                }
+              ]
+            },
+            "prebuilt": {
+              "status": "certified",
+              "binary_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
+              "toolchain": "cuda 13.2 (V13.2.78)",
+              "devices": [
+                "sm_120",
+                "sm_89"
+              ],
+              "devices_experimental": [
+                "sm_100",
+                "sm_75",
+                "sm_80",
+                "sm_86",
+                "sm_90"
+              ],
+              "architecture_digests": {
+                "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
+                "sm_100": "b462cda8d49d165790170d0776b3fd50750482647c01f32eb12a3669e5e62ee2",
+                "sm_120": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
+                "sm_75": "5d4783f7f8b2d33b9cfad57e41526b81b02abee0ec14ab58b2176065ed7d7e86",
+                "sm_80": "5f89e3aab43c01b12d2744da6f02886d4a04a53a54cb3029fc75e5f0156729fc",
+                "sm_86": "624ea52142d0a44122d47a5e9ac7f3a9279ec2dd5c3e8f59ef0e003842c29d41",
+                "sm_89": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
+                "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
+              },
+              "driver_min": "580.65.06",
+              "host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "host_build_flags": [
+                "profile=release",
+                "opt-level=3",
+                "lto=fat",
+                "codegen-units=1",
+                "panic=unwind",
+                "target=x86_64-unknown-linux-gnu",
+                "pyo3=abi3-py310+extension-module"
+              ],
+              "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+            }
+          }
+        },
+        "fast_cpu": {
+          "status": "certified_source",
+          "source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+          "build_flags": [
+            "profile=release",
+            "opt-level=3",
+            "lto=fat",
+            "codegen-units=1",
+            "panic=unwind",
+            "target=x86_64-unknown-linux-gnu",
+            "pyo3=abi3-py310+extension-module"
+          ],
+          "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+          "engine": "gigatoken",
+          "engine_version": "0.10.0+toktier.pinned.1",
+          "engine_delivery": "integrated",
+          "engine_module": "toktier._native",
+          "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+          "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
+          "config_id": "toktier-fast-repair-v1",
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+        }
+      }
+    },
+    {
+      "artifact_sha256": "446e0b59cd941637c0ddfd84e12ee1f49480fd12097f86a9d2fec8ebd0c7ff6c",
+      "family": "hy3",
+      "pipeline_id": "pipeline.b02978f65dde5481",
+      "added_frontend_id": "added-frontend.685a4802a948b81f",
+      "oracle_id": "tokenizers",
+      "suite_version": "gpu-e2e-differential-v1",
+      "evidence_id": "ev-main-corpus-v1",
+      "readings": {
+        "docs": 3638742395,
+        "bytes": 11728655929847,
+        "mismatches": 0
+      },
+      "backends": {
+        "gpu": {
+          "status": "certified_source",
+          "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+          "build_flags": [
+            "-O3"
+          ],
+          "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "devices": [
+            "sm_89",
+            "sm_120"
+          ],
+          "deliveries": {
+            "jit": {
+              "status": "certified_source",
+              "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+              "build_flags": [
+                "-O3"
+              ],
+              "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "devices": [
+                "sm_89",
+                "sm_120"
+              ],
+              "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
+              "direct_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "direct_build_flags": [
+                "-fatbin",
+                "-O3",
+                "-std=c++17",
+                "--expt-relaxed-constexpr",
+                "-DTOKTIER_DEVICE_ONLY"
+              ],
+              "direct_devices": [
+                "sm_120"
+              ],
+              "direct_toolchains": [
+                {
+                  "release": "13.2",
+                  "build": "V13.2.86",
+                  "compiler_sha256": "e0341e832da4c4c9c412c0722ac1a9e6944d0c0fcb36f3cd51d2fe11435f46e5",
+                  "architecture": "sm_120",
+                  "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
+                }
+              ]
+            },
+            "prebuilt": {
+              "status": "certified",
+              "binary_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
+              "toolchain": "cuda 13.2 (V13.2.78)",
+              "devices": [
+                "sm_120",
+                "sm_89"
+              ],
+              "devices_experimental": [
+                "sm_100",
+                "sm_75",
+                "sm_80",
+                "sm_86",
+                "sm_90"
+              ],
+              "architecture_digests": {
+                "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
+                "sm_100": "b462cda8d49d165790170d0776b3fd50750482647c01f32eb12a3669e5e62ee2",
+                "sm_120": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
+                "sm_75": "5d4783f7f8b2d33b9cfad57e41526b81b02abee0ec14ab58b2176065ed7d7e86",
+                "sm_80": "5f89e3aab43c01b12d2744da6f02886d4a04a53a54cb3029fc75e5f0156729fc",
+                "sm_86": "624ea52142d0a44122d47a5e9ac7f3a9279ec2dd5c3e8f59ef0e003842c29d41",
+                "sm_89": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
+                "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
+              },
+              "driver_min": "580.65.06",
+              "host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "host_build_flags": [
+                "profile=release",
+                "opt-level=3",
+                "lto=fat",
+                "codegen-units=1",
+                "panic=unwind",
+                "target=x86_64-unknown-linux-gnu",
+                "pyo3=abi3-py310+extension-module"
+              ],
+              "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+            }
+          }
+        },
+        "fast_cpu": {
+          "status": "unsupported",
+          "engine": "gigatoken",
+          "engine_version": "0.10.0+toktier.pinned.1",
+          "engine_delivery": "integrated",
+          "engine_module": "toktier._native",
+          "config_id": "toktier-fast-repair-v1",
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+        }
+      }
+    },
+    {
+      "artifact_sha256": "809240f7a182cde859a4fc4ebc902e619a173d507e99304c1092aa04e7a6658e",
+      "family": "laguna_s_2_1",
+      "pipeline_id": "pipeline.c1f53da33939f469",
+      "added_frontend_id": "added-frontend.eea96ebb36f6b2f3",
+      "oracle_id": "tokenizers",
+      "suite_version": "gpu-e2e-differential-v1",
+      "evidence_id": "ev-added-families-v1",
+      "readings": {
+        "docs": 3800016491,
+        "bytes": 12328592579973,
+        "mismatches": 0
+      },
+      "backends": {
+        "gpu": {
+          "status": "certified_source",
+          "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+          "build_flags": [
+            "-O3"
+          ],
+          "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "devices": [
+            "sm_89",
+            "sm_120"
+          ],
+          "deliveries": {
+            "jit": {
+              "status": "certified_source",
+              "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+              "build_flags": [
+                "-O3"
+              ],
+              "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "devices": [
+                "sm_89",
+                "sm_120"
+              ],
+              "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
+              "direct_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "direct_build_flags": [
+                "-fatbin",
+                "-O3",
+                "-std=c++17",
+                "--expt-relaxed-constexpr",
+                "-DTOKTIER_DEVICE_ONLY"
+              ],
+              "direct_devices": [
+                "sm_120"
+              ],
+              "direct_toolchains": [
+                {
+                  "release": "13.2",
+                  "build": "V13.2.86",
+                  "compiler_sha256": "e0341e832da4c4c9c412c0722ac1a9e6944d0c0fcb36f3cd51d2fe11435f46e5",
+                  "architecture": "sm_120",
+                  "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
+                }
+              ]
+            },
+            "prebuilt": {
+              "status": "certified",
+              "binary_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
+              "toolchain": "cuda 13.2 (V13.2.78)",
+              "devices": [
+                "sm_120",
+                "sm_89"
+              ],
+              "devices_experimental": [
+                "sm_100",
+                "sm_75",
+                "sm_80",
+                "sm_86",
+                "sm_90"
+              ],
+              "architecture_digests": {
+                "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
+                "sm_100": "b462cda8d49d165790170d0776b3fd50750482647c01f32eb12a3669e5e62ee2",
+                "sm_120": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
+                "sm_75": "5d4783f7f8b2d33b9cfad57e41526b81b02abee0ec14ab58b2176065ed7d7e86",
+                "sm_80": "5f89e3aab43c01b12d2744da6f02886d4a04a53a54cb3029fc75e5f0156729fc",
+                "sm_86": "624ea52142d0a44122d47a5e9ac7f3a9279ec2dd5c3e8f59ef0e003842c29d41",
+                "sm_89": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
+                "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
+              },
+              "driver_min": "580.65.06",
+              "host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "host_build_flags": [
+                "profile=release",
+                "opt-level=3",
+                "lto=fat",
+                "codegen-units=1",
+                "panic=unwind",
+                "target=x86_64-unknown-linux-gnu",
+                "pyo3=abi3-py310+extension-module"
+              ],
+              "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+            }
+          }
+        },
+        "fast_cpu": {
+          "status": "unsupported",
+          "engine": "gigatoken",
+          "engine_version": "0.10.0+toktier.pinned.1",
+          "engine_delivery": "integrated",
+          "engine_module": "toktier._native",
+          "config_id": "toktier-fast-repair-v1",
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+        }
+      }
+    },
+    {
+      "artifact_sha256": "40fb9d7d7795b8bd305aeff39ce9963f3f450915b9553f2938e009be9a1fed60",
+      "family": "ling_3_0_flash",
+      "pipeline_id": "pipeline.030372fa6b14b229",
+      "added_frontend_id": "added-frontend.9c491824b879fcbf",
+      "oracle_id": "tokenizers",
+      "suite_version": "gpu-e2e-differential-v1",
+      "evidence_id": "ev-added-families-v1",
+      "readings": {
+        "docs": 3800016491,
+        "bytes": 12328592579973,
+        "mismatches": 0
+      },
+      "backends": {
+        "gpu": {
+          "status": "certified_source",
+          "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+          "build_flags": [
+            "-O3"
+          ],
+          "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "devices": [
+            "sm_89",
+            "sm_120"
+          ],
+          "deliveries": {
+            "jit": {
+              "status": "certified_source",
+              "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+              "build_flags": [
+                "-O3"
+              ],
+              "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "devices": [
+                "sm_89",
+                "sm_120"
+              ],
+              "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
+              "direct_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "direct_build_flags": [
+                "-fatbin",
+                "-O3",
+                "-std=c++17",
+                "--expt-relaxed-constexpr",
+                "-DTOKTIER_DEVICE_ONLY"
+              ],
+              "direct_devices": [
+                "sm_120"
+              ],
+              "direct_toolchains": [
+                {
+                  "release": "13.2",
+                  "build": "V13.2.86",
+                  "compiler_sha256": "e0341e832da4c4c9c412c0722ac1a9e6944d0c0fcb36f3cd51d2fe11435f46e5",
+                  "architecture": "sm_120",
+                  "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
+                }
+              ]
+            },
+            "prebuilt": {
+              "status": "certified",
+              "binary_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
+              "toolchain": "cuda 13.2 (V13.2.78)",
+              "devices": [
+                "sm_120",
+                "sm_89"
+              ],
+              "devices_experimental": [
+                "sm_100",
+                "sm_75",
+                "sm_80",
+                "sm_86",
+                "sm_90"
+              ],
+              "architecture_digests": {
+                "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
+                "sm_100": "b462cda8d49d165790170d0776b3fd50750482647c01f32eb12a3669e5e62ee2",
+                "sm_120": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
+                "sm_75": "5d4783f7f8b2d33b9cfad57e41526b81b02abee0ec14ab58b2176065ed7d7e86",
+                "sm_80": "5f89e3aab43c01b12d2744da6f02886d4a04a53a54cb3029fc75e5f0156729fc",
+                "sm_86": "624ea52142d0a44122d47a5e9ac7f3a9279ec2dd5c3e8f59ef0e003842c29d41",
+                "sm_89": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
+                "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
+              },
+              "driver_min": "580.65.06",
+              "host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "host_build_flags": [
+                "profile=release",
+                "opt-level=3",
+                "lto=fat",
+                "codegen-units=1",
+                "panic=unwind",
+                "target=x86_64-unknown-linux-gnu",
+                "pyo3=abi3-py310+extension-module"
+              ],
+              "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+            }
+          }
+        },
+        "fast_cpu": {
+          "status": "unsupported",
+          "engine": "gigatoken",
+          "engine_version": "0.10.0+toktier.pinned.1",
+          "engine_delivery": "integrated",
+          "engine_module": "toktier._native",
+          "config_id": "toktier-fast-repair-v1",
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+        }
+      }
+    },
+    {
+      "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
+      "family": "llama_3_1_8b",
+      "pipeline_id": "pipeline.ff6dd044a1cb9ba5",
+      "added_frontend_id": "added-frontend.8212579fa65ce401",
+      "oracle_id": "tokenizers",
+      "suite_version": "gpu-e2e-differential-v1",
+      "evidence_id": "ev-main-corpus-v1",
+      "readings": {
+        "docs": 3638742395,
+        "bytes": 11728655929847,
+        "mismatches": 0
+      },
+      "backends": {
+        "gpu": {
+          "status": "certified_source",
+          "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+          "build_flags": [
+            "-O3"
+          ],
+          "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "devices": [
+            "sm_89",
+            "sm_120"
+          ],
+          "deliveries": {
+            "jit": {
+              "status": "certified_source",
+              "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+              "build_flags": [
+                "-O3"
+              ],
+              "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "devices": [
+                "sm_89",
+                "sm_120"
+              ],
+              "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
+              "direct_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "direct_build_flags": [
+                "-fatbin",
+                "-O3",
+                "-std=c++17",
+                "--expt-relaxed-constexpr",
+                "-DTOKTIER_DEVICE_ONLY"
+              ],
+              "direct_devices": [
+                "sm_120"
+              ],
+              "direct_toolchains": [
+                {
+                  "release": "13.2",
+                  "build": "V13.2.86",
+                  "compiler_sha256": "e0341e832da4c4c9c412c0722ac1a9e6944d0c0fcb36f3cd51d2fe11435f46e5",
+                  "architecture": "sm_120",
+                  "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
+                }
+              ]
+            },
+            "prebuilt": {
+              "status": "certified",
+              "binary_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
+              "toolchain": "cuda 13.2 (V13.2.78)",
+              "devices": [
+                "sm_120",
+                "sm_89"
+              ],
+              "devices_experimental": [
+                "sm_100",
+                "sm_75",
+                "sm_80",
+                "sm_86",
+                "sm_90"
+              ],
+              "architecture_digests": {
+                "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
+                "sm_100": "b462cda8d49d165790170d0776b3fd50750482647c01f32eb12a3669e5e62ee2",
+                "sm_120": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
+                "sm_75": "5d4783f7f8b2d33b9cfad57e41526b81b02abee0ec14ab58b2176065ed7d7e86",
+                "sm_80": "5f89e3aab43c01b12d2744da6f02886d4a04a53a54cb3029fc75e5f0156729fc",
+                "sm_86": "624ea52142d0a44122d47a5e9ac7f3a9279ec2dd5c3e8f59ef0e003842c29d41",
+                "sm_89": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
+                "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
+              },
+              "driver_min": "580.65.06",
+              "host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "host_build_flags": [
+                "profile=release",
+                "opt-level=3",
+                "lto=fat",
+                "codegen-units=1",
+                "panic=unwind",
+                "target=x86_64-unknown-linux-gnu",
+                "pyo3=abi3-py310+extension-module"
+              ],
+              "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+            }
+          }
+        },
+        "fast_cpu": {
+          "status": "certified_source",
+          "source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+          "build_flags": [
+            "profile=release",
+            "opt-level=3",
+            "lto=fat",
+            "codegen-units=1",
+            "panic=unwind",
+            "target=x86_64-unknown-linux-gnu",
+            "pyo3=abi3-py310+extension-module"
+          ],
+          "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+          "engine": "gigatoken",
+          "engine_version": "0.10.0+toktier.pinned.1",
+          "engine_delivery": "integrated",
+          "engine_module": "toktier._native",
+          "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+          "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
+          "config_id": "toktier-fast-repair-v1",
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+        }
+      }
+    },
+    {
+      "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
+      "family": "minimax_m3",
+      "pipeline_id": "pipeline.eb3b41ea275dabaa",
+      "added_frontend_id": "added-frontend.2b0fa8d5e8acac7d",
+      "oracle_id": "tokenizers",
+      "suite_version": "gpu-e2e-differential-v1",
+      "evidence_id": "ev-main-corpus-v1",
+      "readings": {
+        "docs": 3638742395,
+        "bytes": 11728655929847,
+        "mismatches": 0
+      },
+      "backends": {
+        "gpu": {
+          "status": "certified_source",
+          "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+          "build_flags": [
+            "-O3"
+          ],
+          "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "devices": [
+            "sm_89",
+            "sm_120"
+          ],
+          "deliveries": {
+            "jit": {
+              "status": "certified_source",
+              "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+              "build_flags": [
+                "-O3"
+              ],
+              "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "devices": [
+                "sm_89",
+                "sm_120"
+              ],
+              "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
+              "direct_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "direct_build_flags": [
+                "-fatbin",
+                "-O3",
+                "-std=c++17",
+                "--expt-relaxed-constexpr",
+                "-DTOKTIER_DEVICE_ONLY"
+              ],
+              "direct_devices": [
+                "sm_120"
+              ],
+              "direct_toolchains": [
+                {
+                  "release": "13.2",
+                  "build": "V13.2.86",
+                  "compiler_sha256": "e0341e832da4c4c9c412c0722ac1a9e6944d0c0fcb36f3cd51d2fe11435f46e5",
+                  "architecture": "sm_120",
+                  "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
+                }
+              ]
+            },
+            "prebuilt": {
+              "status": "certified",
+              "binary_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
+              "toolchain": "cuda 13.2 (V13.2.78)",
+              "devices": [
+                "sm_120",
+                "sm_89"
+              ],
+              "devices_experimental": [
+                "sm_100",
+                "sm_75",
+                "sm_80",
+                "sm_86",
+                "sm_90"
+              ],
+              "architecture_digests": {
+                "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
+                "sm_100": "b462cda8d49d165790170d0776b3fd50750482647c01f32eb12a3669e5e62ee2",
+                "sm_120": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
+                "sm_75": "5d4783f7f8b2d33b9cfad57e41526b81b02abee0ec14ab58b2176065ed7d7e86",
+                "sm_80": "5f89e3aab43c01b12d2744da6f02886d4a04a53a54cb3029fc75e5f0156729fc",
+                "sm_86": "624ea52142d0a44122d47a5e9ac7f3a9279ec2dd5c3e8f59ef0e003842c29d41",
+                "sm_89": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
+                "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
+              },
+              "driver_min": "580.65.06",
+              "host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "host_build_flags": [
+                "profile=release",
+                "opt-level=3",
+                "lto=fat",
+                "codegen-units=1",
+                "panic=unwind",
+                "target=x86_64-unknown-linux-gnu",
+                "pyo3=abi3-py310+extension-module"
+              ],
+              "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+            }
+          }
+        },
+        "fast_cpu": {
+          "status": "certified_source",
+          "source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+          "build_flags": [
+            "profile=release",
+            "opt-level=3",
+            "lto=fat",
+            "codegen-units=1",
+            "panic=unwind",
+            "target=x86_64-unknown-linux-gnu",
+            "pyo3=abi3-py310+extension-module"
+          ],
+          "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+          "engine": "gigatoken",
+          "engine_version": "0.10.0+toktier.pinned.1",
+          "engine_delivery": "integrated",
+          "engine_module": "toktier._native",
+          "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+          "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
+          "config_id": "toktier-fast-repair-v1",
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+        }
+      }
+    },
+    {
+      "artifact_sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135",
+      "family": "ministral_3_8b",
+      "pipeline_id": "pipeline.e39f44697f3d0b0e",
+      "added_frontend_id": "added-frontend.5fe9cef0194e9457",
+      "oracle_id": "tokenizers",
+      "suite_version": "gpu-e2e-differential-v1",
+      "evidence_id": "ev-main-corpus-v1",
+      "readings": {
+        "docs": 3638742395,
+        "bytes": 11728655929847,
+        "mismatches": 0
+      },
+      "backends": {
+        "gpu": {
+          "status": "certified_source",
+          "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+          "build_flags": [
+            "-O3"
+          ],
+          "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "devices": [
+            "sm_89",
+            "sm_120"
+          ],
+          "deliveries": {
+            "jit": {
+              "status": "certified_source",
+              "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+              "build_flags": [
+                "-O3"
+              ],
+              "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "devices": [
+                "sm_89",
+                "sm_120"
+              ],
+              "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
+              "direct_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "direct_build_flags": [
+                "-fatbin",
+                "-O3",
+                "-std=c++17",
+                "--expt-relaxed-constexpr",
+                "-DTOKTIER_DEVICE_ONLY"
+              ],
+              "direct_devices": [
+                "sm_120"
+              ],
+              "direct_toolchains": [
+                {
+                  "release": "13.2",
+                  "build": "V13.2.86",
+                  "compiler_sha256": "e0341e832da4c4c9c412c0722ac1a9e6944d0c0fcb36f3cd51d2fe11435f46e5",
+                  "architecture": "sm_120",
+                  "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
+                }
+              ]
+            },
+            "prebuilt": {
+              "status": "certified",
+              "binary_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
+              "toolchain": "cuda 13.2 (V13.2.78)",
+              "devices": [
+                "sm_120",
+                "sm_89"
+              ],
+              "devices_experimental": [
+                "sm_100",
+                "sm_75",
+                "sm_80",
+                "sm_86",
+                "sm_90"
+              ],
+              "architecture_digests": {
+                "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
+                "sm_100": "b462cda8d49d165790170d0776b3fd50750482647c01f32eb12a3669e5e62ee2",
+                "sm_120": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
+                "sm_75": "5d4783f7f8b2d33b9cfad57e41526b81b02abee0ec14ab58b2176065ed7d7e86",
+                "sm_80": "5f89e3aab43c01b12d2744da6f02886d4a04a53a54cb3029fc75e5f0156729fc",
+                "sm_86": "624ea52142d0a44122d47a5e9ac7f3a9279ec2dd5c3e8f59ef0e003842c29d41",
+                "sm_89": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
+                "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
+              },
+              "driver_min": "580.65.06",
+              "host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "host_build_flags": [
+                "profile=release",
+                "opt-level=3",
+                "lto=fat",
+                "codegen-units=1",
+                "panic=unwind",
+                "target=x86_64-unknown-linux-gnu",
+                "pyo3=abi3-py310+extension-module"
+              ],
+              "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+            }
+          }
+        },
+        "fast_cpu": {
+          "status": "certified_source",
+          "source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+          "build_flags": [
+            "profile=release",
+            "opt-level=3",
+            "lto=fat",
+            "codegen-units=1",
+            "panic=unwind",
+            "target=x86_64-unknown-linux-gnu",
+            "pyo3=abi3-py310+extension-module"
+          ],
+          "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+          "engine": "gigatoken",
+          "engine_version": "0.10.0+toktier.pinned.1",
+          "engine_delivery": "integrated",
+          "engine_module": "toktier._native",
+          "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+          "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
+          "config_id": "toktier-fast-repair-v1",
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+        }
+      }
+    },
+    {
+      "artifact_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+      "family": "nemotron_3_nano_4b",
+      "pipeline_id": "pipeline.75aef07b9b165fa7",
+      "added_frontend_id": "added-frontend.90b04a1dbd156198",
+      "oracle_id": "tokenizers",
+      "suite_version": "gpu-e2e-differential-v1",
+      "evidence_id": "ev-main-corpus-v1",
+      "readings": {
+        "docs": 3638742395,
+        "bytes": 11728655929847,
+        "mismatches": 0
+      },
+      "backends": {
+        "gpu": {
+          "status": "certified_source",
+          "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+          "build_flags": [
+            "-O3"
+          ],
+          "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "devices": [
+            "sm_89",
+            "sm_120"
+          ],
+          "deliveries": {
+            "jit": {
+              "status": "certified_source",
+              "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+              "build_flags": [
+                "-O3"
+              ],
+              "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "devices": [
+                "sm_89",
+                "sm_120"
+              ],
+              "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
+              "direct_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "direct_build_flags": [
+                "-fatbin",
+                "-O3",
+                "-std=c++17",
+                "--expt-relaxed-constexpr",
+                "-DTOKTIER_DEVICE_ONLY"
+              ],
+              "direct_devices": [
+                "sm_120"
+              ],
+              "direct_toolchains": [
+                {
+                  "release": "13.2",
+                  "build": "V13.2.86",
+                  "compiler_sha256": "e0341e832da4c4c9c412c0722ac1a9e6944d0c0fcb36f3cd51d2fe11435f46e5",
+                  "architecture": "sm_120",
+                  "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
+                }
+              ]
+            },
+            "prebuilt": {
+              "status": "certified",
+              "binary_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
+              "toolchain": "cuda 13.2 (V13.2.78)",
+              "devices": [
+                "sm_120",
+                "sm_89"
+              ],
+              "devices_experimental": [
+                "sm_100",
+                "sm_75",
+                "sm_80",
+                "sm_86",
+                "sm_90"
+              ],
+              "architecture_digests": {
+                "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
+                "sm_100": "b462cda8d49d165790170d0776b3fd50750482647c01f32eb12a3669e5e62ee2",
+                "sm_120": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
+                "sm_75": "5d4783f7f8b2d33b9cfad57e41526b81b02abee0ec14ab58b2176065ed7d7e86",
+                "sm_80": "5f89e3aab43c01b12d2744da6f02886d4a04a53a54cb3029fc75e5f0156729fc",
+                "sm_86": "624ea52142d0a44122d47a5e9ac7f3a9279ec2dd5c3e8f59ef0e003842c29d41",
+                "sm_89": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
+                "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
+              },
+              "driver_min": "580.65.06",
+              "host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "host_build_flags": [
+                "profile=release",
+                "opt-level=3",
+                "lto=fat",
+                "codegen-units=1",
+                "panic=unwind",
+                "target=x86_64-unknown-linux-gnu",
+                "pyo3=abi3-py310+extension-module"
+              ],
+              "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+            }
+          }
+        },
+        "fast_cpu": {
+          "status": "certified_source",
+          "source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+          "build_flags": [
+            "profile=release",
+            "opt-level=3",
+            "lto=fat",
+            "codegen-units=1",
+            "panic=unwind",
+            "target=x86_64-unknown-linux-gnu",
+            "pyo3=abi3-py310+extension-module"
+          ],
+          "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+          "engine": "gigatoken",
+          "engine_version": "0.10.0+toktier.pinned.1",
+          "engine_delivery": "integrated",
+          "engine_module": "toktier._native",
+          "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+          "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
+          "config_id": "toktier-fast-repair-v1",
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+        }
+      }
+    },
+    {
+      "artifact_sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca",
+      "family": "olmo_3_7b",
+      "pipeline_id": "pipeline.c52a38e257eede13",
+      "added_frontend_id": "added-frontend.091f91a7da522aa4",
+      "oracle_id": "tokenizers",
+      "suite_version": "gpu-e2e-differential-v1",
+      "evidence_id": "ev-main-corpus-v1",
+      "readings": {
+        "docs": 3638742395,
+        "bytes": 11728655929847,
+        "mismatches": 0
+      },
+      "backends": {
+        "gpu": {
+          "status": "certified_source",
+          "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+          "build_flags": [
+            "-O3"
+          ],
+          "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "devices": [
+            "sm_89",
+            "sm_120"
+          ],
+          "deliveries": {
+            "jit": {
+              "status": "certified_source",
+              "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+              "build_flags": [
+                "-O3"
+              ],
+              "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "devices": [
+                "sm_89",
+                "sm_120"
+              ],
+              "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
+              "direct_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "direct_build_flags": [
+                "-fatbin",
+                "-O3",
+                "-std=c++17",
+                "--expt-relaxed-constexpr",
+                "-DTOKTIER_DEVICE_ONLY"
+              ],
+              "direct_devices": [
+                "sm_120"
+              ],
+              "direct_toolchains": [
+                {
+                  "release": "13.2",
+                  "build": "V13.2.86",
+                  "compiler_sha256": "e0341e832da4c4c9c412c0722ac1a9e6944d0c0fcb36f3cd51d2fe11435f46e5",
+                  "architecture": "sm_120",
+                  "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
+                }
+              ]
+            },
+            "prebuilt": {
+              "status": "certified",
+              "binary_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
+              "toolchain": "cuda 13.2 (V13.2.78)",
+              "devices": [
+                "sm_120",
+                "sm_89"
+              ],
+              "devices_experimental": [
+                "sm_100",
+                "sm_75",
+                "sm_80",
+                "sm_86",
+                "sm_90"
+              ],
+              "architecture_digests": {
+                "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
+                "sm_100": "b462cda8d49d165790170d0776b3fd50750482647c01f32eb12a3669e5e62ee2",
+                "sm_120": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
+                "sm_75": "5d4783f7f8b2d33b9cfad57e41526b81b02abee0ec14ab58b2176065ed7d7e86",
+                "sm_80": "5f89e3aab43c01b12d2744da6f02886d4a04a53a54cb3029fc75e5f0156729fc",
+                "sm_86": "624ea52142d0a44122d47a5e9ac7f3a9279ec2dd5c3e8f59ef0e003842c29d41",
+                "sm_89": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
+                "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
+              },
+              "driver_min": "580.65.06",
+              "host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "host_build_flags": [
+                "profile=release",
+                "opt-level=3",
+                "lto=fat",
+                "codegen-units=1",
+                "panic=unwind",
+                "target=x86_64-unknown-linux-gnu",
+                "pyo3=abi3-py310+extension-module"
+              ],
+              "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+            }
+          }
+        },
+        "fast_cpu": {
+          "status": "certified_source",
+          "source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+          "build_flags": [
+            "profile=release",
+            "opt-level=3",
+            "lto=fat",
+            "codegen-units=1",
+            "panic=unwind",
+            "target=x86_64-unknown-linux-gnu",
+            "pyo3=abi3-py310+extension-module"
+          ],
+          "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+          "engine": "gigatoken",
+          "engine_version": "0.10.0+toktier.pinned.1",
+          "engine_delivery": "integrated",
+          "engine_module": "toktier._native",
+          "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+          "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
+          "config_id": "toktier-fast-repair-v1",
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+        }
+      }
+    },
+    {
+      "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+      "family": "qwen3_5_08b",
+      "pipeline_id": "pipeline.bc687a3b57eba58b",
+      "added_frontend_id": "added-frontend.2ad65676cbf6bb4d",
+      "oracle_id": "tokenizers",
+      "suite_version": "gpu-e2e-differential-v1",
+      "evidence_id": "ev-main-corpus-v1",
+      "readings": {
+        "docs": 2293999686,
+        "bytes": 7354860216334,
+        "mismatches": 0
+      },
+      "backends": {
+        "gpu": {
+          "status": "certified_source",
+          "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+          "build_flags": [
+            "-O3"
+          ],
+          "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "devices": [
+            "sm_89",
+            "sm_120"
+          ],
+          "deliveries": {
+            "jit": {
+              "status": "certified_source",
+              "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+              "build_flags": [
+                "-O3"
+              ],
+              "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "devices": [
+                "sm_89",
+                "sm_120"
+              ],
+              "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
+              "direct_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "direct_build_flags": [
+                "-fatbin",
+                "-O3",
+                "-std=c++17",
+                "--expt-relaxed-constexpr",
+                "-DTOKTIER_DEVICE_ONLY"
+              ],
+              "direct_devices": [
+                "sm_120"
+              ],
+              "direct_toolchains": [
+                {
+                  "release": "13.2",
+                  "build": "V13.2.86",
+                  "compiler_sha256": "e0341e832da4c4c9c412c0722ac1a9e6944d0c0fcb36f3cd51d2fe11435f46e5",
+                  "architecture": "sm_120",
+                  "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
+                }
+              ]
+            },
+            "prebuilt": {
+              "status": "certified",
+              "binary_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
+              "toolchain": "cuda 13.2 (V13.2.78)",
+              "devices": [
+                "sm_120",
+                "sm_89"
+              ],
+              "devices_experimental": [
+                "sm_100",
+                "sm_75",
+                "sm_80",
+                "sm_86",
+                "sm_90"
+              ],
+              "architecture_digests": {
+                "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
+                "sm_100": "b462cda8d49d165790170d0776b3fd50750482647c01f32eb12a3669e5e62ee2",
+                "sm_120": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
+                "sm_75": "5d4783f7f8b2d33b9cfad57e41526b81b02abee0ec14ab58b2176065ed7d7e86",
+                "sm_80": "5f89e3aab43c01b12d2744da6f02886d4a04a53a54cb3029fc75e5f0156729fc",
+                "sm_86": "624ea52142d0a44122d47a5e9ac7f3a9279ec2dd5c3e8f59ef0e003842c29d41",
+                "sm_89": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
+                "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
+              },
+              "driver_min": "580.65.06",
+              "host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "host_build_flags": [
+                "profile=release",
+                "opt-level=3",
+                "lto=fat",
+                "codegen-units=1",
+                "panic=unwind",
+                "target=x86_64-unknown-linux-gnu",
+                "pyo3=abi3-py310+extension-module"
+              ],
+              "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+            }
+          }
+        },
+        "fast_cpu": {
+          "status": "certified_source",
+          "source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+          "build_flags": [
+            "profile=release",
+            "opt-level=3",
+            "lto=fat",
+            "codegen-units=1",
+            "panic=unwind",
+            "target=x86_64-unknown-linux-gnu",
+            "pyo3=abi3-py310+extension-module"
+          ],
+          "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+          "engine": "gigatoken",
+          "engine_version": "0.10.0+toktier.pinned.1",
+          "engine_delivery": "integrated",
+          "engine_module": "toktier._native",
+          "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+          "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
+          "config_id": "toktier-fast-repair-v1",
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+        }
+      }
+    },
+    {
+      "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "family": "qwen3_8b",
+      "pipeline_id": "pipeline.7d75b953f0224ebd",
+      "added_frontend_id": "added-frontend.dd5aea1ad87550cf",
+      "oracle_id": "tokenizers",
+      "suite_version": "gpu-e2e-differential-v1",
+      "evidence_id": "ev-main-corpus-v1",
+      "readings": {
+        "docs": 3638742395,
+        "bytes": 11728655929847,
+        "mismatches": 0
+      },
+      "backends": {
+        "gpu": {
+          "status": "certified_source",
+          "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+          "build_flags": [
+            "-O3"
+          ],
+          "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "devices": [
+            "sm_89",
+            "sm_120"
+          ],
+          "deliveries": {
+            "jit": {
+              "status": "certified_source",
+              "source_digest": "86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c",
+              "build_flags": [
+                "-O3"
+              ],
+              "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "devices": [
+                "sm_89",
+                "sm_120"
+              ],
+              "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
+              "direct_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "direct_build_flags": [
+                "-fatbin",
+                "-O3",
+                "-std=c++17",
+                "--expt-relaxed-constexpr",
+                "-DTOKTIER_DEVICE_ONLY"
+              ],
+              "direct_devices": [
+                "sm_120"
+              ],
+              "direct_toolchains": [
+                {
+                  "release": "13.2",
+                  "build": "V13.2.86",
+                  "compiler_sha256": "e0341e832da4c4c9c412c0722ac1a9e6944d0c0fcb36f3cd51d2fe11435f46e5",
+                  "architecture": "sm_120",
+                  "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
+                }
+              ]
+            },
+            "prebuilt": {
+              "status": "certified",
+              "binary_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
+              "toolchain": "cuda 13.2 (V13.2.78)",
+              "devices": [
+                "sm_120",
+                "sm_89"
+              ],
+              "devices_experimental": [
+                "sm_100",
+                "sm_75",
+                "sm_80",
+                "sm_86",
+                "sm_90"
+              ],
+              "architecture_digests": {
+                "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
+                "sm_100": "b462cda8d49d165790170d0776b3fd50750482647c01f32eb12a3669e5e62ee2",
+                "sm_120": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
+                "sm_75": "5d4783f7f8b2d33b9cfad57e41526b81b02abee0ec14ab58b2176065ed7d7e86",
+                "sm_80": "5f89e3aab43c01b12d2744da6f02886d4a04a53a54cb3029fc75e5f0156729fc",
+                "sm_86": "624ea52142d0a44122d47a5e9ac7f3a9279ec2dd5c3e8f59ef0e003842c29d41",
+                "sm_89": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
+                "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
+              },
+              "driver_min": "580.65.06",
+              "host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+              "host_build_flags": [
+                "profile=release",
+                "opt-level=3",
+                "lto=fat",
+                "codegen-units=1",
+                "panic=unwind",
+                "target=x86_64-unknown-linux-gnu",
+                "pyo3=abi3-py310+extension-module"
+              ],
+              "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+            }
+          }
+        },
+        "fast_cpu": {
+          "status": "certified_source",
+          "source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+          "build_flags": [
+            "profile=release",
+            "opt-level=3",
+            "lto=fat",
+            "codegen-units=1",
+            "panic=unwind",
+            "target=x86_64-unknown-linux-gnu",
+            "pyo3=abi3-py310+extension-module"
+          ],
+          "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+          "engine": "gigatoken",
+          "engine_version": "0.10.0+toktier.pinned.1",
+          "engine_delivery": "integrated",
+          "engine_module": "toktier._native",
+          "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+          "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
+          "config_id": "toktier-fast-repair-v1",
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+        }
+      }
+    }
+  ],
+  "compositions": [
+    {
+      "pipeline_id": "pipeline.030372fa6b14b229",
+      "added_frontend_id": "added-frontend.9c491824b879fcbf",
+      "evidence_id": "ev-added-families-v1",
+      "note": "Judged together in the differential campaign for: ling_3_0_flash."
+    },
+    {
+      "pipeline_id": "pipeline.48ff98bb0b788e51",
+      "added_frontend_id": "added-frontend.b2ae9b9ff5cca742",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: glm_5_2."
+    },
+    {
+      "pipeline_id": "pipeline.59b9c3a611148dad",
+      "added_frontend_id": "added-frontend.39dc60b16a182c81",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: deepseek_v3."
+    },
+    {
+      "pipeline_id": "pipeline.59b9c3a611148dad",
+      "added_frontend_id": "added-frontend.58c2cb163f177e71",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: deepseek_v4_flash."
+    },
+    {
+      "pipeline_id": "pipeline.75aef07b9b165fa7",
+      "added_frontend_id": "added-frontend.90b04a1dbd156198",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: nemotron_3_nano_4b."
+    },
+    {
+      "pipeline_id": "pipeline.7d75b953f0224ebd",
+      "added_frontend_id": "added-frontend.dd5aea1ad87550cf",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: qwen3_8b."
+    },
+    {
+      "pipeline_id": "pipeline.b02978f65dde5481",
+      "added_frontend_id": "added-frontend.685a4802a948b81f",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: hy3."
+    },
+    {
+      "pipeline_id": "pipeline.bc687a3b57eba58b",
+      "added_frontend_id": "added-frontend.2ad65676cbf6bb4d",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: qwen3_5_08b."
+    },
+    {
+      "pipeline_id": "pipeline.c1f53da33939f469",
+      "added_frontend_id": "added-frontend.eea96ebb36f6b2f3",
+      "evidence_id": "ev-added-families-v1",
+      "note": "Judged together in the differential campaign for: laguna_s_2_1."
+    },
+    {
+      "pipeline_id": "pipeline.c52a38e257eede13",
+      "added_frontend_id": "added-frontend.091f91a7da522aa4",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: olmo_3_7b."
+    },
+    {
+      "pipeline_id": "pipeline.e39f44697f3d0b0e",
+      "added_frontend_id": "added-frontend.5fe9cef0194e9457",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: ministral_3_8b."
+    },
+    {
+      "pipeline_id": "pipeline.eb3b41ea275dabaa",
+      "added_frontend_id": "added-frontend.2b0fa8d5e8acac7d",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: minimax_m3."
+    },
+    {
+      "pipeline_id": "pipeline.ef65569b2ee98da3",
+      "added_frontend_id": "added-frontend.b7e34a654da9e67e",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: gpt_oss_120b."
+    },
+    {
+      "pipeline_id": "pipeline.ff6dd044a1cb9ba5",
+      "added_frontend_id": "added-frontend.8212579fa65ce401",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: llama_3_1_8b."
+    }
+  ],
+  "runtime_builds": [
+    {
+      "runtime": "rust_api",
+      "source_digest": "44313872dc4b9368a93cf2901bd924fbad41c83d02296720a26efbc89518af8c",
+      "fast_cpu_source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+      "native_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+      "build_flags": [
+        "profile=release",
+        "opt-level=3",
+        "lto=fat",
+        "codegen-units=1",
+        "panic=unwind",
+        "target=x86_64-unknown-linux-gnu",
+        "debug=false",
+        "target-features=fxsr,sse,sse2",
+        "features=default,network,prebuilt-gpu,serving,sqlite"
+      ],
+      "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+      "evidence_id": "ev-rust-api-plan160-default-v1"
+    },
+    {
+      "runtime": "rust_api",
+      "source_digest": "44313872dc4b9368a93cf2901bd924fbad41c83d02296720a26efbc89518af8c",
+      "fast_cpu_source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+      "native_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+      "build_flags": [
+        "profile=release",
+        "opt-level=3",
+        "lto=fat",
+        "codegen-units=1",
+        "panic=unwind",
+        "target=x86_64-unknown-linux-gnu",
+        "debug=false",
+        "target-features=fxsr,sse,sse2",
+        "features=default,jit,network,prebuilt-gpu,serving,sqlite"
+      ],
+      "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+      "evidence_id": "ev-rust-api-plan160-jit-v1"
+    }
+  ]
+}

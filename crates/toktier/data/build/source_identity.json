@@ -1,0 +1,7 @@
+{
+  "fast_cpu_source_sha256": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+  "identity_rule": "content-addressed source sets; independent of repository history",
+  "native_host_source_sha256": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+  "rust_api_source_sha256": "44313872dc4b9368a93cf2901bd924fbad41c83d02296720a26efbc89518af8c",
+  "schema": "toktier.rust_package_source_identity.v1"
+}

@@ -1,0 +1,48 @@
+[package]
+name = "toktier"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.93.1"
+build = "build.rs"
+license.workspace = true
+repository.workspace = true
+description = "Rust API preview for TokTier's exact, stateful tokenization runtime"
+homepage = "https://github.com/asu-idi/toktier"
+documentation = "https://docs.rs/toktier"
+readme = "README.md"
+keywords = ["tokenization", "llm", "bpe", "cuda", "serving"]
+categories = ["text-processing"]
+publish = ["crates-io"]
+include = ["src/**", "data/**", "examples/**", "tests/**", "build.rs", "build_support/**", "LICENSE", "NOTICE", "README.md"]
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = ["sqlite", "prebuilt-gpu", "network", "serving"]
+sqlite = ["dep:toktier-store-sqlite"]
+prebuilt-gpu = ["dep:toktier-cuda-driver"]
+jit = ["prebuilt-gpu"]
+network = ["dep:ureq"]
+serving = []
+serde = []
+
+[dependencies]
+flate2.workspace = true
+fs2.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tar.workspace = true
+toktier-routing-core = { path = "../toktier-routing-core", version = "=0.2.0" }
+toktier-cuda-driver = { path = "../toktier-cuda-driver", version = "=0.2.0", optional = true }
+toktier-store-core = { path = "../toktier-store-core", version = "=0.2.0" }
+toktier-store-sqlite = { path = "../toktier-store-sqlite", version = "=0.2.0", optional = true }
+ureq = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = "=3.23.0"
+
+[build-dependencies]
+sha2.workspace = true
+serde_json.workspace = true

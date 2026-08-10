@@ -1,0 +1,101 @@
+{
+ "table": "pretok_classes_deepseek.v1.npy",
+ "enum": {
+  "O": 0,
+  "L": 1,
+  "M": 2,
+  "N": 3,
+  "PS": 4,
+  "WS": 5,
+  "CRLF": 6
+ },
+ "digits_max": 3,
+ "cjk_ranges": [
+  [
+   19968,
+   40869
+  ],
+  [
+   12352,
+   12447
+  ],
+  [
+   12448,
+   12543
+  ]
+ ],
+ "apunct": [
+  33,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39,
+  40,
+  41,
+  42,
+  43,
+  44,
+  45,
+  46,
+  47,
+  58,
+  59,
+  60,
+  61,
+  62,
+  63,
+  64,
+  91,
+  92,
+  93,
+  94,
+  95,
+  96,
+  123,
+  124,
+  125,
+  126
+ ],
+ "alpha_ranges": [
+  [
+   65,
+   90
+  ],
+  [
+   97,
+   122
+  ]
+ ],
+ "a3_space": 32,
+ "crlf_cps": [
+  10,
+  13
+ ],
+ "families": [
+  "deepseek_v3",
+  "deepseek_v4_flash",
+  "hy3"
+ ],
+ "patterns": [
+  "\\p{N}{1,3}",
+  "[\u4e00-\u9fa5\u3040-\u309f\u30a0-\u30ff]+",
+  "[!\"#$%&'()*+,\\-./:;<=>?@\\[\\\\\\]^_`{|}~][A-Za-z]+|[^\r\n\\p{L}\\p{P}\\p{S}]?[\\p{L}\\p{M}]+| ?[\\p{P}\\p{S}]+[\r\n]*|\\s*[\r\n]+|\\s+(?!\\S)|\\s+"
+ ],
+ "pattern_sha256": [
+  "37eeaf14e325fd50c91d4af3b63ab2b18738486e4ad64c66d0b5777032e9e9a9",
+  "b17444129c80d563051e7b293e0a93351a65cd7722d7008bcdeecadbf02d12b3",
+  "c903ee638e48e525ed7aefd8bcf804c5a88b80358403017a36f52702360a031c"
+ ],
+ "class_histogram": {
+  "O": 957230,
+  "L": 141028,
+  "M": 2501,
+  "N": 1911,
+  "PS": 11417,
+  "WS": 23,
+  "CRLF": 2
+ },
+ "source": "generate_class_tables.py (constants extracted mechanically from the artifact's own patterns; category masks probed from the reference engine)"
+}

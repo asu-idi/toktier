@@ -1,0 +1,152 @@
+{
+ "schema": "toktier_prebuilt_build_manifest_v1",
+ "built_at": "2026-08-09T00:49:45Z",
+ "toolchain": "cuda 13.2 (V13.2.78)",
+ "nvcc_argv": [
+  "nvcc",
+  "-fatbin",
+  "-O3",
+  "-std=c++17",
+  "--expt-relaxed-constexpr",
+  "-I<site-packages>/torch/include",
+  "-I<site-packages>/torch/include/torch/csrc/api/include",
+  "-I/usr/local/cuda/include",
+  "-I/usr/include/python3.12",
+  "-DTORCH_EXTENSION_NAME=toktier_pretok_cuda",
+  "-DTORCH_API_INCLUDE_EXTENSION_H",
+  "-D_GLIBCXX_USE_CXX11_ABI=1",
+  "-gencode=arch=compute_75,code=sm_75",
+  "-gencode=arch=compute_80,code=sm_80",
+  "-gencode=arch=compute_86,code=sm_86",
+  "-gencode=arch=compute_89,code=sm_89",
+  "-gencode=arch=compute_90,code=sm_90",
+  "-gencode=arch=compute_100,code=sm_100",
+  "-gencode=arch=compute_120,code=sm_120",
+  "-gencode=arch=compute_75,code=compute_75",
+  "./src/toktier/kernels/prebuilt_unit.cu",
+  "-o",
+  "pretok_kernel.fatbin"
+ ],
+ "build_host": {
+  "platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
+  "gpus": [
+   {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "compute_cap": "12.0",
+    "driver_version": "595.71.05"
+   },
+   {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "compute_cap": "12.0",
+    "driver_version": "595.71.05"
+   },
+   {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "compute_cap": "12.0",
+    "driver_version": "595.71.05"
+   },
+   {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "compute_cap": "12.0",
+    "driver_version": "595.71.05"
+   }
+  ]
+ },
+ "architectures": {
+  "compute_75": {
+   "kind": "ptx",
+   "size": 892338,
+   "digest": "sha256:b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad"
+  },
+  "sm_100": {
+   "kind": "cubin",
+   "size": 844536,
+   "digest": "sha256:b462cda8d49d165790170d0776b3fd50750482647c01f32eb12a3669e5e62ee2"
+  },
+  "sm_120": {
+   "kind": "cubin",
+   "size": 856008,
+   "digest": "sha256:ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5"
+  },
+  "sm_75": {
+   "kind": "cubin",
+   "size": 577056,
+   "digest": "sha256:5d4783f7f8b2d33b9cfad57e41526b81b02abee0ec14ab58b2176065ed7d7e86"
+  },
+  "sm_80": {
+   "kind": "cubin",
+   "size": 562464,
+   "digest": "sha256:5f89e3aab43c01b12d2744da6f02886d4a04a53a54cb3029fc75e5f0156729fc"
+  },
+  "sm_86": {
+   "kind": "cubin",
+   "size": 566816,
+   "digest": "sha256:624ea52142d0a44122d47a5e9ac7f3a9279ec2dd5c3e8f59ef0e003842c29d41"
+  },
+  "sm_89": {
+   "kind": "cubin",
+   "size": 566560,
+   "digest": "sha256:a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139"
+  },
+  "sm_90": {
+   "kind": "cubin",
+   "size": 636632,
+   "digest": "sha256:d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
+  }
+ },
+ "ptx_fallback": "compute_75",
+ "fatbin": {
+  "file": "pretok_kernel.fatbin",
+  "size": 4717048,
+  "digest": "sha256:e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1"
+ },
+ "sources": {
+  "prebuilt_source_digest": "sha256:f1ab71255ecade8e09de7cc0919c24da1541e0ad0f5d5ee8c3b05df61a2aba00",
+  "jit_kernel_source_digest": "sha256:86f5d1de47bd03b5ea2c07a992b2814437dc674b2c64d74e2c60c5a93f983d8c"
+ },
+ "kernels": {
+  "k_bpe_long": "_Z10k_bpe_longPKhPKiS2_PKmS4_jS2_S4_S4_jS0_iPiS5_S5_iS2_PKj",
+  "k_bpe_warp": "_Z10k_bpe_warpPKhPKiS2_iS2_PKmS4_jS2_S4_S4_jS0_iPiS5_PKj",
+  "k_classify_rs0": "_Z10k_classifyILi0EEvPKiPKhS3_PhS4_iS1_",
+  "k_classify_rs1": "_Z10k_classifyILi1EEvPKiPKhS3_PhS4_iS1_",
+  "k_classify_rs2": "_Z10k_classifyILi2EEvPKiPKhS3_PhS4_iS1_",
+  "k_ds_bmask": "_Z10k_ds_bmaskPKiPKhS2_S0_iPhPiiS0_",
+  "k_dso_seed": "_Z10k_dso_seedPKhPii",
+  "k_ds_seed_n": "_Z11k_ds_seed_nPKiPKhS2_PiiS0_",
+  "k_lag_bmask": "_Z11k_lag_bmaskPKiPKhPhiS0_",
+  "k_o2k_heads": "_Z11k_o2k_headsPKiPKhiS0_S2_PhS3_S3_S3_S3_b",
+  "k_o2k_meta3": "_Z11k_o2k_meta3PKiS0_Pi",
+  "k_o2k_rules": "_Z11k_o2k_rulesPKiPKhS0_S0_S0_S0_S0_S0_S0_S0_S0_S0_S0_S0_S0_S0_S0_S0_iibPbPhS4_PiiS0_S5_S2_bS4_",
+  "k_bpe_thread_cap32": "_Z12k_bpe_threadILi32EEvPKhPKiS3_iPKmS5_jS3_S5_S5_jS1_iPiS6_S3_S5_S3_S1_S3_j",
+  "k_bpe_compact": "_Z13k_bpe_compactPKiS0_S0_PiiS0_",
+  "k_memo_insert": "_Z13k_memo_insertPKhPKiiPmPiPhS4_jS2_S2_",
+  "k_pb_sentinel": "_Z13k_pb_sentinelPiPKiS1_",
+  "k_utf8_decode": "_Z13k_utf8_decodePKhPKiPiS3_iS3_",
+  "k_o2k_runinfo1": "_Z14k_o2k_runinfo1PKiPKhS2_S0_S0_S0_iS0_S2_PiS3_S3_b",
+  "k_o2k_runinfo2": "_Z14k_o2k_runinfo2PKiPKhS0_S0_S0_S0_S0_S0_iS0_PiS3_S3_S3_S3_S3_S3_S3_S3_b",
+  "k_o2k_win_mark": "_Z14k_o2k_win_markPKiPKhS0_S0_S0_iibiPb",
+  "k_o2k_win_clear": "_Z15k_o2k_win_clearPKiS0_iPb",
+  "k_dispatch_flags": "_Z16k_dispatch_flagsPKiS0_PhS1_S1_Pii",
+  "k_o2k_win_extents": "_Z17k_o2k_win_extentsPKiPKhS0_S0_S0_S0_iibiPiS3_S3_",
+  "k_rules_rs0": "_Z7k_rulesILi0EEvPKiPKhS3_S1_S1_S1_S1_S1_S3_S1_iiPbiS1_S1_",
+  "k_rules_rs1": "_Z7k_rulesILi1EEvPKiPKhS3_S1_S1_S1_S1_S1_S3_S1_iiPbiS1_S1_",
+  "k_rules_rs2": "_Z7k_rulesILi2EEvPKiPKhS3_S1_S1_S1_S1_S1_S3_S1_iiPbiS1_S1_",
+  "k_nfc_qc": "_Z8k_nfc_qcPKhS0_iPi",
+  "k_runinfo_rs0": "_Z9k_runinfoILi0EEvPKiPKhS3_S1_PiS4_S4_iS1_",
+  "k_runinfo_rs1": "_Z9k_runinfoILi1EEvPKiPKhS3_S1_PiS4_S4_iS1_",
+  "k_runinfo_rs2": "_Z9k_runinfoILi2EEvPKiPKhS3_S1_PiS4_S4_iS1_",
+  "tk_carrier_gather": "tk_carrier_gather",
+  "tk_carrier_scatter": "tk_carrier_scatter",
+  "tk_ds_constants_dump": "tk_ds_constants_dump",
+  "tk_eq_index_i32": "tk_eq_index_i32",
+  "tk_scan_add": "tk_scan_add",
+  "tk_scan_i32_blocks": "tk_scan_i32_blocks",
+  "tk_scan_u8_blocks": "tk_scan_u8_blocks",
+  "tk_select_scatter": "tk_select_scatter",
+  "tk_u8_flags_i32": "tk_u8_flags_i32",
+  "tk_utf8_lead_i32": "tk_utf8_lead_i32"
+ },
+ "notes": [
+  "sub-sm_80 images substitute a shuffle reduction for the __reduce_min_sync builtin (see prebuilt_unit.cu); architectures below sm_80 are experimental-tier deliveries"
+ ]
+}

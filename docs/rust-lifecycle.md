@@ -1,0 +1,181 @@
+# Rust-native lifecycle, JIT, serving, and distribution
+
+TokTier's Rust surface can acquire and verify tokenizer artifacts, move them
+through an air gap, compile a CUDA image, and serve concurrent work without a
+Python runtime. All routes consume the same embedded manifests, registry,
+class tables, corrected CPU engine, state-store format, and CUDA Driver host as
+the Python facade.
+
+## Artifact acquisition and cache policy
+
+Remote construction always names an immutable lowercase 40-hex revision:
+
+```rust,no_run
+use toktier::{ArtifactManager, Device, Revision, Runtime};
+
+let manager = ArtifactManager::builder()
+    .cache("/var/cache/toktier/artifacts")
+    .build()?;
+let runtime = Runtime::builder()
+    .artifacts(manager)
+    .device(Device::Auto)
+    .build()?;
+let tokenizer = runtime.from_pretrained(
+    "Qwen/Qwen3-8B",
+    Revision::commit("b968826d9c46dd6066d109eabc6255188de91218")?,
+)?;
+# let _ = tokenizer;
+# Ok::<(), toktier::Error>(())
+```
+
+The manager streams each response into a mode-0600 temporary file, enforces
+the manifest size while reading, hashes the bytes, fsyncs the file, and renames
+it while holding a family/revision inter-process lock. Cache directories are
+mode 0700. Existing corrupt members are quarantined; a verified handle is not
+published from a partial directory.
+
+The first network implementation uses this explicit policy:
+
+| Axis | Contract |
+|---|---|
+| Revision | immutable 40-hex commit; branches and tags are rejected |
+| TLS | HTTPS only; plaintext is available solely for explicit loopback tests |
+| Timeout | 300 seconds for the complete request by default |
+| Retry | two transport retries after the first request, with bounded exponential backoff; digest, size, registry, and auth failures are not retried |
+| Redirect | at most five without credentials; zero when a secret provider is configured, so bearer material is never forwarded |
+| Proxy | disabled in the native client; configure an explicit HTTPS mirror instead |
+| Resume/range | not used in format v1; every retry starts and revalidates the complete object |
+| ETag | not trusted as identity; the shipped SHA-256 and size are authoritative |
+| Stale temporary file | reclaimed after 24 hours by default while holding the family lock; configurable or disableable |
+
+Authentication enters through `SecretProvider`; `EnvironmentToken` reads only
+the named variable when constructing a request. Token values are redacted from
+`Debug`, errors, paths, registries, marker files, and bundle manifests.
+
+`offline(true)` gates acquisition before URL construction, DNS, or socket use.
+Use `ArtifactSource::None` as an additional explicit statement that only the
+verified cache or an imported bundle is allowed.
+
+## Mirrors and air-gap bundles
+
+`ArtifactManager::mirror` writes the familiar
+`<repo>/resolve/<revision>/<file>` tree. `ArtifactSource::LocalDirectory`
+accepts that tree and the native content-cache layout. Export carries the
+artifact plus the exact registries, schemas, tables, CUDA source/fatbin, and
+provenance embedded in the process.
+
+The archive is deterministic and compatible with the Python v1 importer. Its
+domain-separated root digest binds every declared path, byte count, and SHA-256.
+Import rejects absolute/traversing paths, duplicates, links, special files,
+undeclared files, oversized archives, and digest changes. It verifies into a
+private staging tree, fsyncs every directory from leaves to root, and publishes
+the alias with one rename. Re-import is idempotent only when the visible tree
+still authenticates exactly.
+
+The Rust-only CLI mirrors these calls:
+
+```text
+toktier-rust artifacts fetch qwen3_8b
+toktier-rust artifacts verify qwen3_8b --offline
+toktier-rust artifacts mirror qwen3_8b --out /srv/toktier-mirror
+toktier-rust artifacts export qwen3_8b --out qwen3_8b.tar
+toktier-rust artifacts import qwen3_8b.tar --offline
+```
+
+## Direct native JIT
+
+Enable `jit` to invoke the selected absolute `nvcc` executable directly with
+an argument vector. No shell, Python, PyTorch, Ninja, or callback participates.
+The compiler runs with a cleared environment, fixed locale/PATH, null stdin,
+private source and temporary files, bounded output/product size, and a wall
+timeout. The cache key binds:
+
+- both CUDA source files and normalized compiler arguments;
+- the compiler's canonical path, complete file SHA-256, release, and build;
+- target architecture and CUDA driver API version;
+- family, authenticated tokenizer SHA-256, frozen oracle, class-table identity,
+  and both artifact-campaign and direct-JIT evidence IDs;
+- Rust CUDA-host source, rustc, release flags, and certification result.
+
+The product and manifest are reopened and authenticated before their directory
+is atomically published. Every manifest field is recomputed into the binding
+digest on reuse; changing metadata or fatbin bytes quarantines the entry.
+
+An exact compiler-binary/architecture tuple must appear in the registry for
+automatic certified compilation. Otherwise no cache directory is created and
+the error prints the explicit opt-in. Experimental use is deliberately local
+to one builder and remains labelled after successful comparison:
+
+```text
+toktier-rust gpu compile qwen3_8b --accept-uncertified-jit
+```
+
+Application code must also select `Policy::Experimental`; the waiver is stored
+in the binding manifest but never promoted into certification.
+
+## Serving policy
+
+`ServingPool` is an optional executor-neutral layer over the synchronous core.
+It bounds count/bytes/rows/window/worker/session pressure, batches only rows
+with the same tokenizer, device, and options, and returns zero-copy row views.
+Multiple verified tokenizer handles for the same canonical artifact can be
+registered as explicit device slots. Stateless requests use observable
+round-robin selection; a stateful session remains pinned to one slot.
+
+`DeviceFailurePolicy::FallbackOnly` retains the tokenizer's own ordered
+GPU-to-corrected-CPU-to-HF chain. `RetryEligiblePeer` may retry another handle
+for the identical artifact after that chain returns an execution error.
+Each stateful session also has a bounded FIFO ticket sequence, so worker
+scheduling cannot reorder its seed/appends; rejected and cancelled tickets are
+advanced without touching session state. Cancellation and deadline errors
+distinguish skipped work from already-started work that may still have
+committed. Shutdown stops acceptance, drains accepted requests, and joins
+workers. `worker_threads` is a hard caller-selected bound; adding device
+handles never raises it implicitly.
+
+## Distribution contract
+
+- MSRV: Rust 1.93.1, verified against the complete feature matrix. The bound
+  preserves the frozen corrected-CPU implementation, including its stable
+  AVX-512 intrinsics, rather than rewriting certified SIMD code solely to
+  claim an older compiler.
+- Supported release target: Linux x86-64, glibc 2.34 or newer. CPU-only feature
+  builds do not require a CUDA installation; GPU features open `libcuda` at
+  runtime.
+- Default features: `sqlite`, `prebuilt-gpu`, `network`, and `serving`.
+- Optional features: `jit` and `serde`; all supported feature combinations are
+  compiled in the release matrix.
+- The crate is published on crates.io from 0.2.0 onward and carries the
+  package version (axis 1 of `docs/contracts/versioning.md`); the earlier
+  `0.0.1` number was a source/workspace preview. Patch versions preserve the
+  public API and pre-1.0 minor versions may make documented breaking changes.
+  Publication is a release step of its own, separate from building or testing
+  artifacts.
+
+`tools/build_rust_source_archive.py` creates a deterministic, fully vendored
+offline source archive with normalized tar/gzip metadata and a per-file/root
+digest manifest. A clean `CARGO_HOME` can compile it with Cargo network access
+disabled. Run Cargo from the extracted archive root so it discovers the
+shipped `.cargo/config.toml`; using only `--manifest-path` from another working
+directory does not activate that vendoring configuration.
+`tools/generate_rust_distribution_metadata.py` independently emits
+a CycloneDX 1.5 SBOM and a dependency-license bundle for the non-development
+Rust closure; these are embedded in the Rust package data and air-gap export.
+
+The public crate and Python wheel copy their runtime registries, schemas,
+tables, source, and fatbin from one checked source set through
+`tools/sync_rust_package_data.py`; drift fails the release check.
+
+Crates.io publication is not performed by these tools. The workspace currently
+uses exact-version path dependencies for TokTier's internal crates; the
+vendored source archive is the independently replayable distribution until a
+separate release authorizes publishing that dependency set.
+
+## Non-Rust boundary decision
+
+A C ABI is intentionally deferred until the Rust API has a released stability
+baseline. Freezing opaque-handle, buffer-ownership, error-code, and unwind
+rules while the lifecycle types are still preview APIs would create a second
+compatibility contract without helping Rust-native serving. A future ABI, if
+approved, will use opaque handles and explicit ownership/free functions and
+will never expose Rust layout or permit unwinding across the boundary.

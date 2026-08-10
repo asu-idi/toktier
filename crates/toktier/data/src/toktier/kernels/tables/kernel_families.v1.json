@@ -1,0 +1,217 @@
+{
+  "schema": "toktier.kernel_families.v1",
+  "description": "Family to kernel-band routing data for the GPU backend. This file is the normative in-repo source: the runtime and tools/generate_class_tables.py read it, the runtime never carries a second copy of any mapping expressed here (registry contract section 3.3), and its content digest is reported in the certified-source binding set so a drifted copy is visible to verification.",
+  "class_tables": {
+    "cl100k_v3": {
+      "file": "pretok_classes_cl100k.v3.npy",
+      "shape": [
+        1114112
+      ],
+      "dtype": "uint8",
+      "sha256": "sha256:aab53c6705260d07f65d9762aecba729b18e11cb9710a4aea54157475cbfdf97",
+      "generator": "class_tables:cl100k",
+      "note": "Character classes P/L/N/S over the whole codepoint space, probed from the reference engine."
+    },
+    "cl100k_m2l_v3": {
+      "file": "pretok_classes_cl100k_marks_as_letters.v3.npy",
+      "shape": [
+        1114112
+      ],
+      "dtype": "uint8",
+      "sha256": "sha256:e75a70e3aeb90efe7ad16502d932845a56e22f903f43d6b5061767574bcf3d8f",
+      "generator": "class_tables:cl100k_m2l",
+      "note": "The cl100k table with Mark codepoints folded into the letter class."
+    },
+    "deepseek_v1": {
+      "file": "pretok_classes_deepseek.v1.npy",
+      "shape": [
+        1114112
+      ],
+      "dtype": "uint8",
+      "sha256": "sha256:b4242c04ffc981d9f457981546c43b2a82b53e3d18bf6f7d1ee1e7625c423bf7",
+      "generator": "class_tables:deepseek",
+      "note": "Seven-class table for the three-splitter ruleset; carries a metadata sidecar cross-checked against the kernel inline constants.",
+      "meta_file": "pretok_classes_deepseek.v1.meta.json",
+      "meta_sha256": "sha256:ef0f9b7f19bbe3e89d44c0eadf622e7e5b455148c20fde574d50803524a66c66"
+    },
+    "o200k_v4": {
+      "file": "pretok_classes_o200k.v4.npy",
+      "shape": [
+        1114112
+      ],
+      "dtype": "uint8",
+      "sha256": "sha256:28e6d9e468b2c83db4188787515fa0e89d49750c20c966a9a89481aaf3b9e8ea",
+      "generator": "class_tables:o200k",
+      "note": "Seven-class table for the o200k splitter group."
+    },
+    "kimi_v1": {
+      "file": "pretok_classes_kimi.v1.npy",
+      "shape": [
+        1114112
+      ],
+      "dtype": "uint8",
+      "sha256": "sha256:9b752f3757bdec444ed745f27bac35fdb2aca8893521ef3d40cff7b17f681383",
+      "generator": "class_tables:kimi",
+      "note": "Ten-class table; letter classes exclude Han, with three Han subclasses added.",
+      "meta_file": "pretok_classes_kimi.v1.meta.json",
+      "meta_sha256": "sha256:39ffbf1af4b0102ba5150d5772057efcfd33aeb0e223ad71fdc2dfaf4c96145d"
+    },
+    "nfc_qc_v1": {
+      "file": "nfc_quick_check.v1.npy",
+      "shape": [
+        1114112
+      ],
+      "dtype": "uint8",
+      "sha256": "sha256:1a7d121e9092cdf577d992452393d25116b2577ab74dd5a067e6ca00a535d311",
+      "generator": "class_tables:nfc_qc",
+      "note": "NFC quick-check table probed from the reference engine's own normalizer. Used by every family whose artifact declares an NFC normalizer; not family specific.",
+      "meta_file": "nfc_quick_check.v1.meta.json",
+      "meta_sha256": "sha256:52146d7437ac7ad7c617b46088b45192d8214d32e1221e0d0539dd52d5802ebb"
+    }
+  },
+  "table_roles": {
+    "nfc_quick_check": "nfc_qc_v1"
+  },
+  "bands": {
+    "cl100k": {
+      "e2e": true,
+      "encoder": "encoder",
+      "pretok": "pretok",
+      "note": "GPT-style seven-alternative splitter plus byte-level BPE."
+    },
+    "deepseek": {
+      "e2e": true,
+      "encoder": "encoder",
+      "pretok": "pretok",
+      "note": "Three-splitter ruleset, single-pass kernel."
+    },
+    "o200k": {
+      "e2e": true,
+      "encoder": "encoder_o200k",
+      "pretok": "pretok_o200k",
+      "windowed_starts": true,
+      "note": "o200k splitter group; the fused entry is CUDA-Graph capturable, and the batched channel needs windowed piece starts."
+    },
+    "kimi": {
+      "e2e": false,
+      "pretok": "pretok_kimi",
+      "note": "Split-layer kernel only. There is no end-to-end encoder for this band, so end-to-end requests fall back to the reference backend."
+    }
+  },
+  "families": {
+    "qwen3_8b": {
+      "band": "cl100k",
+      "ruleset": "cl100k",
+      "digits_max": 1,
+      "class_table": "cl100k_v3",
+      "contractions": true
+    },
+    "llama_3_1_8b": {
+      "band": "cl100k",
+      "ruleset": "cl100k",
+      "digits_max": 3,
+      "class_table": "cl100k_v3",
+      "contractions": true
+    },
+    "glm_5_2": {
+      "band": "cl100k",
+      "ruleset": "cl100k",
+      "digits_max": 3,
+      "class_table": "cl100k_v3",
+      "contractions": true,
+      "note": "Splitter signature identical to llama_3_1_8b."
+    },
+    "olmo_3_7b": {
+      "band": "cl100k",
+      "ruleset": "cl100k",
+      "digits_max": 3,
+      "class_table": "cl100k_v3",
+      "contractions": true,
+      "note": "Same regex as llama_3_1_8b; the artifact's Split behaviour differs but is equivalent for a fully covering pattern."
+    },
+    "qwen3_5_08b": {
+      "band": "cl100k",
+      "ruleset": "cl100k",
+      "digits_max": 1,
+      "class_table": "cl100k_m2l_v3",
+      "contractions": true,
+      "note": "qwen3 skeleton with Mark codepoints folded into the letter class."
+    },
+    "ling_3_0_flash": {
+      "band": "cl100k",
+      "ruleset": "cl100k",
+      "digits_max": 1,
+      "class_table": "cl100k_v3",
+      "contractions": true,
+      "note": "Splitter is a tiktoken-style rewrite of the qwen3 pattern; the four spelling differences were shown branch-by-branch equivalent, so it maps onto the qwen3 path with no kernel change."
+    },
+    "laguna_s_2_1": {
+      "band": "cl100k",
+      "ruleset": "laguna",
+      "digits_max": 1,
+      "class_table": "cl100k_v3",
+      "contractions": true,
+      "note": "Stage 1 is byte-identical to qwen3_8b; stage 0 adds newline-run cut points, handled by the laguna ruleset branch in the kernel."
+    },
+    "deepseek_v3": {
+      "band": "deepseek",
+      "ruleset": "deepseek",
+      "digits_max": null,
+      "class_table": "deepseek_v1",
+      "contractions": false,
+      "note": "digits_max is null because it is read from the class-table metadata, which extracts it mechanically from the artifact's own pattern; keeping a copy here would be a second source of truth. The model section (vocabulary and merges) is identical to the family named by shares_model_with, so one exported table serves both; the two model sections are hashed and compared before every use, and a difference refuses the shared table.",
+      "shares_model_with": "deepseek_v4_flash"
+    },
+    "deepseek_v4_flash": {
+      "band": "deepseek",
+      "ruleset": "deepseek",
+      "digits_max": null,
+      "class_table": "deepseek_v1",
+      "contractions": false
+    },
+    "hy3": {
+      "band": "deepseek",
+      "ruleset": "deepseek",
+      "digits_max": null,
+      "class_table": "deepseek_v1",
+      "contractions": false,
+      "note": "Byte alphabet is not fully covered and the artifact has no unknown token; the kernel reproduces the reference behaviour of dropping unmapped initial symbols before merging."
+    },
+    "gpt_oss_120b": {
+      "band": "o200k",
+      "ruleset": "o200k",
+      "digits_max": 3,
+      "class_table": "o200k_v4",
+      "contractions": true
+    },
+    "minimax_m3": {
+      "band": "o200k",
+      "ruleset": "o200k",
+      "digits_max": 3,
+      "class_table": "o200k_v4",
+      "contractions": true
+    },
+    "ministral_3_8b": {
+      "band": "o200k",
+      "ruleset": "o200k",
+      "digits_max": 1,
+      "class_table": "o200k_v4",
+      "contractions": false
+    },
+    "nemotron_3_nano_4b": {
+      "band": "o200k",
+      "ruleset": "o200k",
+      "digits_max": 1,
+      "class_table": "o200k_v4",
+      "contractions": false
+    },
+    "kimi_k3": {
+      "band": "kimi",
+      "ruleset": "kimi",
+      "digits_max": 3,
+      "class_table": "kimi_v1",
+      "contractions": true,
+      "note": "Split layer only: this band has no end-to-end encoder, so encode requests run on the reference backend. digits_max is 3 because the artifact's digit alternative is {1,3}; the kernel compiles that bound in, so no other value can be honoured."
+    }
+  }
+}

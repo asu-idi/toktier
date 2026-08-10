@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toktier:schema:sibling-alias-source:1",
+  "title": "TokTier verified sibling source projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "provenance", "counts", "aliases"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "provenance": { "$ref": "#/$defs/provenance" },
+    "counts": { "$ref": "#/$defs/counts" },
+    "aliases": {
+      "type": "array",
+      "minItems": 210,
+      "maxItems": 210,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/source_alias" }
+    }
+  },
+  "$defs": {
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "family": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$",
+      "maxLength": 128
+    },
+    "repo_id": {
+      "type": "string",
+      "pattern": "^[^\\s/]+/[^\\s/]+$",
+      "maxLength": 192
+    },
+    "basis": {
+      "enum": [
+        "identical",
+        "identical_source",
+        "equivalent_canonicalisation",
+        "equivalent_serialisation"
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "audit_date",
+        "audit_rows",
+        "audit_sha256",
+        "support_matrix_sha256",
+        "selection"
+      ],
+      "properties": {
+        "audit_date": { "type": "string", "format": "date" },
+        "audit_rows": { "const": 470 },
+        "audit_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "support_matrix_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "selection": { "type": "string", "minLength": 1 }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identical",
+        "identical_source",
+        "equivalent_canonicalisation",
+        "equivalent_serialisation",
+        "total"
+      ],
+      "properties": {
+        "identical": { "const": 150 },
+        "identical_source": { "const": 12 },
+        "equivalent_canonicalisation": { "const": 10 },
+        "equivalent_serialisation": { "const": 38 },
+        "total": { "const": 210 }
+      }
+    },
+    "source_alias": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repo_id",
+        "revision",
+        "source_file",
+        "source_sha256",
+        "source_size",
+        "canonical_family",
+        "canonical_anchor_sha256",
+        "basis"
+      ],
+      "properties": {
+        "repo_id": { "$ref": "#/$defs/repo_id" },
+        "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "source_file": { "enum": ["tokenizer.json", "tiktoken.model"] },
+        "source_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "source_size": { "type": "integer", "minimum": 1 },
+        "canonical_family": { "$ref": "#/$defs/family" },
+        "canonical_anchor_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "basis": { "$ref": "#/$defs/basis" }
+      }
+    }
+  }
+}

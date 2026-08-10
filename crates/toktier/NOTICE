@@ -1,0 +1,15 @@
+toktier — correctness-first tokenization toolkit
+Copyright 2026 The TokTier Authors
+
+This crate contains TokTier's Rust-native reference, corrected CPU repair,
+routing, persistent session store, artifact lifecycle, and CUDA Driver host.
+
+The corrected CPU engine derives from Gigatoken, Copyright (c) 2026 Marcel
+Rød, under the MIT License. Its upstream license, TokTier modification notice,
+dependency SBOM, and complete dependency-license bundle accompany the source
+distribution under data/THIRD_PARTY_NOTICES, data/packaging/, data/sbom/,
+and data/licenses/.
+
+Tokenizer artifacts remain separately acquired from their respective owners.
+Artifact provenance is pinned by repository revision and SHA-256 in the
+embedded release manifest.

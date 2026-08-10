@@ -58,7 +58,27 @@ The same underlying fact can surface as either depending on policy: an
 uncertified artifact yields `R_UNCERTIFIED_ARTIFACT` under `CERTIFIED`
 and `UncertifiedTokenizer` under `REQUIRE_ACCELERATED`.
 
-## 4. Extension policy (frozen)
+## 4. Command-line surface
+
+A failed command exits `2` and writes its report to standard error. A
+command invoked with `--json` writes that report as one JSON object so
+that `--json` describes the whole command rather than only its success
+path:
+
+```json
+{"error": {"code": "BACKEND_UNAVAILABLE",
+           "message": "...",
+           "details": {"backend": "gpu", "remedy": "..."}}}
+```
+
+`code` is the stable switch key of Section 2, `message` is the human
+text, and `details` is the same mapping the exception carries in
+process. `details` is open, so a value of a type JSON cannot express is
+rendered as its `repr` rather than dropped or allowed to break the
+envelope. Without `--json` the single line `error <CODE>: <message>` is
+written instead, unchanged.
+
+## 5. Extension policy (frozen)
 
 - New codes may be added in minor releases; existing codes never change
   meaning. Consumers must tolerate unknown codes.

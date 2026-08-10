@@ -8,16 +8,16 @@ mapping, exactly like a Python-raised error.
 
 The extension is built from ``crates/toktier-py``. Set ``TOKTIER_PY_SO``
 to point at a prebuilt shared object; otherwise an existing
-``target/{debug,release}`` build is used, with one debug ``cargo build``
-as the fallback. The module skips cleanly when no build is possible.
+``target/{debug,release}`` build is used. The module skips cleanly when
+neither is present: building here would fold a minutes-long ``cargo
+build`` into a routine pytest run, so the build stays an explicit,
+visible step (``cargo build -p toktier-py``).
 """
 
 from __future__ import annotations
 
 import importlib.util
 import os
-import shutil
-import subprocess
 import sys
 from collections.abc import Mapping, MutableMapping
 from pathlib import Path
@@ -48,14 +48,15 @@ def _shared_object() -> Path:
     for candidate in candidates:
         if candidate.exists():
             return candidate
-    if shutil.which("cargo") is None:
-        pytest.skip("toktier._native is not built and cargo is unavailable")
-    subprocess.run(
-        ["cargo", "build", "-p", "toktier-py"],
-        cwd=REPOSITORY_ROOT,
-        check=True,
+    # No implicit build: a cargo build inside a test run is a hidden,
+    # minutes-long step on a cold checkout. Build the extension
+    # explicitly (cargo build -p toktier-py) or set TOKTIER_PY_SO.
+    message = (
+        "toktier._native is not prebuilt; run `cargo build -p toktier-py` "
+        "or set TOKTIER_PY_SO to a shared object"
     )
-    return candidates[0]
+    pytest.skip(message)
+    raise RuntimeError(message)  # pragma: no cover - skip always raises
 
 
 @pytest.fixture(scope="session")

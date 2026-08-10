@@ -92,6 +92,65 @@ def test_prebuilt_delivery_with_wrong_binary_refuses() -> None:
     assert assessment.blocking.code is ReasonCode.R_KERNEL_DIGEST_MISMATCH
 
 
+def test_prebuilt_delivery_with_wrong_native_host_source_refuses() -> None:
+    """A stable fatbin cannot certify a drifted Rust request host."""
+    assessment = _assessment(
+        _entry_with_deliveries(),
+        delivery="prebuilt",
+        prebuilt_available=True,
+        binary_digest=PREBUILT_DIGEST,
+        host_source_digest="e" * 64,
+    )
+    assert not assessment.eligible
+    assert assessment.blocking is not None
+    assert assessment.blocking.code is ReasonCode.R_KERNEL_DIGEST_MISMATCH
+    assert assessment.blocking.detail["digest"] == "host_source"
+
+
+def test_prebuilt_delivery_without_native_host_binding_refuses() -> None:
+    """A refined prebuilt row must name every native-host binding axis."""
+    entry = _entry_with_deliveries()
+    prebuilt = entry["deliveries"]["prebuilt"]
+    del prebuilt["host_source_digest"]
+    del prebuilt["host_build_flags"]
+    del prebuilt["host_toolchain"]
+    assessment = _assessment(
+        entry,
+        delivery="prebuilt",
+        prebuilt_available=True,
+        binary_digest=PREBUILT_DIGEST,
+    )
+    assert not assessment.eligible
+    assert assessment.blocking is not None
+    assert assessment.blocking.detail["cause"] == "native_host_binding_missing"
+
+
+def test_prebuilt_delivery_with_wrong_native_host_build_refuses() -> None:
+    """Host flags and toolchain are part of the prebuilt certificate."""
+    assessment = _assessment(
+        _entry_with_deliveries(),
+        delivery="prebuilt",
+        prebuilt_available=True,
+        binary_digest=PREBUILT_DIGEST,
+        host_build_flags=("profile=debug",),
+    )
+    assert not assessment.eligible
+    assert assessment.blocking is not None
+    assert assessment.blocking.code is ReasonCode.R_UNCERTIFIED_ARTIFACT
+    assert assessment.blocking.detail["cause"] == "host_build_flags_mismatch"
+
+    assessment = _assessment(
+        _entry_with_deliveries(),
+        delivery="prebuilt",
+        prebuilt_available=True,
+        binary_digest=PREBUILT_DIGEST,
+        host_toolchain="rustc drifted",
+    )
+    assert not assessment.eligible
+    assert assessment.blocking is not None
+    assert assessment.blocking.detail["cause"] == "host_toolchain_mismatch"
+
+
 def test_prebuilt_delivery_on_unlisted_architecture_refuses() -> None:
     """sm not in the prebuilt device list -> R_SM_UNCERTIFIED."""
     assessment = _assessment(
@@ -212,6 +271,62 @@ def test_explain_reports_per_architecture_delivery_status() -> None:
     assert architectures["sm_120"] == "certified"
     assert architectures["sm_75"] == "experimental"
     assert deliveries["jit"]["status"] == "certified_source"
+
+
+def test_certification_headline_follows_the_loaded_delivery() -> None:
+    """The headline labels the delivery that runs, not the one beside it.
+
+    The record's backend-level GPU row is ``certified_source`` (the JIT
+    view). With the judged prebuilt image loaded, a headline repeating
+    that row would label a judged binary with a source certificate.
+    """
+    from toktier.routing.explain import build_explanation
+    from toktier.routing.plan import plan
+
+    view = support.registry(backends={BACKEND_GPU: _entry_with_deliveries()})
+    snapshot = support.snapshot(
+        registry_view=view,
+        driver_version=DRIVER_OK,
+        kernel_cache=support.gpu_ready_kernel_cache(
+            delivery="prebuilt",
+            prebuilt_available=True,
+            binary_digest=PREBUILT_DIGEST,
+        ),
+    )
+    route = plan(snapshot, RoutingPolicy.CERTIFIED, view, support.config())
+    assert route.backend == BACKEND_GPU
+
+    prebuilt = build_explanation(
+        route_plan=route, snapshot=snapshot, gpu_delivery="prebuilt"
+    )
+    certification = prebuilt["certification"]
+    assert isinstance(certification, dict)
+    assert certification["backend_status"][BACKEND_GPU] == "certified"
+    assert certification["state"] == "certified"
+    assert certification["gpu_delivery"] == "prebuilt"
+    # The nested per-delivery detail is unchanged by the headline.
+    assert certification["deliveries"][BACKEND_GPU]["jit"]["status"] == (
+        "certified_source"
+    )
+
+    jit = build_explanation(
+        route_plan=route, snapshot=snapshot, gpu_delivery="jit"
+    )
+    jit_certification = jit["certification"]
+    assert isinstance(jit_certification, dict)
+    assert jit_certification["backend_status"][BACKEND_GPU] == "certified_source"
+    assert jit_certification["state"] == "certified_source"
+    assert jit_certification["gpu_delivery"] == "jit"
+
+    # With no delivery named, the backend-level row is reported as before
+    # and ``gpu_delivery`` says the label belongs to no delivery.
+    unknown = build_explanation(route_plan=route, snapshot=snapshot)
+    unknown_certification = unknown["certification"]
+    assert isinstance(unknown_certification, dict)
+    assert unknown_certification["backend_status"][BACKEND_GPU] == (
+        "certified_source"
+    )
+    assert unknown_certification["gpu_delivery"] is None
 
 
 @pytest.mark.parametrize("delivery", ["prebuilt", "jit"])

@@ -18,8 +18,11 @@ Three runtime routings live here:
 - ``R_EXEC_FAULT`` -- an accelerated path raised
   :class:`~toktier.errors.BackendExecutionFault`, the one exception
   type backends use for recoverable execution failures. The affected
-  input is re-run on the next backend in the chain and the reference
-  result is returned. Every other exception propagates: an unexpected
+  input is re-run on the next backend in the chain; the reference
+  backend answers when the chain reaches it. (The native one-call
+  runtime records this same code when a core-stream-only backend is
+  bypassed for requested postprocessing.) Every other exception
+  propagates: an unexpected
   error is a defect to surface, not a route, and an exception from the
   reference backend itself has nothing further to fall back to.
 """
@@ -290,6 +293,8 @@ class RoutedExecutor:
         *,
         input_bytes: int | None,
         selected_start: int,
+        source: str | None = None,
+        path: str | None = None,
     ) -> None:
         self._execution_counts[backend] = self._execution_counts.get(backend, 0) + 1
         self._last_execution = {
@@ -297,6 +302,68 @@ class RoutedExecutor:
             "selected_start": self._plan.fallback_chain[selected_start],
             "executed_backend": backend,
         }
+        if source is not None:
+            self._last_execution["source"] = source
+        if path is not None:
+            self._last_execution["path"] = path
+
+    def record_reference_result(
+        self,
+        text: str,
+        *,
+        reason: ReasonCode,
+        path: str,
+        replaces_last: bool = False,
+        **detail: object,
+    ) -> None:
+        """Record a facade-owned reference result in the routing ledger.
+
+        Store seeding sometimes needs token offsets that an accelerated
+        backend does not expose. Those paths call the HF oracle directly,
+        outside :meth:`encode`, but they are still routing outcomes and must
+        not disappear from ``runtime_policy`` or ``fallback_counts``.
+
+        ``replaces_last`` is used when an accelerated full encode completed
+        but its reconstructed spans failed a guard. In that case the facade
+        discards that result and returns a fresh reference result; execution
+        counts therefore replace, rather than double-count, the final source.
+        """
+        chain = self._plan.fallback_chain
+        if replaces_last and self._last_execution is not None:
+            previous = self._last_execution
+            input_bytes = cast(int | None, previous.get("input_bytes"))
+            selected_name = str(previous.get("selected_start"))
+            try:
+                selected_start = chain.index(selected_name)
+            except ValueError:  # defensive: the ledger must name this plan
+                input_bytes, selected_start, _literal = self._starting_route(text)
+            previous_backend = str(previous.get("executed_backend"))
+            previous_count = self._execution_counts.get(previous_backend, 0)
+            if previous_count > 1:
+                self._execution_counts[previous_backend] = previous_count - 1
+            elif previous_count == 1:
+                del self._execution_counts[previous_backend]
+            routed_from = previous_backend
+        else:
+            input_bytes, selected_start, _literal = self._starting_route(text)
+            routed_from = chain[selected_start]
+
+        if routed_from != BACKEND_REFERENCE:
+            self._record(
+                reason,
+                backend=routed_from,
+                target=BACKEND_REFERENCE,
+                source="state_encode",
+                path=path,
+                **detail,
+            )
+        self._record_execution(
+            BACKEND_REFERENCE,
+            input_bytes=input_bytes,
+            selected_start=selected_start,
+            source="state_encode",
+            path=path,
+        )
 
     def _encode_batch_from(
         self,

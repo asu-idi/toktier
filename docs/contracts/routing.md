@@ -27,8 +27,8 @@ code namespace are contract; new reason codes may be appended (see Section 5.4).
   uses a backend/version/configuration-bound fingerprint and therefore cannot
   be replayed into a certified or differently versioned configuration.
 - Registry status `certified` (binary digest bound) and
-  `certified_source` (source digest + build flags + toolchain constraint
-  bound; the JIT delivery mode) are both eligible under `CERTIFIED`,
+  `certified_source` (source digest + build flags + exact toolchain bound;
+  used by the integrated CPU engine and GPU JIT) are both eligible under `CERTIFIED`,
   provided every bound constraint verifies at load time. The two statuses
   are reported distinctly in `explain()` and in the registry -- see
   `registry.md` for the honest-labeling rules.
@@ -73,7 +73,7 @@ Backend ids are lowercase strings. v1 assigns:
 |---|---|
 | `hf` | Reference backend: pinned HF tokenizers path. Always present; always last in every fallback chain. |
 | `gpu` | CUDA kernel backend, with prebuilt and JIT deliveries. |
-| `fast_cpu` | Corrected Gigatoken backend vendored privately in the core wheel; eligible only under its exact delivery/module/binary/configuration and artifact binding. |
+| `fast_cpu` | Corrected Gigatoken backend compiled into the private `toktier._native` extension in the core wheel; eligible only under its exact integrated module/source/build/toolchain/configuration and artifact binding. |
 | `fastokens` | Explicit experimental session adapter; never an automatic certified route. |
 
 New backends append to this table; ids are never reused or renamed.
@@ -98,7 +98,7 @@ that may accompany them is not a machine interface.
 | `R_SM_UNCERTIFIED` | Device architecture has no certified kernel entry; only `EXPERIMENTAL` may proceed. |
 | `R_KERNEL_DIGEST_MISMATCH` | A registry-bound digest does not verify: kernel source digest (`certified_source`) or binary digest (`certified`), or the bound class-table digest of the generated lookup tables the kernel consumes. |
 | `R_KERNEL_BUILD_FAILED` | JIT build attempted at load and failed. |
-| `R_ENGINE_BINDING_MISMATCH` | The CPU engine's delivery identity, private module, build version, native-module digest, or repair configuration does not match the registry binding. |
+| `R_ENGINE_BINDING_MISMATCH` | The CPU engine's delivery identity, private module, build version, source digest, build flags, exact toolchain, patch, or repair configuration does not match the registry binding. |
 
 ### 5.2 Run-time reasons (per call or per input, recorded during execute)
 
@@ -106,9 +106,9 @@ that may accompany them is not a machine interface.
 |---|---|
 | `R_INPUT_ADDED_TOKEN` | Input contains an added-token literal; this input is routed to the reference frontend path. Part of the certified pipeline design, not a correctness incident. |
 | `R_INPUT_BELOW_GPU_THRESHOLD` | Input is smaller than the configured GPU crossover, so execution starts at the next eligible backend in the immutable fallback chain. This is a normal latency policy, not a fault. |
-| `R_INPUT_GUARD_ROUTED` | A guarded fast-CPU input could not satisfy a per-input premise and was routed to the reference backend. |
+| `R_INPUT_GUARD_ROUTED` | A per-input guard premise on an accelerated path could not be proved -- a guarded fast-CPU input, or a state-seed closure/span premise -- so this input was routed to the reference backend. |
 | `R_SESSION_NO_SAFE_CUT` | A session append found no certified safe cut point; the accumulated text was fully re-encoded. Correctness preserved by construction. |
-| `R_EXEC_FAULT` | An accelerated path raised an internal error; the affected input was re-run on the next backend in the fallback chain. The reference result is returned. |
+| `R_EXEC_FAULT` | An accelerated backend raised an internal error, or a core-stream-only backend was bypassed for requested postprocessing; execution continued at the next eligible backend in the fallback chain, and the reference runs when the chain reaches it. Returned certified IDs remain reference-equal. |
 
 ### 5.3 Interaction with `REQUIRE_ACCELERATED`
 

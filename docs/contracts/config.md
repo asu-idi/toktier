@@ -34,10 +34,12 @@ wins:
   `0/false/no/off` are false (case-insensitive); anything else raises
   `ConfigInvalid`. No silent guessing.
 - Scope note: this rule governs toktier's configuration surface.
-  Diagnostics (`toktier doctor`) additionally *observe and report*
-  foreign toolchain variables (`CUDA_HOME`, `CUDA_PATH`) to describe
-  the CUDA discovery the kernel build system performs; those values
-  configure nothing in toktier and are never stored or acted on.
+  Diagnostics (`toktier doctor`) and the read-only JIT toolchain probe
+  additionally *observe and report* foreign compiler-selection variables
+  (`CUDA_HOME`, `CUDA_PATH`) to describe the CUDA discovery the delegated
+  build system already performs. They are not TokTier configuration: their
+  selected compiler identity is certification-checked and cache-bound, never
+  persisted as permission or used to weaken policy.
 
 ## 4. Long-term environment variables (frozen set)
 
@@ -75,8 +77,10 @@ contract and can disappear without notice.
     for application name `toktier` (XDG on Linux:
     `~/.cache/toktier`, `~/.local/state/toktier`; the platformdirs
     conventions on other platforms).
-- Store files default to owner-only permissions (0700 directories,
-  0600 files).
+- The Python facade's store files default to owner-only permissions
+  (0700 directories, 0600 files). The Rust SQLite session path currently
+  inherits the process umask; callers who need owner-only state there
+  should pre-create a protected store home.
 
 ## 6. Configuration file (frozen slot; minimal v1 scope)
 

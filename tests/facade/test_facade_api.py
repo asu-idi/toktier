@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from pathlib import Path
 
@@ -94,7 +95,12 @@ def test_cuda_device_failure_carries_unjudged_jit_remedy(
         "constraint": "CUDA 13.0 / torch 2.13.0+cu130",
         "observed": "CUDA 13.0 / torch 2.11.0+cu130",
     }
-    assert remedy in str(caught.value)
+    # The message carries the same facts as the details, so a reader who
+    # sees only the text can still tell what did not match.
+    message = str(caught.value)
+    assert remedy in message
+    assert "observed CUDA 13.0 / torch 2.11.0+cu130" in message
+    assert "certified constraint: CUDA 13.0 / torch 2.13.0+cu130" in message
 
 
 def test_load_fixes_a_reference_plan(rig: Rig) -> None:
@@ -133,8 +139,14 @@ def test_explain_is_the_routing_explanation_plus_facade_keys(rig: Rig) -> None:
     assert isinstance(probe, dict)
     assert probe["family"] == rig.family
     assert isinstance(probe["artifact_sha256"], str)
-    assert probe["fast_cpu_engine_delivery"] == "vendored"
-    assert probe["fast_cpu_engine_module"] == "toktier._vendor.gigatoken_rs"
+    assert probe["fast_cpu_engine_delivery"] == "integrated"
+    assert probe["fast_cpu_engine_module"] == "toktier._native"
+    assert "fast_cpu_source_digest" in probe
+    assert "fast_cpu_build_flags" in probe
+    assert "fast_cpu_toolchain" in probe
+    assert "prebuilt_host_source_digest" in probe
+    assert "prebuilt_host_build_flags" in probe
+    assert "prebuilt_host_toolchain" in probe
     assert report["experimental_waivers"] == []
     assert report["store_directory"] is None
     assert "store" not in report  # the store has not been touched
@@ -208,6 +220,20 @@ def test_encode_returns_an_encoding(
     assert len(encoding) == len(encoding.ids)
 
 
+def test_close_releases_native_runtime_and_refuses_later_work(rig: Rig) -> None:
+    tokenizer = rig.tokenizer()
+    tokenizer.encode("materialize native runtime")
+    tokenizer.close()
+    tokenizer.close()
+
+    with pytest.raises(RuntimeError, match="backend is closed"):
+        tokenizer.encode("later")
+    with pytest.raises(RuntimeError, match="backend is closed"):
+        tokenizer.encode_batch(["later"])
+    with pytest.raises(RuntimeError, match="backend is closed"):
+        tokenizer.decode([1])
+
+
 def test_encode_batch_rows_equal_single_encodes(
     rig: Rig, reference: Callable[[str], list[int]]
 ) -> None:
@@ -215,6 +241,109 @@ def test_encode_batch_rows_equal_single_encodes(
     texts = ["", "a", "hello world", "\u00e9 \u00e9", "a\u4e2d\U0001f642b"]
     rows = tokenizer.encode_batch(texts)
     assert [list(row.ids) for row in rows] == [reference(text) for text in texts]
+
+
+def test_public_requests_use_one_native_call_each(
+    rig: Rig, reference: Callable[[str], list[int]]
+) -> None:
+    tokenizer = rig.tokenizer(device="cpu")
+
+    assert list(tokenizer.encode("one", lookup="off").ids) == reference("one")
+    report = tokenizer.explain()
+    policy = report["runtime_policy"]
+    assert isinstance(policy, dict)
+    assert policy["request_path"] == "rust_native"
+    assert policy["python_to_native_calls"] == 1
+
+    texts = ["two", "three", "four"]
+    rows = tokenizer.encode_batch(texts)
+    assert [list(row.ids) for row in rows] == [reference(text) for text in texts]
+    policy = tokenizer.explain()["runtime_policy"]
+    assert isinstance(policy, dict)
+    assert policy["python_to_native_calls"] == 2
+
+    assert list(tokenizer.encode("session", session="native").ids) == reference(
+        "session"
+    )
+    policy = tokenizer.explain()["runtime_policy"]
+    assert isinstance(policy, dict)
+    assert policy["python_to_native_calls"] == 3
+
+
+def test_explain_probe_reports_the_delivery_this_process_loaded(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A snapshot taken before the first kernel load is not left stale.
+
+    ``probe.kernel_delivery`` comes from the construction-time snapshot,
+    so it can predate the load that the top-level ``kernel_delivery``
+    reports. The two must not disagree about the same process fact.
+    """
+    from toktier.engine.gpu.loader import KernelLoader
+
+    tokenizer = rig.tokenizer(device="cpu")
+    before = tokenizer.explain()
+    probe = before["probe"]
+    assert isinstance(probe, dict)
+    assert probe["kernel_delivery"] == before["kernel_delivery"]
+
+    monkeypatch.setattr(KernelLoader, "delivery", classmethod(lambda _cls: "prebuilt"))
+    after = tokenizer.explain()
+    assert after["kernel_delivery"] == "prebuilt"
+    probe = after["probe"]
+    assert isinstance(probe, dict)
+    assert probe["kernel_delivery"] == "prebuilt"
+
+
+def test_explain_reports_a_loaded_native_gpu_host(rig: Rig) -> None:
+    """The compatibility GPU block must include the Rust prebuilt host."""
+    tokenizer = rig.tokenizer(device="cpu")
+    tokenizer._native_gpu_engine = object()
+    tokenizer._gpu_device = "cuda:7"
+
+    gpu = tokenizer.explain()["gpu_backend"]
+
+    assert isinstance(gpu, dict)
+    assert gpu["loaded"] is True
+    assert gpu["device"] == "cuda:7"
+    assert gpu["load_error"] is None
+
+
+@pytest.mark.slow
+def test_public_native_encode_releases_the_gil(rig: Rig) -> None:
+    tokenizer = rig.tokenizer(device="cpu")
+    entered = threading.Event()
+    finished = threading.Event()
+    failures: list[BaseException] = []
+    text = "agent turn with unicode 世界 U0001f680\n" * 120_000
+
+    def encode() -> None:
+        try:
+            entered.set()
+            tokenizer.encode(text, lookup="off")
+        except BaseException as error:  # pragma: no cover - asserted below
+            failures.append(error)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=encode)
+    worker.start()
+    assert entered.wait(timeout=5)
+    progress = 0
+    while not finished.is_set():
+        progress += 1
+    worker.join(timeout=5)
+
+    assert not worker.is_alive()
+    assert not failures
+    # A native call that retained the GIL would allow, at most, the handful of
+    # iterations between ``entered.set()`` and entering the extension. The
+    # released-GIL encode gives this thread an extended scheduling window.
+    assert progress > 1_000
+    policy = tokenizer.explain()["runtime_policy"]
+    assert isinstance(policy, dict)
+    assert policy["request_path"] == "rust_native"
+    assert policy["python_to_native_calls"] == 1
 
 
 def test_decode_round_trips_the_core_stream(rig: Rig) -> None:

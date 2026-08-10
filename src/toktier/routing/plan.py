@@ -42,7 +42,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from ..backends.fast_cpu import ENGINE_MODULE
+from ..backends.fast_cpu import ENGINE_DELIVERY, ENGINE_MODULE
 from ..config import Config
 from ..errors import (
     BackendUnavailable,
@@ -302,6 +302,25 @@ def _assess(
             ),
             waivable=view.status == STATUS_EXPERIMENTAL,
         )
+    if (
+        backend == BACKEND_GPU
+        and view is not entry
+        and view.status == STATUS_CERTIFIED
+        and (
+            view.host_source_digest is None
+            or not view.host_build_flags
+            or view.host_toolchain is None
+        )
+    ):
+        refuse(
+            _reason(
+                ReasonCode.R_UNCERTIFIED_ARTIFACT,
+                backend,
+                cause="native_host_binding_missing",
+                delivery="prebuilt",
+            ),
+            waivable=True,
+        )
 
     # 6. One loader, one flag set per process (registry.md 3.2).
     if backend == BACKEND_GPU and snapshot.kernel_cache.loaded_flag_sets > 1:
@@ -330,9 +349,10 @@ def _assess(
             waivable=True,
         )
 
-    # 8. The corrected external engine is bound by exact distribution
-    #    version and native-module bytes.  Its registry row carries no
-    #    device/kernel facts, so a successful check terminates here.
+    # 8. The corrected engine is linked into the core native extension. Its
+    #    source set, release build flags and exact Rust compiler are reported
+    #    by the executing extension and bound by the registry. Its row carries
+    #    no device/kernel facts, so a successful check terminates here.
     if backend == BACKEND_FAST_CPU:
         facts = snapshot.fast_cpu_engine
         if entry.engine != "gigatoken":
@@ -346,13 +366,13 @@ def _assess(
                 ),
                 waivable=True,
             )
-        if entry.engine_delivery != "vendored":
+        if entry.engine_delivery != ENGINE_DELIVERY:
             refuse(
                 _reason(
                     ReasonCode.R_ENGINE_BINDING_MISMATCH,
                     backend,
                     axis="engine_delivery",
-                    installed="vendored",
+                    installed=ENGINE_DELIVERY,
                     certified=entry.engine_delivery,
                 ),
                 waivable=True,
@@ -379,14 +399,47 @@ def _assess(
                 ),
                 waivable=True,
             )
-        if facts.binary_digest != entry.binary_digest:
+        if entry.status != STATUS_CERTIFIED_SOURCE:
             refuse(
                 _reason(
                     ReasonCode.R_ENGINE_BINDING_MISMATCH,
                     backend,
-                    axis="binary_digest",
-                    expected_digest=entry.binary_digest,
-                    observed_digest=facts.binary_digest,
+                    axis="status",
+                    expected=STATUS_CERTIFIED_SOURCE,
+                    observed=entry.status,
+                ),
+                waivable=True,
+            )
+        if facts.source_digest != entry.source_digest:
+            refuse(
+                _reason(
+                    ReasonCode.R_ENGINE_BINDING_MISMATCH,
+                    backend,
+                    axis="source_digest",
+                    expected_digest=entry.source_digest,
+                    observed_digest=facts.source_digest,
+                ),
+                waivable=True,
+            )
+        if facts.build_flags != entry.build_flags:
+            refuse(
+                _reason(
+                    ReasonCode.R_ENGINE_BINDING_MISMATCH,
+                    backend,
+                    axis="build_flags",
+                    expected=list(entry.build_flags),
+                    observed=list(facts.build_flags),
+                ),
+                waivable=True,
+            )
+        if facts.toolchain != entry.toolchain:
+            refuse(
+                _reason(
+                    ReasonCode.R_ENGINE_BINDING_MISMATCH,
+                    backend,
+                    axis="toolchain",
+                    expected=entry.toolchain,
+                    observed=facts.toolchain,
                 ),
                 waivable=True,
             )
@@ -468,6 +521,36 @@ def _assess(
                 waivable=True,
             )
 
+    # A prebuilt certificate is the conjunction of the exact CUDA image and
+    # the source-certified Rust host that selects, launches, postprocesses,
+    # and falls back from it.  These are deliberately distinct bindings: a
+    # stable fatbin cannot certify drifted host behavior.
+    if view.status == STATUS_CERTIFIED and view.host_source_digest is not None:
+        if tuple(view.host_build_flags) != tuple(
+            snapshot.kernel_cache.host_build_flags
+        ):
+            refuse(
+                _reason(
+                    ReasonCode.R_UNCERTIFIED_ARTIFACT,
+                    backend,
+                    cause="host_build_flags_mismatch",
+                    certified=list(view.host_build_flags),
+                    observed=list(snapshot.kernel_cache.host_build_flags),
+                ),
+                waivable=True,
+            )
+        if view.host_toolchain != snapshot.kernel_cache.host_toolchain:
+            refuse(
+                _reason(
+                    ReasonCode.R_UNCERTIFIED_ARTIFACT,
+                    backend,
+                    cause="host_toolchain_mismatch",
+                    certified=view.host_toolchain,
+                    observed=snapshot.kernel_cache.host_toolchain,
+                ),
+                waivable=True,
+            )
+
     # 13. Bound build flags and toolchain constraint.
     if view.status == STATUS_CERTIFIED_SOURCE:
         if tuple(view.build_flags) != tuple(snapshot.kernel_cache.build_flags):
@@ -527,7 +610,14 @@ def _bound_digests(
     """(label, certified digest, observed digest) triples to verify."""
     cache = snapshot.kernel_cache
     if entry.status == STATUS_CERTIFIED:
-        return (("binary", entry.binary_digest, cache.binary_digest),)
+        return (
+            ("binary", entry.binary_digest, cache.binary_digest),
+            (
+                "host_source",
+                entry.host_source_digest,
+                cache.host_source_digest,
+            ),
+        )
     if entry.status == STATUS_CERTIFIED_SOURCE:
         return (
             ("source", entry.source_digest, cache.source_digest),

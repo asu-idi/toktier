@@ -20,6 +20,7 @@ import importlib.util
 import json
 import platform
 import shutil
+import subprocess
 from pathlib import Path
 from typing import NoReturn
 
@@ -81,6 +82,8 @@ def _manifest() -> ArtifactManifest:
 def _set_doctor_probes(monkeypatch: pytest.MonkeyPatch) -> None:
     from toktier.backends import fast_cpu
     from toktier.backends.fast_cpu import FastCpuEngineFacts
+    from toktier.engine.gpu import native as native_gpu
+    from toktier.engine.gpu.native import NativeHostBuildFacts
     from toktier.repair import fastokens
 
     def find_spec(name: str) -> object | None:
@@ -94,12 +97,36 @@ def _set_doctor_probes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(importlib.util, "find_spec", find_spec)
     monkeypatch.setattr(shutil, "which", which)
     monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0],
+            0,
+            stdout=(
+                "nvcc: NVIDIA (R) Cuda compiler driver\n"
+                "Cuda compilation tools, release 13.0, V13.0.88\n"
+            ),
+            stderr="",
+        ),
+    )
+    monkeypatch.setattr(
         fast_cpu,
         "fast_cpu_engine_facts",
         lambda: FastCpuEngineFacts(
             version="0.10.0+toktier.pinned.1",
-            binary_digest="f" * 64,
+            source_digest="f" * 64,
+            build_flags=("profile=release", "opt-level=3"),
+            toolchain="rustc 1.93.1 (test fixture)",
             config_digest="e" * 64,
+        ),
+    )
+    monkeypatch.setattr(
+        native_gpu,
+        "native_host_build_facts",
+        lambda: NativeHostBuildFacts(
+            source_digest="a" * 64,
+            build_flags=("profile=release", "opt-level=3"),
+            toolchain="rustc 1.93.1 (test fixture)",
         ),
     )
     monkeypatch.setattr(
@@ -183,12 +210,19 @@ def test_doctor_human(
         "cuda_available: false\n"
         "prebuilt_fatbin_available: true\n"
         f"prebuilt_fatbin_digest: {_shipped_prebuilt_digest()}\n"
+        "prebuilt_native_host_ready: true\n"
+        f"prebuilt_host_source_digest: {'a' * 64}\n"
+        "prebuilt_host_build_flags: profile=release; opt-level=3\n"
+        "prebuilt_host_toolchain: rustc 1.93.1 (test fixture)\n"
         "gigatoken_available: true\n"
-        "gigatoken_delivery: vendored\n"
-        "gigatoken_module: toktier._vendor.gigatoken_rs\n"
+        "gigatoken_delivery: integrated\n"
+        "gigatoken_module: toktier._native\n"
         "gigatoken_runtime_ready: true\n"
         "gigatoken_version: 0.10.0+toktier.pinned.1\n"
-        f"gigatoken_native_digest: {'f' * 64}\n"
+        "gigatoken_native_digest: none\n"
+        f"gigatoken_source_digest: {'f' * 64}\n"
+        "gigatoken_build_flags: profile=release; opt-level=3\n"
+        "gigatoken_toolchain: rustc 1.93.1 (test fixture)\n"
         f"gigatoken_repair_config_digest: {'e' * 64}\n"
         "fastokens_available: true\n"
         "fastokens_version: 1.2.3\n"
@@ -197,6 +231,10 @@ def test_doctor_human(
         "fastokens_exact_id_guarantee: false\n"
         "nvcc_available: true\n"
         "nvcc_path: /opt/cuda/bin/nvcc\n"
+        "nvcc_resolved_path: /opt/cuda/bin/nvcc\n"
+        "nvcc_release: 13.0\n"
+        "nvcc_build: V13.0.88\n"
+        "nvcc_error: none\n"
         f"nvcc_checked: {'; '.join(_NVCC_CHECKED_VIA_PATH)}\n"
     )
     assert captured.err == ""
@@ -231,12 +269,19 @@ def test_doctor_json(
         "cuda_available": False,
         "prebuilt_fatbin_available": True,
         "prebuilt_fatbin_digest": _shipped_prebuilt_digest(),
+        "prebuilt_native_host_ready": True,
+        "prebuilt_host_source_digest": "a" * 64,
+        "prebuilt_host_build_flags": ["profile=release", "opt-level=3"],
+        "prebuilt_host_toolchain": "rustc 1.93.1 (test fixture)",
         "gigatoken_available": True,
-        "gigatoken_delivery": "vendored",
-        "gigatoken_module": "toktier._vendor.gigatoken_rs",
+        "gigatoken_delivery": "integrated",
+        "gigatoken_module": "toktier._native",
         "gigatoken_runtime_ready": True,
         "gigatoken_version": "0.10.0+toktier.pinned.1",
-        "gigatoken_native_digest": "f" * 64,
+        "gigatoken_native_digest": None,
+        "gigatoken_source_digest": "f" * 64,
+        "gigatoken_build_flags": ["profile=release", "opt-level=3"],
+        "gigatoken_toolchain": "rustc 1.93.1 (test fixture)",
         "gigatoken_repair_config_digest": "e" * 64,
         "fastokens_available": True,
         "fastokens_version": "2.0.0",
@@ -245,6 +290,10 @@ def test_doctor_json(
         "fastokens_exact_id_guarantee": False,
         "nvcc_available": True,
         "nvcc_path": "/opt/cuda/bin/nvcc",
+        "nvcc_resolved_path": "/opt/cuda/bin/nvcc",
+        "nvcc_release": "13.0",
+        "nvcc_build": "V13.0.88",
+        "nvcc_error": None,
         "nvcc_checked": _NVCC_CHECKED_VIA_PATH,
     }
 
@@ -716,3 +765,84 @@ def test_gpu_compile_risk_flag_cannot_waive_a_different_premise(
     assert captured.out == ""
     assert "error BACKEND_UNAVAILABLE: uncertified architecture" in captured.err
     assert "UNCERTIFIED JIT OPT-IN" not in captured.err
+
+
+def test_json_failure_emits_a_machine_readable_error(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--json`` covers the failure path, not only the success path."""
+    from toktier import facade
+
+    def fake_load(_family: str, **_keywords: object) -> NoReturn:
+        raise BackendUnavailable(
+            "device='cuda' requires an eligible GPU route, but the "
+            "certified planner closed it; observed NVCC 13.2 / torch CUDA "
+            "13.0 / torch 2.11.0+cu130; certified constraint: judged with "
+            "NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
+            details={
+                "backend": "gpu",
+                "reason_code": "R_UNCERTIFIED_ARTIFACT",
+                "reason": {
+                    "cause": "architecture_unverified",
+                    "observed": "sm_130",
+                },
+                "remedy": "toktier gpu compile qwen3_8b --accept-uncertified-jit",
+            },
+        )
+
+    monkeypatch.setattr(facade, "load", fake_load)
+
+    exit_code = cli.main(["gpu", "compile", "qwen3_8b", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    payload = json.loads(captured.err)
+    error = payload["error"]
+    assert error["code"] == "BACKEND_UNAVAILABLE"
+    assert "certified constraint" in error["message"]
+    assert error["details"]["backend"] == "gpu"
+    assert error["details"]["reason"]["observed"] == "sm_130"
+    assert error["details"]["remedy"] == (
+        "toktier gpu compile qwen3_8b --accept-uncertified-jit"
+    )
+
+
+def test_json_error_envelope_survives_an_unserialisable_detail(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An open details mapping must not be able to break the envelope."""
+    from toktier import facade
+
+    def fake_load(_family: str, **_keywords: object) -> NoReturn:
+        raise BackendUnavailable(
+            "closed", details={"backend": "gpu", "path": Path("/tmp/kernel")}
+        )
+
+    monkeypatch.setattr(facade, "load", fake_load)
+
+    exit_code = cli.main(["gpu", "compile", "qwen3_8b", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    payload = json.loads(captured.err)
+    assert payload["error"]["details"]["backend"] == "gpu"
+    assert "kernel" in payload["error"]["details"]["path"]
+
+
+def test_plain_failure_keeps_the_human_error_line(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Without ``--json`` the human line is unchanged."""
+    from toktier import facade
+
+    def fake_load(_family: str, **_keywords: object) -> NoReturn:
+        raise BackendUnavailable("closed", details={"backend": "gpu"})
+
+    monkeypatch.setattr(facade, "load", fake_load)
+
+    exit_code = cli.main(["gpu", "compile", "qwen3_8b"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err == "error BACKEND_UNAVAILABLE: closed\n"

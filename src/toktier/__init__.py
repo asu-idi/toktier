@@ -1,18 +1,21 @@
 """toktier: correctness-first, high-throughput tokenization toolkit.
 
 The frozen public contracts live in ``docs/contracts/``; this package
-provides their importable, typed counterparts. :func:`load` is the entry
-point: it resolves and verifies a family's artifact and returns a
+provides their importable, typed counterparts. :func:`load` resolves a
+registered family; :func:`from_pretrained` resolves a model repository by
+tokenizer content. Both return a
 :class:`Tokenizer` with encode, decode, session and content-lookup
-paths, every one of which returns ids equal to a from-scratch reference
-encode.
+paths. Certified and reference routes return ids equal to a from-scratch
+reference encode; the explicitly selected Fastokens repair adapter under
+``EXPERIMENTAL`` policy is outside that exact-ID guarantee and labels
+itself accordingly.
 """
 
 from __future__ import annotations
 
 from .config import Config
 from .errors import ToktierError
-from .facade import Encoding, Tokenizer, load
+from .facade import Encoding, Tokenizer, from_pretrained, load
 from .policy import ReasonCode, RoutePlan, RoutingPolicy
 from .session import SessionUpdate
 
@@ -27,6 +30,7 @@ __all__ = [
     "Tokenizer",
     "ToktierError",
     "__version__",
+    "from_pretrained",
     "load",
 ]
 

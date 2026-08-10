@@ -65,6 +65,9 @@ class _BackendDocumentOptional(TypedDict, total=False):
     class_table_digest: str
     build_flags: list[str]
     toolchain: str
+    host_source_digest: str
+    host_build_flags: list[str]
+    host_toolchain: str
     devices: list[str]
     devices_experimental: list[str]
     architecture_digests: Mapping[str, str]
@@ -163,6 +166,12 @@ class BackendEntry:
     class_table_digest: str | None = None
     build_flags: tuple[str, ...] = ()
     toolchain: str | None = None
+    #: Source/build identity of the Rust request host paired with a
+    #: ``certified`` prebuilt GPU binary. These fields are separate from the
+    #: CUDA JIT source binding above.
+    host_source_digest: str | None = None
+    host_build_flags: tuple[str, ...] = ()
+    host_toolchain: str | None = None
     devices: tuple[str, ...] = ()
     devices_experimental: tuple[str, ...] = ()
     architecture_digests: Mapping[str, str] = field(default_factory=dict)
@@ -257,6 +266,9 @@ def _backend_entry(
         class_table_digest=bindings.class_table_digest,
         build_flags=bindings.build_flags,
         toolchain=bindings.toolchain,
+        host_source_digest=raw.get("host_source_digest"),
+        host_build_flags=tuple(str(v) for v in raw.get("host_build_flags") or ()),
+        host_toolchain=raw.get("host_toolchain"),
         devices=bindings.devices,
         devices_experimental=tuple(
             str(v) for v in raw.get("devices_experimental") or ()

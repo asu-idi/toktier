@@ -85,6 +85,12 @@ class KernelCacheState:
     class_table_digest: str | None = None
     build_flags: tuple[str, ...] = ()
     toolchain: str | None = None
+    #: Domain-separated identity of the Rust host that loads the prebuilt
+    #: image and owns routing/store/reference fallback below PyO3.
+    host_source_digest: str | None = None
+    #: Exact release-build facts embedded by that native host.
+    host_build_flags: tuple[str, ...] = ()
+    host_toolchain: str | None = None
     #: Kernel delivery this process loaded (``prebuilt`` / ``jit``), or
     #: ``None`` before any load. The planner verifies the registry
     #: delivery entry matching the delivery that actually runs (or, pre
@@ -175,11 +181,13 @@ class NoDevices:
         no accelerator runtime.
         """
         from ..engine.gpu.loader import KernelLoader
+        from ..engine.gpu.native import native_host_build_facts
         from ..kernels import kernel_source_digest, kernel_source_paths
         from ..kernels.bindings import bare_sha256
         from ..kernels.prebuilt import shipped_prebuilt_facts
 
         prebuilt_available, fatbin_digest = shipped_prebuilt_facts()
+        host = native_host_build_facts()
         sources_shipped = all(
             path.is_file() for path in kernel_source_paths()
         )
@@ -194,6 +202,9 @@ class NoDevices:
             ),
             prebuilt_available=prebuilt_available,
             delivery=KernelLoader.delivery(),
+            host_source_digest=host.source_digest,
+            host_build_flags=host.build_flags,
+            host_toolchain=host.toolchain,
         )
 
 
@@ -249,10 +260,18 @@ class ProbeSnapshot:
             "kernel_build_failed": self.kernel_cache.build_failed,
             "kernel_delivery": self.kernel_cache.delivery,
             "kernel_preferred_delivery": self.kernel_cache.preferred_delivery,
-            "fast_cpu_engine_delivery": "vendored",
+            "prebuilt_host_source_digest": self.kernel_cache.host_source_digest,
+            "prebuilt_host_build_flags": list(
+                self.kernel_cache.host_build_flags
+            ),
+            "prebuilt_host_toolchain": self.kernel_cache.host_toolchain,
+            "fast_cpu_engine_delivery": "integrated",
             "fast_cpu_engine_module": ENGINE_MODULE,
             "fast_cpu_engine_version": self.fast_cpu_engine.version,
             "fast_cpu_binary_digest": self.fast_cpu_engine.binary_digest,
+            "fast_cpu_source_digest": self.fast_cpu_engine.source_digest,
+            "fast_cpu_build_flags": list(self.fast_cpu_engine.build_flags),
+            "fast_cpu_toolchain": self.fast_cpu_engine.toolchain,
             "fast_cpu_config_digest": self.fast_cpu_engine.config_digest,
             "certification_identity": (
                 self.certification.identity if self.certification else None

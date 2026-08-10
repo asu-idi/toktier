@@ -6,15 +6,21 @@ snapshot summary, and accumulated fallback reason codes. The exact key
 set is informational in v1; the method name and the presence of the plan
 and the reason codes are stable.
 
-Two honesty rules are implemented here rather than described:
+Three honesty rules are implemented here rather than described:
 
-- ``certified`` and ``certified_source`` are reported distinctly. The
-  JIT delivery mode binds a source digest, build flags, a toolchain
-  constraint and the class-table digest instead of the judged binary,
-  and that difference is contract, not presentation.
+- ``certified`` and ``certified_source`` are reported distinctly. A
+  source-certified backend binds its source digest, build flags, and exact
+  toolchain instead of one judged binary; GPU JIT additionally binds its class
+  table and device constraints. That difference is contract, not presentation.
 - Every waiver that ``EXPERIMENTAL`` policy granted is listed with its
   reason code. A configuration that is running outside the certified
   set says so.
+- The headline ``backend`` answers "what actually ran", not "what was
+  planned", as soon as anything has run. A plan is a prediction; once a
+  request has returned, the prediction is no longer the honest answer to
+  the question a reader of a headline field asks. ``backend_basis`` says
+  which of the two the value is, and ``planned_backend`` keeps the plan
+  visible so nothing is lost by the correction.
 
 Everything returned is plain data (str, int, bool, list, dict) so it can
 be logged or serialized without a custom encoder.
@@ -47,7 +53,9 @@ def reason_to_dict(reason: PlanReason) -> dict[str, object]:
 
 
 def _certification_state(
-    snapshot: ProbeSnapshot, route_plan: RoutePlan
+    snapshot: ProbeSnapshot,
+    route_plan: RoutePlan,
+    gpu_delivery: str | None = None,
 ) -> dict[str, object]:
     """How the running configuration is labeled.
 
@@ -56,6 +64,17 @@ def _certification_state(
     is closed, the installed reference still runs. It is distinct from
     ``uncertified`` (no record at all) because the two say different
     things about what is known.
+
+    The GPU backend ships as two deliveries with different certification
+    kinds -- a judged prebuilt binary (``certified``) and a locally
+    compiled JIT build (``certified_source``) -- so a single
+    backend-level label cannot describe the one that runs. When
+    ``gpu_delivery`` names the delivery this process loaded or selected
+    and the record carries a row for it, that row's status is the GPU
+    status reported here, and ``gpu_delivery`` echoes which delivery the
+    label belongs to. The per-delivery detail stays under ``deliveries``
+    either way; the headline just stops labeling the loaded delivery
+    with a neighbouring one's status.
     """
     match = snapshot.certification
     if match is None:
@@ -64,6 +83,7 @@ def _certification_state(
             "identity": None,
             "evidence_id": None,
             "backend_status": {},
+            "gpu_delivery": None,
         }
     record = match.record
     oracle_mismatch = any(
@@ -72,6 +92,15 @@ def _certification_state(
     statuses = {
         backend_id: entry.status for backend_id, entry in record.backends.items()
     }
+    gpu_entry = record.backends.get(BACKEND_GPU)
+    labelled_delivery: str | None = None
+    if gpu_entry is not None and gpu_delivery is not None:
+        delivery_entry = (getattr(gpu_entry, "deliveries", None) or {}).get(
+            gpu_delivery
+        )
+        if delivery_entry is not None:
+            statuses[BACKEND_GPU] = delivery_entry.status
+            labelled_delivery = gpu_delivery
     accelerated_open = route_plan.backend != BACKEND_REFERENCE
     if accelerated_open:
         status = statuses.get(route_plan.backend)
@@ -96,6 +125,10 @@ def _certification_state(
             "mismatches": record.mismatches,
         },
         "backend_status": statuses,
+        # Which GPU delivery the ``gpu`` status above describes; ``None``
+        # when no delivery is loaded or selected, or when the record has
+        # no per-delivery rows (then the status is the backend-level one).
+        "gpu_delivery": labelled_delivery,
         "deliveries": _delivery_report(record),
     }
 
@@ -171,6 +204,9 @@ def _kernel_deliveries(
             "shipped": cache.prebuilt_available,
             "loaded": cache.delivery == "prebuilt",
             "binary_digest": cache.binary_digest,
+            "host_source_digest": cache.host_source_digest,
+            "host_build_flags": list(cache.host_build_flags),
+            "host_toolchain": cache.host_toolchain,
             "status": prebuilt_entry.status if prebuilt_entry else None,
             "architectures": _architecture_statuses(prebuilt_entry),
             "driver_min": (
@@ -187,6 +223,19 @@ def _kernel_deliveries(
     }
 
 
+def _executed_backend(last_execution: Mapping[str, object] | None) -> str | None:
+    """The backend of the last returned result, when one is recorded.
+
+    Anything other than a non-empty backend name is treated as "no
+    execution to report": a headline field must not be derived from a
+    value whose shape was not the one promised.
+    """
+    if not isinstance(last_execution, Mapping):
+        return None
+    value = last_execution.get("executed_backend")
+    return value if isinstance(value, str) and value else None
+
+
 def build_explanation(
     *,
     route_plan: RoutePlan,
@@ -195,6 +244,8 @@ def build_explanation(
     fallback_counts: Mapping[str, int] | None = None,
     api_version: int = 1,
     delivery_record: ArtifactRecord | None = None,
+    last_execution: Mapping[str, object] | None = None,
+    gpu_delivery: str | None = None,
 ) -> dict[str, object]:
     """Assemble the diagnostic mapping for one tokenizer.
 
@@ -204,6 +255,18 @@ def build_explanation(
     match carries; a caller that plans against an empty registry view
     but still wants the shipped evidence statements reported (the 0.x
     facade) passes the record it looked up read-only.
+
+    ``last_execution`` is the routing ledger's record of the request
+    that most recently returned a result. When it names a backend, that
+    backend is the reported ``backend`` and ``backend_basis`` is
+    ``"last_execution"``; with no execution yet the report falls back to
+    the planned backend and says so with ``backend_basis="plan"``.
+
+    ``gpu_delivery`` names the kernel delivery this process loaded, or
+    selected before any load. The ``certification`` headline reports the
+    status of that delivery rather than the backend-level row, so a
+    loaded ``certified`` prebuilt image is not headlined with the
+    ``certified_source`` label of the JIT delivery shipped beside it.
     """
     waivers = [
         reason_to_dict(reason)
@@ -211,6 +274,7 @@ def build_explanation(
         if assessment.eligible
         for reason in assessment.waived
     ]
+    executed = _executed_backend(last_execution)
     return {
         "api_version": api_version,
         # The key says which question is answered: this is the routing
@@ -220,7 +284,13 @@ def build_explanation(
         # request was certified" is exactly the ambiguity to avoid; the
         # certification state lives under the "certification" key.
         "routing_policy": route_plan.policy.value,
-        "backend": route_plan.backend,
+        # The backend that actually returned the last result, once
+        # anything has returned one; the planned backend before that.
+        # ``backend_basis`` names which of the two this is, and
+        # ``planned_backend`` keeps the plan itself readable.
+        "backend": executed if executed is not None else route_plan.backend,
+        "backend_basis": "last_execution" if executed is not None else "plan",
+        "planned_backend": route_plan.backend,
         "fallback_chain": list(route_plan.fallback_chain),
         "plan_reasons": [reason_to_dict(reason) for reason in route_plan.reasons],
         "experimental_waivers": waivers,
@@ -243,6 +313,6 @@ def build_explanation(
                 else None
             ),
         ),
-        "certification": _certification_state(snapshot, route_plan),
+        "certification": _certification_state(snapshot, route_plan, gpu_delivery),
         "probe": snapshot.summary(),
     }

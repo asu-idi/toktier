@@ -282,6 +282,55 @@ def test_unpaired_surrogate_stays_on_the_reference_path() -> None:
     }
 
 
+def test_facade_owned_reference_result_uses_the_same_runtime_ledger() -> None:
+    """A direct store-seeding oracle call remains visible and counted."""
+    executor, gpu, reference = _executor(marker="<sep>")
+
+    executor.record_reference_result(
+        "a<sep>b",
+        reason=ReasonCode.R_INPUT_ADDED_TOKEN,
+        path="hf_added_token",
+    )
+
+    assert gpu.calls == []
+    assert reference.calls == []
+    assert executor.execution_counts == {BACKEND_REFERENCE: 1}
+    assert executor.fallback_counts == {ReasonCode.R_INPUT_ADDED_TOKEN.value: 1}
+    assert executor.last_execution == {
+        "input_bytes": 7,
+        "selected_start": BACKEND_GPU,
+        "executed_backend": BACKEND_REFERENCE,
+        "source": "state_encode",
+        "path": "hf_added_token",
+    }
+
+
+def test_span_guard_replaces_the_accelerated_final_result() -> None:
+    """A discarded accelerated result is not counted as the final source."""
+    executor, gpu, reference = _executor()
+    assert executor.encode("hello") == [1005, 1]
+
+    executor.record_reference_result(
+        "hello",
+        reason=ReasonCode.R_INPUT_GUARD_ROUTED,
+        path="hf_span_guard",
+        replaces_last=True,
+        error="WindowUnsupported",
+    )
+
+    assert gpu.calls == ["hello"]
+    assert reference.calls == []
+    assert executor.execution_counts == {BACKEND_REFERENCE: 1}
+    assert executor.fallback_counts == {ReasonCode.R_INPUT_GUARD_ROUTED.value: 1}
+    assert executor.last_execution == {
+        "input_bytes": 5,
+        "selected_start": BACKEND_GPU,
+        "executed_backend": BACKEND_REFERENCE,
+        "source": "state_encode",
+        "path": "hf_span_guard",
+    }
+
+
 def test_gpu_crossover_partitions_mixed_batches_and_preserves_order() -> None:
     """One batch may use both engines without reordering its rows."""
     route_plan = RoutePlan(
@@ -370,6 +419,8 @@ def test_explain_reports_plan_reasons_waivers_and_counters() -> None:
     assert explanation["routing_policy"] == "certified"
     assert "policy" not in explanation  # the bare key invited misreading
     assert explanation["backend"] == BACKEND_REFERENCE
+    assert explanation["backend_basis"] == "plan"
+    assert explanation["planned_backend"] == BACKEND_REFERENCE
     assert explanation["fallback_chain"] == [BACKEND_REFERENCE]
     reasons = explanation["plan_reasons"]
     assert isinstance(reasons, list)
@@ -436,3 +487,41 @@ def test_explain_lists_experimental_waivers() -> None:
     certification = explanation["certification"]
     assert isinstance(certification, dict)
     assert certification["state"] == "uncertified"
+
+
+def test_explain_headlines_the_executed_backend_over_the_plan() -> None:
+    """A recorded execution outranks the plan in the headline field."""
+    view = support.registry()
+    snapshot = support.snapshot(registry_view=view, driver_version="550.0")
+    config = support.config()
+    route_plan = plan(snapshot, RoutingPolicy.CERTIFIED, view, config)
+
+    explanation = build_explanation(
+        route_plan=route_plan,
+        snapshot=snapshot,
+        last_execution={"executed_backend": BACKEND_GPU, "input_bytes": 128},
+    )
+    assert explanation["backend"] == BACKEND_GPU
+    assert explanation["backend_basis"] == "last_execution"
+    assert explanation["planned_backend"] == route_plan.backend
+
+
+def test_explain_falls_back_to_the_plan_for_an_unusable_ledger() -> None:
+    """A ledger without a usable backend name cannot produce a headline.
+
+    Reporting a plan and saying so is honest; deriving a headline from a
+    value that is not the promised shape is not.
+    """
+    view = support.registry()
+    snapshot = support.snapshot(registry_view=view, driver_version="550.0")
+    config = support.config()
+    route_plan = plan(snapshot, RoutingPolicy.CERTIFIED, view, config)
+
+    for ledger in ({}, {"executed_backend": None}, {"executed_backend": ""}):
+        explanation = build_explanation(
+            route_plan=route_plan,
+            snapshot=snapshot,
+            last_execution=ledger,
+        )
+        assert explanation["backend"] == route_plan.backend
+        assert explanation["backend_basis"] == "plan"

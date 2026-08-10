@@ -153,8 +153,9 @@ class ReasonCode(enum.Enum):
     #: Input is deliberately smaller than the configured GPU crossover;
     #: execution starts at the next eligible backend in the same plan.
     R_INPUT_BELOW_GPU_THRESHOLD = "R_INPUT_BELOW_GPU_THRESHOLD"
-    #: Reserved for the guarded fast-CPU backend (not in the first
-    #: release): a guard predicate routed this input to reference.
+    #: A per-input guard premise on an accelerated path (a guarded
+    #: fast-CPU input, or a state-seed closure/span premise) could not
+    #: be proved; the input was routed to reference.
     R_INPUT_GUARD_ROUTED = "R_INPUT_GUARD_ROUTED"
     #: A session append found no certified safe cut point; the
     #: accumulated text was fully re-encoded.

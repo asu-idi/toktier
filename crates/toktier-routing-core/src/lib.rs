@@ -1,15 +1,38 @@
-//! Native, dependency-light request routing primitives.
+//! Native request routing and frozen reference-engine primitives.
 //!
 //! The public policy and diagnostic objects remain in Python. This crate owns
 //! the per-input hot decisions which otherwise allocate a complete UTF-8 copy:
 //! byte-threshold selection, the necessary-condition added-token prefilter,
 //! and the frozen BPE synchronizing-transition predicate used to seal session
-//! prefixes. It has no Python or backend dependency and performs no I/O.
+//! prefixes.  It also owns the pinned Hugging Face `tokenizers` reference so
+//! store and fallback work can run without a Python callback.
 
 #![forbid(unsafe_code)]
 
 use memchr::{memchr, memchr2, memchr3};
 use std::fmt;
+
+mod entry_store;
+mod fast_cpu;
+mod gpu;
+mod reference;
+mod runtime;
+
+pub use entry_store::{
+    EntryStoreOpenError, EntryStoreStats, NativeEntryStore, AUTO_MIN_BYTES,
+    DEFAULT_CACHE_BUDGET_BYTES, MAX_AUTO_ENTRIES,
+};
+pub use fast_cpu::{
+    FastCpuEngine, FastCpuEngineError, FastEncodeOutcome, FastEncodeSource, FastRepairSpec,
+    FastRepairStats, FastSeedPayload,
+};
+pub use gpu::{NativePrebuiltGpu, NativePrebuiltGpuConfig};
+pub use reference::{ReferenceEngine, ReferenceEngineError};
+pub use runtime::{
+    NativeGpuEngine, NativeRouter, NativeRuntimeError, RayonSeedOverlap, RoutedIds, RuntimeEvent,
+    RuntimeStats, BACKEND_FAST_CPU, BACKEND_GPU, BACKEND_REFERENCE, R_EXEC_FAULT,
+    R_INPUT_ADDED_TOKEN, R_INPUT_BELOW_GPU_THRESHOLD, R_INPUT_GUARD_ROUTED,
+};
 
 /// Number of Unicode scalar-value slots in the frozen property table.
 pub const N_CODEPOINTS: usize = 0x11_0000;
@@ -356,6 +379,157 @@ impl BpeSyncBoundary {
     }
 }
 
+/// Backward-materializing span view over fetched windows.
+///
+/// Windows are fetched newest-first in `window` -sized, stride-aligned
+/// regions and retained, so the backward boundary scan touches only the
+/// suffix it actually visits. Each fetched window is checked for the
+/// nondecreasing-starts premise (within the window and across the seam
+/// to the previously fetched right neighbour); a violation poisons the
+/// view and the search returns no certificate.
+struct WindowedSpans<F, E>
+where
+    F: FnMut(usize, usize) -> Result<(Vec<u32>, Vec<u32>), E>,
+{
+    fetch: F,
+    window: usize,
+    /// Fetched regions in decreasing `lo` order: `(lo, starts, ends)`.
+    chunks: Vec<(usize, Vec<u32>, Vec<u32>)>,
+    /// First covered token index (tokens `[covered_lo, n)` are fetched).
+    covered_lo: usize,
+    monotone: bool,
+}
+
+impl<F, E> WindowedSpans<F, E>
+where
+    F: FnMut(usize, usize) -> Result<(Vec<u32>, Vec<u32>), E>,
+{
+    fn new(fetch: F, window: usize, n_tokens: usize) -> Self {
+        WindowedSpans {
+            fetch,
+            window: window.max(1),
+            chunks: Vec::new(),
+            covered_lo: n_tokens,
+            monotone: true,
+        }
+    }
+
+    /// Fetch stride-aligned windows until token `index` is covered.
+    /// Returns false when a fetched window violated the premise.
+    fn ensure(&mut self, index: usize) -> Result<bool, E> {
+        while self.covered_lo > index {
+            let hi = self.covered_lo;
+            let lo = (hi - 1) - ((hi - 1) % self.window);
+            let (starts, ends) = (self.fetch)(lo, hi)?;
+            if starts.windows(2).any(|pair| pair[0] > pair[1]) {
+                self.monotone = false;
+            }
+            if let (Some(&last), Some((_, right, _))) = (starts.last(), self.chunks.last()) {
+                if right.first().is_some_and(|&first| last > first) {
+                    self.monotone = false;
+                }
+            }
+            self.chunks.push((lo, starts, ends));
+            self.covered_lo = lo;
+        }
+        Ok(self.monotone)
+    }
+
+    /// `(start, end)` of a covered token index.
+    fn bounds(&self, index: usize) -> (u32, u32) {
+        for (lo, starts, ends) in self.chunks.iter().rev() {
+            if index >= *lo && index - lo < starts.len() {
+                return (starts[index - lo], ends[index - lo]);
+            }
+        }
+        unreachable!("span window access outside the ensured coverage")
+    }
+}
+
+impl BpeSyncBoundary {
+    /// Windowed variant of [`Self::last_boundary`] for tails whose spans
+    /// exist only as sparse checkpoints: span regions are fetched on
+    /// demand (suffix first) instead of being read from whole-row
+    /// arrays, so a search that certifies a cut near the tail end never
+    /// materializes millions of spans.
+    ///
+    /// Premise: the fetched values come from the exact known-ID span
+    /// converters, whose starts are nondecreasing by construction. The
+    /// whole-array precheck of [`Self::last_boundary`] is therefore
+    /// applied per fetched window (including the seam between windows);
+    /// a violation inside the visited suffix returns `None` exactly like
+    /// the whole-row search, while windows the backward scan never needs
+    /// are not fetched at all.
+    #[allow(clippy::too_many_arguments)]
+    pub fn last_boundary_windowed<F, E>(
+        &self,
+        text: &str,
+        text_chars: u32,
+        n_tokens: usize,
+        floor_char: u64,
+        ceil_char: u64,
+        window_tokens: usize,
+        fetch: F,
+    ) -> Result<Option<BpeBoundaryCut>, E>
+    where
+        F: FnMut(usize, usize) -> Result<(Vec<u32>, Vec<u32>), E>,
+    {
+        if n_tokens < 2 {
+            return Ok(None);
+        }
+        let mut spans = WindowedSpans::new(fetch, window_tokens, n_tokens);
+        let ceiling = ceil_char.min(u64::from(text_chars));
+        let mut cursor = ReverseCharCursor::new(text, u64::from(text_chars));
+        let mut right_index = n_tokens - 1;
+        while right_index > 0 {
+            if !spans.ensure(right_index)? {
+                return Ok(None);
+            }
+            let boundary_start = spans.bounds(right_index).0;
+            let mut group_start = right_index;
+            while group_start > 0 {
+                if !spans.ensure(group_start - 1)? {
+                    return Ok(None);
+                }
+                if spans.bounds(group_start - 1).0 != boundary_start {
+                    break;
+                }
+                group_start -= 1;
+            }
+            let boundary = u64::from(boundary_start);
+            if boundary <= floor_char {
+                break;
+            }
+            if boundary <= ceiling
+                && boundary > 0
+                && boundary < u64::from(text_chars)
+                && group_start > 0
+                // A byte-fallback character can occupy several tokens sharing
+                // one character span. `group_start` is the first token in the
+                // group, so this check considers only the boundary before it.
+                && u64::from(spans.bounds(group_start - 1).1) <= boundary
+            {
+                let (Some(current), Some(previous)) =
+                    (cursor.char_at(boundary), cursor.char_at(boundary - 1))
+                else {
+                    return Ok(None);
+                };
+                if self.accepts(previous, current) {
+                    return Ok(Some(BpeBoundaryCut {
+                        cut_tokens: group_start,
+                        cut_char: boundary,
+                    }));
+                }
+            }
+            if group_start == 0 {
+                break;
+            }
+            right_index = group_start - 1;
+        }
+        Ok(None)
+    }
+}
+
 /// Monotone reverse character lookup without materializing `Vec<char>`.
 struct ReverseCharCursor<'a> {
     iter: std::iter::Rev<std::str::Chars<'a>>,
@@ -470,6 +644,140 @@ mod tests {
         // The candidate between the two tokens shares the same character;
         // span_end[0] > span_start[1], so it is not a clean character cut.
         assert_eq!(cert.last_boundary("a1", 2, &[0, 1], &[2, 2], 0, 2), None);
+    }
+
+    /// Windowed and whole-row searches must agree on converter-shaped
+    /// (monotone) spans for every window size, floor, and ceiling.
+    fn assert_windowed_matches(
+        cert: &BpeSyncBoundary,
+        text: &str,
+        starts: &[u32],
+        ends: &[u32],
+        floor: u64,
+        ceil: u64,
+    ) {
+        let text_chars = text.chars().count() as u32;
+        let full = cert.last_boundary(text, text_chars, starts, ends, floor, ceil);
+        for window in [1usize, 2, 3, 5, 7, 64] {
+            let windowed = cert
+                .last_boundary_windowed(
+                    text,
+                    text_chars,
+                    starts.len(),
+                    floor,
+                    ceil,
+                    window,
+                    |lo, hi| {
+                        Ok::<_, std::convert::Infallible>((
+                            starts[lo..hi].to_vec(),
+                            ends[lo..hi].to_vec(),
+                        ))
+                    },
+                )
+                .unwrap();
+            assert_eq!(
+                windowed, full,
+                "window={window} floor={floor} ceil={ceil} over {text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn windowed_boundary_matches_the_whole_row_search() {
+        let cert = BpeSyncBoundary::new(classes()).unwrap();
+        // Char-per-token rows, multi-char tokens, and byte-fallback
+        // groups (several tokens sharing one span start) placed so that
+        // groups straddle the small test window sizes.
+        let text = "alpha 123 beta.think 42 gamma\ndelta 9";
+        let n = text.chars().count() as u32;
+        let starts: Vec<u32> = (0..n).collect();
+        let ends: Vec<u32> = (1..=n).collect();
+        for floor in [0u64, 3, 10, 30, 36, 64] {
+            for ceil in [0u64, 1, 5, 17, 29, 36, 37, u64::MAX] {
+                assert_windowed_matches(&cert, text, &starts, &ends, floor, ceil);
+            }
+        }
+        // Grouped rows: tokens 4..=6 share span start 4 (a fallback
+        // group), tokens 10..=11 share span start 10.
+        let g_starts = [0u32, 1, 2, 3, 4, 4, 4, 7, 8, 9, 10, 10, 12, 13];
+        let g_ends = [1u32, 2, 3, 4, 5, 5, 5, 8, 9, 10, 12, 12, 13, 14];
+        let g_text = "word 12 ab cd12"; // 15 chars; spans cover 14
+        for floor in [0u64, 2, 4, 9] {
+            for ceil in [u64::MAX, 13, 11, 10, 5] {
+                assert_windowed_matches(&cert, g_text, &g_starts, &g_ends, floor, ceil);
+            }
+        }
+        // Deterministic randomized rows.
+        let mut seed = 0x1234_5678_9abc_def0u64;
+        let mut next = move || {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            seed >> 33
+        };
+        let pool: Vec<char> = "abc 123.\n'".chars().collect();
+        for _ in 0..300 {
+            let chars = 2 + (next() % 40) as usize;
+            let text: String = (0..chars)
+                .map(|_| pool[(next() % pool.len() as u64) as usize])
+                .collect();
+            let total = text.chars().count() as u32;
+            // Random monotone token layout with occasional groups.
+            let mut starts = Vec::new();
+            let mut ends = Vec::new();
+            let mut position = 0u32;
+            while position < total {
+                let width = 1 + (next() % 3) as u32;
+                let end = (position + width).min(total);
+                if next() % 4 == 0 {
+                    // A fallback-style group: several tokens, one span.
+                    for _ in 0..=(next() % 3) {
+                        starts.push(position);
+                        ends.push(end);
+                    }
+                } else {
+                    starts.push(position);
+                    ends.push(end);
+                }
+                position = end;
+            }
+            let floor = next() % (u64::from(total) + 1);
+            let ceil = next() % (u64::from(total) + 2);
+            assert_windowed_matches(&cert, &text, &starts, &ends, floor, ceil);
+        }
+    }
+
+    #[test]
+    fn windowed_boundary_rejects_a_visited_monotonicity_violation() {
+        let cert = BpeSyncBoundary::new(classes()).unwrap();
+        let text = "alpha 123";
+        // Starts decrease at index 3: the premise is violated.
+        let starts = [0u32, 1, 5, 2, 6, 7];
+        let ends = [1u32, 5, 6, 6, 7, 9];
+        assert_eq!(
+            cert.last_boundary(text, 9, &starts, &ends, 0, u64::MAX),
+            None
+        );
+        for window in [1usize, 2, 3, 8] {
+            let windowed = cert
+                .last_boundary_windowed(text, 9, starts.len(), 0, u64::MAX, window, |lo, hi| {
+                    Ok::<_, std::convert::Infallible>((
+                        starts[lo..hi].to_vec(),
+                        ends[lo..hi].to_vec(),
+                    ))
+                })
+                .unwrap();
+            assert_eq!(windowed, None, "window={window}");
+        }
+    }
+
+    #[test]
+    fn windowed_boundary_propagates_fetch_errors() {
+        let cert = BpeSyncBoundary::new(classes()).unwrap();
+        let result = cert.last_boundary_windowed("alpha 123", 9, 9, 0, u64::MAX, 4, |_lo, _hi| {
+            Err::<(Vec<u32>, Vec<u32>), &str>("window fetch failed")
+        });
+        assert_eq!(result, Err("window fetch failed"));
     }
 
     #[test]

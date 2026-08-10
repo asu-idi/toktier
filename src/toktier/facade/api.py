@@ -5,9 +5,10 @@ facade is a thin composition of shipped pieces: artifacts resolve
 through the manifest and the verified cache, routing follows the
 standing policy semantics (GPU and corrected CPU backends are selected
 only for exact certified bindings), and the session/lookup paths run on
-the entry store. Every path returns ids equal to a
+the entry store. Certified and reference paths return ids equal to a
 from-scratch reference encode; store layers can only decline to serve,
-never answer differently.
+never answer differently. The explicitly selected experimental Fastokens
+repair adapter is outside that exact-ID guarantee and reports it.
 
 Heavy work is deferred: importing this module loads no oracle and no
 native store. The oracle loads when the tokenizer is constructed (the
@@ -29,7 +30,13 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 
 from .._oracle import ORACLE_PACKAGE, import_oracle, oracle_version
-from ..artifacts import ArtifactManifest, ArtifactStore, HuggingFaceSource
+from ..artifacts import (
+    ArtifactManifest,
+    ArtifactStore,
+    HuggingFaceSource,
+    shipped_sibling_aliases,
+)
+from ..artifacts.model_resolution import ModelResolution, resolve_model_repository
 from ..artifacts.tables import ARTIFACT_MANIFEST
 from ..backends.fast_cpu import FastCpuBackend
 from ..backends.hf import HfBackend
@@ -37,7 +44,13 @@ from ..backends.protocol import TOKENIZER_FILE
 from ..config import Config
 from ..engine.gpu.backend import GpuBackend, LazyGpuBackend
 from ..engine.gpu.host_probe import CudaHostProbe
-from ..errors import BackendExecutionFault, BackendUnavailable, UnsupportedConfig
+from ..errors import (
+    BackendExecutionFault,
+    BackendUnavailable,
+    KernelIncompatible,
+    UncertifiedTokenizer,
+    UnsupportedConfig,
+)
 from ..frontend.added import AddedTokenFrontend
 from ..policy import (
     BACKEND_FAST_CPU,
@@ -50,7 +63,7 @@ from ..policy import (
 )
 from ..repair.fastokens import FastokensFullRepair
 from ..repair.gigatoken import GigatokenRepair, WindowUnsupported
-from ..repair.registry import family_spec
+from ..repair.registry import family_spec, pclass_table
 from ..routing.added_route import AddedTokenRouter
 from ..routing.execute import RoutedExecutor
 from ..routing.explain import build_explanation
@@ -61,7 +74,7 @@ from ..routing.registry_load import shipped_registry
 from ..routing.registry_view import ArtifactRecord
 from .store import DEFAULT_CACHE_BUDGET_BYTES, EntryStore
 
-__all__ = ["Encoding", "Tokenizer", "load"]
+__all__ = ["Encoding", "Tokenizer", "from_pretrained", "load"]
 
 #: Engine identity bound into the semantic fingerprint. Changes when the
 #: session-path engine semantics change; stored sessions then miss and
@@ -265,6 +278,7 @@ class Tokenizer:
             self._added_router = AddedTokenRouter(_RouteEveryInput())
         else:
             self._added_router = AddedTokenRouter(frontend)
+        self._postprocessor_adds_tokens = document.get("post_processor") is not None
         self._registry = shipped_registry()
         device_probe = (
             CudaHostProbe(
@@ -318,11 +332,18 @@ class Tokenizer:
                 "certified planner closed it"
             )
             if jit_rejection is not None:
+                # The facts the refusal rests on belong in the message,
+                # not only in ``details``: a reader who sees only the
+                # text should still be able to tell which of the three
+                # binding axes did not match.
+                observed = jit_rejection.detail.get("observed", "unknown")
+                constraint = jit_rejection.detail.get("constraint", "unknown")
                 remedy = _uncertified_jit_remedy(entry.family)
                 details["remedy"] = remedy
                 message += (
-                    "; to compile this unjudged combination for explicit "
-                    f"evaluation, run `{remedy}`"
+                    f"; observed {observed}; certified constraint: "
+                    f"{constraint}; to compile this unjudged combination "
+                    f"for explicit evaluation, run `{remedy}`"
                 )
             self._backend.close()
             raise BackendUnavailable(message, details=details)
@@ -361,9 +382,17 @@ class Tokenizer:
         self._entry_store: EntryStore | None = None
         self._session_repair: _SessionRepair | None = None
         self._session_repair_initialised = False
+        self._native_session_encoder: Any | None = None
+        self._native_session_encoder_initialised = False
+        self._native_request: Any | None = None
+        self._native_request_initialised = False
+        self._native_request_guard: dict[str, object] | None = None
+        self._native_gpu_engine: Any | None = None
         self._session_repair_guard: dict[str, object] | None = None
         self._state_encode_counts: dict[str, int] = {}
         self._last_state_encode: dict[str, object] | None = None
+        self._model_resolution: ModelResolution | None = None
+        self._closed = False
 
     # -- identity ------------------------------------------------------
 
@@ -392,11 +421,18 @@ class Tokenizer:
         ``session`` names a store entry: when its stored text is a
         prefix of ``text``, only the remainder is appended; otherwise
         the entry is re-encoded whole and overwritten. Without a
-        session, content lookup (``lookup="auto"``, the default) asks
-        the store whether a stored text is a prefix of this input;
-        ``lookup="off"`` skips the store. Every variant returns the ids
-        a from-scratch reference encode would return.
+        session, an omitted ``lookup`` behaves as ``"auto"`` for
+        core-stream calls: content lookup asks the store whether a
+        stored text is a prefix of this input; ``lookup="off"`` skips
+        the store. With ``add_special_tokens=True``, omitting
+        ``lookup`` selects the plain routed path, while an explicit
+        ``session`` or ``lookup="auto"`` raises ``UNSUPPORTED_CONFIG``.
+        Under certified and reference policies every variant returns
+        the ids a from-scratch reference encode would return; an
+        explicitly selected experimental repair backend labels itself
+        outside that guarantee.
         """
+        self._require_open()
         if lookup not in _LOOKUP_VALUES:
             raise ValueError(
                 f"lookup must be one of {_LOOKUP_VALUES!r}, not {lookup!r}"
@@ -415,6 +451,18 @@ class Tokenizer:
                     "reason": "sessions and content lookup store the "
                     "pre-postprocessor core stream",
                 },
+            )
+        native = self._native_request_runtime()
+        if native is not None:
+            return Encoding(
+                ids=tuple(
+                    native.encode(
+                        text,
+                        session=session,
+                        lookup_auto=lookup != "off",
+                        add_special_tokens=add_special_tokens,
+                    )
+                )
             )
         ids: list[int] | None = None
         if session is not None:
@@ -436,11 +484,19 @@ class Tokenizer:
         Batches run the plain routed path; per-document content lookup
         belongs to :meth:`encode`.
         """
+        self._require_open()
+        native = self._native_request_runtime()
+        if native is not None:
+            rows = native.encode_batch(
+                list(texts), add_special_tokens=add_special_tokens
+            )
+            return [Encoding(ids=tuple(row)) for row in rows]
         rows = self._executor.encode_batch(texts, add_special_tokens=add_special_tokens)
         return [Encoding(ids=tuple(row)) for row in rows]
 
     def decode(self, ids: Sequence[int], *, skip_special_tokens: bool = True) -> str:
         """Decode token ids back to text through the reference oracle."""
+        self._require_open()
         return self._oracle().decode(list(ids), skip_special_tokens=skip_special_tokens)
 
     # -- diagnostics ---------------------------------------------------
@@ -453,7 +509,17 @@ class Tokenizer:
         facade keys (``family``, ``store_directory``, ``store``). The
         requested routing policy is reported as ``routing_policy``; the
         ``certification`` block is a separate answer to a separate
-        question. The facade plans against the digest-verified shipped
+        question.
+
+        The headline ``backend`` is the backend that actually returned
+        the last result once this tokenizer has run anything, and the
+        planned backend before that; ``backend_basis``
+        (``"last_execution"`` / ``"plan"``) says which, and
+        ``planned_backend`` reports the plan either way. A per-input
+        safety fallback therefore shows up in the headline rather than
+        only in ``runtime_policy.last_execution``.
+
+        The facade plans against the digest-verified shipped
         registry. Outside ``REFERENCE``, its default ``device="auto"`` path
         performs an honest device probe when the GPU runtime is installed;
         ``device="cpu"``
@@ -467,23 +533,44 @@ class Tokenizer:
         doctor`` gives) together with the per-delivery,
         per-architecture certification statuses of this artifact's
         record in the shipped support registry. The ``session_repair``
-        block separately reports whether store appends use the certified
-        corrected-Gigatoken callback or exact HF full re-encoding.
+        block separately reports the active repair engine and request
+        path: Rust-native corrected repair, the compatibility callback,
+        an explicitly selected experimental Fastokens adapter, or exact
+        HF full re-encoding.
         ``runtime_policy``, ``gpu_backend``, and ``state_encode`` report
         the automatic crossover and the path that actually ran.
         """
+        native_runtime = (
+            self._native_request if self._native_request_initialised else None
+        )
+        native_stats = (
+            native_runtime.runtime_stats() if native_runtime is not None else None
+        )
+        last_execution = (
+            native_stats["last_execution"]
+            if native_stats is not None
+            else self._executor.last_execution
+        )
+        from ..engine.gpu.loader import KernelLoader
+
+        actual_delivery = KernelLoader.delivery()
         report = build_explanation(
             route_plan=self._plan,
             snapshot=self._snapshot,
             assessments=assessments_for(
                 self._snapshot, self._plan.policy, self._registry, self._config
             ),
-            fallback_counts=self._executor.fallback_counts,
+            fallback_counts=(
+                native_stats["fallback_counts"]
+                if native_stats is not None
+                else self._executor.fallback_counts
+            ),
             delivery_record=self._shipped_record(),
+            last_execution=(
+                last_execution if isinstance(last_execution, Mapping) else None
+            ),
+            gpu_delivery=actual_delivery or self._gpu_delivery,
         )
-        from ..engine.gpu.loader import KernelLoader
-
-        actual_delivery = KernelLoader.delivery()
         report["kernel_delivery"] = actual_delivery
         delivery_report = report.get("kernel_deliveries")
         if isinstance(delivery_report, dict):
@@ -491,11 +578,27 @@ class Tokenizer:
                 item = delivery_report.get(name)
                 if isinstance(item, dict):
                     item["loaded"] = actual_delivery == name
+        # The snapshot was taken at construction, so its delivery field
+        # can predate the first kernel load. The loader's answer is a
+        # read-only process fact; reporting the stale ``None`` beside a
+        # top-level ``prebuilt`` would make the two disagree.
+        probe_report = report.get("probe")
+        if isinstance(probe_report, dict) and actual_delivery is not None:
+            probe_report["kernel_delivery"] = actual_delivery
         report["family"] = self.family
+        report["model_resolution"] = (
+            self._model_resolution.report(
+                execution_artifact_sha256=self._artifact_sha256
+            )
+            if self._model_resolution is not None
+            else None
+        )
         report["store_directory"] = (
             str(self._store_directory) if self._store_directory else None
         )
-        if self._entry_store is not None:
+        if native_runtime is not None:
+            report["store"] = native_runtime.store_stats()
+        elif self._entry_store is not None:
             report["store"] = self._entry_store.stats()
         report["session_repair"] = self._session_repair_report()
         report["runtime_policy"] = {
@@ -503,36 +606,76 @@ class Tokenizer:
             "gpu_delivery_request": self._gpu_delivery_request,
             "gpu_delivery_selected": self._gpu_delivery,
             "gpu_min_bytes": self._gpu_min_bytes,
-            "execution_counts": dict(self._executor.execution_counts),
-            "last_execution": self._executor.last_execution,
+            "execution_counts": (
+                dict(native_stats["execution_counts"])
+                if native_stats is not None
+                else dict(self._executor.execution_counts)
+            ),
+            "last_execution": last_execution,
+            "request_path": (
+                "rust_native" if native_runtime is not None else "python_adapter"
+            ),
+            "python_to_native_calls": (
+                native_stats["python_to_native_calls"]
+                if native_stats is not None
+                else None
+            ),
         }
+        native_gpu_loaded = self._native_gpu_engine is not None
+        legacy_gpu_loaded = (
+            self._gpu_backend.loaded if self._gpu_backend is not None else False
+        )
         report["gpu_backend"] = {
             "planned": BACKEND_GPU in self._plan.fallback_chain,
-            "device": self._gpu_device if self._gpu_backend is not None else None,
-            "loaded": self._gpu_backend.loaded if self._gpu_backend else False,
+            "device": (
+                self._gpu_device
+                if self._gpu_backend is not None or native_gpu_loaded
+                else None
+            ),
+            "loaded": legacy_gpu_loaded or native_gpu_loaded,
             "load_error": (
                 str(self._gpu_backend.load_error)
                 if self._gpu_backend and self._gpu_backend.load_error
                 else None
             ),
         }
-        report["state_encode"] = {
-            "counts": dict(sorted(self._state_encode_counts.items())),
-            "last": (
-                dict(self._last_state_encode)
-                if self._last_state_encode is not None
-                else None
-            ),
-        }
+        report["state_encode"] = (
+            {
+                "counts": dict(native_stats["state_encode_counts"]),
+                "last": native_stats["last_state_encode"],
+            }
+            if native_stats is not None
+            else {
+                "counts": dict(sorted(self._state_encode_counts.items())),
+                "last": (
+                    dict(self._last_state_encode)
+                    if self._last_state_encode is not None
+                    else None
+                ),
+            }
+        )
+        if self._native_request_guard is not None:
+            report["native_request_guard"] = dict(self._native_request_guard)
         return report
 
     def close(self) -> None:
         """Release the loaded backend. Idempotent."""
+        if self._closed:
+            return
+        self._closed = True
+        self._native_request = None
+        self._native_gpu_engine = None
+        self._native_session_encoder = None
+        self._oracle_handle = None
         self._backend.close()
         if self._fast_backend is not None:
             self._fast_backend.close()
         if self._gpu_backend is not None:
             self._gpu_backend.close()
+
+    def _require_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("backend is closed")
 
     # -- internals -----------------------------------------------------
 
@@ -605,22 +748,46 @@ class Tokenizer:
         """
         repair = self._repair_callback()
         if not isinstance(repair, GigatokenRepair):
-            self._count_state_encode("hf_no_certified_span_bridge")
-            return self._reference_encode(text)
+            path = "hf_no_certified_span_bridge"
+            result = self._reference_encode(text)
+            self._count_state_encode(path)
+            self._executor.record_reference_result(
+                text,
+                reason=ReasonCode.R_INPUT_GUARD_ROUTED,
+                path=path,
+            )
+            return result
         if self._added_router.holds_literal(text):
-            self._count_state_encode("hf_added_token")
-            return self._reference_encode(text)
+            path = "hf_added_token"
+            result = self._reference_encode(text)
+            self._count_state_encode(path)
+            self._executor.record_reference_result(
+                text,
+                reason=ReasonCode.R_INPUT_ADDED_TOKEN,
+                path=path,
+            )
+            return result
         ids = self._executor.encode(text, add_special_tokens=False)
         execution = self._executor.last_execution or {}
         try:
             spans = repair.spans_for_ids(text, ids)
         except (UnicodeError, ValueError, WindowUnsupported) as error:
+            path = "hf_span_guard"
+            result = self._reference_encode(text)
             self._count_state_encode(
-                "hf_span_guard",
+                path,
                 error=type(error).__name__,
                 message=str(error),
             )
-            return self._reference_encode(text)
+            self._executor.record_reference_result(
+                text,
+                reason=ReasonCode.R_INPUT_GUARD_ROUTED,
+                path=path,
+                replaces_last=True,
+                error=type(error).__name__,
+                message=str(error),
+            )
+            return result
         backend = str(execution.get("executed_backend", "unknown"))
         self._count_state_encode(
             "accelerated_with_reconstructed_spans",
@@ -631,30 +798,230 @@ class Tokenizer:
 
     def _store(self) -> EntryStore:
         if self._entry_store is None:
-            repair = self._repair_callback()
+            # The pure-native session encoder performs full/seed encodes on
+            # the corrected CPU engine below PyO3, without consulting the
+            # routed executor. That is exactly right for CPU-only plans, but
+            # a plan that admits the GPU backend routes large inputs by size
+            # (``gpu_min_bytes``), and this store only serves the Python
+            # adapter (the native request runtime owns the store paths under
+            # prebuilt delivery). So when GPU is admitted, full and seed
+            # encodes go through the callback lane instead: its
+            # ``encode`` callback (:meth:`_state_encode`) runs the routed
+            # executor -- dispatching the admitted GPU backend and recording
+            # ``last_execution`` -- while append repair stays on the
+            # certified Gigatoken BPE-sync witness machinery.
+            native_encoder = (
+                None
+                if BACKEND_GPU in self._plan.fallback_chain
+                else self._native_repair_encoder()
+            )
+            repair = None if native_encoder is not None else self._repair_callback()
+            native_repair = native_encoder is not None
             self._entry_store = EntryStore(
-                fingerprint=self._semantic_fingerprint(repair),
+                fingerprint=self._semantic_fingerprint(
+                    repair, native_fast_cpu=native_repair
+                ),
                 encode=self._state_encode,
                 append=repair,
-                append_stats=repair.stats if repair is not None else None,
-                certified_bpe_witness=isinstance(repair, GigatokenRepair),
+                append_stats=(
+                    native_encoder.stats
+                    if native_encoder is not None
+                    else (repair.stats if repair is not None else None)
+                ),
+                certified_bpe_witness=(
+                    native_repair or isinstance(repair, GigatokenRepair)
+                ),
                 bpe_sync_pclass=(
-                    repair.bpe_sync_pclass
-                    if isinstance(repair, GigatokenRepair)
-                    else None
+                    None
+                    if native_repair
+                    else (
+                        repair.bpe_sync_pclass
+                        if isinstance(repair, GigatokenRepair)
+                        else None
+                    )
                 ),
                 seal_end_guard_chars=(
                     max(
                         self._seal_end_guard_chars,
-                        repair.minimum_seal_tail_chars,
+                        native_encoder.minimum_seal_tail_chars,
                     )
-                    if isinstance(repair, GigatokenRepair)
-                    else 0
+                    if native_encoder is not None
+                    else (
+                        max(
+                            self._seal_end_guard_chars,
+                            repair.minimum_seal_tail_chars,
+                        )
+                        if isinstance(repair, GigatokenRepair)
+                        else 0
+                    )
                 ),
+                native_encoder=native_encoder,
                 directory=self._store_directory,
                 cache_budget_bytes=self._cache_budget,
             )
         return self._entry_store
+
+    def _native_request_runtime(self) -> Any | None:
+        """Construct the one-call native request path when every engine fits.
+
+        JIT delivery and the explicitly experimental Fastokens repair adapter
+        retain their existing Python hosts.  Certified CPU/reference plans use
+        this runtime directly; prebuilt CUDA joins it through the native driver
+        host rather than through a callback.
+        """
+        if self._native_request_initialised:
+            return self._native_request
+        self._native_request_initialised = True
+        if self._repair_backend_request == "fastokens":
+            return None
+        if (
+            BACKEND_GPU in self._plan.fallback_chain
+            and self._gpu_delivery != "prebuilt"
+        ):
+            return None
+        native_reference = getattr(self._backend, "native_engine", None)
+        if not callable(native_reference):
+            return None
+        try:
+            from .. import _native
+
+            reference = native_reference()
+            fast_encoder = None
+            if BACKEND_FAST_CPU in self._plan.fallback_chain:
+                fast_encoder = self._native_repair_encoder(reference)
+                if fast_encoder is None:
+                    return None
+            repair_fast_cpu = (
+                self._repair_backend_request == "auto" and fast_encoder is not None
+            )
+            seal_guard = 0
+            if repair_fast_cpu:
+                assert fast_encoder is not None
+                seal_guard = max(
+                    self._seal_end_guard_chars,
+                    int(fast_encoder.minimum_seal_tail_chars),
+                )
+            gpu_encoder = None
+            if BACKEND_GPU in self._plan.fallback_chain:
+                from ..engine.gpu.native import open_native_prebuilt_gpu
+
+                device_ordinal = int(self._gpu_device.partition(":")[2] or "0")
+                device = next(
+                    (
+                        item
+                        for item in self._snapshot.devices
+                        if item.index == device_ordinal
+                    ),
+                    None,
+                )
+                if device is None:
+                    raise RuntimeError(
+                        "the native GPU device disappeared after planning"
+                    )
+                gpu_encoder = open_native_prebuilt_gpu(
+                    artifact=self._artifact_handle,
+                    family=self.family,
+                    cache_dir=Path(self._config.cache_dir),
+                    device_ordinal=device_ordinal,
+                    architecture=device.architecture,
+                    reference=reference,
+                )
+                self._native_gpu_engine = gpu_encoder
+            self._native_request = _native.NativeRuntime(
+                list(self._plan.fallback_chain),
+                [
+                    self._gpu_min_bytes if backend == BACKEND_GPU else 0
+                    for backend in self._plan.fallback_chain
+                ],
+                reference,
+                fast_encoder,
+                gpu_encoder,
+                repair_fast_cpu,
+                self._semantic_fingerprint(None, native_fast_cpu=repair_fast_cpu),
+                seal_guard,
+                self._postprocessor_adds_tokens,
+                self._config.diagnostics,
+                (
+                    str(self._store_directory)
+                    if self._store_directory is not None
+                    else None
+                ),
+                self._cache_budget,
+            )
+        except (
+            BackendExecutionFault,
+            KernelIncompatible,
+            UncertifiedTokenizer,
+            OSError,
+            RuntimeError,
+            ValueError,
+        ) as error:
+            self._native_request_guard = {
+                "reason": "native_request_initialisation_guard",
+                "error": type(error).__name__,
+                "message": str(error),
+            }
+            self._native_request = None
+        return self._native_request
+
+    def _native_repair_encoder(self, reference: object | None = None) -> Any | None:
+        """Build the one-call Rust session engine once when certified.
+
+        Explicit reference and experimental Fastokens requests retain their
+        existing adapters. The default corrected-Gigatoken route instead
+        materializes the exact live tokenizer once, then moves full encode,
+        append repair, boundary certification and HF fallback below PyO3.
+        """
+        if self._native_session_encoder_initialised:
+            return self._native_session_encoder
+        self._native_session_encoder_initialised = True
+        if self._repair_backend_request != "auto":
+            return None
+        backend = self._fast_backend
+        if backend is None or BACKEND_FAST_CPU not in self._plan.fallback_chain:
+            return None
+        shared_engine = getattr(backend, "native_session_engine", None)
+        materialize = getattr(backend, "materialized_tokenizer_json", None)
+        if not callable(shared_engine) and not callable(materialize):
+            # Test/injected backends written for the callback protocol retain
+            # that protocol. Production FastCpuBackend always supplies the
+            # native materialization surface.
+            return None
+        spec = family_spec(self.family, self._artifact_sha256)
+        if spec is None:
+            self._session_repair_guard = {
+                "reason": "artifact_not_in_certified_repair_roster"
+            }
+            return None
+        try:
+            from .. import _native
+
+            if callable(shared_engine):
+                self._native_session_encoder = (
+                    shared_engine(reference)
+                    if isinstance(backend, FastCpuBackend)
+                    else shared_engine()
+                )
+            if self._native_session_encoder is None:
+                assert callable(materialize)
+                tokenizer_json = materialize().encode("utf-8")
+                self._native_session_encoder = _native.CallbackEncoder.native_fast_cpu(
+                    tokenizer_json,
+                    spec.family,
+                    spec.artifact_sha256,
+                    spec.margin,
+                    spec.effective_l_max,
+                    spec.has_normalizer,
+                    pclass_table(),
+                )
+        except (BackendExecutionFault, RuntimeError, ValueError) as error:
+            self._session_repair_guard = {
+                "reason": "native_repair_initialisation_guard",
+                "error": type(error).__name__,
+                "message": str(error),
+            }
+            self._native_session_encoder = None
+        return self._native_session_encoder
 
     def _repair_callback(self) -> _SessionRepair | None:
         """Build the certified append callback once; otherwise use HF."""
@@ -707,6 +1074,12 @@ class Tokenizer:
         return self._session_repair
 
     def _session_repair_report(self) -> dict[str, object]:
+        if self._native_session_encoder is not None:
+            return {
+                "status": "active",
+                "request_path": "rust_native",
+                **self._native_session_encoder.stats(),
+            }
         if self._session_repair is not None:
             return {"status": "active", **self._session_repair.stats()}
         if self._session_repair_guard is not None:
@@ -726,13 +1099,17 @@ class Tokenizer:
                     else None
                 )
             )
-            return {
-                "status": "not_initialised" if eligible else "reference_only",
-                "eligible_backend": eligible,
-            }
+            if eligible is None:
+                return {"status": "reference_only", "backend": BACKEND_REFERENCE}
+            return {"status": "not_initialised", "eligible_backend": eligible}
         return {"status": "reference_only", "backend": BACKEND_REFERENCE}
 
-    def _semantic_fingerprint(self, repair: _SessionRepair | None = None) -> bytes:
+    def _semantic_fingerprint(
+        self,
+        repair: _SessionRepair | None = None,
+        *,
+        native_fast_cpu: bool = False,
+    ) -> bytes:
         """32-byte identity binding artifact, oracle and engine semantics.
 
         Any component changing produces a different fingerprint, so
@@ -748,21 +1125,95 @@ class Tokenizer:
             _ENGINE_ID,
             _SESSION_SEMVER,
             (
-                str(repair_stats.get("backend"))
-                if repair is not None
-                else BACKEND_REFERENCE
+                BACKEND_FAST_CPU
+                if native_fast_cpu
+                else (
+                    str(repair_stats.get("backend"))
+                    if repair is not None
+                    else BACKEND_REFERENCE
+                )
             ),
-            repair.config_id if repair is not None else "",
+            (
+                "toktier-fast-repair-v1"
+                if native_fast_cpu
+                else (repair.config_id if repair is not None else "")
+            ),
             str(repair_stats.get("engine_version") or ""),
             str(repair_stats.get("engine_digest") or ""),
             self._snapshot.fast_cpu_engine.version or "",
-            self._snapshot.fast_cpu_engine.binary_digest or "",
+            self._snapshot.fast_cpu_engine.source_digest or "",
+            "\x1f".join(self._snapshot.fast_cpu_engine.build_flags),
+            self._snapshot.fast_cpu_engine.toolchain or "",
             self._snapshot.fast_cpu_engine.config_digest or "",
         ):
             raw = component.encode("utf-8")
             digest.update(len(raw).to_bytes(4, "little"))
             digest.update(raw)
         return digest.digest()
+
+
+def from_pretrained(
+    repo_id: str,
+    *,
+    revision: str | None = None,
+    store: str | os.PathLike[str] | None = None,
+    device: str = "auto",
+    config: Config | None = None,
+    policy: RoutingPolicy | str | None = None,
+    manifest: ArtifactManifest | None = None,
+    cache_budget_bytes: int | None = None,
+    repair_backend: str = "auto",
+    gpu_delivery: str = "auto",
+    gpu_min_bytes: int = DEFAULT_GPU_MIN_BYTES,
+) -> Tokenizer:
+    """Load a model repository, admitting acceleration by tokenizer content.
+
+    The repository name chooses where to look, not whether acceleration is
+    safe.  TokTier hashes the resolved tokenizer file and admits a canonical
+    family only when those bytes equal a packaged anchor or an exact identity
+    in the digest-protected verified-sibling registry.  Registered
+    canonicalisation and serialisation variants execute the audited canonical
+    anchor through the ordinary CPU/GPU router.  Unknown or changed content is
+    still usable under policies that permit the reference route, and then only
+    through Hugging Face; ``REQUIRE_ACCELERATED`` raises when no certified
+    accelerated path is eligible.
+
+    When ``revision`` is omitted, audited sibling and canonical repositories
+    use their recorded immutable revision; an otherwise unknown repository
+    resolves ``main``.  ``load(family)`` remains the family-id API and is not
+    affected by this entry point.
+    """
+    if not isinstance(repo_id, str) or not repo_id or repo_id != repo_id.strip():
+        raise ValueError("repo_id must be a non-empty, unpadded string")
+    if revision is not None and (
+        not isinstance(revision, str) or not revision or revision != revision.strip()
+    ):
+        raise ValueError("revision must be a non-empty, unpadded string or None")
+    resolved_config = config if config is not None else Config.resolve()
+    active_manifest = (
+        manifest if manifest is not None else ArtifactManifest.load(ARTIFACT_MANIFEST)
+    )
+    resolved = resolve_model_repository(
+        repo_id=repo_id,
+        revision=revision,
+        config=resolved_config,
+        manifest=active_manifest,
+        aliases=shipped_sibling_aliases(),
+    )
+    tokenizer = load(
+        resolved.family,
+        store=store,
+        device=device,
+        config=resolved_config,
+        policy=policy,
+        manifest=resolved.manifest,
+        cache_budget_bytes=cache_budget_bytes,
+        repair_backend=repair_backend,
+        gpu_delivery=gpu_delivery,
+        gpu_min_bytes=gpu_min_bytes,
+    )
+    tokenizer._model_resolution = resolved.resolution
+    return tokenizer
 
 
 def load(

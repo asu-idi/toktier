@@ -19,21 +19,72 @@
 
 #![deny(unsafe_code)]
 
+use std::collections::BTreeMap;
 use std::ffi::CStr;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use pyo3::exceptions::{PyKeyError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::pybacked::{PyBackedBytes, PyBackedStr};
 use pyo3::sync::GILOnceCell;
-use pyo3::types::{PyBytes, PyDict, PyString, PyStringMethods};
+use pyo3::types::{PyBytes, PyDict, PyList, PyString, PyStringMethods};
 
 use toktier_routing_core::{
-    BpeSyncBoundary, LiteralMode, LiteralPrefix, RouteSelector as CoreRouteSelector,
+    BpeSyncBoundary, EntryStoreOpenError, FastCpuEngine, FastRepairSpec, LiteralMode,
+    LiteralPrefix, NativeEntryStore, NativePrebuiltGpu, NativePrebuiltGpuConfig, NativeRouter,
+    ReferenceEngine, RouteSelector as CoreRouteSelector,
 };
 use toktier_store_core::{
-    AppendReport, BoundaryCut, Encoding, EngineError, KeyId, SemanticFingerprint, SessionEncoder,
-    SessionHandle, StoreConfig, StoreError, TailState, WitnessCategory,
+    AppendReport, BoundaryCut, Encoding, EngineError, KeyId, RecoveryMaterial, SemanticFingerprint,
+    SessionEncoder, SessionHandle, StoreConfig, StoreError, TailState, WitnessCategory,
 };
 use toktier_store_sqlite::{SingleEngine, StoreDb};
+
+const FAST_CPU_ENGINE_VERSION: &str = "0.10.0+toktier.pinned.1";
+type PyIdsWithOffsets = (Vec<u32>, Vec<(u32, u32)>);
+type PyContentIndexEntry = (u64, String, Vec<(u64, String)>);
+const FAST_CPU_ENGINE_MODULE: &str = "toktier._native";
+const FAST_CPU_ENGINE_DELIVERY: &str = "integrated";
+
+/// Build-time identity of the corrected Gigatoken implementation that is
+/// actually linked into this extension.  The planner compares these facts to
+/// the checked registry before admitting the CPU-fast route.
+#[pyfunction]
+fn fast_cpu_build_facts<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    let output = PyDict::new(py);
+    output.set_item("engine", "gigatoken")?;
+    output.set_item("engine_version", FAST_CPU_ENGINE_VERSION)?;
+    output.set_item("engine_delivery", FAST_CPU_ENGINE_DELIVERY)?;
+    output.set_item("engine_module", FAST_CPU_ENGINE_MODULE)?;
+    output.set_item("source_digest", env!("TOKTIER_FAST_CPU_SOURCE_SHA256"))?;
+    output.set_item(
+        "build_flags",
+        env!("TOKTIER_FAST_CPU_BUILD_FLAGS")
+            .split('\x1f')
+            .collect::<Vec<_>>(),
+    )?;
+    output.set_item("toolchain", env!("TOKTIER_FAST_CPU_TOOLCHAIN"))?;
+    Ok(output)
+}
+
+/// Build-time identity of the Rust request host paired with the shipped
+/// prebuilt CUDA binary.  The prebuilt certificate binds these facts in
+/// addition to the fatbin and per-architecture image digests.
+#[pyfunction]
+fn native_host_build_facts<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    let output = PyDict::new(py);
+    output.set_item("source_digest", env!("TOKTIER_NATIVE_HOST_SOURCE_SHA256"))?;
+    output.set_item(
+        "build_flags",
+        env!("TOKTIER_NATIVE_HOST_BUILD_FLAGS")
+            .split('\x1f')
+            .collect::<Vec<_>>(),
+    )?;
+    output.set_item("toolchain", env!("TOKTIER_NATIVE_HOST_TOOLCHAIN"))?;
+    Ok(output)
+}
 
 /// Fallback mirror of the error classes this boundary raises, used only
 /// when `toktier.errors` is not importable (standalone `.so` loading).
@@ -202,6 +253,58 @@ fn fingerprint_of(raw: &[u8]) -> PyResult<SemanticFingerprint> {
         .map_err(|_| PyValueError::new_err("fingerprint must be exactly 32 bytes"))
 }
 
+fn digest32_of(raw: &[u8], name: &str) -> PyResult<[u8; 32]> {
+    raw.try_into()
+        .map_err(|_| PyValueError::new_err(format!("{name} must be exactly 32 bytes")))
+}
+
+fn hex(raw: &[u8]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(raw.len() * 2);
+    for &byte in raw {
+        output.push(DIGITS[(byte >> 4) as usize] as char);
+        output.push(DIGITS[(byte & 0x0f) as usize] as char);
+    }
+    output
+}
+
+fn json_to_py(py: Python<'_>, value: &serde_json::Value) -> PyResult<Py<PyAny>> {
+    Ok(match value {
+        serde_json::Value::Null => py.None(),
+        serde_json::Value::Bool(value) => value.into_pyobject(py)?.to_owned().unbind().into_any(),
+        serde_json::Value::Number(value) => {
+            if let Some(value) = value.as_i64() {
+                value.into_pyobject(py)?.to_owned().unbind().into_any()
+            } else if let Some(value) = value.as_u64() {
+                value.into_pyobject(py)?.to_owned().unbind().into_any()
+            } else {
+                value
+                    .as_f64()
+                    .unwrap_or_default()
+                    .into_pyobject(py)?
+                    .to_owned()
+                    .unbind()
+                    .into_any()
+            }
+        }
+        serde_json::Value::String(value) => PyString::new(py, value).unbind().into_any(),
+        serde_json::Value::Array(values) => {
+            let list = PyList::empty(py);
+            for value in values {
+                list.append(json_to_py(py, value)?)?;
+            }
+            list.unbind().into_any()
+        }
+        serde_json::Value::Object(values) => {
+            let mapping = PyDict::new(py);
+            for (key, value) in values {
+                mapping.set_item(key, json_to_py(py, value)?)?;
+            }
+            mapping.unbind().into_any()
+        }
+    })
+}
+
 // --------------------------------------------------------------- route --
 
 /// Allocation-free per-input selector over one immutable fallback chain.
@@ -284,6 +387,190 @@ impl NativeRouteSelector {
     }
 }
 
+// ----------------------------------------------------------- reference --
+
+/// Frozen Hugging Face reference engine owned entirely by Rust.
+///
+/// The Python facade verifies the artifact before construction.  Every method
+/// then borrows Python's immutable UTF-8 storage, releases the GIL for the
+/// complete tokenizer operation, and converts only the final result.
+#[pyclass(name = "ReferenceEngine", module = "toktier._native")]
+struct NativeReferenceEngine {
+    inner: Arc<ReferenceEngine>,
+}
+
+fn reference_err(error: impl std::fmt::Display) -> PyErr {
+    PyRuntimeError::new_err(format!("native reference engine failed: {error}"))
+}
+
+#[pymethods]
+impl NativeReferenceEngine {
+    #[new]
+    fn new(path: &str) -> PyResult<Self> {
+        let inner = ReferenceEngine::from_file(path).map_err(reference_err)?;
+        Ok(Self {
+            inner: Arc::new(inner),
+        })
+    }
+
+    #[pyo3(signature = (text, add_special_tokens = true))]
+    fn encode(
+        &self,
+        py: Python<'_>,
+        text: PyBackedStr,
+        add_special_tokens: bool,
+    ) -> PyResult<Vec<u32>> {
+        let engine = Arc::clone(&self.inner);
+        py.allow_threads(move || engine.encode_ids(&text, add_special_tokens))
+            .map_err(reference_err)
+    }
+
+    fn encode_with_offsets(&self, py: Python<'_>, text: PyBackedStr) -> PyResult<PyIdsWithOffsets> {
+        let engine = Arc::clone(&self.inner);
+        let encoded = py
+            .allow_threads(move || engine.encode_core(&text))
+            .map_err(reference_err)?;
+        Ok((encoded.ids, encoded.spans))
+    }
+
+    #[pyo3(signature = (texts, add_special_tokens = true))]
+    fn encode_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<PyBackedStr>,
+        add_special_tokens: bool,
+    ) -> PyResult<Vec<Vec<u32>>> {
+        let engine = Arc::clone(&self.inner);
+        py.allow_threads(move || {
+            let rows = texts.iter().map(|text| text.as_ref()).collect::<Vec<_>>();
+            engine.encode_batch_ids(&rows, add_special_tokens)
+        })
+        .map_err(reference_err)
+    }
+
+    #[pyo3(signature = (ids, skip_special_tokens = true))]
+    fn decode(&self, py: Python<'_>, ids: Vec<u32>, skip_special_tokens: bool) -> PyResult<String> {
+        let engine = Arc::clone(&self.inner);
+        py.allow_threads(move || engine.decode(&ids, skip_special_tokens))
+            .map_err(reference_err)
+    }
+
+    #[getter]
+    fn oracle_version(&self) -> &'static str {
+        "tokenizers==0.22.2"
+    }
+}
+
+// ---------------------------------------------------------- prebuilt GPU --
+
+/// Manifest-bound CUDA Driver host. Construction performs all Python-owned
+/// artifact/table projection; request execution thereafter is entirely Rust.
+#[pyclass(name = "NativePrebuiltGpu", module = "toktier._native")]
+struct PyNativePrebuiltGpu {
+    inner: Arc<NativePrebuiltGpu>,
+}
+
+#[pymethods]
+impl PyNativePrebuiltGpu {
+    #[new]
+    #[pyo3(signature = (
+        family,
+        artifact_sha256,
+        fatbin,
+        expected_fatbin_sha256,
+        expected_architecture,
+        device_ordinal,
+        ruleset,
+        digits_max,
+        contractions,
+        needs_nfc,
+        ignore_merges,
+        symbols,
+        class_table,
+        pair_keys,
+        pair_vals,
+        byte_id,
+        vocab_keys,
+        vocab_vals,
+        vocab_blob,
+        unsafe_bits,
+        pair_count,
+        vocab_count,
+        reference
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        py: Python<'_>,
+        family: String,
+        artifact_sha256: String,
+        fatbin: &[u8],
+        expected_fatbin_sha256: String,
+        expected_architecture: String,
+        device_ordinal: i32,
+        ruleset: String,
+        digits_max: i32,
+        contractions: bool,
+        needs_nfc: bool,
+        ignore_merges: i32,
+        symbols: BTreeMap<String, String>,
+        class_table: &[u8],
+        pair_keys: &[u8],
+        pair_vals: &[u8],
+        byte_id: &[u8],
+        vocab_keys: &[u8],
+        vocab_vals: &[u8],
+        vocab_blob: &[u8],
+        unsafe_bits: &[u8],
+        pair_count: usize,
+        vocab_count: usize,
+        reference: PyRef<'_, NativeReferenceEngine>,
+    ) -> PyResult<Self> {
+        let config = NativePrebuiltGpuConfig {
+            family,
+            artifact_sha256,
+            expected_fatbin_sha256,
+            expected_architecture,
+            device_ordinal,
+            ruleset,
+            digits_max,
+            contractions,
+            needs_nfc,
+            ignore_merges,
+            pair_count,
+            vocab_count,
+            delivery: "prebuilt".to_owned(),
+        };
+        let reference = reference.native();
+        let engine = py
+            .allow_threads(|| {
+                NativePrebuiltGpu::new(
+                    config,
+                    (*reference).clone(),
+                    fatbin,
+                    symbols,
+                    class_table,
+                    pair_keys,
+                    pair_vals,
+                    byte_id,
+                    vocab_keys,
+                    vocab_vals,
+                    vocab_blob,
+                    unsafe_bits,
+                )
+            })
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        Ok(Self {
+            inner: Arc::new(engine),
+        })
+    }
+}
+
+impl NativeReferenceEngine {
+    fn native(&self) -> Arc<ReferenceEngine> {
+        Arc::clone(&self.inner)
+    }
+}
+
 // -------------------------------------------------------------- encoder --
 
 /// Python-callable encoder adapter.
@@ -303,11 +590,18 @@ impl NativeRouteSelector {
 ///   certificates the callbacks implement.
 #[pyclass(module = "toktier._native")]
 struct CallbackEncoder {
-    witness: WitnessCategory,
-    encode_cb: Py<PyAny>,
-    append_cb: Option<Py<PyAny>>,
-    boundary_cb: Option<Py<PyAny>>,
-    bpe_sync: Option<BpeSyncBoundary>,
+    inner: EncoderImpl,
+}
+
+enum EncoderImpl {
+    Python {
+        witness: WitnessCategory,
+        encode_cb: Py<PyAny>,
+        append_cb: Option<Py<PyAny>>,
+        boundary_cb: Option<Py<PyAny>>,
+        bpe_sync: Option<BpeSyncBoundary>,
+    },
+    NativeFastCpu(Arc<FastCpuEngine>),
 }
 
 #[pymethods]
@@ -341,17 +635,192 @@ impl CallbackEncoder {
             ));
         }
         Ok(CallbackEncoder {
-            witness,
-            encode_cb,
-            append_cb,
-            boundary_cb,
-            bpe_sync,
+            inner: EncoderImpl::Python {
+                witness,
+                encode_cb,
+                append_cb,
+                boundary_cb,
+                bpe_sync,
+            },
+        })
+    }
+
+    /// Construct the corrected CPU/session engine entirely inside Rust.
+    #[staticmethod]
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (
+        tokenizer_json,
+        family,
+        artifact_sha256,
+        margin,
+        effective_l_max,
+        has_normalizer,
+        bpe_sync_pclass,
+        reference = None
+    ))]
+    fn native_fast_cpu(
+        tokenizer_json: &[u8],
+        family: String,
+        artifact_sha256: String,
+        margin: usize,
+        effective_l_max: usize,
+        has_normalizer: bool,
+        bpe_sync_pclass: &[u8],
+        reference: Option<PyRef<'_, NativeReferenceEngine>>,
+    ) -> PyResult<Self> {
+        let spec = FastRepairSpec::new(
+            family,
+            artifact_sha256,
+            margin,
+            effective_l_max,
+            has_normalizer,
+        );
+        let engine = match reference {
+            Some(reference) => FastCpuEngine::from_reference(
+                tokenizer_json,
+                reference.native(),
+                spec,
+                bpe_sync_pclass.to_vec(),
+            ),
+            None => FastCpuEngine::from_json(tokenizer_json, spec, bpe_sync_pclass.to_vec()),
+        }
+        .map_err(|error| {
+            PyValueError::new_err(format!(
+                "native fast CPU engine rejected its inputs: {error}"
+            ))
+        })?;
+        Ok(Self {
+            inner: EncoderImpl::NativeFastCpu(Arc::new(engine)),
         })
     }
 
     #[getter]
     fn witness_category(&self) -> u16 {
-        self.witness.as_u16()
+        self.witness().as_u16()
+    }
+
+    #[getter]
+    fn native_request_path(&self) -> bool {
+        matches!(self.inner, EncoderImpl::NativeFastCpu(_))
+    }
+
+    #[getter]
+    fn engine_initialized(&self) -> bool {
+        match &self.inner {
+            EncoderImpl::NativeFastCpu(engine) => engine.is_initialized(),
+            EncoderImpl::Python { .. } => false,
+        }
+    }
+
+    #[getter]
+    fn batch_worker_count(&self) -> usize {
+        match &self.inner {
+            EncoderImpl::NativeFastCpu(engine) => engine.batch_worker_count(),
+            EncoderImpl::Python { .. } => 0,
+        }
+    }
+
+    #[getter]
+    fn minimum_seal_tail_chars(&self) -> usize {
+        match &self.inner {
+            EncoderImpl::NativeFastCpu(engine) => engine.minimum_seal_tail_chars(),
+            EncoderImpl::Python { .. } => 0,
+        }
+    }
+
+    fn stats<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let output = PyDict::new(py);
+        match &self.inner {
+            EncoderImpl::NativeFastCpu(engine) => {
+                let stats = engine.stats();
+                output.set_item("backend", "fast_cpu")?;
+                output.set_item("engine", "gigatoken")?;
+                output.set_item("config_id", "toktier-fast-repair-v1")?;
+                output.set_item("family", &engine.spec().family)?;
+                output.set_item("artifact_sha256", &engine.spec().artifact_sha256)?;
+                output.set_item("window_calls", stats.window_calls)?;
+                output.set_item("window_chars", stats.window_chars)?;
+                let paths = PyDict::new(py);
+                for (name, value) in stats.path_counts {
+                    paths.set_item(name, value)?;
+                }
+                output.set_item("path_counts", paths)?;
+                let last = PyDict::new(py);
+                if let Some(path) = stats.last_path {
+                    last.set_item("path", path)?;
+                    last.set_item("reason", stats.last_reason)?;
+                    last.set_item("kept_tokens", stats.last_kept_tokens)?;
+                    last.set_item("window_chars", stats.last_window_chars)?;
+                    last.set_item("retries", stats.last_retries)?;
+                    output.set_item("last", last)?;
+                } else {
+                    output.set_item("last", py.None())?;
+                }
+            }
+            EncoderImpl::Python { .. } => {
+                output.set_item("backend", "python_callback")?;
+            }
+        }
+        Ok(output)
+    }
+
+    /// Core-stream IDs through the native corrected-CPU route.
+    fn encode(&self, py: Python<'_>, text: PyBackedStr) -> PyResult<Vec<u32>> {
+        match &self.inner {
+            EncoderImpl::NativeFastCpu(engine) => {
+                let engine = Arc::clone(engine);
+                py.allow_threads(move || engine.encode_ids(&text))
+                    .map_err(reference_err)
+            }
+            EncoderImpl::Python { .. } => self
+                .call_encode(&text)
+                .map(|encoding| encoding.ids)
+                .map_err(reference_err),
+        }
+    }
+
+    /// Batch core-stream IDs with persistent native worker caches.
+    fn encode_batch(&self, py: Python<'_>, texts: Vec<PyBackedStr>) -> PyResult<Vec<Vec<u32>>> {
+        match &self.inner {
+            EncoderImpl::NativeFastCpu(engine) => {
+                let engine = Arc::clone(engine);
+                py.allow_threads(move || {
+                    let rows = texts.iter().map(|text| text.as_ref()).collect::<Vec<_>>();
+                    engine.encode_batch_ids(&rows)
+                })
+                .map_err(reference_err)
+            }
+            EncoderImpl::Python { .. } => texts
+                .iter()
+                .map(|text| self.call_encode(text).map(|encoding| encoding.ids))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(reference_err),
+        }
+    }
+
+    #[getter]
+    fn vocab_size(&self) -> PyResult<usize> {
+        match &self.inner {
+            EncoderImpl::NativeFastCpu(engine) => engine.vocab_size().map_err(reference_err),
+            EncoderImpl::Python { .. } => Err(PyRuntimeError::new_err(
+                "a Python callback encoder has no vocabulary surface",
+            )),
+        }
+    }
+
+    #[getter]
+    fn vocab<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let EncoderImpl::NativeFastCpu(engine) = &self.inner else {
+            return Err(PyRuntimeError::new_err(
+                "a Python callback encoder has no vocabulary surface",
+            ));
+        };
+        let rows = engine.vocab_entries().map_err(reference_err)?;
+        let output = PyDict::new(py);
+        for (id, bytes) in rows {
+            output.set_item(id, PyBytes::new(py, &bytes))?;
+        }
+        Ok(output)
     }
 }
 
@@ -360,19 +829,37 @@ fn engine_err(e: PyErr) -> EngineError {
 }
 
 impl CallbackEncoder {
+    fn witness(&self) -> WitnessCategory {
+        match &self.inner {
+            EncoderImpl::Python { witness, .. } => *witness,
+            EncoderImpl::NativeFastCpu(engine) => engine.witness_category(),
+        }
+    }
+
+    fn native(&self) -> Option<Arc<FastCpuEngine>> {
+        match &self.inner {
+            EncoderImpl::NativeFastCpu(engine) => Some(Arc::clone(engine)),
+            EncoderImpl::Python { .. } => None,
+        }
+    }
+
     fn call_encode(&self, text: &str) -> Result<Encoding, EngineError> {
-        Python::with_gil(|py| {
-            let out = self.encode_cb.call1(py, (text,)).map_err(engine_err)?;
-            let (ids, spans): (Vec<u32>, Vec<(u32, u32)>) = out.extract(py).map_err(engine_err)?;
-            if ids.len() != spans.len() {
-                return Err(EngineError(format!(
-                    "encode callback returned {} ids but {} spans",
-                    ids.len(),
-                    spans.len()
-                )));
-            }
-            Ok(Encoding { ids, spans })
-        })
+        match &self.inner {
+            EncoderImpl::NativeFastCpu(engine) => engine.encode(text),
+            EncoderImpl::Python { encode_cb, .. } => Python::with_gil(|py| {
+                let out = encode_cb.call1(py, (text,)).map_err(engine_err)?;
+                let (ids, spans): (Vec<u32>, Vec<(u32, u32)>) =
+                    out.extract(py).map_err(engine_err)?;
+                if ids.len() != spans.len() {
+                    return Err(EngineError(format!(
+                        "encode callback returned {} ids but {} spans",
+                        ids.len(),
+                        spans.len()
+                    )));
+                }
+                Ok(Encoding { ids, spans })
+            }),
+        }
     }
 }
 
@@ -382,6 +869,12 @@ impl SessionEncoder for CallbackEncoder {
     }
 
     fn append(&self, tail: &mut TailState, delta: &str) -> Result<AppendReport, EngineError> {
+        if let EncoderImpl::NativeFastCpu(engine) = &self.inner {
+            return engine.append(tail, delta);
+        }
+        let EncoderImpl::Python { append_cb, .. } = &self.inner else {
+            unreachable!()
+        };
         let was_empty = tail.text().is_empty();
         let mut full = String::with_capacity(tail.text_bytes() + delta.len());
         full.push_str(tail.text());
@@ -393,7 +886,7 @@ impl SessionEncoder for CallbackEncoder {
         let (enc, kept, path) = if was_empty {
             (self.call_encode(&full)?, 0, "cold_full".to_string())
         } else {
-            match &self.append_cb {
+            match append_cb {
                 Some(cb) => Python::with_gil(|py| {
                     let args = (tail.text(), tail.ids().to_vec(), tail.spans(), delta);
                     let out = cb.call1(py, args).map_err(engine_err)?;
@@ -425,7 +918,18 @@ impl SessionEncoder for CallbackEncoder {
         floor_char: u64,
         ceil_char: u64,
     ) -> Result<Option<BoundaryCut>, EngineError> {
-        if let Some(predicate) = &self.bpe_sync {
+        if let EncoderImpl::NativeFastCpu(engine) = &self.inner {
+            return engine.last_certified_boundary(tail, floor_char, ceil_char);
+        }
+        let EncoderImpl::Python {
+            boundary_cb,
+            bpe_sync,
+            ..
+        } = &self.inner
+        else {
+            unreachable!()
+        };
+        if let Some(predicate) = bpe_sync {
             return Ok(predicate
                 .last_boundary(
                     tail.text(),
@@ -440,7 +944,7 @@ impl SessionEncoder for CallbackEncoder {
                     cut_char: cut.cut_char,
                 }));
         }
-        let Some(cb) = &self.boundary_cb else {
+        let Some(cb) = boundary_cb else {
             return Ok(None);
         };
         Python::with_gil(|py| {
@@ -461,7 +965,239 @@ impl SessionEncoder for CallbackEncoder {
     }
 
     fn witness_category(&self) -> WitnessCategory {
-        self.witness
+        self.witness()
+    }
+}
+
+// ------------------------------------------------------ native runtime --
+
+/// Complete CPU/store request path behind one GIL-released call.
+#[pyclass(name = "NativeRuntime", module = "toktier._native")]
+struct PyNativeRuntime {
+    router: Arc<NativeRouter>,
+    store: Mutex<NativeEntryStore>,
+    calls: std::sync::atomic::AtomicU64,
+}
+
+fn entry_open_err(py: Python<'_>, error: EntryStoreOpenError) -> PyErr {
+    match error {
+        EntryStoreOpenError::StateMismatch(message) => {
+            let classes = match error_classes(py) {
+                Ok(classes) => classes,
+                Err(error) => return error,
+            };
+            structured(
+                py,
+                &classes.session_state_mismatch,
+                &message,
+                &PyDict::new(py),
+            )
+        }
+        EntryStoreOpenError::Store(error) => err_to_py(py, error),
+        EntryStoreOpenError::Io(error) => PyRuntimeError::new_err(error.to_string()),
+    }
+}
+
+#[pymethods]
+impl PyNativeRuntime {
+    #[new]
+    #[pyo3(signature = (
+        fallback_chain,
+        minimum_input_bytes,
+        reference,
+        fast_encoder,
+        gpu_encoder,
+        repair_fast_cpu,
+        fingerprint,
+        seal_end_guard_chars,
+        postprocessor_adds_tokens,
+        diagnostics = false,
+        store_directory = None,
+        cache_budget_bytes = toktier_routing_core::DEFAULT_CACHE_BUDGET_BYTES
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        py: Python<'_>,
+        fallback_chain: Vec<String>,
+        minimum_input_bytes: Vec<u64>,
+        reference: PyRef<'_, NativeReferenceEngine>,
+        fast_encoder: Option<PyRef<'_, CallbackEncoder>>,
+        gpu_encoder: Option<PyRef<'_, PyNativePrebuiltGpu>>,
+        repair_fast_cpu: bool,
+        fingerprint: &[u8],
+        seal_end_guard_chars: u64,
+        postprocessor_adds_tokens: bool,
+        diagnostics: bool,
+        store_directory: Option<String>,
+        cache_budget_bytes: usize,
+    ) -> PyResult<Self> {
+        let fingerprint = fingerprint_of(fingerprint)?;
+        let fast = fast_encoder.as_ref().and_then(|encoder| encoder.native());
+        if fast_encoder.is_some() && fast.is_none() {
+            return Err(PyValueError::new_err(
+                "fast_encoder must be a native corrected-CPU engine",
+            ));
+        }
+        let reference = fast
+            .as_ref()
+            .map(|engine| engine.reference_arc())
+            .unwrap_or_else(|| reference.native());
+        let gpu = gpu_encoder.map(|engine| Arc::clone(&engine.inner));
+        let router = Arc::new(
+            NativeRouter::new(
+                fallback_chain,
+                minimum_input_bytes,
+                reference,
+                fast,
+                repair_fast_cpu,
+                gpu.map(|engine| engine as Arc<dyn toktier_routing_core::NativeGpuEngine>),
+                postprocessor_adds_tokens,
+                diagnostics,
+            )
+            .map_err(|error| PyValueError::new_err(error.to_string()))?,
+        );
+        let store = NativeEntryStore::open(
+            fingerprint,
+            Arc::clone(&router),
+            store_directory.map(PathBuf::from),
+            cache_budget_bytes,
+            seal_end_guard_chars,
+        )
+        .map_err(|error| entry_open_err(py, error))?;
+        Ok(Self {
+            router,
+            store: Mutex::new(store),
+            calls: std::sync::atomic::AtomicU64::new(0),
+        })
+    }
+
+    #[pyo3(signature = (
+        text,
+        session = None,
+        lookup_auto = true,
+        add_special_tokens = false
+    ))]
+    fn encode(
+        &self,
+        py: Python<'_>,
+        text: PyBackedStr,
+        session: Option<String>,
+        lookup_auto: bool,
+        add_special_tokens: bool,
+    ) -> PyResult<Vec<u32>> {
+        self.calls
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        py.allow_threads(|| {
+            let stored = if let Some(session) = session.as_deref() {
+                self.store
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .encode_session(session, &text)
+            } else if lookup_auto && !add_special_tokens {
+                self.store
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .encode_auto(&text)
+            } else {
+                None
+            };
+            match stored {
+                Some(ids) => Ok(ids),
+                None => self
+                    .router
+                    .encode_ids(&text, add_special_tokens)
+                    .map(|outcome| outcome.ids),
+            }
+        })
+        .map_err(reference_err)
+    }
+
+    #[pyo3(signature = (texts, add_special_tokens = false))]
+    fn encode_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<PyBackedStr>,
+        add_special_tokens: bool,
+    ) -> PyResult<Vec<Vec<u32>>> {
+        self.calls
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        py.allow_threads(|| {
+            let borrowed = texts.iter().map(|text| text.as_ref()).collect::<Vec<_>>();
+            self.router
+                .encode_batch_ids(&borrowed, add_special_tokens)
+                .map(|rows| rows.into_iter().map(|outcome| outcome.ids).collect())
+        })
+        .map_err(reference_err)
+    }
+
+    fn runtime_stats<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let stats = self.router.stats();
+        let output = PyDict::new(py);
+        output.set_item("fallback_counts", stats.fallback_counts)?;
+        output.set_item("execution_counts", stats.execution_counts)?;
+        output.set_item(
+            "last_execution",
+            match &stats.last_execution {
+                Some(value) => json_to_py(py, value)?,
+                None => py.None(),
+            },
+        )?;
+        let events = PyList::empty(py);
+        for event in stats.events {
+            let item = PyDict::new(py);
+            item.set_item("code", event.code)?;
+            item.set_item("backend", event.backend)?;
+            item.set_item("target", event.target)?;
+            item.set_item("detail", json_to_py(py, &event.detail)?)?;
+            events.append(item)?;
+        }
+        output.set_item("events", events)?;
+        output.set_item("state_encode_counts", stats.state_encode_counts)?;
+        output.set_item(
+            "last_state_encode",
+            match &stats.last_state_encode {
+                Some(value) => json_to_py(py, value)?,
+                None => py.None(),
+            },
+        )?;
+        output.set_item(
+            "python_to_native_calls",
+            self.calls.load(std::sync::atomic::Ordering::Relaxed),
+        )?;
+        Ok(output)
+    }
+
+    fn store_stats<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let store = self
+            .store
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let stats = store.stats();
+        let output = PyDict::new(py);
+        output.set_item("session_hits", stats.session_hits)?;
+        output.set_item("session_appends", stats.session_appends)?;
+        output.set_item("session_overwrites", stats.session_overwrites)?;
+        output.set_item("session_misses", stats.session_misses)?;
+        output.set_item("auto_hits", stats.auto_hits)?;
+        output.set_item("auto_appends", stats.auto_appends)?;
+        output.set_item("auto_misses", stats.auto_misses)?;
+        output.set_item("collision_rejects", stats.collision_rejects)?;
+        output.set_item("degraded", stats.degraded)?;
+        output.set_item("index_rebuilds", stats.index_rebuilds)?;
+        output.set_item("entries_evicted", stats.entries_evicted)?;
+        for (name, value) in &stats.extra {
+            output.set_item(name, value)?;
+        }
+        output.set_item("entries", store.entries_len())?;
+        output.set_item("resident_bytes", store.resident_bytes())?;
+        let native = store.native_stats();
+        output.set_item("append_paths", native.path_counts)?;
+        Ok(output)
+    }
+
+    #[getter]
+    fn fallback_chain(&self) -> Vec<&'static str> {
+        self.router.chain()
     }
 }
 
@@ -474,6 +1210,8 @@ struct SessionStore {
     inner: toktier_store_core::SessionStore,
 }
 
+type PyRecoveryMaterial<'py> = (Bound<'py, PyBytes>, u64, Bound<'py, PyBytes>);
+
 fn map<T>(py: Python<'_>, r: Result<T, StoreError>) -> PyResult<T> {
     r.map_err(|e| err_to_py(py, e))
 }
@@ -483,7 +1221,9 @@ impl SessionStore {
     #[new]
     #[pyo3(signature = (block_chars = 4096, tail_soft_cap_bytes = 65536,
                         tail_hard_cap_bytes = 1048576, node_tail_cap_bytes = 65536,
-                        max_sessions = 1024))]
+                        max_sessions = 1024, track_recovery = false,
+                        track_content_index = false))]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         py: Python<'_>,
         block_chars: u64,
@@ -491,6 +1231,8 @@ impl SessionStore {
         tail_hard_cap_bytes: usize,
         node_tail_cap_bytes: usize,
         max_sessions: usize,
+        track_recovery: bool,
+        track_content_index: bool,
     ) -> PyResult<Self> {
         let cfg = StoreConfig {
             block_chars,
@@ -501,12 +1243,21 @@ impl SessionStore {
         };
         // Config errors are argument misuse at this surface: ValueError
         // (prototype battery parity), code available via message.
-        toktier_store_core::SessionStore::new(cfg)
-            .map(|inner| SessionStore { inner })
-            .map_err(|e| {
-                let _ = py;
-                PyValueError::new_err(e.to_string())
-            })
+        let mut inner = toktier_store_core::SessionStore::new(cfg).map_err(|e| {
+            let _ = py;
+            PyValueError::new_err(e.to_string())
+        })?;
+        if track_recovery {
+            inner
+                .enable_recovery_tracking()
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        }
+        if track_content_index {
+            inner
+                .enable_content_tracking()
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        }
+        Ok(SessionStore { inner })
     }
 
     /// Intern a 32-byte semantic fingerprint; returns a stable key id.
@@ -530,10 +1281,14 @@ impl SessionStore {
         &mut self,
         py: Python<'_>,
         key_id: u32,
-        text: &str,
+        text: PyBackedStr,
         engine: PyRef<'_, CallbackEncoder>,
     ) -> PyResult<(u64, u64, u64)> {
-        let out = map(py, self.inner.put(KeyId(key_id), text, &*engine))?;
+        let result = match engine.native() {
+            Some(native) => py.allow_threads(|| self.inner.put(KeyId(key_id), &text, &*native)),
+            None => self.inner.put(KeyId(key_id), &text, &*engine),
+        };
+        let out = map(py, result)?;
         Ok((out.handle.0, out.revision, out.token_count))
     }
 
@@ -544,15 +1299,20 @@ impl SessionStore {
         &mut self,
         py: Python<'py>,
         handle: u64,
-        delta: &str,
+        delta: PyBackedStr,
         expected_revision: u64,
         engine: PyRef<'_, CallbackEncoder>,
     ) -> PyResult<Bound<'py, PyDict>> {
-        let out = map(
-            py,
-            self.inner
-                .append(SessionHandle(handle), delta, expected_revision, &*engine),
-        )?;
+        let result = match engine.native() {
+            Some(native) => py.allow_threads(|| {
+                self.inner
+                    .append(SessionHandle(handle), &delta, expected_revision, &*native)
+            }),
+            None => self
+                .inner
+                .append(SessionHandle(handle), &delta, expected_revision, &*engine),
+        };
+        let out = map(py, result)?;
         let d = PyDict::new(py);
         d.set_item("path", &out.path)?;
         d.set_item("revision", out.revision)?;
@@ -569,10 +1329,14 @@ impl SessionStore {
         &mut self,
         py: Python<'_>,
         key_id: u32,
-        text: &str,
+        text: PyBackedStr,
         engine: PyRef<'_, CallbackEncoder>,
     ) -> PyResult<Option<(u64, u64, u64)>> {
-        let hit = map(py, self.inner.lookup(KeyId(key_id), text, &*engine))?;
+        let result = match engine.native() {
+            Some(native) => py.allow_threads(|| self.inner.lookup(KeyId(key_id), &text, &*native)),
+            None => self.inner.lookup(KeyId(key_id), &text, &*engine),
+        };
+        let hit = map(py, result)?;
         Ok(hit.map(|h| (h.handle.0, h.matched_chars, h.revision)))
     }
 
@@ -668,6 +1432,55 @@ impl SessionStore {
         Ok(PyBytes::new(py, &rec))
     }
 
+    /// Private facade recovery material. `None` means the native session
+    /// does not possess every historical text byte needed to bind it.
+    fn recovery_material<'py>(
+        &self,
+        py: Python<'py>,
+        handle: u64,
+    ) -> PyResult<Option<PyRecoveryMaterial<'py>>> {
+        let material = map(py, self.inner.recovery_material(SessionHandle(handle)))?;
+        Ok(material.map(|value| {
+            (
+                PyBytes::new(py, &value.record_hash),
+                value.text_bytes,
+                PyBytes::new(py, &value.text_digest),
+            )
+        }))
+    }
+
+    /// Native personalized-BLAKE2b endpoint and geometric checkpoints.
+    fn content_index_entry(
+        &self,
+        py: Python<'_>,
+        handle: u64,
+    ) -> PyResult<Option<PyContentIndexEntry>> {
+        let entry = map(py, self.inner.content_index_entry(SessionHandle(handle)))?;
+        Ok(entry.map(|row| {
+            (
+                row.byte_length,
+                hex(&row.end_digest),
+                row.marks
+                    .into_iter()
+                    .map(|(position, digest)| (position, hex(&digest)))
+                    .collect(),
+            )
+        }))
+    }
+
+    /// Canonical TKFR-v1 bytes assembled from resident incremental states.
+    fn export_recovery_binding<'py>(
+        &self,
+        py: Python<'py>,
+        handle: u64,
+    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
+        let raw = map(
+            py,
+            self.inner.export_recovery_binding(SessionHandle(handle)),
+        )?;
+        Ok(raw.map(|bytes| PyBytes::new(py, &bytes)))
+    }
+
     /// Serialize the internal bookkeeping sidecar of one session.
     fn export_session_sidecar<'py>(
         &self,
@@ -684,10 +1497,56 @@ impl SessionStore {
         &mut self,
         py: Python<'_>,
         key_id: u32,
-        rec: &[u8],
+        rec: PyBackedBytes,
         engine: PyRef<'_, CallbackEncoder>,
     ) -> PyResult<u64> {
-        map(py, self.inner.import_session(KeyId(key_id), rec, &*engine)).map(|h| h.0)
+        let result = match engine.native() {
+            Some(native) => {
+                py.allow_threads(|| self.inner.import_session(KeyId(key_id), &rec, &*native))
+            }
+            None => self.inner.import_session(KeyId(key_id), &rec, &*engine),
+        };
+        map(py, result).map(|h| h.0)
+    }
+
+    /// Import a session only after caller-presented historical text is
+    /// bound to this exact record and private recovery digest.
+    fn import_session_with_recovery(
+        &mut self,
+        py: Python<'_>,
+        key_id: u32,
+        rec: PyBackedBytes,
+        historical_text: PyBackedStr,
+        expected_material: (Vec<u8>, u64, Vec<u8>),
+        engine: PyRef<'_, CallbackEncoder>,
+    ) -> PyResult<u64> {
+        let (expected_record_hash, expected_text_bytes, expected_text_digest) = expected_material;
+        let record_hash = digest32_of(&expected_record_hash, "expected_record_hash")?;
+        let text_digest = digest32_of(&expected_text_digest, "expected_text_digest")?;
+        let expected = RecoveryMaterial {
+            record_hash,
+            text_bytes: expected_text_bytes,
+            text_digest,
+        };
+        let result = match engine.native() {
+            Some(native) => py.allow_threads(|| {
+                self.inner.import_session_with_recovery(
+                    KeyId(key_id),
+                    &rec,
+                    &historical_text,
+                    &expected,
+                    &*native,
+                )
+            }),
+            None => self.inner.import_session_with_recovery(
+                KeyId(key_id),
+                &rec,
+                &historical_text,
+                &expected,
+                &*engine,
+            ),
+        };
+        map(py, result).map(|h| h.0)
     }
 
     /// Import a session from a record plus its sidecar (exact restore).
@@ -695,16 +1554,52 @@ impl SessionStore {
         &mut self,
         py: Python<'_>,
         key_id: u32,
-        rec: &[u8],
-        sidecar: &[u8],
+        rec: PyBackedBytes,
+        sidecar: PyBackedBytes,
         engine: PyRef<'_, CallbackEncoder>,
     ) -> PyResult<u64> {
-        map(
-            py,
-            self.inner
-                .import_session_with_sidecar(KeyId(key_id), rec, sidecar, &*engine),
-        )
-        .map(|h| h.0)
+        let result = match engine.native() {
+            Some(native) => py.allow_threads(|| {
+                self.inner
+                    .import_session_with_sidecar(KeyId(key_id), &rec, &sidecar, &*native)
+            }),
+            None => self
+                .inner
+                .import_session_with_sidecar(KeyId(key_id), &rec, &sidecar, &*engine),
+        };
+        map(py, result).map(|h| h.0)
+    }
+
+    /// Import with TKFR-v1, slicing the historical prefix from the caller's
+    /// complete transcript under the released GIL.
+    fn import_session_with_binding(
+        &mut self,
+        py: Python<'_>,
+        key_id: u32,
+        rec: PyBackedBytes,
+        candidate_text: PyBackedStr,
+        binding: PyBackedBytes,
+        engine: PyRef<'_, CallbackEncoder>,
+    ) -> PyResult<(u64, usize)> {
+        let result = match engine.native() {
+            Some(native) => py.allow_threads(|| {
+                self.inner.import_session_with_binding_candidate(
+                    KeyId(key_id),
+                    &rec,
+                    &candidate_text,
+                    &binding,
+                    &*native,
+                )
+            }),
+            None => self.inner.import_session_with_binding_candidate(
+                KeyId(key_id),
+                &rec,
+                &candidate_text,
+                &binding,
+                &*engine,
+            ),
+        };
+        map(py, result).map(|(handle, historical_chars)| (handle.0, historical_chars))
     }
 
     fn export_node_items<'py>(
@@ -776,6 +1671,11 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<SessionStore>()?;
     m.add_class::<CallbackEncoder>()?;
     m.add_class::<NativeRouteSelector>()?;
+    m.add_class::<NativeReferenceEngine>()?;
+    m.add_class::<PyNativePrebuiltGpu>()?;
+    m.add_class::<PyNativeRuntime>()?;
+    m.add_function(wrap_pyfunction!(fast_cpu_build_facts, m)?)?;
+    m.add_function(wrap_pyfunction!(native_host_build_facts, m)?)?;
     // Convenience re-exports of the classes this boundary raises. These
     // are the public `toktier.errors` objects themselves (or, only under
     // standalone loading, the private shim); the extension defines no

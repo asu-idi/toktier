@@ -98,6 +98,9 @@ def test_no_probe_path_reports_shipped_facts_truthfully() -> None:
     # This checkout ships the fatbin and the JIT sources.
     assert cache.prebuilt_available is True
     assert cache.source_digest is not None
+    assert cache.host_source_digest is not None
+    assert cache.host_build_flags
+    assert cache.host_toolchain is not None
     assert cache.delivery is None
     assert cache.built is False
 
@@ -299,6 +302,33 @@ def test_family_certification_attaches_only_when_everything_matches() -> None:
     )
     assert verdict["state"] == "certified"
     assert verdict["reasons"] == []
+
+
+def test_family_certification_requires_observed_jit_compiler_tuple() -> None:
+    view, record = _record_and_registry()
+    closed = family_certification(
+        registry=view,
+        record=record,
+        delivery="jit",
+        architecture="sm_120",
+        certificate_void=False,
+        jit_toolchain_satisfied=False,
+        installed_oracle=support.ORACLE_VERSION,
+    )
+    assert closed["state"] == "uncertified"
+    assert closed["reasons"] == ["jit_toolchain_unverified"]
+
+    attached = family_certification(
+        registry=view,
+        record=record,
+        delivery="jit",
+        architecture="sm_120",
+        certificate_void=False,
+        jit_toolchain_satisfied=True,
+        installed_oracle=support.ORACLE_VERSION,
+    )
+    assert attached["state"] == "certified_source"
+    assert attached["reasons"] == []
 
 
 def test_family_certification_labels_out_of_set_oracle() -> None:

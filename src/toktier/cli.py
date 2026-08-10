@@ -6,12 +6,10 @@ import argparse
 import importlib.metadata
 import importlib.util
 import json
-import os
 import platform
-import shutil
 import sys
 from collections.abc import Callable, Mapping, Sequence
-from typing import NoReturn, cast
+from typing import TYPE_CHECKING, NoReturn, cast
 
 from . import __version__
 from .artifacts import (
@@ -29,6 +27,9 @@ from .artifacts.tables import ARTIFACT_MANIFEST
 from .config import Config
 from .errors import BackendUnavailable, ToktierError
 from .paths import artifact_cache_dir, kernel_cache_dir, store_state_dir
+
+if TYPE_CHECKING:
+    from .engine.gpu.toolchain import NvccFacts
 
 _USAGE_ERROR = 64
 _TOKTIER_ERROR = 2
@@ -60,17 +61,17 @@ def _installed_version(distribution: str) -> str | None:
         return None
 
 
-def _nvcc_search() -> tuple[str | None, list[str]]:
-    """Locate ``nvcc`` the way the JIT loader's build system does.
+def _nvcc_report() -> NvccFacts:
+    """Inspect ``nvcc`` the way the JIT loader's build system does.
 
     The kernel loader delegates compilation to the torch extension
     build system, which resolves the CUDA toolkit in this order: the
     ``CUDA_HOME`` environment variable, then ``CUDA_PATH``, then the
     ``nvcc`` on ``PATH``, then the conventional ``/usr/local/cuda``
     root. This check walks the same order without importing torch and
-    records every location it consulted, so the report names where it
-    looked rather than answering from a single ``PATH`` lookup that the
-    build system does not limit itself to.
+    records every location it consulted and parses ``nvcc --version``, so
+    the report names the compiler identity JIT certification actually binds
+    rather than answering from a single ``PATH`` lookup.
 
     An explicitly set ``CUDA_HOME``/``CUDA_PATH`` is authoritative for
     the build system -- it stops the search whether or not ``nvcc`` is
@@ -82,29 +83,9 @@ def _nvcc_search() -> tuple[str | None, list[str]]:
     keeps toktier's environment surface to the frozen five, read once
     by ``Config``).
     """
-    checked: list[str] = []
-    for variable in ("CUDA_HOME", "CUDA_PATH"):
-        root = os.environ.get(variable)
-        if not root:
-            checked.append(f"{variable}: not set")
-            continue
-        candidate = os.path.join(root, "bin", "nvcc")
-        if os.path.isfile(candidate):
-            checked.append(f"{variable}: {candidate} (found)")
-            return candidate, checked
-        checked.append(f"{variable}: {candidate} (not found)")
-        return None, checked
-    from_path = shutil.which("nvcc")
-    if from_path is not None:
-        checked.append(f"PATH: {from_path} (found)")
-        return from_path, checked
-    checked.append("PATH: not found")
-    default = "/usr/local/cuda/bin/nvcc"
-    if os.path.isfile(default):
-        checked.append(f"default: {default} (found)")
-        return default, checked
-    checked.append(f"default: {default} (not found)")
-    return None, checked
+    from .engine.gpu.toolchain import nvcc_facts
+
+    return nvcc_facts()
 
 
 def _prebuilt_facts() -> tuple[bool, str | None]:
@@ -134,16 +115,22 @@ def _doctor_report(
     # Looking up torch.cuda would import its parent package. The top-level
     # cuda package is the CUDA probe that preserves this command's no-import
     # guarantee for torch.
-    nvcc_path, nvcc_checked = _nvcc_search()
+    nvcc = _nvcc_report()
     # The nvcc trail concerns the JIT delivery only; the prebuilt
     # delivery loads the shipped fatbin through the driver and needs no
     # toolkit, so the two facts are reported side by side rather than
     # letting a missing nvcc read as "no GPU path".
     prebuilt_available, prebuilt_digest = _prebuilt_facts()
-    from .backends.fast_cpu import ENGINE_MODULE, fast_cpu_engine_facts
+    from .backends.fast_cpu import (
+        ENGINE_DELIVERY,
+        ENGINE_MODULE,
+        fast_cpu_engine_facts,
+    )
+    from .engine.gpu.native import native_host_build_facts
     from .facade.api import DEFAULT_GPU_MIN_BYTES
 
     fast_cpu = fast_cpu_engine_facts()
+    native_host = native_host_build_facts()
     from .repair.fastokens import fastokens_distribution_identity
 
     fastokens_version, fastokens_digest = fastokens_distribution_identity()
@@ -167,6 +154,10 @@ def _doctor_report(
         "transformers_version": transformers_version,
         "certified_cpu_profile_ready": (
             fast_cpu.version is not None
+            and fast_cpu.source_digest is not None
+            and bool(fast_cpu.build_flags)
+            and fast_cpu.toolchain is not None
+            and fast_cpu.config_digest is not None
             and tokenizers_version == "0.22.2"
             and transformers_version == "4.57.6"
         ),
@@ -178,23 +169,41 @@ def _doctor_report(
         "cuda_available": importlib.util.find_spec("cuda") is not None,
         "prebuilt_fatbin_available": prebuilt_available,
         "prebuilt_fatbin_digest": prebuilt_digest,
+        "prebuilt_native_host_ready": (
+            prebuilt_available
+            and native_host.source_digest is not None
+            and bool(native_host.build_flags)
+            and native_host.toolchain is not None
+        ),
+        "prebuilt_host_source_digest": native_host.source_digest,
+        "prebuilt_host_build_flags": list(native_host.build_flags),
+        "prebuilt_host_toolchain": native_host.toolchain,
         "gigatoken_available": fast_cpu.version is not None,
-        "gigatoken_delivery": "vendored",
+        "gigatoken_delivery": ENGINE_DELIVERY,
         "gigatoken_module": ENGINE_MODULE,
         "gigatoken_runtime_ready": (
             fast_cpu.version is not None and transformers_available
         ),
         "gigatoken_version": fast_cpu.version,
+        # Retained as a compatibility key. Integrated, source-certified
+        # builds intentionally have no independently certified CPU binary.
         "gigatoken_native_digest": fast_cpu.binary_digest,
+        "gigatoken_source_digest": fast_cpu.source_digest,
+        "gigatoken_build_flags": list(fast_cpu.build_flags),
+        "gigatoken_toolchain": fast_cpu.toolchain,
         "gigatoken_repair_config_digest": fast_cpu.config_digest,
         "fastokens_available": fastokens_version is not None,
         "fastokens_version": fastokens_version,
         "fastokens_distribution_digest": fastokens_digest,
         "fastokens_policy": "experimental",
         "fastokens_exact_id_guarantee": False,
-        "nvcc_available": nvcc_path is not None,
-        "nvcc_path": nvcc_path,
-        "nvcc_checked": nvcc_checked,
+        "nvcc_available": nvcc.path is not None,
+        "nvcc_path": nvcc.path,
+        "nvcc_resolved_path": nvcc.resolved_path,
+        "nvcc_release": nvcc.release,
+        "nvcc_build": nvcc.build,
+        "nvcc_error": nvcc.error,
+        "nvcc_checked": list(nvcc.checked),
     }
 
 
@@ -520,6 +529,42 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _json_safe(value: object) -> object:
+    """A JSON-serialisable projection of one ``details`` value.
+
+    Error details are a machine interface, but they are also open: a
+    caller may put any object there. Rendering an unknown type through
+    ``repr`` keeps the envelope serialisable without dropping the fact
+    it carried.
+    """
+    if value is None or isinstance(value, bool | int | float | str):
+        return value
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_json_safe(item) for item in value]
+    return repr(value)
+
+
+def _error_payload(error: ToktierError) -> dict[str, object]:
+    """The machine-readable envelope for one failed command.
+
+    ``code`` is the stable switch key (``docs/contracts/errors.md``);
+    ``message`` is the human text; ``details`` carries the same
+    machine-readable facts the exception exposes in process.
+    """
+    return {
+        "error": {
+            "code": error.code,
+            "message": str(error),
+            "details": {
+                str(key): _json_safe(value)
+                for key, value in error.details.items()
+            },
+        }
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the toktier command-line interface."""
     parser = _build_parser()
@@ -532,7 +577,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         return handler(arguments)
     except ToktierError as error:
-        print(f"error {error.code}: {error}", file=sys.stderr)
+        # ``--json`` is a promise about the whole command, not only its
+        # success path: a caller that asked for machine-readable output
+        # must not have to parse prose to learn why it failed.
+        if getattr(arguments, "json", False):
+            print(
+                json.dumps(
+                    _error_payload(error), sort_keys=True, separators=(",", ":")
+                ),
+                file=sys.stderr,
+            )
+        else:
+            print(f"error {error.code}: {error}", file=sys.stderr)
         return _TOKTIER_ERROR
 
 

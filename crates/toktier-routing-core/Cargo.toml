@@ -7,4 +7,22 @@ repository.workspace = true
 description = "Allocation-free per-request routing and certified BPE boundary selection for TokTier."
 
 [dependencies]
+aho-corasick.workspace = true
+base64.workspace = true
 memchr.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokenizers.workspace = true
+toktier-gigatoken-core = { path = "../toktier-gigatoken-core", version = "=0.2.0" }
+toktier-cuda-driver = { path = "../toktier-cuda-driver", version = "=0.2.0" }
+toktier-store-core = { path = "../toktier-store-core", version = "=0.2.0" }
+
+[dev-dependencies]
+tempfile = "3"
+# The crate's own tests use the store's testing helpers (for example the
+# injectable content-digest fault behind the overlap seam).
+toktier-store-core = { path = "../toktier-store-core", features = [
+    "testing",
+] }

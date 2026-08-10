@@ -38,6 +38,55 @@ __device__ __forceinline__ unsigned toktier_warp_min_u32(unsigned mask,
 
 #include "pretok_kernel.cu"
 
+// Direct Rust JIT defines TOKTIER_DEVICE_ONLY so the legacy Torch host glue
+// is not parsed. Those host launch sites used to instantiate these templates
+// as a side effect; keep the exact device symbols explicit for the shared
+// CUDA Driver host instead.
+#ifdef TOKTIER_DEVICE_ONLY
+template __global__ void k_classify<RS_CL100K>(
+    const int32_t*, const uint8_t*, const uint8_t*, uint8_t*, uint8_t*, int,
+    const int32_t*);
+template __global__ void k_classify<RS_DEEPSEEK>(
+    const int32_t*, const uint8_t*, const uint8_t*, uint8_t*, uint8_t*, int,
+    const int32_t*);
+template __global__ void k_classify<RS_LAGUNA>(
+    const int32_t*, const uint8_t*, const uint8_t*, uint8_t*, uint8_t*, int,
+    const int32_t*);
+
+template __global__ void k_runinfo<RS_CL100K>(
+    const int32_t*, const uint8_t*, const uint8_t*, const int32_t*, int32_t*,
+    int32_t*, int32_t*, int, const int32_t*);
+template __global__ void k_runinfo<RS_DEEPSEEK>(
+    const int32_t*, const uint8_t*, const uint8_t*, const int32_t*, int32_t*,
+    int32_t*, int32_t*, int, const int32_t*);
+template __global__ void k_runinfo<RS_LAGUNA>(
+    const int32_t*, const uint8_t*, const uint8_t*, const int32_t*, int32_t*,
+    int32_t*, int32_t*, int, const int32_t*);
+
+template __global__ void k_rules<RS_CL100K>(
+    const int32_t*, const uint8_t*, const uint8_t*, const int32_t*,
+    const int32_t*, const int32_t*, const int32_t*, const int32_t*,
+    const uint8_t*, const int32_t*, int, int, bool*, int, const int32_t*,
+    const int32_t*);
+template __global__ void k_rules<RS_DEEPSEEK>(
+    const int32_t*, const uint8_t*, const uint8_t*, const int32_t*,
+    const int32_t*, const int32_t*, const int32_t*, const int32_t*,
+    const uint8_t*, const int32_t*, int, int, bool*, int, const int32_t*,
+    const int32_t*);
+template __global__ void k_rules<RS_LAGUNA>(
+    const int32_t*, const uint8_t*, const uint8_t*, const int32_t*,
+    const int32_t*, const int32_t*, const int32_t*, const int32_t*,
+    const uint8_t*, const int32_t*, int, int, bool*, int, const int32_t*,
+    const int32_t*);
+
+template __global__ void k_bpe_thread<TOKTIER_SHORT_MAX>(
+    const uint8_t*, const int32_t*, const int32_t*, int, const uint64_t*,
+    const uint64_t*, unsigned, const int32_t*, const uint64_t*,
+    const uint64_t*, unsigned, const uint8_t*, int, int32_t*, int32_t*,
+    const int32_t*, const uint64_t*, const int32_t*, const uint8_t*,
+    const int32_t*, unsigned);
+#endif
+
 // ---- launcher-support kernels ---------------------------------------
 // The Python launcher replaces the two host-side CUB algorithms with
 // exact integer primitives:
@@ -61,6 +110,85 @@ __device__ __forceinline__ unsigned toktier_warp_min_u32(unsigned mask,
 //
 // All three kernels are `extern "C"` so the driver-API loader can look
 // them up without a mangled-name map.
+
+// Inclusive integer scan used by the native CUDA Driver host.  One block
+// consumes consecutive pairs, so the BlockScan prefix is in array order.
+// The host recursively scans `block_sums`, then `tk_scan_add` applies the
+// preceding-block prefix.  This is the same associative integer sum as CUB
+// and torch.cumsum; no floating-point or architecture-dependent operation is
+// involved.
+template <typename Input>
+__device__ __forceinline__ void tk_scan_block_body(
+    const Input* __restrict__ input,
+    int32_t* __restrict__ output,
+    int32_t* __restrict__ block_sums,
+    int n) {
+  using Scan = cub::BlockScan<int32_t, TPB>;
+  __shared__ typename Scan::TempStorage temporary;
+  const int pair = 2 * (blockIdx.x * blockDim.x + threadIdx.x);
+  const int32_t first = pair < n ? static_cast<int32_t>(input[pair]) : 0;
+  const int32_t second = pair + 1 < n
+      ? static_cast<int32_t>(input[pair + 1]) : 0;
+  const int32_t local = first + second;
+  int32_t inclusive = 0;
+  Scan(temporary).InclusiveSum(local, inclusive);
+  const int32_t exclusive = inclusive - local;
+  if (pair < n) output[pair] = exclusive + first;
+  if (pair + 1 < n) output[pair + 1] = inclusive;
+  if (threadIdx.x == blockDim.x - 1 && block_sums)
+    block_sums[blockIdx.x] = inclusive;
+}
+
+extern "C" __global__ void tk_scan_u8_blocks(
+    const uint8_t* __restrict__ input,
+    int32_t* __restrict__ output,
+    int32_t* __restrict__ block_sums,
+    int n) {
+  tk_scan_block_body(input, output, block_sums, n);
+}
+
+extern "C" __global__ void tk_scan_i32_blocks(
+    const int32_t* __restrict__ input,
+    int32_t* __restrict__ output,
+    int32_t* __restrict__ block_sums,
+    int n) {
+  tk_scan_block_body(input, output, block_sums, n);
+}
+
+extern "C" __global__ void tk_scan_add(
+    int32_t* __restrict__ output,
+    const int32_t* __restrict__ scanned_block_sums,
+    int n) {
+  const int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  const int owner = i / (2 * TPB);
+  if (owner > 0) output[i] += scanned_block_sums[owner - 1];
+}
+
+extern "C" __global__ void tk_utf8_lead_i32(
+    const uint8_t* __restrict__ input,
+    int32_t* __restrict__ output,
+    int n) {
+  const int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n) output[i] = (input[i] & 0xC0) != 0x80;
+}
+
+extern "C" __global__ void tk_u8_flags_i32(
+    const uint8_t* __restrict__ input,
+    int32_t* __restrict__ output,
+    int n,
+    bool force_first) {
+  const int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n) output[i] = (force_first && i == 0) || input[i] != 0;
+}
+
+extern "C" __global__ void tk_eq_index_i32(
+    const int32_t* __restrict__ input,
+    int32_t* __restrict__ output,
+    int n) {
+  const int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n) output[i] = input[i] == i;
+}
 
 extern "C" __global__ void tk_carrier_scatter(
     const int32_t* __restrict__ rid,   // inclusive sum of carrier flags

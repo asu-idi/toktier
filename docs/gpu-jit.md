@@ -23,8 +23,10 @@ registry records this delivery as `certified`, bound to the fatbin's
 binary digest, on the architectures its verdict battery ran (sm_89 and
 sm_120); the other embedded architectures are labeled `experimental`.
 When the prebuilt delivery cannot serve — old driver, missing torch,
-digest mismatch — the loader falls back to JIT (when installed) or to
-the reference path, and the reason is recorded, never silent. An
+digest mismatch — the loader falls back to JIT if that delivery is
+installed and eligible, and otherwise the request continues down the
+routing chain, which is corrected Gigatoken → HF (Section 9). The
+reason is recorded, never silent. An
 explicit `delivery="prebuilt"` or `delivery="jit"` request that cannot
 be served raises instead of substituting.
 
@@ -34,8 +36,9 @@ compiles it with `torch.utils.cpp_extension` into the cache directory
 (`docs/contracts/config.md` Section 5). Compilation needs `torch` and
 `ninja`, plus a CUDA toolchain (the build system resolves it through
 `CUDA_HOME`, `CUDA_PATH`, the `nvcc` on `PATH`, or `/usr/local/cuda`,
-in that order; `toktier doctor` reports the same search). A minimal
-construction and encode example is in Section 9.
+in that order; `toktier doctor` reports the same search and the parsed
+compiler release/build identity). A minimal construction and encode example
+is in Section 9.
 
 Because a JIT build product is machine-local, it is not bit-identical
 to the build the certification runs judged. The registry therefore
@@ -46,7 +49,7 @@ and binds:
 |---|---|
 | kernel source digest | `toktier.kernels.kernel_source_digest()` |
 | build flags digest | `BuildFlags.digest()` |
-| toolchain constraints | recorded from the loading process |
+| toolchain constraints | actual selected NVCC path/release/build, `torch.version.cuda`, and exact PyTorch distribution version recorded from the loading process |
 | device architecture list | the architectures actually judged |
 | class table digest | `ClassTableStore.binding_digest()` |
 
@@ -73,7 +76,11 @@ uncertified rather than claiming a certificate whose premise is gone.
 Two host tests keep this honest: one asserts that exactly one module
 mentions `cpp_extension`, the other exercises the runtime refusal.
 
-Build products live under `<cache>/kernels/<extension>-<flag digest>`.
+Build products live under
+`<cache>/kernels/<extension>-<flag digest>-tc-<toolchain digest>`; the latter
+binds the selected compiler path/release/build plus the torch runtime and
+distribution versions. A build made with NVCC 13.0 therefore cannot be reused
+after that compiler selection drifts to NVCC 13.2.
 Nothing sets `TORCH_EXTENSIONS_DIR`, and no path is hardcoded.
 
 The same one-per-process rule applies to the delivery: the first load
@@ -123,9 +130,18 @@ exactly as a kernel source mismatch would.
 Delivery: the generated tables ship in the wheel, pre-generated and
 digest-pinned in the packaged `toktier/kernels/tables/` directory, so
 installing either GPU extra is sufficient to construct the engine --
-nothing is generated at install time or on first use, and the shipped
-bytes are byte-identical to the tables the certification campaigns
-judged against. The engine still looks for each table in order: an
+*these tables* are not generated at install time or on first use, and
+the shipped bytes are byte-identical to the tables the certification
+campaigns judged against.
+
+That statement is about the class tables and should not be read as "the
+first use does no work". A first construction still derives the family's
+BPE tables from the verified `tokenizer.json` and caches them: on
+`qwen3_8b` that is about 17.8 MB of cache data and a cold
+construction-plus-encode of roughly 2.2 s, after which the cache is
+reused. What the prepackaged tables buy is that no *compiler* and no
+class-table generation step is required -- the derived-cache work is
+ordinary first-use preparation, not a build. The engine still looks for each table in order: an
 explicit `table_dir` handed to `ClassTableStore`, the packaged
 directory, then `class_tables/` under the resolved cache directory.
 When a required table is absent or does not match its bound digest,
@@ -235,6 +251,13 @@ Host tests (no GPU, no torch) run in ordinary CI:
 pytest tests/gpu
 ```
 
+Two of them read the native host's compile-time identity out of the
+compiled `toktier._native`. `pytest.ini` runs the suite against `src`,
+so a source tree that has never been built has no extension for them to
+read and they skip with that reason rather than failing. Building the
+extension into `src/toktier` (`maturin develop`, or `maturin build
+--locked` and placing it there) runs them.
+
 The hardware suite:
 
 ```
@@ -251,10 +274,10 @@ batch shape.
 
 ## 9. Automatic facade and explicit engine
 
-The normal entry point is automatic. With `toktier[gpu]`, the facade lazily
-loads the shipped prebuilt kernel only when an eligible cold/plain input is at
-least 64 KiB; smaller inputs and session appends use the corrected Gigatoken
-CPU path. With `toktier[gpu-jit]`, the routing semantics are identical and only
+The normal entry point is automatic. With `toktier[gpu]`, an eligible
+cold/plain input of at least 64 KiB executes on the shipped prebuilt kernel;
+smaller inputs and session appends execute on the corrected Gigatoken CPU
+path. With `toktier[gpu-jit]`, the routing semantics are identical and only
 kernel delivery changes to a local JIT build:
 
 ```python
@@ -270,18 +293,32 @@ print(tok.explain()["runtime_policy"])
 detection, and `gpu_min_bytes=` changes the UTF-8 byte crossover. The explicit
 engine below remains available for benchmarking and low-level integration.
 
-The JIT toolchain gate is fail-closed. A registry-judged CUDA/PyTorch pair can
-be compiled or warmed explicitly without weakening the policy:
+When the GPU engine opens is a separate question from which backend runs a
+given input, and the two deliveries answer it differently. Under certified
+prebuilt delivery -- the default path on a supported GPU -- requests take the
+native single-call route, and that runtime opens the GPU engine while it is
+being constructed, on the first request of the tokenizer whatever that
+request's size is. `explain()["gpu_backend"]["loaded"]` therefore reads
+`true` after a short first request, while the crossover keeps deciding per
+input which backend actually executes. Under JIT delivery, and under the
+experimental `repair_backend="fastokens"` adapter, requests stay on the Python
+host, whose GPU backend still opens lazily at the first input that routes to
+the GPU, that is at or above the crossover.
+
+The JIT toolchain gate is fail-closed. A registry-judged triple of the actual
+selected NVCC release, `torch.version.cuda`, and PyTorch distribution version
+can be compiled or warmed explicitly without weakening the policy:
 
 ```bash
 toktier gpu compile qwen3_8b
 ```
 
-If the pair is not judged, that command and `device="cuda"` fail with
-`BACKEND_UNAVAILABLE`; the error names the observed pair, the certified
-constraint, and the exact opt-in command. The default `device="auto"` path
-instead emits a `RuntimeWarning` and continues through the corrected
-Gigatoken → HF chain.
+If the triple is not judged, that command and `device="cuda"` fail with
+`BACKEND_UNAVAILABLE`; the error names the selected compiler path/release,
+torch runtime, certified constraint, and exact opt-in command. The default
+`device="auto"` path instead emits a `RuntimeWarning` and continues through
+the corrected Gigatoken → HF chain. A matching torch CUDA label is insufficient
+on its own: torch CUDA 13.0 with an actually selected NVCC 13.2 is unjudged.
 
 There is one deliberately loud escape hatch for experiments:
 
@@ -345,9 +382,12 @@ against the certified set (`oracle`, with `uncertified_oracle: true`
 whenever the installed version falls outside it -- the certificate does
 not attach to such a process), and one certification verdict per
 family (`state` plus machine-readable `reasons`) for the delivery,
-architecture and oracle in effect. `binding_set()` carries the same
-oracle block, so a logged binding set is never silent about the
-reference version it ran against (registry.md Section 2).
+architecture and oracle in effect. For JIT it also reports `toolchain_facts`
+(selected/resolved NVCC path, release/build, torch CUDA and PyTorch versions)
+and `jit_toolchain_satisfied`; an unverified triple cannot carry a per-family
+certified verdict. `binding_set()` carries the same facts and oracle block, so
+a logged binding set is never silent about the compiler or reference version
+it ran against (registry.md Section 2).
 
 Under the prebuilt delivery the engine is ready as soon as the fatbin
 is verified and loaded; under the JIT delivery the first `encode`

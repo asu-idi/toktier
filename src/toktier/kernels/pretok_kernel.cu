@@ -32,6 +32,7 @@
 // byte-level BPE stage and the fully fused, CUDA-Graph capturable
 // bytes -> token ids path live in the second half of this file.
 
+#ifndef TOKTIER_DEVICE_ONLY
 #include <torch/extension.h>
 #include <cstdio>
 #include <cstdlib>
@@ -40,6 +41,7 @@
 #include <ATen/cuda/CUDAContext.h>
 #include <ATen/cuda/CUDAEvent.h>
 #include <c10/cuda/CUDAGuard.h>
+#endif
 #include <cuda_runtime.h>
 #include <cub/device/device_scan.cuh>
 #include <cub/device/device_select.cuh>
@@ -404,6 +406,7 @@ __global__ void k_utf8_decode(const uint8_t* __restrict__ bytes,
   if (bo) bo[cpos[i] - 1] = i;
 }
 
+#ifndef TOKTIER_DEVICE_ONLY
 static std::vector<torch::Tensor> utf8_decode_impl(torch::Tensor bytes,
                                                    bool want_bo) {
   const c10::cuda::OptionalCUDAGuard guard(at::device_of(bytes));
@@ -534,6 +537,8 @@ torch::Tensor pretok_starts(torch::Tensor cp, torch::Tensor tab,
   return pretok_impl(cp, tab, dmax, nullptr, nullptr);
 }
 
+#endif
+
 __global__ void k_dso_seed(const uint8_t* __restrict__ dstart,
                            int32_t* __restrict__ seed, int n) {
   int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -547,6 +552,7 @@ __global__ void k_dso_seed(const uint8_t* __restrict__ dstart,
 // is pathologically slow (~55ms for 41M characters) and was the source
 // of an apparent batch-throughput bottleneck. Runs are force-broken at
 // document boundaries and look-back is bounded by the document start.
+#ifndef TOKTIER_DEVICE_ONLY
 torch::Tensor pretok_starts_batched(torch::Tensor cp, torch::Tensor dstart,
                                     torch::Tensor tab, int64_t dmax) {
   const c10::cuda::OptionalCUDAGuard guard(at::device_of(cp));
@@ -592,6 +598,8 @@ torch::Tensor pretok_starts_batched(torch::Tensor cp, torch::Tensor dstart,
 // their own index and member non-head positions seed 0, so after the
 // scan a member position holds the index of its run head).
 
+#endif
+
 __global__ void k_ds_seed_n(const int32_t* __restrict__ cp,
                             const uint8_t* __restrict__ tab,
                             const uint8_t* __restrict__ doc,
@@ -631,6 +639,7 @@ __global__ void k_ds_bmask(const int32_t* __restrict__ cp,
 }
 
 // (B, dso, ars): dso = B segment start (dso semantics of dstart reused)
+#ifndef TOKTIER_DEVICE_ONLY
 static std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> ds_prepass(
     torch::Tensor cp, torch::Tensor tab, int64_t dmax,
     const uint8_t* doc_ptr, int cap, const int32_t* n_dev) {
@@ -737,6 +746,8 @@ torch::Tensor pretok_starts_batched_ds(torch::Tensor cp,
 // which is exactly the HuggingFace Sequence semantics and the reason the
 // measured Laguna behavior (37,327/60,058) differs from the
 // single-stage qwen3 case.
+#endif
+
 __global__ void k_lag_bmask(const int32_t* __restrict__ cp,
                             const uint8_t* __restrict__ doc,
                             uint8_t* __restrict__ B, int cap,
@@ -759,6 +770,7 @@ __global__ void k_lag_bmask(const int32_t* __restrict__ cp,
 // channel). The geometry only depends on cap and all data-dependent
 // quantities go through n_dev, so this is CUDA-Graph capturable (the
 // encode_fused_laguna path).
+#ifndef TOKTIER_DEVICE_ONLY
 static std::tuple<torch::Tensor, torch::Tensor> lag_prepass(
     torch::Tensor cp, const uint8_t* doc_ptr, int cap,
     const int32_t* n_dev) {
@@ -854,6 +866,8 @@ static std::string ds_constants() {
            (int)DS_WS, (int)DS_CRLF);
   return std::string(buf) + "\"apunct\":" + ap + ",\"alpha\":" + al + "}";
 }
+
+#endif
 
 // ============ In-piece BPE merge (byte-level BPE families) ============
 //
@@ -1477,6 +1491,7 @@ __global__ void k_memo_insert(const uint8_t* bytes, const int32_t* pb, int P,
 // domain; and every table must be contiguous and on the same device as
 // bytes. A violation used to mean a silent out-of-bounds probe or a
 // wrong-table read inside the kernel.
+#ifndef TOKTIER_DEVICE_ONLY
 static void check_bpe_tables_meta(const torch::Tensor& bytes,
                                   const torch::Tensor& pair_keys,
                                   const torch::Tensor& pair_vals,
@@ -1767,6 +1782,8 @@ std::vector<torch::Tensor> bpe_encode_memo_v2(
 // DeviceSelect; the caller reads the returned 1-element tensor
 // off[cap]=T to learn the valid length.
 
+#endif
+
 __global__ void k_pb_sentinel(int32_t* __restrict__ pb,
                               const int32_t* __restrict__ nP,
                               const int32_t* __restrict__ nb) {
@@ -1789,6 +1806,7 @@ __global__ void k_dispatch_flags(const int32_t* __restrict__ pb,
   fL[p] = len > MED_MAX;
 }
 
+#ifndef TOKTIER_DEVICE_ONLY
 template <int RS>
 static std::vector<torch::Tensor> encode_fused_t(
     torch::Tensor bytes, torch::Tensor nb_dev, torch::Tensor tab,
@@ -2116,6 +2134,8 @@ std::vector<torch::Tensor> encode_fused_laguna_v2(
 // capacity, so it is CUDA-Graph capturable. This is additive only: no
 // existing kernel line was touched, which keeps the exposure of the
 // bit-identical zero-regression gate minimal.
+#endif
+
 __device__ __forceinline__ int nfcqc_len(uint8_t c) {
   if (c < 0x80) return 1;
   if ((c >> 5) == 0x6) return 2;
@@ -2160,6 +2180,7 @@ __global__ void k_nfc_qc(const uint8_t* __restrict__ b,
   }
 }
 
+#ifndef TOKTIER_DEVICE_ONLY
 torch::Tensor nfc_qc_scan(torch::Tensor bytes, torch::Tensor tab) {
   const c10::cuda::OptionalCUDAGuard guard(at::device_of(bytes));
   TORCH_CHECK(bytes.is_cuda() && bytes.dtype() == torch::kUInt8 &&
@@ -2194,6 +2215,8 @@ torch::Tensor nfc_qc_scan(torch::Tensor bytes, torch::Tensor tab) {
 // flag back to the host: true chains (a fully swallowing link pointing
 // at another candidate) and {P union M} ambiguous spans (a P earlier
 // than an M).
+
+#endif
 
 namespace o2k {
 constexpr uint8_t P = 0, U = 1, L = 2, C = 3, N = 4, S = 5, M = 6;
@@ -2573,6 +2596,7 @@ __global__ void k_o2k_rules(const int32_t* __restrict__ cp,
   }
 }
 
+#ifndef TOKTIER_DEVICE_ONLY
 static std::vector<torch::Tensor> pretok_starts_o200k(torch::Tensor cp,
                                                       torch::Tensor tab,
                                                       int64_t dmax,
@@ -2709,6 +2733,8 @@ static std::vector<torch::Tensor> pretok_starts_o200k(torch::Tensor cp,
 // device reads global cp directly, so the host version's D2H of window
 // contents and its re-fetch when widening a window disappear entirely.
 // ---------------------------------------------------------------------
+#endif
+
 namespace o2k {
 __device__ __forceinline__ uint8_t sq_cls(const int32_t* cp,
                                           const uint8_t* tab, int j) {
@@ -3002,6 +3028,7 @@ __global__ void k_o2k_win_mark(const int32_t* __restrict__ cp,
                   starts);
 }
 
+#ifndef TOKTIER_DEVICE_ONLY
 static std::vector<torch::Tensor> o200k_win_extents(
     torch::Tensor cp, torch::Tensor tab, torch::Tensor sp, torch::Tensor qL,
     torch::Tensor ds, torch::Tensor de, int64_t dmax, bool contractions,
@@ -3312,6 +3339,8 @@ static std::vector<torch::Tensor> pretok_starts_kimi(torch::Tensor cp,
 
 // Pack three metadata values {token count, chain flag, pm flag} so that
 // a single 12B D2H reads back tcnt together with the sparse-case flags.
+#endif
+
 __global__ void k_o2k_meta3(const int32_t* __restrict__ tcnt,
                             const int32_t* __restrict__ flags2,
                             int32_t* __restrict__ meta) {
@@ -3328,6 +3357,7 @@ __global__ void k_o2k_meta3(const int32_t* __restrict__ tcnt,
 // chain and pm flags are folded into meta and read back once; and when a
 // flag fires, the Python layer redoes the work on the eager path, so the
 // sparse cases never enter the graph.
+#ifndef TOKTIER_DEVICE_ONLY
 static std::vector<torch::Tensor> encode_fused_o200k_impl(
     torch::Tensor bytes, torch::Tensor nb_dev, torch::Tensor tab,
     int64_t dmax, bool contractions, torch::Tensor pair_keys,
@@ -3648,3 +3678,4 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         "encode_fused_o200k overload with guard bitmap (trailing "
         "unsafe_bits)");
 }
+#endif

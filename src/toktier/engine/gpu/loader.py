@@ -34,8 +34,10 @@ Rules implemented here:
   (``Config.cache_dir``; see ``docs/contracts/config.md`` Section 5), not
   from a hardcoded path and not from ``TORCH_EXTENSIONS_DIR``. Built
   kernels are cache: deleting them costs build time, never data.
-- No environment variable is read here. Build flags and delivery are
-  explicit arguments, because they are inputs to the certificate.
+- Build flags and delivery are explicit arguments. The read-only toolchain
+  probe observes CUDA's own ``CUDA_HOME`` / ``CUDA_PATH`` compiler-selection
+  inputs because the delegated build system already honors them; they are
+  reported and cache-bound, never interpreted as TokTier configuration.
 """
 
 from __future__ import annotations
@@ -43,6 +45,7 @@ from __future__ import annotations
 import hashlib
 import threading
 from dataclasses import dataclass, field
+from importlib.util import find_spec
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
@@ -50,6 +53,11 @@ from typing import TYPE_CHECKING, Any
 from ...errors import BackendUnavailable, KernelIncompatible
 from ...kernels import kernel_source_digest, kernel_source_paths
 from ...kernels.bindings import CertifiedSourceBindings, bare_sha256
+from .toolchain import (
+    NvccFacts,
+    jit_toolchain_satisfied,
+    selected_nvcc_facts,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ...config import Config
@@ -142,9 +150,28 @@ class ToolchainFacts:
 
     torch_version: str
     cuda_version: str | None
+    nvcc_path: str | None
+    nvcc_resolved_path: str | None
+    nvcc_release: str | None
+    nvcc_build: str | None
+    nvcc_error: str | None
+    jit_toolchain_satisfied: bool
     device_name: str | None
     device_capability: str | None
     driver_version: str | None
+
+    def cache_tag(self) -> str:
+        compiler = NvccFacts(
+            path=self.nvcc_path,
+            resolved_path=self.nvcc_resolved_path,
+            release=self.nvcc_release,
+            build=self.nvcc_build,
+            error=self.nvcc_error,
+        )
+        return compiler.cache_tag(
+            torch_cuda=self.cuda_version or "unknown",
+            torch_version=self.torch_version,
+        )
 
 
 @dataclass
@@ -161,7 +188,22 @@ class _LoadState:
     prebuilt: Any | None = None
     #: Why ``auto`` fell back to JIT, if it did (stated, not silent).
     prebuilt_fallback_reason: str | None = None
+    #: The prebuilt image is owned by the Rust CUDA Driver host rather than
+    #: by the legacy torch extension.  This is still the one process-wide
+    #: certified delivery and must participate in all loader reporting and
+    #: divergent-delivery guards.
+    native_prebuilt: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class _NativePrebuiltFacts:
+    """Shape-compatible identity facts for the Rust-owned fatbin."""
+
+    manifest: dict[str, Any]
+    fatbin_digest: str
+    device_architecture: str
+    architecture_embedded: bool = True
 
 
 class KernelLoader:
@@ -182,7 +224,7 @@ class KernelLoader:
     @classmethod
     def is_loaded(cls) -> bool:
         """Whether a kernel build has been loaded in this process."""
-        return cls._state.module is not None
+        return cls._state.module is not None or cls._state.native_prebuilt
 
     @classmethod
     def bound_flags(cls) -> BuildFlags | None:
@@ -259,6 +301,12 @@ class KernelLoader:
             ),
             "certificate_void": cls._state.certificate_void,
         }
+        from .native import native_host_build_facts
+
+        host = native_host_build_facts()
+        binding["host_source_digest"] = host.source_digest
+        binding["host_build_flags"] = list(host.build_flags)
+        binding["host_toolchain"] = host.toolchain
         prebuilt = cls._state.prebuilt
         if prebuilt is not None:
             manifest = prebuilt.manifest
@@ -286,6 +334,14 @@ class KernelLoader:
             binding["toolchain_facts"] = {
                 "torch_version": toolchain.torch_version,
                 "cuda_version": toolchain.cuda_version,
+                "nvcc_path": toolchain.nvcc_path,
+                "nvcc_resolved_path": toolchain.nvcc_resolved_path,
+                "nvcc_release": toolchain.nvcc_release,
+                "nvcc_build": toolchain.nvcc_build,
+                "nvcc_error": toolchain.nvcc_error,
+                "jit_toolchain_satisfied": (
+                    toolchain.jit_toolchain_satisfied
+                ),
                 "device_name": toolchain.device_name,
                 "device_capability": toolchain.device_capability,
                 "driver_version": toolchain.driver_version,
@@ -301,6 +357,12 @@ class KernelLoader:
     def prebuilt_fallback_reason(cls) -> str | None:
         """Why ``auto`` fell back to JIT, if it did."""
         return cls._state.prebuilt_fallback_reason
+
+    @classmethod
+    def jit_toolchain_satisfied(cls) -> bool | None:
+        """Judgement of the compiler/runtime triple, once observed."""
+        facts = cls._state.toolchain
+        return facts.jit_toolchain_satisfied if facts is not None else None
 
     # -- loading ------------------------------------------------------
 
@@ -350,6 +412,36 @@ class KernelLoader:
             )
         with cls._lock:
             state = cls._state
+            if state.native_prebuilt:
+                if flags != state.flags or delivery == "jit":
+                    state.certificate_void = True
+                    state.void_reason = (
+                        "the Rust prebuilt host already owns the process-wide "
+                        "kernel delivery and a divergent legacy load was requested"
+                    )
+                    raise KernelIncompatible(
+                        "the native prebuilt kernel is already loaded with a "
+                        "different build request",
+                        details={
+                            "backend": "gpu",
+                            "reason_code": "R_KERNEL_DIGEST_MISMATCH",
+                            "expected_digest": (
+                                state.flags or DEFAULT_BUILD_FLAGS
+                            ).digest(),
+                            "observed_digest": flags.digest(),
+                            "remedy": "use one GPU delivery per process",
+                        },
+                    )
+                raise KernelIncompatible(
+                    "the prebuilt kernel is already owned by TokTier's native "
+                    "CUDA Driver host; the legacy extension surface is unavailable",
+                    details={
+                        "backend": "gpu",
+                        "reason_code": "R_KERNEL_DIGEST_MISMATCH",
+                        "expected_digest": None,
+                        "remedy": "reuse the existing Tokenizer instance",
+                    },
+                )
             if state.module is not None:
                 if state.flags != flags:
                     state.certificate_void = True
@@ -399,15 +491,85 @@ class KernelLoader:
                 if loaded is not None:
                     result: ModuleType = loaded
                     return result
-            build_dir = _resolve_build_dir(cache_dir, config, flags)
+            toolchain = _toolchain_facts(torch, device)
+            build_dir = _resolve_build_dir(
+                cache_dir, config, flags, toolchain=toolchain
+            )
             build_dir.mkdir(parents=True, exist_ok=True)
             module = _compile(torch, build_dir, flags)
             state.module = module
             state.flags = flags
             state.build_dir = build_dir
             state.delivery = "jit"
-            state.toolchain = _toolchain_facts(torch, device)
+            state.toolchain = toolchain
             return module
+
+    @classmethod
+    def note_native_prebuilt_loaded(
+        cls,
+        *,
+        manifest: dict[str, Any],
+        fatbin_digest: str,
+        architecture: str,
+    ) -> None:
+        """Publish a successfully loaded Rust-owned prebuilt delivery.
+
+        The native constructor has already verified the manifest digest,
+        selected an embedded image for ``architecture`` and loaded the CUDA
+        module.  Recording those immutable facts here keeps ``explain()``,
+        ``doctor`` and the legacy loader's single-delivery guard honest
+        without importing torch or exposing the extension ABI to Rust.
+        """
+        facts = _NativePrebuiltFacts(
+            manifest=dict(manifest),
+            fatbin_digest=fatbin_digest,
+            device_architecture=architecture,
+        )
+        with cls._lock:
+            state = cls._state
+            if state.module is not None:
+                state.certificate_void = True
+                state.void_reason = (
+                    "a legacy kernel extension was already loaded before the "
+                    "Rust prebuilt host requested process ownership"
+                )
+                raise KernelIncompatible(
+                    "a kernel delivery is already loaded through the legacy host",
+                    details={
+                        "backend": "gpu",
+                        "reason_code": "R_KERNEL_DIGEST_MISMATCH",
+                        "expected_digest": None,
+                        "remedy": "use one GPU host implementation per process",
+                    },
+                )
+            if state.native_prebuilt:
+                previous = state.prebuilt
+                if (
+                    previous is None
+                    or previous.fatbin_digest != fatbin_digest
+                    or previous.device_architecture != architecture
+                ):
+                    state.certificate_void = True
+                    state.void_reason = (
+                        "a second native prebuilt identity was requested in one process"
+                    )
+                    raise KernelIncompatible(
+                        "native prebuilt identity differs from the loaded image",
+                        details={
+                            "backend": "gpu",
+                            "reason_code": "R_KERNEL_DIGEST_MISMATCH",
+                            "expected_digest": getattr(
+                                previous, "fatbin_digest", None
+                            ),
+                            "observed_digest": fatbin_digest,
+                            "remedy": "restart the process to change GPU images",
+                        },
+                    )
+                return
+            state.flags = DEFAULT_BUILD_FLAGS
+            state.delivery = "prebuilt"
+            state.prebuilt = facts
+            state.native_prebuilt = True
 
     @classmethod
     def _try_prebuilt(
@@ -461,7 +623,9 @@ class KernelLoader:
         state.flags = flags
         state.delivery = "prebuilt"
         state.prebuilt = load
-        state.toolchain = _toolchain_facts(torch, device)
+        state.toolchain = _toolchain_facts(
+            torch, device, inspect_compiler=False
+        )
         return load.extension
 
     @classmethod
@@ -484,7 +648,11 @@ def _import_torch() -> Any:
 
 
 def _resolve_build_dir(
-    cache_dir: Path | None, config: Config | None, flags: BuildFlags
+    cache_dir: Path | None,
+    config: Config | None,
+    flags: BuildFlags,
+    *,
+    toolchain: ToolchainFacts | None = None,
 ) -> Path:
     """Build products go under the resolved cache directory.
 
@@ -498,8 +666,13 @@ def _resolve_build_dir(
 
             config = Config.resolve()
         cache_dir = Path(config.cache_dir)
-    tag = flags.digest().split(":", 1)[1][:16]
-    return Path(cache_dir) / "kernels" / f"{EXTENSION_NAME}-{tag}"
+    flags_tag = flags.digest().split(":", 1)[1][:16]
+    toolchain_tag = toolchain.cache_tag() if toolchain is not None else "unprobed"
+    return (
+        Path(cache_dir)
+        / "kernels"
+        / f"{EXTENSION_NAME}-{flags_tag}-tc-{toolchain_tag}"
+    )
 
 
 def _compile(torch: Any, build_dir: Path, flags: BuildFlags) -> ModuleType:
@@ -529,8 +702,23 @@ def _compile(torch: Any, build_dir: Path, flags: BuildFlags) -> ModuleType:
     return loaded
 
 
-def _toolchain_facts(torch: Any, device: str | None) -> ToolchainFacts:
+def _toolchain_facts(
+    torch: Any, device: str | None, *, inspect_compiler: bool = True
+) -> ToolchainFacts:
     cuda_version = getattr(torch.version, "cuda", None)
+    compiler = (
+        selected_nvcc_facts()
+        if inspect_compiler
+        else NvccFacts(
+            path=None,
+            resolved_path=None,
+            release=None,
+            build=None,
+            error="not inspected for prebuilt delivery",
+        )
+    )
+    torch_version = str(torch.__version__)
+    cuda_text = str(cuda_version) if cuda_version else None
     device_name: str | None = None
     capability: str | None = None
     driver: str | None = None
@@ -548,8 +736,19 @@ def _toolchain_facts(torch: Any, device: str | None) -> ToolchainFacts:
         # other exception type is a defect and propagates.
         pass
     return ToolchainFacts(
-        torch_version=str(torch.__version__),
-        cuda_version=str(cuda_version) if cuda_version else None,
+        torch_version=torch_version,
+        cuda_version=cuda_text,
+        nvcc_path=compiler.path,
+        nvcc_resolved_path=compiler.resolved_path,
+        nvcc_release=compiler.release,
+        nvcc_build=compiler.build,
+        nvcc_error=compiler.error,
+        jit_toolchain_satisfied=jit_toolchain_satisfied(
+            torch_cuda=cuda_text or "unknown",
+            torch_version=torch_version,
+            nvcc=compiler,
+            ninja_present=find_spec("ninja") is not None,
+        ),
         device_name=device_name,
         device_capability=capability,
         driver_version=driver if driver and driver != "None" else None,

@@ -1,0 +1,10 @@
+[package]
+name = "toktier-cuda-driver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Minimal dynamically loaded CUDA Driver API host for TokTier's prebuilt kernels."
+
+[dependencies]
+libc.workspace = true

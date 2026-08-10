@@ -347,6 +347,9 @@ class GpuEngine:
                 delivery=delivery,
                 architecture=architecture,
                 certificate_void=bool(binding.get("certificate_void")),
+                jit_toolchain_satisfied=(
+                    KernelLoader.jit_toolchain_satisfied()
+                ),
             )
             for family in sorted(self.artifacts)
         }
@@ -356,6 +359,11 @@ class GpuEngine:
             "prebuilt_available": prebuilt_available,
             "device_architecture": architecture,
             "certificate_void": bool(binding.get("certificate_void")),
+            "jit_toolchain_satisfied": (
+                KernelLoader.jit_toolchain_satisfied()
+                if delivery == "jit"
+                else None
+            ),
             "oracle": binding["oracle"],
             "uncertified_oracle": binding["uncertified_oracle"],
             "families": families,

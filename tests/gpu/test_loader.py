@@ -19,6 +19,7 @@ from toktier.engine.gpu.loader import (
     EXTENSION_NAME,
     BuildFlags,
     KernelLoader,
+    ToolchainFacts,
 )
 from toktier.errors import KernelIncompatible
 
@@ -189,6 +190,42 @@ def test_build_directory_separates_flag_sets(tmp_path: Path) -> None:
     assert first.parent == tmp_path / "kernels"
 
 
+def test_build_directory_separates_actual_compiler_identities(
+    tmp_path: Path,
+) -> None:
+    from toktier.engine.gpu.loader import _resolve_build_dir
+
+    def facts(release: str, build: str) -> ToolchainFacts:
+        return ToolchainFacts(
+            torch_version="2.13.0+cu130",
+            cuda_version="13.0",
+            nvcc_path="/usr/local/cuda/bin/nvcc",
+            nvcc_resolved_path=f"/usr/local/cuda-{release}/bin/nvcc",
+            nvcc_release=release,
+            nvcc_build=build,
+            nvcc_error=None,
+            jit_toolchain_satisfied=release == "13.0",
+            device_name="test",
+            device_capability="sm_120",
+            driver_version="595.84",
+        )
+
+    judged = _resolve_build_dir(
+        tmp_path,
+        None,
+        DEFAULT_BUILD_FLAGS,
+        toolchain=facts("13.0", "V13.0.88"),
+    )
+    drifted = _resolve_build_dir(
+        tmp_path,
+        None,
+        DEFAULT_BUILD_FLAGS,
+        toolchain=facts("13.2", "V13.2.86"),
+    )
+    assert judged != drifted
+    assert judged.parent == drifted.parent == tmp_path / "kernels"
+
+
 def _docstring_node_ids(tree: ast.AST) -> set[int]:
     """Identify docstring constants, which are prose rather than code."""
     ids: set[int] = set()
@@ -244,12 +281,11 @@ def test_package_never_reads_the_environment() -> None:
             # The hub source honors HF_HUB_OFFLINE exactly once, at
             # construction, as the artifacts contract documents.
             continue
-        if path.parts[-2:] == ("toktier", "cli.py"):
-            # The doctor command reports the CUDA toolkit discovery the
-            # build system performs, which means observing CUDA_HOME and
-            # CUDA_PATH -- the toolchain's variables, not toktier
-            # configuration. The values are printed, never stored and
-            # never acted on; no toktier behavior varies with them.
+        if path.parts[-3:] == ("engine", "gpu", "toolchain.py"):
+            # JIT certification must identify the compiler the build
+            # system selects. CUDA_HOME/CUDA_PATH are compiler-selection
+            # inputs already honored by that system; the shared probe
+            # observes them, never treats them as TokTier configuration.
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):

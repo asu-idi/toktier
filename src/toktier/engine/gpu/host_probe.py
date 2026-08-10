@@ -24,19 +24,23 @@ from ...routing.probe import DeviceInfo, KernelCacheState
 from .class_tables import ClassTableStore
 from .families import KernelFamilyTable
 from .loader import KernelLoader
+from .toolchain import (
+    NvccFacts,
+    jit_toolchain_observation,
+    jit_toolchain_satisfied,
+    selected_nvcc_facts,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ...config import Config
 
 __all__ = ["CudaHostProbe"]
 
-_JUDGED_JIT_TOOLCHAINS = frozenset(
-    {
-        ("12.8", "2.11.0+cu128"),
-        ("13.0", "2.13.0+cu130"),
-    }
-)
 _DRIVER_PATTERN = re.compile(r"\b(\d{3}\.\d+(?:\.\d+)?)\b")
+
+# A module-level alias keeps the read-only compiler probe replaceable in unit
+# tests without patching subprocess globally.
+_nvcc_facts = selected_nvcc_facts
 
 
 def _torch_runtime() -> Any | None:
@@ -77,16 +81,24 @@ def _system_driver_version() -> str | None:
 
 
 def _jit_toolchain(torch: Any | None) -> tuple[str | None, bool]:
-    """Observed JIT pair and whether it is one of the judged pairs."""
+    """Observed compiler/runtime triple and whether it was judged."""
     if torch is None:
         return None, False
     cuda = getattr(getattr(torch, "version", None), "cuda", None)
     torch_version = str(getattr(torch, "__version__", ""))
     cuda_version = str(cuda) if cuda is not None else "unknown"
-    observed = f"CUDA {cuda_version} / torch {torch_version}"
+    compiler: NvccFacts = _nvcc_facts()
+    observed = jit_toolchain_observation(
+        torch_cuda=cuda_version,
+        torch_version=torch_version,
+        nvcc=compiler,
+    )
     ninja_present = find_spec("ninja") is not None
-    return observed, ninja_present and (cuda_version, torch_version) in (
-        _JUDGED_JIT_TOOLCHAINS
+    return observed, jit_toolchain_satisfied(
+        torch_cuda=cuda_version,
+        torch_version=torch_version,
+        nvcc=compiler,
+        ninja_present=ninja_present,
     )
 
 
@@ -164,14 +176,19 @@ class CudaHostProbe:
         # record binds. Absent fatbin -> None -> a certified check can
         # only fail, never silently pass.
         from ...kernels.bindings import bare_sha256
+        from .native import native_host_build_facts
         from .prebuilt import shipped_fatbin_digest
 
         fatbin_digest = shipped_fatbin_digest()
-        torch = _torch_runtime()
-        toolchain, toolchain_satisfied = _jit_toolchain(torch)
+        host = native_host_build_facts()
         active_delivery = KernelLoader.delivery()
         preferred_delivery = self._delivery if self._delivery != "auto" else None
         judged_delivery = active_delivery or preferred_delivery
+        torch = _torch_runtime()
+        if judged_delivery == "jit":
+            toolchain, toolchain_satisfied = _jit_toolchain(torch)
+        else:
+            toolchain, toolchain_satisfied = None, False
         return KernelCacheState.from_bindings(
             KernelLoader.certified_source_bindings(
                 class_table_digest=store.binding_digest()
@@ -182,6 +199,9 @@ class CudaHostProbe:
             prebuilt_available=fatbin_digest is not None,
             delivery=active_delivery,
             preferred_delivery=preferred_delivery,
+            host_source_digest=host.source_digest,
+            host_build_flags=host.build_flags,
+            host_toolchain=host.toolchain,
             toolchain=toolchain,
             toolchain_satisfied=(
                 toolchain_satisfied if judged_delivery == "jit" else None

@@ -5,10 +5,26 @@ the shipped-artifact consistency (fatbin vs manifest), and the loader's
 delivery selection rules (explicit requests never substitute; ``auto``
 falls back with the reason recorded). The GPU test at the end is marked
 ``gpu`` like the rest of the suite.
+
+Two of them do need one more thing: the compiled ``toktier._native``
+extension, because they assert on identity facts the Cargo build script
+embeds into it. ``pytest.ini`` runs the suite against ``src`` rather
+than an install, so a source tree that has never been built (an
+unpacked archive, for instance) has no extension there. An installed
+wheel beside such a tree does carry one, and it is a legitimate subject
+for these assertions, so the two tests look for it the same way
+``tools/generate_registry.py`` does before deciding they have no
+premise. Adopting an installed extension changes only where the
+identity is read: it still has to equal, exactly, the digest the
+current source set hashes to. With neither extension available the two
+skip with that reason rather than failing, which is the honest report:
+the premise for the assertion is absent, not violated.
 """
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -16,6 +32,7 @@ import pytest
 
 from toktier.engine.gpu import prebuilt as prebuilt_pkg
 from toktier.engine.gpu.loader import BuildFlags, KernelLoader
+from toktier.engine.gpu.native import native_host_build_facts
 from toktier.engine.gpu.prebuilt import (
     PrebuiltUnavailable,
     shipped_fatbin_digest,
@@ -66,6 +83,49 @@ def test_cubin_digest_binds_the_architecture() -> None:
 
 _FATBIN_SHIPPED = (PREBUILT_DIR / FATBIN_NAME).is_file()
 
+def _readable_native_extension() -> bool:
+    """Whether identity facts can be read from a compiled extension.
+
+    This source tree's own build answers first. When it has none, the
+    repository's registry generator already knows how to bind an
+    installed wheel's extension instead; reusing that helper keeps one
+    lookup rule (skip this tree, accept only real extension suffixes,
+    load through ``ExtensionFileLoader``) rather than a second copy that
+    could drift from it. The helper only changes where the facts come
+    from -- the assertions below still require exact equality with the
+    current source set.
+    """
+    if native_host_build_facts().source_digest:
+        return True
+    tools = str(Path(__file__).resolve().parents[2] / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    try:
+        from generate_registry import _adopt_installed_native_extension
+    except ImportError:  # pragma: no cover - tooling absent from a slice
+        return False
+    if _adopt_installed_native_extension() is None:
+        return False
+    return bool(native_host_build_facts().source_digest)
+
+
+#: Whether identity facts are readable at all: from this source tree's
+#: compiled ``toktier._native``, or failing that from an installed
+#: wheel's. The build script embeds those facts, so tests that read them
+#: have no premise without one of the two.
+_NATIVE_BUILT = _readable_native_extension()
+
+_NEEDS_NATIVE = pytest.mark.skipif(
+    not _NATIVE_BUILT,
+    reason=(
+        "no compiled toktier._native in this source tree and none found "
+        "in an installed toktier on sys.path; build it into src/toktier "
+        "(maturin develop, or maturin build --locked and place the "
+        "extension there), or run against an environment where the "
+        "matching wheel is installed, and re-run"
+    ),
+)
+
 
 def test_shipped_digest_reports_presence_honestly() -> None:
     digest = shipped_fatbin_digest()
@@ -73,6 +133,24 @@ def test_shipped_digest_reports_presence_honestly() -> None:
         assert digest is not None and digest.startswith("sha256:")
     else:
         assert digest is None
+
+
+@_NEEDS_NATIVE
+def test_native_host_source_identity_matches_the_loaded_extension() -> None:
+    """The verifier and Cargo build script hash exactly the same source set."""
+    from toktier import _native
+
+    root = Path(__file__).resolve().parents[2]
+    observed = subprocess.run(
+        [sys.executable, str(root / "tools/native_host_source_identity.py")],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    facts = _native.native_host_build_facts()
+    assert facts["source_digest"] == observed
+    assert facts["build_flags"]
+    assert facts["toolchain"]
 
 
 @pytest.mark.skipif(
@@ -154,7 +232,7 @@ def test_auto_falls_back_to_jit_with_reason(monkeypatch: Any) -> None:
     )
     monkeypatch.setattr(
         "toktier.engine.gpu.loader._toolchain_facts",
-        lambda torch, device: None,
+        lambda torch, device, **_kwargs: None,
     )
     got = KernelLoader.get(cache_dir=Path("/tmp/toktier-test"), delivery="auto")
     assert got is module
@@ -204,7 +282,7 @@ def test_divergent_delivery_request_voids_certificate(
     )
     monkeypatch.setattr(
         "toktier.engine.gpu.loader._toolchain_facts",
-        lambda torch, device: None,
+        lambda torch, device, **_kwargs: None,
     )
     got = KernelLoader.get(delivery="prebuilt")
     assert got is module
@@ -226,6 +304,49 @@ def test_divergent_delivery_request_voids_certificate(
 
 
 # -- launcher geometry helpers -----------------------------------------
+
+
+@_NEEDS_NATIVE
+def test_rust_prebuilt_host_publishes_one_process_delivery() -> None:
+    manifest = {
+        "toolchain": "cuda 13.2",
+        "architectures": {
+            "sm_120": {"digest": "sha256:" + "a" * 64},
+        },
+        "sources": {"prebuilt_source_digest": "sha256:" + "b" * 64},
+    }
+    digest = "sha256:" + "d" * 64
+    KernelLoader.note_native_prebuilt_loaded(
+        manifest=manifest,
+        fatbin_digest=digest,
+        architecture="sm_120",
+    )
+
+    assert KernelLoader.is_loaded()
+    assert KernelLoader.delivery() == "prebuilt"
+    binding = KernelLoader.binding_set()
+    assert binding["binary_digest"] == "d" * 64
+    assert binding["host_source_digest"]
+    assert binding["host_build_flags"]
+    assert binding["host_toolchain"]
+    assert binding["prebuilt"]["device_architecture"] == "sm_120"
+    assert binding["prebuilt"]["architecture_embedded"] is True
+
+    # Re-publishing the same immutable identity is idempotent; a second
+    # architecture in the same process invalidates the single-load premise.
+    KernelLoader.note_native_prebuilt_loaded(
+        manifest=manifest,
+        fatbin_digest=digest,
+        architecture="sm_120",
+    )
+    with pytest.raises(KernelIncompatible):
+        KernelLoader.note_native_prebuilt_loaded(
+            manifest=manifest,
+            fatbin_digest=digest,
+            architecture="sm_90",
+        )
+    assert KernelLoader.certificate_void()
+
 
 
 def test_launcher_grid_and_scalar_packing() -> None:

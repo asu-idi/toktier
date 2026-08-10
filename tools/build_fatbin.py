@@ -108,6 +108,12 @@ EXPECTED_KERNELS = {
     "tk_carrier_scatter": "tk_carrier_scatter",
     "tk_carrier_gather": "tk_carrier_gather",
     "tk_select_scatter": "tk_select_scatter",
+    "tk_scan_u8_blocks": "tk_scan_u8_blocks",
+    "tk_scan_i32_blocks": "tk_scan_i32_blocks",
+    "tk_scan_add": "tk_scan_add",
+    "tk_utf8_lead_i32": "tk_utf8_lead_i32",
+    "tk_u8_flags_i32": "tk_u8_flags_i32",
+    "tk_eq_index_i32": "tk_eq_index_i32",
     "tk_ds_constants_dump": "tk_ds_constants_dump",
 }
 

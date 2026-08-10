@@ -63,6 +63,7 @@ def family_certification(
     delivery: str | None,
     architecture: str | None,
     certificate_void: bool,
+    jit_toolchain_satisfied: bool | None = None,
     installed_oracle: str | None = None,
 ) -> dict[str, Any]:
     """One family's certification verdict for the running process.
@@ -94,6 +95,8 @@ def family_certification(
         reasons.append("oracle_outside_certified_set")
     if certificate_void:
         reasons.append("certificate_void")
+    if delivery == "jit" and jit_toolchain_satisfied is not True:
+        reasons.append("jit_toolchain_unverified")
     architecture_experimental = False
     if architecture is None:
         reasons.append("device_architecture_unobserved")

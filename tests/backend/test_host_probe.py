@@ -15,6 +15,7 @@ import pytest
 
 from toktier.engine.gpu import host_probe
 from toktier.engine.gpu.host_probe import CudaHostProbe
+from toktier.engine.gpu.toolchain import NvccFacts
 from toktier.policy import BACKEND_REFERENCE, ReasonCode, RoutingPolicy
 from toktier.routing.plan import plan
 from toktier.routing.probe import probe
@@ -47,11 +48,25 @@ def test_explicit_delivery_is_visible_before_the_lazy_load(
     )
     monkeypatch.setattr(host_probe, "_torch_runtime", lambda: fake_torch)
     monkeypatch.setattr(host_probe, "find_spec", lambda name: object())
+    monkeypatch.setattr(
+        host_probe,
+        "_nvcc_facts",
+        lambda: NvccFacts(
+            path="/opt/cuda-12.8/bin/nvcc",
+            resolved_path="/opt/cuda-12.8/bin/nvcc",
+            release="12.8",
+            build="V12.8.93",
+            error=None,
+        ),
+    )
 
     cache = CudaHostProbe(config=support.config(), delivery="jit").kernel_cache()
     assert cache.delivery is None
     assert cache.preferred_delivery == "jit"
-    assert cache.toolchain == "CUDA 12.8 / torch 2.11.0+cu128"
+    assert cache.toolchain == (
+        "NVCC 12.8 (V12.8.93; /opt/cuda-12.8/bin/nvcc) / "
+        "torch CUDA 12.8 / torch 2.11.0+cu128"
+    )
     assert cache.toolchain_satisfied is True
 
     prebuilt = CudaHostProbe(
@@ -72,8 +87,48 @@ def test_unjudged_jit_pair_fails_the_toolchain_fact_closed(
     )
     monkeypatch.setattr(host_probe, "_torch_runtime", lambda: fake_torch)
     monkeypatch.setattr(host_probe, "find_spec", lambda name: object())
+    monkeypatch.setattr(
+        host_probe,
+        "_nvcc_facts",
+        lambda: NvccFacts(
+            path="/opt/cuda/bin/nvcc",
+            resolved_path="/opt/cuda/bin/nvcc",
+            release="12.9",
+            build="V12.9.1",
+            error=None,
+        ),
+    )
     cache = CudaHostProbe(config=support.config(), delivery="jit").kernel_cache()
     assert cache.toolchain_satisfied is False
+
+
+def test_matching_torch_runtime_with_different_nvcc_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_torch = SimpleNamespace(
+        __version__="2.13.0+cu130",
+        version=SimpleNamespace(cuda="13.0"),
+        cuda=SimpleNamespace(is_available=lambda: False),
+    )
+    monkeypatch.setattr(host_probe, "_torch_runtime", lambda: fake_torch)
+    monkeypatch.setattr(host_probe, "find_spec", lambda name: object())
+    monkeypatch.setattr(
+        host_probe,
+        "_nvcc_facts",
+        lambda: NvccFacts(
+            path="/usr/local/cuda/bin/nvcc",
+            resolved_path="/usr/local/cuda-13.2/bin/nvcc",
+            release="13.2",
+            build="V13.2.86",
+            error=None,
+        ),
+    )
+
+    cache = CudaHostProbe(config=support.config(), delivery="jit").kernel_cache()
+    assert cache.toolchain_satisfied is False
+    assert cache.toolchain is not None
+    assert "NVCC 13.2" in cache.toolchain
+    assert "torch CUDA 13.0" in cache.toolchain
 
 
 def test_driver_uses_the_system_version_when_torch_has_no_api(

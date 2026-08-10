@@ -18,6 +18,7 @@
 
 #![deny(unsafe_code)]
 
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::Path;
 
@@ -84,6 +85,24 @@ impl EngineResolver for SingleEngine<'_> {
     }
 }
 
+/// One stable name restored with the plaintext needed to resume incremental
+/// TKFR/content tracking after a process restart.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoveredNamedSession {
+    pub name: String,
+    pub handle: SessionHandle,
+    pub transcript: String,
+}
+
+/// Borrowed durable-session input used by an atomic save. The transcript is
+/// passed directly to SQLite instead of being cloned first.
+#[derive(Debug, Clone, Copy)]
+pub struct NamedSessionRef<'a> {
+    pub name: &'a str,
+    pub handle: SessionHandle,
+    pub transcript: &'a str,
+}
+
 const SCHEMA_SQL: &str = "
 CREATE TABLE IF NOT EXISTS store_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS fingerprints (
@@ -96,6 +115,15 @@ CREATE TABLE IF NOT EXISTS sessions (
     key_id INTEGER NOT NULL CHECK (key_id BETWEEN 0 AND 4294967295),
     rec BLOB NOT NULL,
     sidecar BLOB NOT NULL);
+CREATE TABLE IF NOT EXISTS named_sessions (
+    name TEXT PRIMARY KEY,
+    session_id INTEGER NOT NULL CHECK (session_id >= 0),
+    FOREIGN KEY(session_id) REFERENCES sessions(id));
+CREATE TABLE IF NOT EXISTS named_session_recovery (
+    name TEXT PRIMARY KEY,
+    transcript BLOB NOT NULL,
+    binding BLOB NOT NULL,
+    FOREIGN KEY(name) REFERENCES named_sessions(name));
 ";
 
 fn sqlite_i64_to_u64(column: &str, value: i64) -> Result<u64, DbError> {
@@ -151,19 +179,71 @@ impl StoreDb {
     /// Persist the full store state (configuration, fingerprints, sealed
     /// nodes, sessions) in one transaction, replacing prior content.
     pub fn save(&mut self, store: &SessionStore) -> Result<(), DbError> {
+        self.save_named(store, &[])
+    }
+
+    /// Persist the full store and its public stable-name mapping in the same
+    /// transaction. Session handles remain process-local; names are rebound
+    /// to fresh handles by [`Self::load_named_recoverable`].
+    pub fn save_named(
+        &mut self,
+        store: &SessionStore,
+        names: &[(String, SessionHandle)],
+    ) -> Result<(), DbError> {
+        self.save_named_inner(store, names, &HashMap::new())
+    }
+
+    /// Persist stable names together with the historical plaintext needed to
+    /// recover a sealed session's incremental TKFR/content digest state.
+    /// The binding is generated from the store's incremental digest state;
+    /// transcript length is checked without rescanning historical bytes. Full
+    /// digest/tail/checkpoint verification occurs before restart state is
+    /// admitted by [`Self::load_named_recoverable`].
+    pub fn save_named_recoverable(
+        &mut self,
+        store: &SessionStore,
+        sessions: &[NamedSessionRef<'_>],
+    ) -> Result<(), DbError> {
+        let names = sessions
+            .iter()
+            .map(|session| (session.name.to_owned(), session.handle))
+            .collect::<Vec<_>>();
+        let transcripts = sessions
+            .iter()
+            .map(|session| (session.name, session.transcript))
+            .collect::<HashMap<_, _>>();
+        self.save_named_inner(store, &names, &transcripts)
+    }
+
+    fn save_named_inner(
+        &mut self,
+        store: &SessionStore,
+        names: &[(String, SessionHandle)],
+        transcripts: &HashMap<&str, &str>,
+    ) -> Result<(), DbError> {
         let cfg = store.config().clone();
         let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM named_session_recovery", [])?;
+        tx.execute("DELETE FROM named_sessions", [])?;
         tx.execute("DELETE FROM store_meta", [])?;
         tx.execute("DELETE FROM fingerprints", [])?;
         tx.execute("DELETE FROM nodes", [])?;
         tx.execute("DELETE FROM sessions", [])?;
-        let meta: [(&str, String); 6] = [
+        let meta: [(&str, String); 8] = [
             ("format", FORMAT_NAME.to_string()),
             ("block_chars", cfg.block_chars.to_string()),
             ("tail_soft_cap_bytes", cfg.tail_soft_cap_bytes.to_string()),
             ("tail_hard_cap_bytes", cfg.tail_hard_cap_bytes.to_string()),
             ("node_tail_cap_bytes", cfg.node_tail_cap_bytes.to_string()),
             ("max_sessions", cfg.max_sessions.to_string()),
+            (
+                "recovery_tracking",
+                u8::from(store.recovery_tracking_enabled()).to_string(),
+            ),
+            (
+                "content_tracking",
+                u8::from(store.content_tracking_enabled()).to_string(),
+            ),
         ];
         for (k, v) in &meta {
             tx.execute("INSERT INTO store_meta VALUES (?1, ?2)", (k, v))?;
@@ -181,7 +261,9 @@ impl StoreDb {
                 (node_key.as_slice(), rec.as_slice()),
             )?;
         }
-        for handle in store.list_handles() {
+        let handles = store.list_handles();
+        let known_handles = handles.iter().copied().collect::<HashSet<_>>();
+        for handle in handles {
             let info = store.session_info(handle)?;
             let rec = store.export_session(handle)?;
             let sidecar = store.export_session_sidecar(handle)?;
@@ -195,6 +277,55 @@ impl StoreDb {
                     sidecar.as_slice(),
                 ),
             )?;
+        }
+        for (name, handle) in names {
+            if name.is_empty() || name.len() > 1024 {
+                return Err(DbError::Schema(
+                    "session names must contain 1..=1024 bytes".to_owned(),
+                ));
+            }
+            if !known_handles.contains(handle) {
+                return Err(DbError::Schema(format!(
+                    "named session {name:?} references unknown handle {}",
+                    handle.0
+                )));
+            }
+            tx.execute(
+                "INSERT INTO named_sessions VALUES (?1, ?2)",
+                (
+                    name,
+                    u64_to_sqlite_i64("named_sessions.session_id", handle.0)?,
+                ),
+            )?;
+            if let Some(transcript) = transcripts.get(name.as_str()) {
+                let binding = store.export_recovery_binding(*handle)?.ok_or_else(|| {
+                    DbError::Schema(format!(
+                        "named session {name:?} has no complete recovery binding"
+                    ))
+                })?;
+                let expected_bytes = store
+                    .content_index_entry(*handle)?
+                    .ok_or_else(|| {
+                        DbError::Schema(format!(
+                            "named session {name:?} has no complete content binding"
+                        ))
+                    })?
+                    .byte_length;
+                if u64::try_from(transcript.len()).ok() != Some(expected_bytes) {
+                    return Err(DbError::Schema(format!(
+                        "named session {name:?} transcript length does not match its binding"
+                    )));
+                }
+                tx.execute(
+                    "INSERT INTO named_session_recovery VALUES (?1, ?2, ?3)",
+                    (name, transcript.as_bytes(), binding.as_slice()),
+                )?;
+            }
+        }
+        if transcripts.len() != names.len() && !transcripts.is_empty() {
+            return Err(DbError::Schema(
+                "recoverable named-session persistence requires one transcript per name".to_owned(),
+            ));
         }
         tx.commit()?;
         Ok(())
@@ -245,6 +376,27 @@ impl StoreDb {
             max_sessions: meta_usize("max_sessions")?,
         };
         let mut store = SessionStore::new(cfg)?;
+        let optional_bool = |key: &str| -> Result<bool, DbError> {
+            let value: Option<String> = self
+                .conn
+                .query_row("SELECT v FROM store_meta WHERE k = ?1", [key], |row| {
+                    row.get(0)
+                })
+                .optional()?;
+            match value.as_deref() {
+                None | Some("0") => Ok(false),
+                Some("1") => Ok(true),
+                Some(other) => Err(DbError::Schema(format!(
+                    "store_meta.v for {key} value {other:?} is not 0 or 1"
+                ))),
+            }
+        };
+        if optional_bool("recovery_tracking")? {
+            store.enable_recovery_tracking()?;
+        }
+        if optional_bool("content_tracking")? {
+            store.enable_content_tracking()?;
+        }
 
         // Fingerprints, in saved id order.
         let mut key_map: Vec<(u32, KeyId, SemanticFingerprint)> = Vec::new();
@@ -313,5 +465,63 @@ impl StoreDb {
             }
         }
         Ok((store, handle_map))
+    }
+
+    /// Load stable names and restore their incremental recovery/content state
+    /// from transcript + TKFR bytes captured in the same SQLite transaction.
+    /// Missing, malformed, or mismatched recovery material is a loud failure.
+    pub fn load_named_recoverable(
+        &self,
+        engines: &dyn EngineResolver,
+    ) -> Result<(SessionStore, Vec<RecoveredNamedSession>), DbError> {
+        let (mut store, handles) = self.load(engines)?;
+        let mut sessions = Vec::new();
+        let mut statement = self.conn.prepare(
+            "SELECT n.name, n.session_id, r.transcript, r.binding
+             FROM named_sessions AS n
+             LEFT JOIN named_session_recovery AS r ON r.name = n.name
+             ORDER BY n.name",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, Option<Vec<u8>>>(2)?,
+                row.get::<_, Option<Vec<u8>>>(3)?,
+            ))
+        })?;
+        for row in rows {
+            let (name, saved_id, transcript, binding) = row?;
+            let handle = handles
+                .iter()
+                .find_map(|(candidate, handle)| (*candidate == saved_id).then_some(*handle))
+                .ok_or_else(|| {
+                    DbError::Schema(format!(
+                        "named session {name:?} references missing session {saved_id}"
+                    ))
+                })?;
+            let transcript = transcript.ok_or_else(|| {
+                DbError::Schema(format!(
+                    "named session {name:?} has no restart-recovery transcript"
+                ))
+            })?;
+            let binding = binding.ok_or_else(|| {
+                DbError::Schema(format!(
+                    "named session {name:?} has no restart-recovery binding"
+                ))
+            })?;
+            let transcript = String::from_utf8(transcript).map_err(|_| {
+                DbError::Schema(format!(
+                    "named session {name:?} recovery transcript is not UTF-8"
+                ))
+            })?;
+            store.restore_tracking_with_binding(handle, &transcript, &binding)?;
+            sessions.push(RecoveredNamedSession {
+                name,
+                handle,
+                transcript,
+            });
+        }
+        Ok((store, sessions))
     }
 }

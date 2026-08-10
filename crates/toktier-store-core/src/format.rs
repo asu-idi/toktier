@@ -46,6 +46,27 @@ const DOMAIN_RECORD: &[u8] = b"toktier.store.v1.record\0";
 const OFF_CHECKSUM: usize = 168;
 const HASH_LEN: usize = 32;
 
+/// IDs per stack chunk when converting a `u32` row to little-endian
+/// bytes (4096 * 4 = 16 KiB). Feeding the hash and the record writer in
+/// blocks avoids one call per 4-byte value on multi-million-token rows;
+/// the produced byte sequence is unchanged.
+const CHUNK_IDS: usize = 4096;
+
+/// Convert `ids` to their little-endian payload bytes through a stack
+/// buffer and hand each block to `consume`. This is the one definition
+/// of the payload's ID byte layout used by hashing and serialization.
+fn ids_le_chunks(ids: &[u32], mut consume: impl FnMut(&[u8])) {
+    let mut buffer = [0u8; CHUNK_IDS * 4];
+    for chunk in ids.chunks(CHUNK_IDS) {
+        let mut used = 0usize;
+        for &value in chunk {
+            buffer[used..used + 4].copy_from_slice(&value.to_le_bytes());
+            used += 4;
+        }
+        consume(&buffer[..used]);
+    }
+}
+
 /// A 32-byte SHA-256 output (chain hashes, digests, checksums).
 pub type BlockHash = [u8; HASH_LEN];
 
@@ -66,12 +87,54 @@ pub fn payload_digest_parts(id_parts: &[&[u32]], tail_text: &[u8]) -> BlockHash 
     let mut h = Sha256::new();
     h.update(DOMAIN_PAYLOAD);
     for part in id_parts {
-        for &v in *part {
-            h.update(v.to_le_bytes());
-        }
+        ids_le_chunks(part, |block| h.update(block));
     }
     h.update(tail_text);
     h.finalize().into()
+}
+
+/// Incremental payload-digest state (Section 4.1).
+///
+/// The state holds the running SHA-256 over `DOMAIN_PAYLOAD` followed by
+/// every ID fed so far (u32 LE each). A session keeps one such state over
+/// its append-only sealed prefix, advances it exactly when the prefix
+/// grows, and completes a commit digest by cloning the state and feeding
+/// only the mutable tail. The finished digest is bit-identical to
+/// [`payload_digest_parts`] over the same complete parts: SHA-256 is
+/// invariant to update chunking, and the byte layout comes from the same
+/// shared helper.
+#[derive(Clone)]
+pub struct PayloadHasher {
+    hasher: Sha256,
+}
+
+impl PayloadHasher {
+    /// State over the domain prefix and no IDs.
+    pub fn new() -> PayloadHasher {
+        let mut hasher = Sha256::new();
+        hasher.update(DOMAIN_PAYLOAD);
+        PayloadHasher { hasher }
+    }
+
+    /// Feed `ids` as little-endian payload bytes.
+    pub fn update_ids(&mut self, ids: &[u32]) {
+        ids_le_chunks(ids, |block| self.hasher.update(block));
+    }
+
+    /// Complete the digest with the trailing parts without disturbing the
+    /// running prefix state.
+    pub fn digest_with_tail(&self, tail_ids: &[u32], tail_text: &[u8]) -> BlockHash {
+        let mut hasher = self.hasher.clone();
+        ids_le_chunks(tail_ids, |block| hasher.update(block));
+        hasher.update(tail_text);
+        hasher.finalize().into()
+    }
+}
+
+impl Default for PayloadHasher {
+    fn default() -> PayloadHasher {
+        PayloadHasher::new()
+    }
 }
 
 /// Inputs of the chain link hash (Section 4.2), gathered so the link
@@ -246,9 +309,7 @@ impl SessionRecordV1 {
         debug_assert_eq!(w.len(), hl);
         let checksum = record_checksum(&w, &payload_digest);
         w[OFF_CHECKSUM..OFF_CHECKSUM + HASH_LEN].copy_from_slice(&checksum);
-        for &v in &self.ids {
-            w.extend_from_slice(&v.to_le_bytes());
-        }
+        ids_le_chunks(&self.ids, |block| w.extend_from_slice(block));
         w.extend_from_slice(tail);
         Ok(w)
     }
@@ -618,6 +679,103 @@ mod tests {
         let mut overrun = ext.clone();
         overrun[202..204].copy_from_slice(&100u16.to_le_bytes());
         assert!(SessionRecordV1::from_bytes(&overrun).is_err());
+    }
+
+    /// The pre-chunking implementation, retained verbatim as the digest
+    /// oracle: one `update` per 4-byte little-endian ID.
+    fn payload_digest_per_element(id_parts: &[&[u32]], tail_text: &[u8]) -> BlockHash {
+        let mut h = Sha256::new();
+        h.update(DOMAIN_PAYLOAD);
+        for part in id_parts {
+            for &v in *part {
+                h.update(v.to_le_bytes());
+            }
+        }
+        h.update(tail_text);
+        h.finalize().into()
+    }
+
+    #[test]
+    fn chunked_payload_digest_matches_the_per_element_oracle() {
+        let row: Vec<u32> = (0..10_000u32)
+            .map(|i| i.wrapping_mul(2_654_435_761).rotate_left(7))
+            .collect();
+        let tail = b"tail text with unicode: \xe4\xbd\xa0\xe5\xa5\xbd";
+        for take in [0usize, 1, 3, 4095, 4096, 4097, 8192, 10_000] {
+            let part = &row[..take];
+            for split in [0usize, take / 3, take] {
+                let parts: [&[u32]; 2] = [&part[..split], &part[split..]];
+                assert_eq!(
+                    payload_digest_parts(&parts, tail),
+                    payload_digest_per_element(&parts, tail),
+                    "take={take} split={split}"
+                );
+            }
+        }
+        assert_eq!(
+            payload_digest_parts(&[], b""),
+            payload_digest_per_element(&[], b"")
+        );
+    }
+
+    #[test]
+    fn prefix_hasher_digest_equals_full_recomputation() {
+        let row: Vec<u32> = (0..9000u32)
+            .map(|i| i.wrapping_mul(97).rotate_left(11))
+            .collect();
+        let tail_text = b"the mutable tail";
+        for sealed_len in [0usize, 1, 4096, 4097, 9000] {
+            let (sealed, tail_ids) = row.split_at(sealed_len);
+            let mut prefix = PayloadHasher::new();
+            prefix.update_ids(sealed);
+            assert_eq!(
+                prefix.digest_with_tail(tail_ids, tail_text),
+                payload_digest_parts(&[sealed, tail_ids], tail_text),
+                "sealed_len={sealed_len}"
+            );
+            // The state is reusable: completing a digest does not disturb it.
+            assert_eq!(
+                prefix.digest_with_tail(tail_ids, tail_text),
+                payload_digest_parts(&[sealed, tail_ids], tail_text)
+            );
+        }
+        // Incremental prefix growth in several steps equals one-shot growth.
+        let mut stepped = PayloadHasher::new();
+        for chunk in row.chunks(1000) {
+            stepped.update_ids(chunk);
+        }
+        assert_eq!(
+            stepped.digest_with_tail(&[], b"x"),
+            payload_digest_parts(&[&row], b"x")
+        );
+    }
+
+    #[test]
+    fn payload_digest_golden_vector_is_stable() {
+        // Frozen golden vector: any change to the domain prefix or the ID
+        // byte layout changes this digest and must fail loudly.
+        let digest = payload_digest_parts(&[&[0u32, 1, 2, u32::MAX]], b"tail");
+        let hex = digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        assert_eq!(
+            hex,
+            "7388ba641a9bda6c841035a3af0349e725f366a47fce8447046745c5ef6cb508"
+        );
+    }
+
+    #[test]
+    fn multi_chunk_record_roundtrips() {
+        let mut rec = sample();
+        rec.ids = (0..9000u32)
+            .map(|i| i.wrapping_mul(31).rotate_left(3))
+            .collect();
+        let bytes = rec.to_bytes().unwrap();
+        assert_eq!(bytes.len(), 200 + rec.ids.len() * 4 + rec.tail_text.len());
+        let back = SessionRecordV1::from_bytes(&bytes).unwrap();
+        assert_eq!(back.ids, rec.ids);
+        assert_eq!(back.curr_block_hash, back.compute_curr());
     }
 
     #[test]

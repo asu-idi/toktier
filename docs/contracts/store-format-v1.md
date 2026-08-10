@@ -16,7 +16,10 @@ miss, never a wrong result. We prefer a miss over a wrong result.
 - All length arithmetic during decode uses checked (overflow-detecting)
   operations. Bytes read from disk are untrusted until verified.
 - Records store the **pre-postprocessor core token stream**. BOS/EOS and
-  other postprocessor output are applied at read time, never persisted.
+  other postprocessor output are never persisted; whether and when a reader
+  applies the postprocessor after reading is that reader's contract (the 0.x
+  facade serves postprocessed requests outside the store; see `facade.md`
+  Section 2).
 - Hash domain-separation tags are ASCII strings including a trailing
   NUL, as written below.
 
@@ -56,7 +59,10 @@ Field semantics:
 - `stable_prefix_byte_length` -- byte length of the certified stable text
   prefix. Token ids covering the stable prefix are the sealed portion;
   the prefix bytes themselves are not stored in this record (they are
-  reachable through the chain).
+  reachable through the chain). The 0.x Python facade may keep a private,
+  record-hash-bound digest sidecar so caller-presented historical bytes can be
+  verified and reattached after restart; that sidecar is not part of this
+  portable record format and cannot supply token IDs.
 - `text_tail_byte_length` -- byte length of the text tail stored in this
   record's payload: the exact raw suffix of the full text starting at
   the stable prefix end. Must decode as valid UTF-8 (which also

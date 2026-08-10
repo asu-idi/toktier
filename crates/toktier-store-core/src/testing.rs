@@ -178,6 +178,17 @@ impl SessionEncoder for MockEncoder {
     }
 }
 
+/// Deterministic 32-byte engine fingerprint for store tests: `tag` in the
+/// first byte, `tag + 1` in the last, zeroes between. This is the one
+/// definition shared by the store-core and store-sqlite test batteries,
+/// so the same tag denotes the same fingerprint across both.
+pub fn fp(tag: u8) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    out[0] = tag;
+    out[31] = tag.wrapping_add(1);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

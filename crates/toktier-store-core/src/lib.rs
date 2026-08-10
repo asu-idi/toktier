@@ -22,6 +22,7 @@
 pub mod engine;
 pub mod error;
 pub mod format;
+pub mod recovery_binding;
 pub mod sidecar;
 pub mod store;
 pub mod tail;
@@ -30,16 +31,22 @@ pub mod tail;
 pub mod testing;
 
 pub use engine::{
-    AppendReport, BoundaryCut, Encoding, EngineError, SessionEncoder, WitnessCategory,
+    AppendReport, BoundaryCut, Encoding, EngineError, OverlapRunner, SessionEncoder, SharedIds,
+    SoaEncoding, WitnessCategory,
 };
 pub use error::StoreError;
 pub use format::{
-    link_hash, payload_digest_parts, BlockHash, LinkInputs, SessionRecordV1, ENDIANNESS_LE,
-    FIXED_HEADER_LEN, FORMAT_VERSION, HEADER_LEN_MAX, MAGIC, MANDATORY_FLAGS_MASK, ZERO_HASH,
+    link_hash, payload_digest_parts, BlockHash, LinkInputs, PayloadHasher, SessionRecordV1,
+    ENDIANNESS_LE, FIXED_HEADER_LEN, FORMAT_VERSION, HEADER_LEN_MAX, MAGIC, MANDATORY_FLAGS_MASK,
+    ZERO_HASH,
+};
+pub use recovery_binding::{
+    ContentDigest, ContentIndexEntry, RecoveryBindingV1, CONTENT_DIGEST_BYTES, MARK_FLOOR_BYTES,
 };
 pub use sidecar::{node_key, NodeCacheRecord, SessionSidecar};
 pub use store::{
-    AppendOutcome, KeyId, LookupHit, PutOutcome, SemanticFingerprint, SessionHandle, SessionInfo,
-    SessionStore, StatsSnapshot, StoreConfig, FORMAT_NAME,
+    AppendOutcome, AppendPatchOutcome, KeyId, LookupHit, PutOutcome, RecoveryMaterial,
+    SemanticFingerprint, SessionHandle, SessionInfo, SessionStore, StatsSnapshot, StoreConfig,
+    FORMAT_NAME,
 };
-pub use tail::TailState;
+pub use tail::{TailState, SPAN_CHECKPOINT_STRIDE};

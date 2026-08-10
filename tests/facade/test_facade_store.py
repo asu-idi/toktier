@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import random
+import stat
 import string
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
@@ -16,7 +19,9 @@ from toktier.errors import (
     StoreFormatUnsupported,
 )
 from toktier.facade import store as store_module
+from toktier.facade.recovery import RecoveryBinding
 from toktier.facade.store import EntryStore
+from toktier.paths import FILE_MODE
 
 from .conftest import TEST_FINGERPRINT, Rig, SpanEncode, build_rig, byte_level_document
 
@@ -150,6 +155,54 @@ def test_persisted_records_decode_and_carry_the_stream(
         records.decode_record(bytes(newer))
 
 
+def test_persistent_write_uses_incremental_recovery_material(
+    rig: Rig,
+    reference: Callable[[str], list[int]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Binding persistence must not invoke the one-shot history scanner."""
+
+    def forbidden_create(*_args: object, **_kwargs: object) -> RecoveryBinding:
+        raise AssertionError("RecoveryBinding.create rescanned full history")
+
+    monkeypatch.setattr(RecoveryBinding, "create", classmethod(forbidden_create))
+    tokenizer = rig.tokenizer(store=rig.store_path())
+    base = _text(12_000) + " \u4f60\u597d"
+    grown = base + " incremental \U0001f680"
+
+    assert list(tokenizer.encode(base, session="hot-path").ids) == reference(base)
+    assert list(tokenizer.encode(grown, session="hot-path").ids) == reference(grown)
+    (binding_path,) = (rig.store_path() / "entries").glob("*.binding")
+    binding = RecoveryBinding.from_bytes(binding_path.read_bytes())
+    assert binding.index_entry.byte_length == len(grown.encode())
+
+    # The one-call Rust runtime intentionally no longer exposes its session
+    # handles through the legacy Python EntryStore.  Verify the persisted
+    # material itself: it must bind the current native record and exact text,
+    # while the monkeypatch above proves that the Python one-shot constructor
+    # did not create it.
+    (record_path,) = (rig.store_path() / "entries").glob("*.rec")
+    view = records.decode_record(record_path.read_bytes())
+    assert binding.matches(grown.encode(), view.curr_block_hash)
+
+
+def test_native_recovery_binding_is_byte_identical_to_python_golden(
+    rig: Rig,
+) -> None:
+    tokenizer = rig.tokenizer(store=rig.store_path())
+    text = _text(14_000) + " boundary 你好 🚀"
+    tokenizer.encode(text, session="golden")
+
+    entries = rig.store_path() / "entries"
+    (record_path,) = entries.glob("*.rec")
+    (binding_path,) = entries.glob("*.binding")
+    view = records.decode_record(record_path.read_bytes())
+    expected = RecoveryBinding.create(
+        text.encode("utf-8"), view.curr_block_hash
+    ).to_bytes()
+    assert binding_path.read_bytes() == expected
+
+
 def test_corrupt_session_record_degrades_to_overwrite(
     rig: Rig, reference: Callable[[str], list[int]]
 ) -> None:
@@ -217,3 +270,51 @@ def test_native_capacity_churn_never_changes_ids(
     assert list(tokenizer.encode(second, session="b").ids) == reference(second)
     grown = first + " back again"
     assert list(tokenizer.encode(grown, session="a").ids) == reference(grown)
+
+
+def test_atomic_write_syncs_payload_before_rename_and_directory_after(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Entry files follow the write-fsync-rename-fsync discipline.
+
+    The payload has to be durable before the rename publishes it, and
+    the directory entry is flushed afterwards -- the same discipline as
+    the artifact store's installer, so a crash never leaves a torn but
+    visible record. The recording wrappers call through, so the write
+    is also checked for real.
+    """
+    events: list[tuple[str, str]] = []
+    descriptor_paths: dict[int, str] = {}
+    real_open = os.open
+    real_fsync = os.fsync
+    real_replace = os.replace
+
+    def recording_open(path: str | os.PathLike[str], flags: int) -> int:
+        descriptor = real_open(path, flags)
+        descriptor_paths[descriptor] = str(path)
+        return descriptor
+
+    def recording_fsync(descriptor: int) -> None:
+        events.append(("fsync", descriptor_paths.get(descriptor, "<unknown>")))
+        real_fsync(descriptor)
+
+    def recording_replace(
+        source: str | os.PathLike[str], destination: str | os.PathLike[str]
+    ) -> None:
+        events.append(("replace", str(destination)))
+        real_replace(source, destination)
+
+    target = tmp_path / "durable.rec"
+    monkeypatch.setattr(os, "open", recording_open)
+    monkeypatch.setattr(os, "fsync", recording_fsync)
+    monkeypatch.setattr(os, "replace", recording_replace)
+    store_module._atomic_write(target, b"payload")
+    monkeypatch.undo()
+
+    assert target.read_bytes() == b"payload"
+    assert stat.S_IMODE(target.stat().st_mode) == FILE_MODE
+    assert [kind for kind, _ in events] == ["fsync", "replace", "fsync"]
+    payload_sync, publish, directory_sync = events
+    assert payload_sync[1].endswith(".tmp")
+    assert publish[1] == str(target)
+    assert directory_sync[1] == str(tmp_path)

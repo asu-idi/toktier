@@ -69,7 +69,7 @@ structurally, not by per-field convention.
 | `0x0003` | `added_tokens` | list | The full added-token table encoded inline, **in artifact insertion order** (Section 6). |
 | `0x0004` | `oracle_package` | string | Oracle package identifier, e.g. `tokenizers`. |
 | `0x0005` | `oracle_semantic_id` | string | Oracle **semantic** version identifier assigned by the support registry (Section 7), not the raw package version string. |
-| `0x0006` | `add_special_tokens_policy` | string | v1 value: `read_time` -- specials are not stored; the postprocessor is applied at read time. |
+| `0x0006` | `add_special_tokens_policy` | string | v1 value: `read_time` -- specials are not stored; applying the postprocessor after reading is the read side's contract (the 0.x facade serves postprocessed requests outside the store). |
 | `0x0007` | `normalization_policy` | string | v1 value: `artifact_default` -- the normalizer exactly as the artifact declares; overrides are not supported in v1. |
 | `0x0008` | `special_token_extraction_policy` | string | v1 value: `artifact_default` -- added-token extraction per the artifact's declared flags. |
 | `0x0009` | `truncation_policy` | string | v1 value: `none`. Sessions reject truncation and padding at construction (`UNSUPPORTED_CONFIG`), so no other value is reachable in v1. |

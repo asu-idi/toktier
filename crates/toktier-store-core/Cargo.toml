@@ -13,6 +13,7 @@ description = "Session store core for toktier: append-only text-to-token-ids ses
 testing = []
 
 [dependencies]
+blake2b_simd.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]

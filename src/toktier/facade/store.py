@@ -5,23 +5,27 @@ user-supplied session id, auto entries are created by content lookup.
 The token streams live in the native session store
 (``toktier._native``); this module adds naming, residency, persistence
 and the checkpoint index, and it decides nothing about token ids -- every
-stream is produced by the certified full-encode/repair callbacks the store was
-built with, and those callbacks must return the reference id stream.
+stream is produced by the full-encode/repair callbacks the store was
+built with. Certified callbacks return the reference id stream; the
+explicitly selected experimental Fastokens adapter is keyed under its own
+fingerprint and carries no exact-ID certificate.
 
 Correctness posture, inherited from the store contract: the read path
 never raises for store reasons. Any failure to locate, verify or append
 -- a missing record, a corrupt file, an evicted native handle, a digest
 collision -- degrades to "the store cannot serve this call" and the caller
-runs the active plain routed encode instead. A wrong id is never an
-outcome; the store can only be slow, never wrong.
+runs the active plain routed encode instead. On certified configurations
+a wrong id is never an outcome; the store can only be slow, never wrong.
 
 Persistence uses store format v1 records verbatim, one file per entry
 (``entries/<name>.rec``, atomic replace). Loading a record re-verifies
 it byte-level (:mod:`toktier.records`) and re-encodes its tail through
 the current engine inside the native import, so a stale or foreign
-record fails closed into a miss. The checkpoint index and the in-process
-text cache are derived layers: rebuildable, evictable, never
-authoritative.
+record fails closed into a miss. A private ``.binding`` sidecar lets a sealed
+record recover its omitted historical prefix only from caller-presented bytes
+that match its record hash and full-text digest; it contains no plaintext or
+token IDs. The checkpoint index and the in-process text cache are derived
+layers: rebuildable, evictable, never authoritative.
 """
 
 from __future__ import annotations
@@ -41,6 +45,7 @@ from .. import records
 from ..errors import SessionStateMismatch, StoreFormatUnsupported, ToktierError
 from ..paths import FILE_MODE, ensure_private_dir
 from .index import CheckpointIndex, IndexEntry, entry_for, prefix_digests
+from .recovery import RecoveryBinding
 
 if TYPE_CHECKING:
     from .. import _native
@@ -86,11 +91,16 @@ _META_NAME = "meta.json"
 _INDEX_NAME = "index.json"
 _ENTRIES_DIR = "entries"
 _META_FORMAT = 1
+_RECOVERY_SUFFIX = ".binding"
 
 #: Failures the read path converts into a miss. Broad on purpose: the
 #: caller re-runs the reference encode, which re-raises any genuine
 #: encoder problem with its proper type.
 _MISS_ERRORS = (ToktierError, ValueError, KeyError, RuntimeError, OSError)
+
+
+class _CandidateMismatch(Exception):
+    """The supplied text cannot be the historical text of an entry."""
 
 
 def _outcome_ids(outcome: dict[str, object]) -> list[int]:
@@ -122,10 +132,34 @@ def _ids_from_bytes(raw: bytes) -> list[int]:
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
+    """Write, fsync, rename, then fsync the directory.
+
+    The same persistence discipline as the artifact store's installer:
+    the payload is durable before the rename makes it visible, and the
+    directory entry is flushed afterwards, so a crash never publishes a
+    torn record. The directory fsync is best effort because not every
+    platform exposes directory descriptors; the shipped wheels are
+    Linux-only, where both steps are real.
+    """
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temporary.write_bytes(data)
+    handle = os.open(temporary, os.O_RDONLY)
+    try:
+        os.fsync(handle)
+    finally:
+        os.close(handle)
     os.chmod(temporary, FILE_MODE)
     os.replace(temporary, path)
+    try:
+        directory_handle = os.open(path.parent, os.O_RDONLY)
+    except OSError:  # pragma: no cover - platforms without directory fds
+        return
+    try:
+        os.fsync(directory_handle)
+    except OSError:  # pragma: no cover - filesystems without directory fsync
+        pass
+    finally:
+        os.close(directory_handle)
 
 
 def _entry_name(kind: str, token: str) -> str:
@@ -133,6 +167,20 @@ def _entry_name(kind: str, token: str) -> str:
         encoded = base64.urlsafe_b64encode(token.encode("utf-8")).decode("ascii")
         return "s-" + encoded.rstrip("=")
     return "a-" + token
+
+
+def _native_index_entry(
+    row: tuple[int, str, list[tuple[int, str]]] | None,
+) -> IndexEntry | None:
+    """Translate the native checkpoint row without rescanning text."""
+    if row is None:
+        return None
+    byte_length, end_digest, marks = row
+    return IndexEntry(
+        byte_length=byte_length,
+        end_digest=end_digest,
+        marks=tuple(marks),
+    )
 
 
 @dataclass
@@ -196,6 +244,7 @@ class EntryStore:
         certified_bpe_witness: bool = False,
         bpe_sync_pclass: bytes | None = None,
         seal_end_guard_chars: int = 0,
+        native_encoder: object | None = None,
         directory: Path | None = None,
         cache_budget_bytes: int = DEFAULT_CACHE_BUDGET_BYTES,
     ) -> None:
@@ -208,6 +257,7 @@ class EntryStore:
         if type(seal_end_guard_chars) is not int or seal_end_guard_chars < 0:
             raise ValueError("seal_end_guard_chars must be a non-negative integer")
         self._seal_end_guard_chars = seal_end_guard_chars
+        self._native_encoder = native_encoder
         self._directory = directory
         self._budget = max(0, int(cache_budget_bytes))
         self._entries: dict[str, _Entry] = {}
@@ -215,31 +265,37 @@ class EntryStore:
         self._stats = _Stats()
         self._native: Any = None
         self._store: _native.SessionStore | None = None
-        self._encoder: _native.CallbackEncoder | None = None
+        self._encoder: Any = None
         self._key_id = 0
         if directory is not None:
             self._open_directory(directory)
 
     # -- native store --------------------------------------------------
 
-    def _backend(self) -> tuple[_native.SessionStore, _native.CallbackEncoder]:
+    def _backend(self) -> tuple[_native.SessionStore, Any]:
         if self._store is None or self._encoder is None:
             from .. import _native as native
 
             self._native = native
-            store = native.SessionStore(max_sessions=_NATIVE_MAX_SESSIONS)
+            store = native.SessionStore(
+                max_sessions=_NATIVE_MAX_SESSIONS,
+                track_recovery=self._directory is not None,
+                track_content_index=True,
+            )
             witness = (
                 native.WITNESS_BPE_SYNC_TRANSITION
                 if self._certified_bpe_witness
                 else native.WITNESS_NONE_FULL_REENCODE
             )
-            encoder = native.CallbackEncoder(
-                witness,
-                self._encode,
-                self._append,
-                None,
-                self._bpe_sync_pclass,
-            )
+            encoder = self._native_encoder
+            if encoder is None:
+                encoder = native.CallbackEncoder(
+                    witness,
+                    self._encode,
+                    self._append,
+                    None,
+                    self._bpe_sync_pclass,
+                )
             self._key_id = store.register_fingerprint(
                 self._fingerprint, self._seal_end_guard_chars
             )
@@ -302,6 +358,10 @@ class EntryStore:
         assert self._directory is not None
         return self._directory / _ENTRIES_DIR / f"{name}.rec"
 
+    def _recovery_path(self, name: str) -> Path:
+        assert self._directory is not None
+        return self._directory / _ENTRIES_DIR / f"{name}{_RECOVERY_SUFFIX}"
+
     def _load_or_rebuild_index(self, directory: Path, *, fresh: bool) -> None:
         index_path = directory / _INDEX_NAME
         index: CheckpointIndex | None = None
@@ -337,11 +397,27 @@ class EntryStore:
                 view = records.decode_record(path.read_bytes())
             except _MISS_ERRORS:
                 continue
-            if view.stable_prefix_byte_length != 0:
-                # The record does not carry its full text; it stays on
-                # disk but cannot be indexed by content from here.
+            if view.stable_prefix_byte_length == 0:
+                index.put(path.stem, entry_for(view.text_tail.encode("utf-8")))
                 continue
-            index.put(path.stem, entry_for(view.text_tail.encode("utf-8")))
+            try:
+                binding_path = (
+                    directory / _ENTRIES_DIR / f"{path.stem}{_RECOVERY_SUFFIX}"
+                )
+                binding = RecoveryBinding.from_bytes(
+                    binding_path.read_bytes()
+                )
+            except (OSError, ValueError):
+                # Legacy sealed records have no recovery binding. They
+                # remain valid portable records, but cannot be proposed
+                # for facade reuse after the derived index is lost.
+                continue
+            if (
+                binding.record_hash != view.curr_block_hash
+                or binding.index_entry.byte_length != view.full_text_byte_length
+            ):
+                continue
+            index.put(path.stem, binding.index_entry)
         return index
 
     def _persist_index(self) -> None:
@@ -355,13 +431,16 @@ class EntryStore:
             self._count_extra("persist_failures")
 
     def _persist_entry(self, entry: _Entry) -> None:
-        if self._directory is None or entry.handle is None:
+        if self._directory is None or entry.handle is None or entry.text is None:
             return
         store, _ = self._backend()
         try:
-            _atomic_write(
-                self._record_path(entry.name), store.export_session(entry.handle)
-            )
+            raw = bytes(store.export_session(entry.handle))
+            binding = store.export_recovery_binding(entry.handle)
+            if binding is None:
+                raise ValueError("native session has no recovery binding")
+            _atomic_write(self._record_path(entry.name), raw)
+            _atomic_write(self._recovery_path(entry.name), bytes(binding))
         except _MISS_ERRORS:
             # Durability degrades for this entry; served ids are already
             # correct, and the next process simply misses it.
@@ -372,7 +451,9 @@ class EntryStore:
 
     # -- residency and the cache budget --------------------------------
 
-    def _resident(self, entry: _Entry) -> _Entry | None:
+    def _resident(
+        self, entry: _Entry, *, candidate_text: str | None = None
+    ) -> _Entry | None:
         """Bring an entry's text and native handle back, or ``None``."""
         if entry.text is not None and entry.handle is not None:
             return entry
@@ -382,11 +463,26 @@ class EntryStore:
         try:
             raw = self._record_path(entry.name).read_bytes()
             view = records.decode_record(raw)
-            if view.stable_prefix_byte_length != 0:
-                return None
-            entry.handle = store.import_session(self._key_id, raw, encoder)
-            entry.text = view.text_tail
-            entry.byte_length = view.text_tail_byte_length
+            if view.stable_prefix_byte_length == 0:
+                historical_text = view.text_tail
+                entry.handle = store.import_session(self._key_id, raw, encoder)
+            else:
+                if candidate_text is None:
+                    return None
+                binding = self._recovery_path(entry.name).read_bytes()
+                entry.handle, historical_chars = store.import_session_with_binding(
+                    self._key_id,
+                    raw,
+                    candidate_text,
+                    binding,
+                    encoder,
+                )
+                historical_text = candidate_text[:historical_chars]
+                entry.index_entry = _native_index_entry(
+                    store.content_index_entry(entry.handle)
+                )
+            entry.text = historical_text
+            entry.byte_length = view.full_text_byte_length
             entry.revision = view.session_revision
         except _MISS_ERRORS:
             self._drop(entry, remove_file=False)
@@ -443,6 +539,8 @@ class EntryStore:
         if remove_file and self._directory is not None:
             with suppress(OSError):
                 self._record_path(entry.name).unlink(missing_ok=True)
+            with suppress(OSError):
+                self._recovery_path(entry.name).unlink(missing_ok=True)
 
     def _cap_auto_entries(self) -> None:
         auto_names = [
@@ -474,15 +572,19 @@ class EntryStore:
                 self._drop(previous, remove_file=False)
             self._stats.degraded += 1
             return None
-        data = text.encode("utf-8")
+        row = _native_index_entry(store.content_index_entry(handle))
+        if row is None:  # pragma: no cover - native tracking invariant
+            store.evict(handle)
+            self._stats.degraded += 1
+            return None
         entry = _Entry(
             name=name,
             kind=kind,
-            byte_length=len(data),
+            byte_length=row.byte_length,
             text=text,
             handle=handle,
             revision=revision,
-            index_entry=row if row is not None else entry_for(data),
+            index_entry=row,
         )
         self._entries.pop(name, None)
         self._entries[name] = entry
@@ -505,9 +607,15 @@ class EntryStore:
             self._stats.degraded += 1
             return None
         entry.text = entry.text + delta
-        entry.byte_length = len(entry.text.encode("utf-8"))
         entry.revision = _outcome_revision(outcome)
-        entry.index_entry = entry_for(entry.text.encode("utf-8"))
+        entry.index_entry = _native_index_entry(
+            store.content_index_entry(entry.handle)
+        )
+        if entry.index_entry is None:  # pragma: no cover - native invariant
+            self._drop(entry, remove_file=False)
+            self._stats.degraded += 1
+            return None
+        entry.byte_length = entry.index_entry.byte_length
         self._index.put(entry.name, entry.index_entry)
         self._persist_entry(entry)
         self._persist_index()
@@ -522,7 +630,11 @@ class EntryStore:
         name = _entry_name("session", session_id)
         entry = self._entries.get(name)
         if entry is not None:
-            entry = self._resident(entry)
+            try:
+                entry = self._resident(entry, candidate_text=text)
+            except _CandidateMismatch:
+                self._stats.session_overwrites += 1
+                return self._write_entry(name, "session", text)
         if entry is None:
             self._stats.session_misses += 1
             return self._write_entry(name, "session", text)
@@ -563,7 +675,11 @@ class EntryStore:
             if entry is None:
                 self._index.discard(name)
                 continue
-            entry = self._resident(entry)
+            try:
+                entry = self._resident(entry, candidate_text=text)
+            except _CandidateMismatch:
+                self._stats.collision_rejects += 1
+                continue
             if entry is None:
                 continue
             assert entry.text is not None
@@ -615,7 +731,12 @@ class EntryStore:
         self, fork: int, text: str, data: bytes, revision: int
     ) -> None:
         """Keep an extended fork as a fresh auto entry."""
-        row = entry_for(data)
+        store, _ = self._backend()
+        row = _native_index_entry(store.content_index_entry(fork))
+        if row is None:  # pragma: no cover - native tracking invariant
+            store.evict(fork)
+            self._stats.degraded += 1
+            return
         name = _entry_name("auto", row.end_digest)
         previous = self._entries.get(name)
         if previous is not None:
@@ -623,7 +744,7 @@ class EntryStore:
         entry = _Entry(
             name=name,
             kind="auto",
-            byte_length=len(data),
+            byte_length=row.byte_length,
             text=text,
             handle=fork,
             revision=revision,

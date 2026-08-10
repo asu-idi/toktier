@@ -119,8 +119,12 @@ recorded here:
   from-scratch reference encode) lives with the engine, exactly as in
   the prototype.
 - **`corrupt_node_for_tests`** exists only under the core `testing`
-  feature (the facade enables it; the prototype build carried it
-  unconditionally).
+  feature (the prototype build carried it unconditionally). The
+  binding crate forwards it only under its own `testing` feature,
+  which no shipped build enables, so the installed extension does not
+  expose it and the type stub does not declare it. (This paragraph
+  originally said the facade enables the feature; that stopped being
+  true when the facade moved onto the release build.)
 
 ## 4. Dependency pins
 

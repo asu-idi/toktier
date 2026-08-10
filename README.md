@@ -15,7 +15,12 @@ offers a certified GPU path for fresh or large requests. Both fast paths return 
 - **Fast on both paths.** On the recorded benchmark battery, the GPU path
   encodes a fresh 4-million-character request (~786K tokens) in
   **3.88 ms**. The bounded native CPU repair for a 256-character append to a
-  4.19M-character session takes **1.68 ms**. This measures the repair operation
+  4.19M-character session takes **1.68 ms**; that reading is the
+  `toktier repair (HF tokenizers window)` lane, which is the repair window this
+  cell measured. The corrected-Gigatoken window is a separate lane in the same
+  figure (2.39 ms on the 65,536-character append). Both are bounded repairs
+  under the routing table below; the figure data names the lane of each bar.
+  This measures the repair operation
   itself; it excludes materializing the full historical token sequence as a
   Python tuple. A native Rust serving integration can avoid this full-sequence
   materialization by retaining session state and consuming only the repaired suffix.
@@ -50,6 +55,32 @@ print(tok.decode(enc.ids))
 print(tok.explain())                    # backend chosen, and why
 ```
 
+`encode` then `decode` is not necessarily a text-identity round trip: a
+tokenizer whose pipeline normalizes (NFC, for instance) returns the
+normalized text, and that is the tokenizer's own behaviour rather than a
+TokTier divergence. The guarantee TokTier makes is about IDs, and it is
+unaffected: the IDs equal a from-scratch HF encode of the same input, and
+both decoders return the same text.
+
+If application code starts from a Hugging Face model repository instead of a
+TokTier family id, resolve it by content:
+
+```python
+tok = toktier.from_pretrained("Qwen/Qwen3-0.6B")
+```
+
+`from_pretrained()` downloads the audited immutable revision for a recorded
+sibling or canonical repository (an unknown repository resolves `main` unless
+`revision=` is passed), hashes the exact file, and consults the root-digested
+210-repository sibling registry. Byte-identical, canonicalisation-equivalent,
+and serialisation-equivalent records use the already certified canonical
+artifact through the same CPU/GPU router. A familiar repository whose bytes
+changed—and any unregistered content—stays on HF under policies that permit
+the reference fallback; `REQUIRE_ACCELERATED` raises instead. See
+`explain()["model_resolution"]` for both the source identity and the
+canonical identity actually executed. `load(family)` remains the direct
+family API and the air-gap-friendly path.
+
 Name a growing transcript with `session=` to persist its token state across
 calls and processes:
 
@@ -68,7 +99,10 @@ assert enc.ids == tok.encode(transcript, lookup="off").ids
 
 Without `session=`, the store can find a byte-verified stored prefix by content.
 Use `lookup="off"` to skip that lookup. A failed byte check is a miss, never a
-trusted hit; cache eviction changes latency, not output.
+trusted hit; cache eviction changes latency, not output. Long sessions whose
+stable prefix has been sealed remain reusable after restart: TokTier binds the
+record to the caller-presented historical prefix before restoring it, and a
+missing or corrupt binding becomes a cold encode.
 
 Routing policy is selectable and inspectable:
 
@@ -90,13 +124,42 @@ The install profile and input shape then determine the automatic route:
 | Situation under the default `CERTIFIED` policy | Automatic route |
 |---|---|
 | `toktier`, one of 11 certified tokenizer artifacts (12 model families) | Corrected Gigatoken for full CPU encoding; HF if any binding check fails |
-| `toktier[gpu]`, cold/plain input below 64 KiB | Corrected Gigatoken CPU path (HF for a family without CPU-fast certification) |
-| `toktier[gpu]`, cold/plain input at least 64 KiB | Shipped prebuilt GPU path; then corrected Gigatoken and HF in the frozen fallback chain |
+| `toktier[gpu]`, cold/plain input below the GPU crossover (64 KiB default) | Corrected Gigatoken CPU path (HF for a family without CPU-fast certification) |
+| `toktier[gpu]`, cold/plain input at or above the GPU crossover (64 KiB default) | Shipped prebuilt GPU path; then corrected Gigatoken and HF in the frozen fallback chain |
 | Existing session receives a strict append | Corrected Gigatoken CPU repair for the 12 covered model families, independent of total transcript size |
 | Added-token or repair guard cannot prove its premise | HF reference path for that input |
 
-`explain()` reports the fixed chain, the 64 KiB decision, the backend that
-actually returned the last result, and every fallback counter.
+`explain()` reports the fixed chain, the crossover decision
+(`gpu_min_bytes`, 64 KiB by default), the backend that actually returned the
+last result, and every fallback counter.
+
+## Rust serving API
+
+The workspace now includes a Python-free Rust serving facade for frontends
+that retain token state directly. It exposes pinned artifact fetch/mirror/
+air-gap operations, reference/corrected-CPU/prebuilt-or-direct-JIT GPU routing,
+continuous token buffers, bounded executor-neutral batching, persistent named
+sessions, and delta-native `TokenPatch` results:
+
+```rust,no_run
+use toktier::{Device, Runtime};
+
+let runtime = Runtime::builder().device(Device::Auto).build()?;
+let tokenizer = runtime.load("qwen3_8b")?;
+let mut session = tokenizer.open_session("agent-42")?;
+let seed = session.seed("user: hello\n")?;
+let patch = session.append("assistant: hi\n")?;
+# Ok::<(), toktier::Error>(())
+```
+
+`patch.keep_tokens()` says where a retained downstream ID buffer should be
+truncated; `patch.replacement_ids()` is the exact repaired suffix. The append
+does not allocate the complete historical ID sequence unless the caller asks
+for `snapshot()`. The crate is published on crates.io from 0.2.0 onward and
+tracks the package version, so `cargo add toktier` resolves it from the
+registry. See [`docs/rust-api.md`](docs/rust-api.md) for the serving surface and
+[`docs/rust-lifecycle.md`](docs/rust-lifecycle.md) for acquisition, JIT,
+concurrency, and reproducible offline distribution.
 
 Since 0.1.1, the UTF-8 crossover and no-hit added-token prefilter execute in
 one allocation-free Rust selector call. On the recorded RTX 5090 host, its
@@ -110,20 +173,24 @@ materialization. See [`docs/native-routing.md`](docs/native-routing.md).
 pip install toktier                 # complete certified CPU product
 pip install "toktier[gpu]"          # CPU product + automatic prebuilt GPU route
 pip install "toktier[gpu-jit]"      # same routing, with local JIT delivery
+cargo add toktier                   # Python-free Rust serving API
 ```
 
 | Install | Delivery | Requirements |
 |---|---|---|
 | `toktier` | Corrected Gigatoken full CPU encode and session repair, HF fallback, persistent store, routing, and CLI | Linux x86_64 with glibc 2.34+, CPython 3.10+; installs `tokenizers==0.22.2` and `transformers==4.57.6` |
 | `toktier[gpu]` | Strict superset of `toktier`; automatic 64 KiB crossover to the shipped multi-architecture CUDA fatbin | NVIDIA GPU, driver 580.65.06+, `torch`; no compiler or first-use build |
-| `toktier[gpu-jit]` | Same CPU/GPU routing as `toktier[gpu]`; compiles the certified kernel source locally | judged CUDA/PyTorch toolchain, `nvcc`, `torch`, `ninja`; first-use compilation |
+| `toktier[gpu-jit]` | Same CPU/GPU routing as `toktier[gpu]`; compiles the certified kernel source locally | judged NVCC / torch-runtime CUDA / PyTorch triple, `torch`, `ninja`; first-use compilation |
 
-JIT is fail-closed at the toolchain boundary. If the installed CUDA/PyTorch
-pair is outside the pairs recorded in the registry, automatic routing emits a
-prominent warning and keeps using the corrected Gigatoken → HF fallback chain;
-an explicit CUDA request fails with the observed pair, certified constraint,
-and a copyable remedy. A judged combination can be compiled ahead of first use
-with:
+JIT is fail-closed at the toolchain boundary. Certification checks the actual
+`nvcc` selected by PyTorch's extension builder, `torch.version.cuda`, and the
+PyTorch distribution version as independent axes. If that exact triple is not
+recorded in the registry, automatic routing emits a prominent warning and keeps
+using the corrected Gigatoken → HF fallback chain; an explicit CUDA request
+fails with the observed compiler/runtime triple, certified constraint, and a
+copyable remedy. For example, torch CUDA 13.0 with NVCC 13.2 is not treated as
+the judged NVCC 13.0 combination. A judged combination can be compiled ahead of
+first use with:
 
 ```bash
 toktier gpu compile qwen3_8b
@@ -143,39 +210,45 @@ waived premise. Application code must also opt in explicitly with
 not persisted or inherited by later certified processes. Inspect
 `explain()["experimental_waivers"]` before using those results.
 
-The corrected, data-version-pinned Gigatoken native module is already inside
-the core wheel under the private name `toktier._vendor.gigatoken_rs`. TokTier
-does not install or trust a top-level package named `gigatoken`. The base wheel
-also pins the HF loader and oracle versions needed to open this certified route;
-there is no separate CPU-fast installation step.
+The corrected, data-version-pinned Gigatoken implementation is linked directly
+into the core `toktier._native` extension. TokTier does not install or trust a
+top-level package named `gigatoken`, and the wheel carries no second CPU native
+module. The base wheel also pins the HF loader and oracle versions needed to
+open this certified route; there is no separate CPU-fast installation step.
 
-For provenance, a source checkout can reproduce the exact native bytes:
+For provenance, a source checkout can independently recompute the active source
+identity and build the same release profile:
 
 ```bash
-pip install .
-TOKTIER_GIGATOKEN_BUILD_ROOT="$PWD/.build/gigatoken" \
-  packaging/fast_cpu/build_pinned.sh
+python tools/fast_cpu_source_identity.py
+maturin build --locked --release
 ```
 
-The [reproducible build recipe](packaging/fast_cpu/README.md) pins the upstream
-commit, patch, Unicode inputs, compiler, and build backend. Its output is a
-reproduction artifact, not another runtime install. The registry verifies the
-vendored module digest, repair configuration, oracle, and tokenizer artifact
-before opening the route. The core wheel carries Gigatoken's MIT license,
-TokTier's modification notice, the dependency SBOM, and the dependency-license
-bundle.
+The [provenance and build record](packaging/fast_cpu/README.md) pins the
+upstream commit, patch, Unicode inputs, compiler, and release flags. The
+executing extension reports its domain-separated source digest, exact Rust
+toolchain, and build flags; the registry verifies all of them together with the
+repair configuration, oracle, and tokenizer artifact before opening the route.
+The core wheel carries Gigatoken's MIT license, TokTier's modification notice,
+the dependency SBOM, and the dependency-license bundle.
 
-TokTier is published as an ABI3 Linux x86-64 wheel, not an sdist: the
-certified CPU binary requires glibc 2.34 or newer, and silently rebuilding it
-during an sdist install would create different, uncertified bytes. The tagged
-repository contains the complete source and pinned reproduction recipe.
+TokTier is currently published as an ABI3 Linux x86-64 wheel, not an sdist.
+An arbitrary install-time rebuild would have a different toolchain/build
+identity and therefore fail closed until separately certified. The tagged
+repository contains the complete source and pinned build record; sdist
+publication remains a separate release decision.
 
 The prebuilt fatbin contains `sm_75/80/86/89/90/100/120` images and a
 `compute_75` PTX fallback. Its binary-digest-bound certificate covers `sm_89`
 and `sm_120`; the other embedded architectures are marked `experimental`. With
-the default facade, `toktier[gpu]` chooses this prebuilt delivery lazily and
-`toktier[gpu-jit]` chooses JIT lazily; an explicit `gpu_delivery=` argument can
-override profile detection. The
+the default facade, `toktier[gpu]` selects this prebuilt delivery and
+`toktier[gpu-jit]` selects JIT from the detected profile; an explicit
+`gpu_delivery=` argument can override that detection. Under prebuilt delivery
+the GPU engine opens when the native request path is constructed, on the first
+request of any size, so `explain()["gpu_backend"]["loaded"]` can read `true`
+after a short request; the crossover still decides per input which backend
+executes. JIT delivery keeps the Python host, whose GPU backend opens lazily at
+the first input that routes to the GPU. The
 JIT delivery is `certified_source` on `sm_89` and `sm_120`, meaning its
 certificate binds source, class tables, flags, and toolchain constraints rather
 than a machine-local binary. See [`docs/gpu-jit.md`](docs/gpu-jit.md) for the
@@ -194,9 +267,17 @@ toktier inspect qwen3_8b
 toktier doctor --json
 ```
 
+This recipe transports tokenizer artifacts, and only those. A genuinely
+disconnected host also needs the TokTier wheel and every dependency wheel
+staged separately (a wheelhouse or a local index); the bundle format carries no
+Python distributions.
+
 The core package has no `torch` dependency and can be imported without CUDA,
 network access, or hardware probing. Artifact caches, compiled-kernel caches,
-and persistent session state use separate directories.
+and persistent session state use separate directories: the two caches follow
+`XDG_CACHE_HOME` and the session store follows `XDG_STATE_HOME`, because state
+is not a cache. Relocating everything at once is what `TOKTIER_HOME` is for
+(`docs/contracts/config.md` Section 5).
 
 Fastokens 0.3.1 is available only as an explicit experimental comparison:
 
@@ -230,16 +311,19 @@ The machine-readable records are
 and [`tables/support_registry.json`](tables/support_registry.json). Shipped
 per-artifact readings account for 49,920,199,013 checks; an archived earlier
 phase accounts for the remaining 3,280,031,861. Together they produce the
-headline total above. A focused end-to-end rerun through the released public
-session API covers all 11 CPU-fast artifacts in
+headline total above. A focused end-to-end rerun through the historical public
+session API is kept in
 [`readings/fast_cpu_focused_parity.json`](readings/fast_cpu_focused_parity.json).
+The executing one-call Rust front end is separately checked across all 11
+CPU-fast artifacts in
+[`readings/fast_cpu_native_frontend_parity.json`](readings/fast_cpu_native_frontend_parity.json).
 
 Three status values keep evidence and runtime behavior distinct:
 
 | Status | Meaning |
 |---|---|
-| `certified` | Evidence binds the exact artifact and accelerated binary. |
-| `certified_source` | Evidence binds source, build inputs, and constraints for a local build. |
+| `certified` | Evidence binds the exact artifact and accelerated binary. The prebuilt GPU delivery additionally binds the Rust host's source digest, exact rustc, and release build facts. |
+| `certified_source` | Evidence binds source, build inputs, and toolchain; used by the integrated CPU engine and locally built GPU JIT. |
 | `reference-only` | No accelerated route is admitted; HF `tokenizers` runs. |
 
 These are empirical differential results, not a proof over all possible input.
@@ -248,11 +332,38 @@ Per-request checks and the reference fallback remain part of the contract.
 Repository self-checks:
 
 ```bash
+pip install pytest==9.1.1 jsonschema==4.26.0    # or: pip install --group test
 python tools/generate_evidence.py --check
-python tools/validate_registry.py
+python tools/generate_native_legal.py --check    # needs cargo
+python tools/validate_registry.py tables/support_registry.json
 python tools/generate_registry.py --release-check
+python tools/generate_sibling_aliases.py --check
 python tools/dev.py test-packaging
 ```
+
+Prerequisites, stated so that a failure means a real problem rather than
+a missing tool. The schema checks need `jsonschema` (the `test`
+dependency group in `pyproject.toml`); without it they refuse with
+`error: the jsonschema package is required ...`. The last command runs
+the packaging test suite and also needs `pytest`, which the same group
+carries -- the first line above installs both pins directly and covers
+every command in the block. The `pip install --group` alternative reads
+that group from `pyproject.toml` and needs pip 25.1 or newer (PEP 735).
+
+`generate_native_legal.py` reads the workspace's locked resolve graph
+and needs `cargo` (the toolchain pinned by `rust-toolchain.toml`). On a
+fresh checkout, populate the local Cargo cache once with
+`cargo fetch --locked` (network required; a plain `cargo build` is not
+enough, since the legal closure covers every target) -- the check
+itself then runs offline.
+`generate_registry.py` reads the native host's compile-time identity out
+of the built extension: it uses this tree's `src/toktier/_native` when
+one has been built, and otherwise the extension of an installed
+`toktier` wheel, saying on stderr which it read; the identity must equal
+the current source set either way. `pytest tests/gpu` follows the same
+rule: the two tests that assert on that identity read whichever
+extension is available and skip with a stated reason only when neither
+is.
 
 ## Performance
 
@@ -300,11 +411,16 @@ shows the regimes where direct use of another engine is faster.
 [`docs/support-matrix.md`](docs/support-matrix.md) lists every anchor artifact,
 SHA-256, backend status, and **210 verified model repositories** that share an
 identical or serialization-equivalent tokenizer. Coverage follows tokenizer
-content, not repository naming.
+content, not repository naming. `toktier.from_pretrained(repo_id)` enforces
+that rule at runtime: it hashes the resolved file, maps registered content to
+the canonical artifact, and otherwise remains on HF.
 
-The wheel currently resolves the 14 artifacts in its generated manifest.
-`kimi_k3` and the three WordPiece families have evidence but are not yet wired
-into that manifest; `toktier inspect` is the authoritative packaged list.
+Of the 210 sibling rows, 191 map to canonical artifacts present in this wheel.
+The other 19 do not admit acceleration because their canonical artifacts are
+not packaged: seven WordPiece rows run through HF, while the 12 source-level
+`kimi_k3` rows currently need a conversion artifact and therefore produce an
+actionable error rather than pretending that `tiktoken.model` is directly
+loadable. `toktier inspect` is the authoritative packaged-family list.
 
 ## Relation to existing work
 
@@ -329,10 +445,13 @@ layers together.
 
 ## Documentation
 
+- [`docs/releases/v0.2.0.md`](docs/releases/v0.2.0.md) — release notes for this version.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — layers, routing, and store format.
 - [`ROADMAP.md`](ROADMAP.md) — release scope and planned integration.
 - [`docs/support-matrix.md`](docs/support-matrix.md) — artifacts and covered repositories.
 - [`docs/gpu-jit.md`](docs/gpu-jit.md) — prebuilt and JIT GPU deliveries.
+- [`docs/rust-api.md`](docs/rust-api.md) — Python-free Rust serving API.
+- [`docs/rust-lifecycle.md`](docs/rust-lifecycle.md) — native artifacts, direct JIT, concurrency, and offline distribution.
 - [`docs/integration/dynamo.md`](docs/integration/dynamo.md) — Dynamo integration.
 - [`docs/paper/toktier-preprint.pdf`](docs/paper/toktier-preprint.pdf) — current preprint.
 

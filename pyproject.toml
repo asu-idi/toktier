@@ -118,27 +118,11 @@ python-source = "src"
 # crate must expose `_native`.
 module-name = "toktier._native"
 features = ["pyo3/extension-module"]
-# The private CPU engine is prebuilt, digest-certified package data. It is
-# gitignored by the generic native-output rule, so it must be included
-# explicitly in wheels; source distributions are intentionally not released.
-include = [
-    { path = "toktier/_vendor/gigatoken_rs.abi3.so", format = "wheel" },
-]
 [tool.maturin.sbom]
-# Also expose the vendored native module's dependency SBOM in the standard
-# dist-info/sboms location (the private package copy remains digest-addressable
-# by the runtime provenance manifest).
+# Expose the integrated corrected-Gigatoken dependency SBOM in the standard
+# dist-info/sboms location. The engine itself is linked into toktier._native;
+# the wheel must not carry a second native extension or top-level package.
 include = ["packaging/fast_cpu/gigatoken.cyclonedx.json"]
-
-[tool.pytest.ini_options]
-minversion = "7.0"
-testpaths = ["tests"]
-# Tests run against the source tree; an editable or wheel install is
-# exercised separately by the packaging smoke suite.
-pythonpath = ["src"]
-# importlib mode allows equal basenames across test tiers
-# (tests/test_config.py vs tests/conformance/test_config.py).
-addopts = "-ra --import-mode=importlib"
 
 [project.scripts]
 toktier = 'toktier.cli:main'

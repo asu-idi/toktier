@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/toktier",
+    "crates/toktier-cuda-driver",
+    "crates/toktier-gigatoken-core",
     "crates/toktier-routing-core",
     "crates/toktier-store-core",
     "crates/toktier-store-sqlite",
@@ -8,7 +11,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/asu-idi/toktier"
@@ -17,6 +20,7 @@ repository = "https://github.com/asu-idi/toktier"
 # Hash primitive for the store format (pinned; first fetch recorded
 # 2026-08-04).
 sha2 = "=0.11.0"
+blake2b_simd = "=1.0.3"
 # SQLite tier: bundled build so the library file is owned by this Rust
 # process alone, with no system-library skew. First fetch 2026-08-05.
 rusqlite = { version = "=0.39.0", features = ["bundled"] }
@@ -26,6 +30,33 @@ pyo3 = { version = "=0.23.5", features = ["abi3-py310", "extension-module"] }
 # SIMD-accelerated byte search for the added-token necessary-condition
 # prefilter in the native request router.
 memchr = "=2.8.3"
+# The frozen Hugging Face reference implementation. Keeping the Rust crate at
+# exactly the same version as the Python oracle lets the native request path
+# execute tokenizer.json without reacquiring the GIL.
+tokenizers = "=0.22.2"
+# Dependencies retained from TokTier's audited, corrected Gigatoken build.
+aho-corasick = "=1.1.3"
+base64 = "=0.22.1"
+eyre = "=0.6.12"
+icu_properties = { version = "=2.2.0", features = ["compiled_data"] }
+itertools = "=0.14.0"
+rayon = "=1.11.0"
+rustc-hash = "=2.1.1"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.151"
+sonic-rs = "=0.5.8"
+spm_precompiled = "=0.1.4"
+unicode-normalization-alignments = "=0.1.12"
+winnow = { version = "=1.0.4", features = ["simd"] }
+libc = "=0.2.177"
+# Pure-Rust zlib decoding for the frozen repair-property table.  Pinned after
+# reviewing flate2 1.1.9's safe miniz_oxide backend and MSRV policy.
+flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
+# Rust-only artifact lifecycle. Network delivery is feature-gated; the cache,
+# lock, and air-gap formats remain available in offline/CPU-only builds.
+fs2 = "=0.4.3"
+tar = { version = "=0.4.46", default-features = false }
+ureq = { version = "=3.4.0", default-features = false, features = ["rustls"] }
 
 [profile.release]
 lto = true

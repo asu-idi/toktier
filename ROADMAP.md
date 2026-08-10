@@ -4,64 +4,49 @@ What is planned, and what is deliberately outside the first release. Items are
 grouped by theme rather than by date; nothing here is a commitment to a
 schedule.
 
-## Native request path: Rust routing behind a thin Python binding
+## Native request path: completed core, thinner integrations next
 
-Version 0.1.1 begins this migration: the UTF-8 size crossover and the
-added-token necessary-condition gate now run together in the pure-Rust
-`toktier-routing-core` crate, and the session store evaluates the certified BPE
-seal predicate there without materializing token/span lists in Python. The
-measured scope and remaining boundary are documented in
+The one-call request pipeline is now implemented behind the existing Python
+API. Construction-time Python validates artifacts, registry entries, policy,
+and device facts, then projects the immutable admitted route into Rust. Encode,
+batch, named-session, and content-reuse operations cross PyO3 once with the GIL
+released. Native routing owns the guards, fallback ledger, Hugging Face
+reference, corrected Gigatoken full/repair engine, content index, persistence,
+and prebuilt CUDA Driver API dispatch. The exact boundary and evidence are in
 [`docs/native-routing.md`](docs/native-routing.md).
 
-Artifact and registry views, probe/plan construction, fallback invocation and
-accounting, facade orchestration, and part of the content-prefix index still
-live in Python. The persistent token-state store and corrected Gigatoken engine
-are Rust, while GPU BPE runs in CUDA, so a request can still cross the
-Python/Rust boundary several times before its ids are returned.
+Two of the planned integrations shipped in 0.2.0:
 
-The direction is one native request pipeline behind the existing Python API:
+- **Done (0.2.0)** — a stable Rust/server-facing adapter: the public `toktier`
+  crate consumes native token buffers directly, with no Python
+  `tuple[int, ...]` allocation on the request path
+  ([`docs/rust-api.md`](docs/rust-api.md));
+- **Done (0.2.0)** — artifact acquisition and verified-cache management behind
+  a native service boundary, including air-gap export and import, for
+  deployments that need a Python-free lifecycle
+  ([`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)).
 
-- each encode, batch, session lookup, or strict append enters through one PyO3
-  call; the binding releases the GIL and does not call back into Python on an
-  eligible fast path;
-- registry projection, immutable route planning, the 64 KiB crossover,
-  added-token/repair guards, fallback execution, counters, session naming,
-  content-prefix lookup, and persistence orchestration move into Rust;
-- corrected Gigatoken full BPE and repair run directly under that router. The
-  reference fallback uses the pinned Hugging Face `tokenizers` Rust
-  implementation rather than a Python callback, so correctness fallback does
-  not leave the native pipeline;
-- the prebuilt GPU route is dispatched by the Rust host layer through the CUDA
-  Driver API. CUDA remains the device implementation, but Python and PyTorch
-  are absent from request dispatch, buffer management, and fallback;
-- Python remains the thin product surface for installation, configuration,
-  artifact acquisition, object lifetime, and conversion of native diagnostics
-  into the public `Encoding` / `explain()` shapes.
+Still open:
 
-This is a latency project, not a semantic rewrite. The frozen policy enum,
-reason codes, certificate checks, downward-only fallback chain, store format,
-and exact-ID contract stay unchanged. Acceptance requires:
+- offer an optional borrowed-buffer or array result without weakening the
+  current immutable Python `Encoding` contract;
+- keep diagnostics generated from one schema so future native consumers cannot
+  drift from the Python `explain()` shape.
 
-1. one Python-to-native crossing per public request and zero Python callbacks
-   on store hits, certified CPU full encodes/repairs, and prebuilt GPU dispatch;
-2. no GIL held while the native request pipeline performs lookup,
-   tokenization, repair, or GPU work;
-3. byte-for-byte diagnostic parity and fresh-HF id equality across the same
-   routing, persistence, fault-injection, and 11-artifact differential suites;
-4. separately reported p50/p95 control-plane and end-to-end latency showing a
-   lower short-append/store-hit critical path without regressing large-request
-   throughput.
+The frozen policy enum, reason codes, certificate checks, downward-only
+fallback chain, store/TKFR formats, and exact-ID contract remain unchanged.
 
-## Kernel distribution: a native Driver API host layer
+## Kernel distribution: finish the JIT host
 
-The first release already ships a verified multi-architecture fatbin through
-the `gpu` extra and retains local compilation through `gpu-jit`. The prebuilt
-loader currently uses Python `ctypes` around the CUDA Driver API and PyTorch for
-tensors and streams; JIT uses `torch.utils.cpp_extension`.
-
-The remaining direction is a Rust-owned Driver API host layer behind a stable
-C ABI, with image selection, memory, streams and graph capture managed by the
-library rather than Python or PyTorch. Two consequences shape the design:
+The prebuilt multi-architecture fatbin is now hosted in Rust through the CUDA
+Driver API: image selection, digest verification, memory, streams, launches,
+document offsets, and ordered fallback do not use Python or PyTorch on the
+request path. Since 0.2.0 the Rust crate also performs JIT delivery natively:
+the compiler toolchain is selected explicitly, the compiler and runtime tuple
+is recorded in the runtime-builds registry, and uncertified builds are refused
+unless explicitly opted in. The Python `[gpu-jit]` extra still uses
+`torch.utils.cpp_extension` and its legacy host; moving it onto the same
+native delivery must preserve two rules:
 
 - the loader selects an image **explicitly**, from a manifest, and matches its
   digest against the certificate; leaving the choice to the driver would break
@@ -71,9 +56,8 @@ library rather than Python or PyTorch. Two consequences shape the design:
 - the list of shipped architectures is therefore short by construction: it
   contains the devices on which verdicts were actually run.
 
-Related, and dependent on the above: an optional adapter for PyTorch tensors
-across a stable ABI. Free-threaded CPython is out of scope while the package
-ships abi3 wheels.
+Related: an optional adapter for PyTorch tensors across a stable ABI.
+Free-threaded CPython remains out of scope while the package ships abi3 wheels.
 
 ## Session store: a server mode
 
@@ -100,6 +84,28 @@ does not carry TokTier's exact-ID guarantee. Additional third-party CPU engines
 may be admitted only behind per-input guards, exact artifact/engine bindings,
 published differential evidence, and any coordinated disclosure their fixes
 require; uncertainty continues to route to the HF reference implementation.
+
+## CPU parallel BPE for long requests
+
+Long requests on the certified CPU path are encoded serially today. The
+planned direction is chunk-parallel BPE: split a long input into chunks,
+encode the chunks on multiple cores, and repair the chunk boundaries so that
+the merged result is byte-for-byte the serial encoding. The exact-ID contract
+shapes the design: boundary repair has to be verified, an input that fails a
+safety check falls back to the serial path, and the feature ships only behind
+the same differential evidence as the engine it accelerates.
+
+## Routing large session deltas to the GPU
+
+Session appends run on the CPU repair lane regardless of the delta's size;
+the size threshold in the admitted route applies to whole encode requests
+only. For a large appended delta, most of the work is ordinary encoding and
+only the seam against the sealed prefix needs repair. The planned split:
+encode the body of the delta on the accelerated backend when the route admits
+one, repair the boundary on the CPU lane, and keep the result byte-for-byte
+identical to the serial path. The admission rules apply unchanged — without
+certification evidence for the accelerated backend, the delta stays on the
+CPU lane.
 
 ## Certification suite (second wave)
 

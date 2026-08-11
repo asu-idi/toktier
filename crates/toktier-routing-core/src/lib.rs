@@ -1,5 +1,9 @@
 //! Native request routing and frozen reference-engine primitives.
 //!
+//! This is an internal supporting crate of TokTier, versioned with the
+//! workspace and carrying no independent API stability promise; use the
+//! `toktier` package for the supported Rust surface.
+//!
 //! The public policy and diagnostic objects remain in Python. This crate owns
 //! the per-input hot decisions which otherwise allocate a complete UTF-8 copy:
 //! byte-threshold selection, the necessary-condition added-token prefilter,
@@ -29,9 +33,10 @@ pub use fast_cpu::{
 pub use gpu::{NativePrebuiltGpu, NativePrebuiltGpuConfig};
 pub use reference::{ReferenceEngine, ReferenceEngineError};
 pub use runtime::{
-    NativeGpuEngine, NativeRouter, NativeRuntimeError, RayonSeedOverlap, RoutedIds, RuntimeEvent,
-    RuntimeStats, BACKEND_FAST_CPU, BACKEND_GPU, BACKEND_REFERENCE, R_EXEC_FAULT,
-    R_INPUT_ADDED_TOKEN, R_INPUT_BELOW_GPU_THRESHOLD, R_INPUT_GUARD_ROUTED,
+    NativeGpuEngine, NativeGpuOpener, NativeGpuSource, NativeRouter, NativeRuntimeError,
+    RayonSeedOverlap, RoutedIds, RuntimeEvent, RuntimeStats, BACKEND_FAST_CPU, BACKEND_GPU,
+    BACKEND_REFERENCE, R_EXEC_FAULT, R_INPUT_ADDED_TOKEN, R_INPUT_BELOW_GPU_THRESHOLD,
+    R_INPUT_GUARD_ROUTED, R_INPUT_POSTPROCESS_ROUTED,
 };
 
 /// Number of Unicode scalar-value slots in the frozen property table.

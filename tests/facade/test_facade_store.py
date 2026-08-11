@@ -22,6 +22,7 @@ from toktier.facade import store as store_module
 from toktier.facade.recovery import RecoveryBinding
 from toktier.facade.store import EntryStore
 from toktier.paths import FILE_MODE
+from toktier.policy import BACKEND_REFERENCE
 
 from .conftest import TEST_FINGERPRINT, Rig, SpanEncode, build_rig, byte_level_document
 
@@ -62,6 +63,44 @@ def test_session_hit_append_and_overwrite_counters(
     assert stats["session_hits"] == 1
     assert stats["session_appends"] == 1
     assert stats["session_overwrites"] == 1
+
+
+def test_native_reference_append_replaces_the_seed_ledger(
+    rig: Rig, reference: Callable[[str], list[int]]
+) -> None:
+    tokenizer = rig.tokenizer(store=rig.store_path(), device="cpu")
+    assert tokenizer.plan.fallback_chain == (BACKEND_REFERENCE,)
+    base = "native café reference seed"
+    grown = base + " appended 中"
+
+    assert list(tokenizer.encode(base, session="ledger").ids) == reference(base)
+    seeded = tokenizer.explain()["runtime_policy"]
+    assert isinstance(seeded, dict)
+    assert seeded["request_path"] == "rust_native"
+    assert seeded["last_execution"] == {
+        "input_bytes": len(base.encode("utf-8")),
+        "selected_start": BACKEND_REFERENCE,
+        "executed_backend": BACKEND_REFERENCE,
+        "source": "state_encode",
+        "path": "hf_no_certified_span_bridge",
+    }
+
+    assert list(tokenizer.encode(grown, session="ledger").ids) == reference(grown)
+    runtime = tokenizer.explain()["runtime_policy"]
+    assert isinstance(runtime, dict)
+    assert runtime["execution_counts"] == {BACKEND_REFERENCE: 2}
+    assert runtime["last_execution"] == {
+        "input_bytes": len(grown.encode("utf-8")),
+        "selected_start": BACKEND_REFERENCE,
+        "executed_backend": BACKEND_REFERENCE,
+        "path": "native_hf_full_reencode",
+    }
+
+    assert list(tokenizer.encode(grown, session="ledger").ids) == reference(grown)
+    after_hit = tokenizer.explain()["runtime_policy"]
+    assert isinstance(after_hit, dict)
+    assert after_hit["execution_counts"] == runtime["execution_counts"]
+    assert after_hit["last_execution"] == runtime["last_execution"]
 
 
 def test_session_ids_survive_a_process_boundary(

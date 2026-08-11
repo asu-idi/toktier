@@ -1309,6 +1309,35 @@ impl std::fmt::Debug for NativePrebuiltGpu {
 }
 
 impl NativePrebuiltGpu {
+    /// Construction-time validation that needs no device: the ruleset name
+    /// and the table shapes. A deferred engine runs this when its inputs
+    /// are projected, so a malformed projection still fails at
+    /// construction; the digest re-check and every device check run in
+    /// [`NativePrebuiltGpu::new`] when the engine actually opens.
+    #[allow(clippy::too_many_arguments)]
+    pub fn preflight(
+        config: &NativePrebuiltGpuConfig,
+        class_table: &[u8],
+        pair_keys: &[u8],
+        pair_vals: &[u8],
+        byte_id: &[u8],
+        vocab_keys: &[u8],
+        vocab_vals: &[u8],
+        unsafe_bits: &[u8],
+    ) -> Result<(), NativeRuntimeError> {
+        Ruleset::parse(&config.ruleset)?;
+        validate_tables(
+            config,
+            class_table,
+            pair_keys,
+            pair_vals,
+            byte_id,
+            vocab_keys,
+            vocab_vals,
+            unsafe_bits,
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: NativePrebuiltGpuConfig,

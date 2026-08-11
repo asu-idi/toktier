@@ -18,6 +18,7 @@ This module is dependency-free (standard library only).
 
 from __future__ import annotations
 
+import difflib
 import json
 import re
 from collections.abc import Iterable, Mapping
@@ -245,9 +246,18 @@ class ArtifactManifest:
         for candidate in self.entries.values():
             if family in candidate.aliases:
                 return candidate
+        suggestions = difflib.get_close_matches(family, self.families(), n=3)
+        message = f"unknown tokenizer family {family!r}"
+        if suggestions:
+            matches = ", ".join(repr(suggestion) for suggestion in suggestions)
+            message = f"{message}; closest valid family IDs: {matches}"
         raise ArtifactNotFound(
-            f"unknown tokenizer family {family!r}",
-            details={"family": family, "searched": list(self.sources)},
+            message,
+            details={
+                "family": family,
+                "searched": list(self.sources),
+                "suggestions": suggestions,
+            },
         )
 
     def families(self) -> tuple[str, ...]:

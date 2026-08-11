@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -24,6 +25,7 @@ from toktier.policy import (
     RoutePlan,
     RoutingPolicy,
 )
+from toktier.routing.probe import DeviceInfo, ProbeSnapshot
 
 from .conftest import Rig, build_rig
 
@@ -127,6 +129,7 @@ def test_explain_is_the_routing_explanation_plus_facade_keys(rig: Rig) -> None:
     """
     tokenizer = rig.tokenizer()
     report = tokenizer.explain()
+    assert tokenizer.explain(summary=False) == report
 
     assert report["family"] == rig.family
     assert report["routing_policy"] == "certified"
@@ -134,6 +137,7 @@ def test_explain_is_the_routing_explanation_plus_facade_keys(rig: Rig) -> None:
     certification = report["certification"]
     assert isinstance(certification, dict)
     assert certification["state"] == "uncertified"
+    assert certification["effective_verdict"] == "unverified"
     assert certification["identity"] is None
     probe = report["probe"]
     assert isinstance(probe, dict)
@@ -150,6 +154,95 @@ def test_explain_is_the_routing_explanation_plus_facade_keys(rig: Rig) -> None:
     assert report["experimental_waivers"] == []
     assert report["store_directory"] is None
     assert "store" not in report  # the store has not been touched
+
+
+def test_explain_summary_is_flat_and_agrees_with_full_report(rig: Rig) -> None:
+    tokenizer = rig.tokenizer()
+    full = tokenizer.explain()
+    summary = tokenizer.explain(summary=True)
+    certification = full["certification"]
+    assert isinstance(certification, dict)
+    fallback_counts = full["fallback_counts"]
+    assert isinstance(fallback_counts, dict)
+
+    runtime = full["runtime_policy"]
+    assert isinstance(runtime, dict)
+
+    assert summary == {
+        "family": full["family"],
+        "backend": full["backend"],
+        "backend_basis": full["backend_basis"],
+        "planned_backend": full["planned_backend"],
+        "kernel_delivery": full["kernel_delivery"],
+        "certification_state": certification["state"],
+        "effective_verdict": certification["effective_verdict"],
+        "fallback_occurred": bool(fallback_counts),
+        "last_execution_backend": None,
+        "last_execution_path": None,
+        "last_execution_source": None,
+        "last_execution_fallback": False,
+        "fallback_ever_occurred": bool(fallback_counts),
+        "selected_kernel_delivery": runtime["gpu_delivery_selected"],
+        "loaded_kernel_delivery": full["kernel_delivery"],
+    }
+    assert not any(isinstance(value, dict) for value in summary.values())
+
+
+def test_explain_summary_names_the_time_scope_of_each_fact(rig: Rig) -> None:
+    """The summary answers "what just happened?" on its own.
+
+    Before anything runs the last-execution group is empty and the flag
+    is false. After a request it mirrors ``runtime_policy.last_execution``
+    exactly, and the lifetime flag keeps its separate, sticky meaning.
+    """
+    tokenizer = rig.tokenizer()
+    before = tokenizer.explain(summary=True)
+    assert before["last_execution_backend"] is None
+    assert before["last_execution_fallback"] is False
+    assert before["backend_basis"] == "plan"
+
+    tokenizer.encode("hello world")
+    after = tokenizer.explain(summary=True)
+    full = tokenizer.explain()
+    runtime = full["runtime_policy"]
+    assert isinstance(runtime, dict)
+    last = runtime["last_execution"]
+    assert isinstance(last, dict)
+
+    assert after["last_execution_backend"] == last["executed_backend"]
+    assert after["last_execution_path"] == last.get("path")
+    assert after["last_execution_source"] == last.get("source")
+    # This rig plans and runs on the reference backend, so the request
+    # finished where it started: no failover to report.
+    assert last["executed_backend"] == last["selected_start"]
+    assert after["last_execution_fallback"] is False
+    assert after["backend"] == last["executed_backend"]
+    assert after["fallback_ever_occurred"] == after["fallback_occurred"]
+
+
+def test_explain_summary_marks_a_real_per_request_failover(rig: Rig) -> None:
+    """A request that finishes elsewhere than it started says so.
+
+    The ledger is what the summary reads, so a recorded execution whose
+    selected start differs from the backend that returned is exactly the
+    case the flag exists for.
+    """
+    tokenizer = rig.tokenizer()
+    tokenizer.encode("hello world")
+    report = tokenizer.explain()
+    runtime = report["runtime_policy"]
+    assert isinstance(runtime, dict)
+    recorded = runtime["last_execution"]
+    assert isinstance(recorded, dict)
+    ledger = dict(recorded)
+    ledger["selected_start"] = "fast_cpu"
+    runtime["last_execution"] = ledger
+    report["runtime_policy"] = runtime
+
+    summary = facade_api._explanation_summary(report)
+
+    assert summary["last_execution_backend"] == "hf"
+    assert summary["last_execution_fallback"] is True
 
 
 def test_auto_device_reports_the_hardware_probe_it_performed(rig: Rig) -> None:
@@ -270,6 +363,162 @@ def test_public_requests_use_one_native_call_each(
     assert policy["python_to_native_calls"] == 3
 
 
+class _ConcurrentNativeRuntime:
+    """Native-runtime fake that records every request it serves."""
+
+    gpu_engine_loaded = False
+    gpu_engine_open_error = None
+
+    def __init__(
+        self,
+        reference: Any,
+        calls: list[str],
+    ) -> None:
+        self._reference = reference
+        self._calls = calls
+        self._calls_lock = threading.Lock()
+
+    def encode(
+        self,
+        text: str,
+        *,
+        session: str | None,
+        lookup_auto: bool,
+        add_special_tokens: bool,
+    ) -> list[int]:
+        del session, lookup_auto
+        with self._calls_lock:
+            self._calls.append(text)
+        return list(self._reference.encode(text, add_special_tokens=add_special_tokens))
+
+    def runtime_stats(self) -> dict[str, object]:
+        with self._calls_lock:
+            call_count = len(self._calls)
+        return {
+            "fallback_counts": {},
+            "execution_counts": {BACKEND_REFERENCE: call_count},
+            "last_execution": None,
+            "state_encode_counts": {},
+            "last_state_encode": None,
+            "python_to_native_calls": call_count,
+        }
+
+    def store_stats(self) -> dict[str, object]:
+        return {}
+
+
+def test_concurrent_first_encodes_wait_for_one_native_runtime(
+    rig: Rig,
+    reference: Callable[[str], list[int]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """First callers share construction instead of touching the adapter."""
+    from toktier import _native
+    from toktier.engine.gpu import native as gpu_native
+
+    snapshot = ProbeSnapshot(
+        family=rig.family,
+        artifact_sha256=rig.artifact_sha256,
+        oracle_version="0.22.2",
+        importable_backends=frozenset({BACKEND_GPU, BACKEND_REFERENCE}),
+        devices=(DeviceInfo(0, "synthetic GPU", "sm_test"),),
+        devices_probed=True,
+    )
+    plan = RoutePlan(
+        policy=RoutingPolicy.CERTIFIED,
+        backend=BACKEND_GPU,
+        fallback_chain=(BACKEND_GPU, BACKEND_REFERENCE),
+    )
+    monkeypatch.setattr(facade_api, "probe", lambda **_keywords: snapshot)
+    monkeypatch.setattr(facade_api, "build_plan", lambda *_args: plan)
+
+    prepared_calls = 0
+
+    class _PreparedGpu:
+        engine = object()
+        published = False
+
+    def prepare_gpu(**_keywords: Any) -> _PreparedGpu:
+        nonlocal prepared_calls
+        prepared_calls += 1
+        return _PreparedGpu()
+
+    monkeypatch.setattr(gpu_native, "prepare_native_prebuilt_gpu", prepare_gpu)
+
+    legacy_loads = 0
+
+    def refuse_legacy_load(_tokenizer: Any) -> Any:
+        nonlocal legacy_loads
+        legacy_loads += 1
+        raise RuntimeError("the prebuilt delivery is already owned by native host")
+
+    monkeypatch.setattr(facade_api.Tokenizer, "_open_gpu_backend", refuse_legacy_load)
+    tokenizer = rig.tokenizer(device="cpu", gpu_delivery="prebuilt", gpu_min_bytes=0)
+
+    worker_count = 8
+    all_callers_entered = threading.Event()
+    caller_lock = threading.Lock()
+    caller_count = 0
+    original_runtime = tokenizer._native_request_runtime
+
+    def synchronized_runtime() -> Any | None:
+        nonlocal caller_count
+        with caller_lock:
+            caller_count += 1
+            if caller_count == worker_count:
+                all_callers_entered.set()
+        return original_runtime()
+
+    monkeypatch.setattr(tokenizer, "_native_request_runtime", synchronized_runtime)
+
+    construction_calls = 0
+    construction_lock = threading.Lock()
+    native_calls: list[str] = []
+
+    def slow_runtime_factory(*args: Any, **_keywords: Any) -> Any:
+        nonlocal construction_calls
+        with construction_lock:
+            construction_calls += 1
+        if not all_callers_entered.wait(timeout=5):
+            raise RuntimeError("concurrent callers did not reach initialization")
+        return _ConcurrentNativeRuntime(args[2], native_calls)
+
+    monkeypatch.setattr(_native, "NativeRuntime", slow_runtime_factory)
+
+    texts = [f"concurrent native request {index}" for index in range(worker_count)]
+    results: list[tuple[int, ...] | None] = [None] * worker_count
+    failures: list[BaseException] = []
+
+    def encode(index: int) -> None:
+        try:
+            results[index] = tokenizer.encode(texts[index], lookup="off").ids
+        except BaseException as error:  # pragma: no cover - asserted below
+            failures.append(error)
+
+    workers = [
+        threading.Thread(target=encode, args=(index,)) for index in range(worker_count)
+    ]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=10)
+
+    assert not any(worker.is_alive() for worker in workers)
+    assert not failures
+    assert construction_calls == 1
+    assert prepared_calls == 1
+    assert sorted(native_calls) == sorted(texts)
+    assert results == [tuple(reference(text)) for text in texts]
+    assert legacy_loads == 0
+    report = tokenizer.explain()
+    gpu = report["gpu_backend"]
+    assert isinstance(gpu, dict)
+    assert gpu["load_error"] is None
+    runtime = report["runtime_policy"]
+    assert isinstance(runtime, dict)
+    assert runtime["request_path"] == "rust_native"
+
+
 def test_explain_probe_reports_the_delivery_this_process_loaded(
     rig: Rig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -295,10 +544,38 @@ def test_explain_probe_reports_the_delivery_this_process_loaded(
     assert probe["kernel_delivery"] == "prebuilt"
 
 
+class _GpuStateRuntime:
+    """A native runtime stand-in with a fixed deferred-GPU open state."""
+
+    def __init__(self, inner: Any, *, loaded: bool, open_error: str | None) -> None:
+        self._inner = inner
+        self.gpu_engine_loaded = loaded
+        self.gpu_engine_open_error = open_error
+
+    def runtime_stats(self) -> Any:
+        return self._inner.runtime_stats()
+
+    def store_stats(self) -> Any:
+        return self._inner.store_stats()
+
+
 def test_explain_reports_a_loaded_native_gpu_host(rig: Rig) -> None:
-    """The compatibility GPU block must include the Rust prebuilt host."""
+    """The compatibility GPU block must include the Rust prebuilt host.
+
+    The engine opens below PyO3 on the first request routed to the GPU,
+    so ``gpu_backend.loaded`` follows the runtime's own record of that
+    open rather than any construction-time fact.
+    """
     tokenizer = rig.tokenizer(device="cpu")
-    tokenizer._native_gpu_engine = object()
+    tokenizer.encode("prime the native runtime")
+    inner = tokenizer._native_request
+    assert inner is not None
+
+    before = tokenizer.explain()["gpu_backend"]
+    assert isinstance(before, dict)
+    assert before["loaded"] is False
+
+    tokenizer._native_request = _GpuStateRuntime(inner, loaded=True, open_error=None)
     tokenizer._gpu_device = "cuda:7"
 
     gpu = tokenizer.explain()["gpu_backend"]
@@ -307,6 +584,24 @@ def test_explain_reports_a_loaded_native_gpu_host(rig: Rig) -> None:
     assert gpu["loaded"] is True
     assert gpu["device"] == "cuda:7"
     assert gpu["load_error"] is None
+
+
+def test_explain_reports_a_latched_native_gpu_open_failure(rig: Rig) -> None:
+    """A failed deferred open surfaces as the GPU block's load error."""
+    tokenizer = rig.tokenizer(device="cpu")
+    tokenizer.encode("prime the native runtime")
+    inner = tokenizer._native_request
+    assert inner is not None
+
+    tokenizer._native_request = _GpuStateRuntime(
+        inner, loaded=False, open_error="injected open failure"
+    )
+
+    gpu = tokenizer.explain()["gpu_backend"]
+
+    assert isinstance(gpu, dict)
+    assert gpu["loaded"] is False
+    assert gpu["load_error"] == "injected open failure"
 
 
 @pytest.mark.slow

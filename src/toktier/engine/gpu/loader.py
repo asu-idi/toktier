@@ -193,6 +193,11 @@ class _LoadState:
     #: certified delivery and must participate in all loader reporting and
     #: divergent-delivery guards.
     native_prebuilt: bool = False
+    #: Identity facts of a Rust prebuilt delivery whose deferred engine has
+    #: not opened yet.  The reservation participates in the single-delivery
+    #: guards from construction on, while ``is_loaded()``/``delivery()``
+    #: keep answering with what has actually been loaded.
+    native_prebuilt_reserved: Any | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -442,6 +447,39 @@ class KernelLoader:
                         "remedy": "reuse the existing Tokenizer instance",
                     },
                 )
+            if state.native_prebuilt_reserved is not None:
+                # A deferred native engine has reserved the delivery; the
+                # single-host premise holds from reservation on, before the
+                # first routed request opens the device.
+                if flags != DEFAULT_BUILD_FLAGS or delivery == "jit":
+                    state.certificate_void = True
+                    state.void_reason = (
+                        "the Rust prebuilt host has reserved the process-wide "
+                        "kernel delivery and a divergent legacy load was "
+                        "requested"
+                    )
+                    raise KernelIncompatible(
+                        "the native prebuilt delivery is already reserved "
+                        "with a different build request",
+                        details={
+                            "backend": "gpu",
+                            "reason_code": "R_KERNEL_DIGEST_MISMATCH",
+                            "expected_digest": DEFAULT_BUILD_FLAGS.digest(),
+                            "observed_digest": flags.digest(),
+                            "remedy": "use one GPU delivery per process",
+                        },
+                    )
+                raise KernelIncompatible(
+                    "the prebuilt kernel delivery is reserved by TokTier's "
+                    "native CUDA Driver host; the legacy extension surface "
+                    "is unavailable",
+                    details={
+                        "backend": "gpu",
+                        "reason_code": "R_KERNEL_DIGEST_MISMATCH",
+                        "expected_digest": None,
+                        "remedy": "reuse the existing Tokenizer instance",
+                    },
+                )
             if state.module is not None:
                 if state.flags != flags:
                     state.certificate_void = True
@@ -505,6 +543,50 @@ class KernelLoader:
             return module
 
     @classmethod
+    def reserve_native_prebuilt(
+        cls,
+        *,
+        manifest: dict[str, Any],
+        fatbin_digest: str,
+        architecture: str,
+    ) -> None:
+        """Reserve the process-wide delivery for the Rust prebuilt host.
+
+        Called when the native request path is constructed, before any
+        device work: the deferred engine opens later, on the first request
+        that routes to the GPU.  Reserving keeps the single-delivery guard
+        at the same moment it held when construction opened the engine
+        eagerly, while ``is_loaded()`` and ``delivery()`` keep answering
+        with what has actually been loaded.
+        :meth:`note_native_prebuilt_loaded` upgrades the reservation once
+        the open has been observed.
+        """
+        facts = _NativePrebuiltFacts(
+            manifest=dict(manifest),
+            fatbin_digest=fatbin_digest,
+            device_architecture=architecture,
+        )
+        with cls._lock:
+            state = cls._state
+            cls._refuse_legacy_module_conflict(state)
+            if state.native_prebuilt:
+                cls._refuse_divergent_identity(
+                    state, state.prebuilt, fatbin_digest, architecture
+                )
+                return
+            reserved = state.native_prebuilt_reserved
+            if reserved is not None:
+                cls._refuse_divergent_identity(
+                    state,
+                    reserved,
+                    fatbin_digest,
+                    architecture,
+                    owned="reserved",
+                )
+                return
+            state.native_prebuilt_reserved = facts
+
+    @classmethod
     def note_native_prebuilt_loaded(
         cls,
         *,
@@ -514,11 +596,13 @@ class KernelLoader:
     ) -> None:
         """Publish a successfully loaded Rust-owned prebuilt delivery.
 
-        The native constructor has already verified the manifest digest,
+        The native engine open has already verified the manifest digest,
         selected an embedded image for ``architecture`` and loaded the CUDA
         module.  Recording those immutable facts here keeps ``explain()``,
         ``doctor`` and the legacy loader's single-delivery guard honest
-        without importing torch or exposing the extension ABI to Rust.
+        without importing torch or exposing the extension ABI to Rust.  A
+        reservation made by :meth:`reserve_native_prebuilt` is upgraded in
+        place when its identity matches.
         """
         facts = _NativePrebuiltFacts(
             manifest=dict(manifest),
@@ -527,49 +611,78 @@ class KernelLoader:
         )
         with cls._lock:
             state = cls._state
-            if state.module is not None:
-                state.certificate_void = True
-                state.void_reason = (
-                    "a legacy kernel extension was already loaded before the "
-                    "Rust prebuilt host requested process ownership"
-                )
-                raise KernelIncompatible(
-                    "a kernel delivery is already loaded through the legacy host",
-                    details={
-                        "backend": "gpu",
-                        "reason_code": "R_KERNEL_DIGEST_MISMATCH",
-                        "expected_digest": None,
-                        "remedy": "use one GPU host implementation per process",
-                    },
-                )
+            cls._refuse_legacy_module_conflict(state)
             if state.native_prebuilt:
-                previous = state.prebuilt
-                if (
-                    previous is None
-                    or previous.fatbin_digest != fatbin_digest
-                    or previous.device_architecture != architecture
-                ):
-                    state.certificate_void = True
-                    state.void_reason = (
-                        "a second native prebuilt identity was requested in one process"
-                    )
-                    raise KernelIncompatible(
-                        "native prebuilt identity differs from the loaded image",
-                        details={
-                            "backend": "gpu",
-                            "reason_code": "R_KERNEL_DIGEST_MISMATCH",
-                            "expected_digest": getattr(
-                                previous, "fatbin_digest", None
-                            ),
-                            "observed_digest": fatbin_digest,
-                            "remedy": "restart the process to change GPU images",
-                        },
-                    )
+                cls._refuse_divergent_identity(
+                    state, state.prebuilt, fatbin_digest, architecture
+                )
                 return
+            reserved = state.native_prebuilt_reserved
+            if reserved is not None:
+                cls._refuse_divergent_identity(
+                    state,
+                    reserved,
+                    fatbin_digest,
+                    architecture,
+                    owned="reserved",
+                )
             state.flags = DEFAULT_BUILD_FLAGS
             state.delivery = "prebuilt"
             state.prebuilt = facts
             state.native_prebuilt = True
+            state.native_prebuilt_reserved = None
+
+    @classmethod
+    def _refuse_legacy_module_conflict(cls, state: _LoadState) -> None:
+        """A legacy extension already owns the process; refuse and record."""
+        if state.module is None:
+            return
+        state.certificate_void = True
+        state.void_reason = (
+            "a legacy kernel extension was already loaded before the "
+            "Rust prebuilt host requested process ownership"
+        )
+        raise KernelIncompatible(
+            "a kernel delivery is already loaded through the legacy host",
+            details={
+                "backend": "gpu",
+                "reason_code": "R_KERNEL_DIGEST_MISMATCH",
+                "expected_digest": None,
+                "remedy": "use one GPU host implementation per process",
+            },
+        )
+
+    @classmethod
+    def _refuse_divergent_identity(
+        cls,
+        state: _LoadState,
+        current: Any,
+        fatbin_digest: str,
+        architecture: str,
+        *,
+        owned: str = "loaded",
+    ) -> None:
+        """One native prebuilt identity per process; refuse a second."""
+        if (
+            current is not None
+            and current.fatbin_digest == fatbin_digest
+            and current.device_architecture == architecture
+        ):
+            return
+        state.certificate_void = True
+        state.void_reason = (
+            "a second native prebuilt identity was requested in one process"
+        )
+        raise KernelIncompatible(
+            f"native prebuilt identity differs from the {owned} image",
+            details={
+                "backend": "gpu",
+                "reason_code": "R_KERNEL_DIGEST_MISMATCH",
+                "expected_digest": getattr(current, "fatbin_digest", None),
+                "observed_digest": fatbin_digest,
+                "remedy": "restart the process to change GPU images",
+            },
+        )
 
     @classmethod
     def _try_prebuilt(

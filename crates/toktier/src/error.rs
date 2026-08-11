@@ -156,6 +156,7 @@ impl From<toktier_store_sqlite::DbError> for Error {
     fn from(error: toktier_store_sqlite::DbError) -> Self {
         match error {
             toktier_store_sqlite::DbError::Store(error) => error.into(),
+            toktier_store_sqlite::DbError::Io(error) => Self::new(ErrorCode::Io, error.to_string()),
             toktier_store_sqlite::DbError::Sqlite(error) => {
                 Self::new(ErrorCode::Io, error.to_string())
             }

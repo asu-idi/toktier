@@ -348,6 +348,98 @@ def test_rust_prebuilt_host_publishes_one_process_delivery() -> None:
     assert KernelLoader.certificate_void()
 
 
+def _native_prebuilt_identity() -> tuple[dict[str, Any], str]:
+    manifest = {
+        "toolchain": "cuda 13.2",
+        "architectures": {
+            "sm_120": {"digest": "sha256:" + "a" * 64},
+        },
+        "sources": {"prebuilt_source_digest": "sha256:" + "b" * 64},
+    }
+    return manifest, "sha256:" + "d" * 64
+
+
+def test_reserving_the_native_prebuilt_delivery_reports_no_load() -> None:
+    """A reservation guards the process without claiming a loaded kernel.
+
+    The deferred engine opens on the first request routed to the GPU;
+    until then ``is_loaded()``/``delivery()`` keep answering with what
+    has actually been loaded, while divergent legacy loads are refused
+    from the reservation on.
+    """
+    manifest, digest = _native_prebuilt_identity()
+    KernelLoader.reserve_native_prebuilt(
+        manifest=manifest,
+        fatbin_digest=digest,
+        architecture="sm_120",
+    )
+
+    assert not KernelLoader.is_loaded()
+    assert KernelLoader.delivery() is None
+    assert not KernelLoader.certificate_void()
+
+    # The same identity may be reserved again; a second identity breaks
+    # the single-image premise exactly as it would after the load.
+    KernelLoader.reserve_native_prebuilt(
+        manifest=manifest,
+        fatbin_digest=digest,
+        architecture="sm_120",
+    )
+    with pytest.raises(KernelIncompatible):
+        KernelLoader.reserve_native_prebuilt(
+            manifest=manifest,
+            fatbin_digest=digest,
+            architecture="sm_90",
+        )
+    assert KernelLoader.certificate_void()
+
+
+def test_a_reserved_delivery_refuses_divergent_legacy_loads() -> None:
+    manifest, digest = _native_prebuilt_identity()
+    KernelLoader.reserve_native_prebuilt(
+        manifest=manifest,
+        fatbin_digest=digest,
+        architecture="sm_120",
+    )
+
+    with pytest.raises(KernelIncompatible):
+        KernelLoader.get(delivery="jit")
+    assert KernelLoader.certificate_void()
+
+    KernelLoader._reset_for_tests()
+    KernelLoader.reserve_native_prebuilt(
+        manifest=manifest,
+        fatbin_digest=digest,
+        architecture="sm_120",
+    )
+    # The compatible request is also refused -- the reserved delivery is
+    # owned by the native host -- but it does not void the certificate.
+    with pytest.raises(KernelIncompatible):
+        KernelLoader.get(delivery="prebuilt")
+    assert not KernelLoader.certificate_void()
+
+
+def test_the_note_upgrades_a_matching_reservation() -> None:
+    manifest, digest = _native_prebuilt_identity()
+    KernelLoader.reserve_native_prebuilt(
+        manifest=manifest,
+        fatbin_digest=digest,
+        architecture="sm_120",
+    )
+    KernelLoader.note_native_prebuilt_loaded(
+        manifest=manifest,
+        fatbin_digest=digest,
+        architecture="sm_120",
+    )
+
+    assert KernelLoader.is_loaded()
+    assert KernelLoader.delivery() == "prebuilt"
+    assert KernelLoader._state.native_prebuilt_reserved is None
+    binding = KernelLoader.binding_set()
+    assert binding["binary_digest"] == "d" * 64
+    assert binding["prebuilt"]["device_architecture"] == "sm_120"
+
+
 
 def test_launcher_grid_and_scalar_packing() -> None:
     torch = pytest.importorskip("torch")  # noqa: F841 - import gate only

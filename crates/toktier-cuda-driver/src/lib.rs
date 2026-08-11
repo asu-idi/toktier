@@ -1,5 +1,9 @@
 //! Audited, dependency-light CUDA Driver API surface for prebuilt dispatch.
 //!
+//! This is an internal supporting crate of TokTier, versioned with the
+//! workspace and carrying no independent API stability promise; use the
+//! `toktier` package for the supported Rust surface.
+//!
 //! This crate never links a CUDA runtime and never compiles device code.  It
 //! loads the NVIDIA driver's stable C ABI at runtime, retains one primary
 //! context, and owns every stream/module/allocation through RAII.  Unsafe code

@@ -1,5 +1,9 @@
 use std::collections::{HashMap, HashSet};
+#[cfg(all(feature = "sqlite", unix))]
+use std::fs;
 use std::path::Path;
+#[cfg(all(feature = "sqlite", unix))]
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -66,9 +70,7 @@ impl SessionStoreState {
         #[cfg(feature = "sqlite")]
         if let Some(path) = database_path {
             if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).map_err(|error| {
-                    Error::new(ErrorCode::Io, error.to_string()).with_path(parent)
-                })?;
+                ensure_store_home(parent)?;
             }
             let populated = path.metadata().is_ok_and(|metadata| metadata.len() > 0);
             let database = StoreDb::open(path)?;
@@ -191,6 +193,39 @@ impl SessionStoreState {
             None => Ok(()),
         }
     }
+}
+
+#[cfg(feature = "sqlite")]
+fn ensure_store_home(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+
+        let mut current = PathBuf::new();
+        for component in path.components() {
+            current.push(component.as_os_str());
+            let mut builder = fs::DirBuilder::new();
+            builder.mode(0o700);
+            match builder.create(&current) {
+                Ok(()) => fs::set_permissions(&current, fs::Permissions::from_mode(0o700))
+                    .map_err(|error| {
+                        Error::new(ErrorCode::Io, error.to_string()).with_path(&current)
+                    })?,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(error) => {
+                    return Err(Error::new(ErrorCode::Io, error.to_string()).with_path(&current));
+                }
+            }
+        }
+        // Preserve create_dir_all's validation of a pre-existing final path
+        // without changing any directory this call did not create.
+        fs::create_dir_all(path)
+            .map_err(|error| Error::new(ErrorCode::Io, error.to_string()).with_path(path))?;
+    }
+    #[cfg(not(unix))]
+    std::fs::create_dir_all(path)
+        .map_err(|error| Error::new(ErrorCode::Io, error.to_string()).with_path(path))?;
+    Ok(())
 }
 
 fn new_store(persistent: bool, seed_digest_overlap: bool) -> Result<SessionStore> {
@@ -651,4 +686,61 @@ fn _assert_session_send() {
     fn assert_send<T: Send>() {}
     assert_send::<Session>();
     let _ = Certification::Reference;
+}
+
+#[cfg(all(test, feature = "sqlite", unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    use toktier_routing_core::BACKEND_REFERENCE;
+
+    const TOKENIZER_JSON: &[u8] = br#"{"version":"1.0","truncation":null,"padding":null,"added_tokens":[],"normalizer":null,"pre_tokenizer":null,"post_processor":null,"decoder":null,"model":{"type":"BPE","dropout":null,"unk_token":null,"continuing_subword_prefix":null,"end_of_word_suffix":null,"fuse_unk":false,"byte_fallback":false,"ignore_merges":false,"vocab":{"a":0},"merges":[]}}"#;
+
+    fn reference_router() -> Arc<NativeRouter> {
+        let reference = Arc::new(ReferenceEngine::from_bytes(TOKENIZER_JSON).unwrap());
+        Arc::new(
+            NativeRouter::new(
+                vec![BACKEND_REFERENCE.to_owned()],
+                vec![0],
+                reference,
+                None,
+                false,
+                None,
+                false,
+                true,
+            )
+            .unwrap(),
+        )
+    }
+
+    fn permission_bits(path: &Path) -> u32 {
+        fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    #[test]
+    fn fresh_rust_store_home_and_database_are_owner_only() {
+        let temporary = tempfile::tempdir().unwrap();
+        let existing = temporary.path().join("caller-owned");
+        fs::create_dir(&existing).unwrap();
+        fs::set_permissions(&existing, fs::Permissions::from_mode(0o750)).unwrap();
+        ensure_store_home(&existing).unwrap();
+        assert_eq!(permission_bits(&existing), 0o750);
+
+        let store_home = temporary.path().join("runtime-home/sessions");
+        let database_path = store_home.join("test.sqlite3");
+        let _state =
+            SessionStoreState::new(reference_router(), [7; 32], 0, Some(&database_path), false)
+                .unwrap();
+
+        assert_eq!(permission_bits(&store_home), 0o700);
+        assert_eq!(permission_bits(&database_path), 0o600);
+        for suffix in ["-wal", "-shm"] {
+            let mut sidecar = database_path.as_os_str().to_os_string();
+            sidecar.push(suffix);
+            let sidecar = PathBuf::from(sidecar);
+            if sidecar.exists() {
+                assert_eq!(permission_bits(&sidecar), 0o600);
+            }
+        }
+    }
 }

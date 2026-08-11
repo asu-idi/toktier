@@ -3,15 +3,17 @@
 Python remains responsible for verified artifact acquisition and immutable
 registry/configuration projection.  This module loads and digest-checks those
 facts once, converts the already exported NumPy tables to byte strings, and
-hands ownership to :mod:`toktier._native`.  It imports neither torch nor the
-legacy ctypes launcher; no Python object participates after construction.
+hands ownership to :mod:`toktier._native`.  The native runtime then opens the
+engine deferred, on the first request that actually routes to the GPU; no
+CUDA call happens here.  The module imports neither torch nor the legacy
+ctypes launcher; no Python object participates after construction.
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -28,8 +30,9 @@ if TYPE_CHECKING:
 
 __all__ = [
     "NativeHostBuildFacts",
+    "PreparedNativeGpu",
     "native_host_build_facts",
-    "open_native_prebuilt_gpu",
+    "prepare_native_prebuilt_gpu",
 ]
 
 
@@ -100,7 +103,37 @@ def _digits_max(family: Any, table: Any) -> int:
     return value
 
 
-def open_native_prebuilt_gpu(
+@dataclass
+class PreparedNativeGpu:
+    """A deferred prebuilt engine plus the loader facts it publishes.
+
+    ``engine`` owns the verified engine inputs; the native runtime opens it
+    on the first request that routes to the GPU.  The identity facts stay
+    here so :meth:`publish_loaded` can record the process-wide loaded fact
+    once the facade observes that the open happened.
+    """
+
+    engine: Any
+    manifest: dict[str, Any]
+    fatbin_digest: str
+    architecture: str
+    published: bool = field(default=False)
+
+    def publish_loaded(self) -> None:
+        """Record the loaded delivery once; idempotent afterwards."""
+        if self.published:
+            return
+        from .loader import KernelLoader
+
+        KernelLoader.note_native_prebuilt_loaded(
+            manifest=self.manifest,
+            fatbin_digest=self.fatbin_digest,
+            architecture=self.architecture,
+        )
+        self.published = True
+
+
+def prepare_native_prebuilt_gpu(
     *,
     artifact: ArtifactHandle,
     family: str,
@@ -108,8 +141,8 @@ def open_native_prebuilt_gpu(
     device_ordinal: int,
     architecture: str,
     reference: _native.ReferenceEngine,
-) -> _native.NativePrebuiltGpu:
-    """Build a manifest-bound Rust CUDA engine from verified package data."""
+) -> PreparedNativeGpu:
+    """Project verified package data into a deferred Rust CUDA engine."""
     from ... import _native
 
     family_table = KernelFamilyTable.load()
@@ -172,15 +205,23 @@ def open_native_prebuilt_gpu(
         int(bpe.vocab_keys.size),
         reference,
     )
-    # Construction returning means the Rust host verified the digest,
-    # selected the requested embedded architecture and loaded the module.
-    # Publish that process-wide fact for explain()/doctor and for the
-    # single-delivery guard; this does not import torch or the legacy host.
+    # Construction returning means the projected shapes were validated and
+    # the engine inputs are owned below PyO3; the module itself loads on
+    # the first request routed to the GPU.  Reserve the process-wide
+    # delivery now, so the single-delivery guard holds through the window
+    # before that open; ``PreparedNativeGpu.publish_loaded`` records the
+    # loaded fact once the open is observed.  Neither step imports torch
+    # or the legacy host.
     from .loader import KernelLoader
 
-    KernelLoader.note_native_prebuilt_loaded(
+    KernelLoader.reserve_native_prebuilt(
         manifest=manifest,
         fatbin_digest=expected,
         architecture=architecture,
     )
-    return engine
+    return PreparedNativeGpu(
+        engine=engine,
+        manifest=dict(manifest),
+        fatbin_digest=expected,
+        architecture=architecture,
+    )

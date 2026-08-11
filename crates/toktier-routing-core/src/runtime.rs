@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use aho_corasick::{AhoCorasick, MatchKind};
 use serde_json::{json, Value};
@@ -21,6 +21,10 @@ pub const R_INPUT_ADDED_TOKEN: &str = "R_INPUT_ADDED_TOKEN";
 pub const R_INPUT_BELOW_GPU_THRESHOLD: &str = "R_INPUT_BELOW_GPU_THRESHOLD";
 pub const R_INPUT_GUARD_ROUTED: &str = "R_INPUT_GUARD_ROUTED";
 pub const R_EXEC_FAULT: &str = "R_EXEC_FAULT";
+pub const R_INPUT_POSTPROCESS_ROUTED: &str = "R_INPUT_POSTPROCESS_ROUTED";
+
+const STATE_ENCODE_RECONSTRUCTED_SPANS: &str = "accelerated_with_reconstructed_spans";
+const STATE_ENCODE_LAZY_SPAN_CHECKPOINTS: &str = "accelerated_with_lazy_span_checkpoints";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BackendKind {
@@ -75,6 +79,96 @@ pub trait NativeGpuEngine: Send + Sync {
         texts.iter().map(|text| self.encode_ids(text)).collect()
     }
     fn delivery(&self) -> &str;
+}
+
+/// One-shot constructor for a deferred native GPU engine.
+///
+/// The opener owns every input the engine needs -- configuration and host
+/// copies of the device tables -- so running it performs no callback into an
+/// embedding interpreter and assumes no held interpreter lock. The router
+/// runs it at most once, on the first request thread that actually routes to
+/// the GPU backend (a thread that has already released the GIL when the
+/// router is driven through the Python bindings).
+pub type NativeGpuOpener =
+    Box<dyn FnOnce() -> Result<Arc<dyn NativeGpuEngine>, NativeRuntimeError> + Send + Sync>;
+
+/// How a router receives its GPU engine.
+///
+/// `Open` adopts an engine whose device resources already exist (tests and
+/// embedders that manage the device lifecycle themselves). `Deferred`
+/// carries the opener and leaves the device untouched until the first
+/// request the router actually routes to the GPU backend.
+pub enum NativeGpuSource {
+    Open(Arc<dyn NativeGpuEngine>),
+    Deferred(NativeGpuOpener),
+}
+
+/// Lazily opened GPU engine slot.
+///
+/// The first open outcome -- success or failure -- is fixed for the slot's
+/// lifetime: concurrent first requests block on one initialization and
+/// share its engine, and a failed open is latched so later GPU-routed
+/// requests take the ordered fallback chain instead of retrying the device.
+struct GpuCell {
+    opener: Mutex<Option<NativeGpuOpener>>,
+    engine: OnceLock<Result<Arc<dyn NativeGpuEngine>, NativeRuntimeError>>,
+}
+
+impl GpuCell {
+    fn new(source: NativeGpuSource) -> Self {
+        let cell = Self {
+            opener: Mutex::new(None),
+            engine: OnceLock::new(),
+        };
+        match source {
+            NativeGpuSource::Open(engine) => {
+                let _ = cell.engine.set(Ok(engine));
+            }
+            NativeGpuSource::Deferred(opener) => {
+                *cell
+                    .opener
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(opener);
+            }
+        }
+        cell
+    }
+
+    /// The engine, opening it on first use.
+    fn engine(&self) -> Result<Arc<dyn NativeGpuEngine>, NativeRuntimeError> {
+        self.engine
+            .get_or_init(|| {
+                let opener = self
+                    .opener
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .take();
+                match opener {
+                    Some(open) => open(),
+                    // Reachable only if a previous open panicked between
+                    // consuming the opener and publishing an outcome; the
+                    // request then falls back like any other open failure.
+                    None => Err(NativeRuntimeError::new(
+                        "the deferred native GPU opener was already consumed",
+                    )),
+                }
+            })
+            .clone()
+    }
+
+    /// Whether a routed request has already opened the engine.
+    /// Reads the once-cell only; it never triggers an open.
+    fn opened(&self) -> bool {
+        matches!(self.engine.get(), Some(Ok(_)))
+    }
+
+    /// The latched message of a failed open, if one happened.
+    fn open_error(&self) -> Option<String> {
+        match self.engine.get() {
+            Some(Err(error)) => Some(error.to_string()),
+            _ => None,
+        }
+    }
 }
 
 /// Bounded seed-overlap runner on the process-wide Rayon pool -- the same
@@ -191,6 +285,15 @@ enum StatePayload {
     },
 }
 
+impl StatePayload {
+    fn accelerated_state_encode_path(&self) -> &'static str {
+        match self {
+            Self::Soa(_) => STATE_ENCODE_RECONSTRUCTED_SPANS,
+            Self::Lazy { .. } => STATE_ENCODE_LAZY_SPAN_CHECKPOINTS,
+        }
+    }
+}
+
 /// How the state route may deliver its payload.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum StateMode {
@@ -210,7 +313,7 @@ pub struct NativeRouter {
     reference: Arc<ReferenceEngine>,
     fast_cpu: Option<Arc<FastCpuEngine>>,
     repair_fast_cpu: bool,
-    gpu: Option<Arc<dyn NativeGpuEngine>>,
+    gpu: Option<GpuCell>,
     added: AddedGate,
     postprocessor_adds_tokens: bool,
     diagnostics: bool,
@@ -243,7 +346,7 @@ impl NativeRouter {
         reference: Arc<ReferenceEngine>,
         fast_cpu: Option<Arc<FastCpuEngine>>,
         repair_fast_cpu: bool,
-        gpu: Option<Arc<dyn NativeGpuEngine>>,
+        gpu: Option<NativeGpuSource>,
         postprocessor_adds_tokens: bool,
         diagnostics: bool,
     ) -> Result<Self, NativeRuntimeError> {
@@ -271,7 +374,7 @@ impl NativeRouter {
             match backend {
                 BackendKind::Gpu if gpu.is_none() => {
                     return Err(NativeRuntimeError::new(
-                        "native route names gpu but no native GPU engine was constructed",
+                        "native route names gpu but no native GPU engine source was provided",
                     ));
                 }
                 BackendKind::FastCpu if fast_cpu.is_none() => {
@@ -303,7 +406,7 @@ impl NativeRouter {
             reference,
             fast_cpu,
             repair_fast_cpu,
-            gpu,
+            gpu: gpu.map(GpuCell::new),
             added,
             postprocessor_adds_tokens,
             diagnostics,
@@ -320,6 +423,17 @@ impl NativeRouter {
 
     pub fn chain(&self) -> Vec<&'static str> {
         self.chain.iter().map(|backend| backend.as_str()).collect()
+    }
+
+    /// Whether a routed request has already opened the GPU engine.
+    /// Reads the once-cell only; it never triggers an open.
+    pub fn gpu_engine_opened(&self) -> bool {
+        self.gpu.as_ref().is_some_and(GpuCell::opened)
+    }
+
+    /// The latched message of a failed deferred GPU open, if one happened.
+    pub fn gpu_engine_open_error(&self) -> Option<String> {
+        self.gpu.as_ref().and_then(GpuCell::open_error)
     }
 
     fn start_index(&self, input_bytes: u64) -> usize {
@@ -353,9 +467,26 @@ impl NativeRouter {
         source: Option<&str>,
         path: Option<&str>,
     ) {
+        self.record_execution_from(
+            backend,
+            input_bytes,
+            self.chain[selected_start].as_str(),
+            source,
+            path,
+        );
+    }
+
+    fn record_execution_from(
+        &self,
+        backend: &str,
+        input_bytes: u64,
+        selected_start: &str,
+        source: Option<&str>,
+        path: Option<&str>,
+    ) {
         let mut last = json!({
             "input_bytes": input_bytes,
-            "selected_start": self.chain[selected_start].as_str(),
+            "selected_start": selected_start,
             "executed_backend": backend,
         });
         if let Some(source) = source {
@@ -442,6 +573,23 @@ impl NativeRouter {
         );
     }
 
+    /// A deferred engine open that failed. The outcome is latched by the
+    /// once-cell, so every later GPU-routed request records this event and
+    /// takes the ordered fallback chain instead of retrying the device.
+    fn gpu_open_fault_event(&self, index: usize, error: &NativeRuntimeError) {
+        self.record_event(
+            R_EXEC_FAULT,
+            BACKEND_GPU,
+            self.chain[index + 1].as_str(),
+            json!({
+                "error": "NativeGpuOpenError",
+                "message": error.to_string(),
+                "scope": "engine",
+                "stage": "engine_open",
+            }),
+        );
+    }
+
     fn fast_cpu_fault_event(&self, index: usize, error: &EngineError) {
         self.record_event(
             R_EXEC_FAULT,
@@ -458,12 +606,18 @@ impl NativeRouter {
     /// The routed-to-reference ledger facts for a fast-CPU outcome that the
     /// reference engine actually produced.
     fn fast_cpu_reference_path(&self, source: FastEncodeSource) -> &'static str {
-        let (code, path) = match source {
-            FastEncodeSource::ReferenceAddedToken => (R_INPUT_ADDED_TOKEN, "hf_added_token"),
-            FastEncodeSource::ReferenceEngineGuard => (R_INPUT_GUARD_ROUTED, "hf_engine_guard"),
+        let (code, path, detail) = match source {
+            FastEncodeSource::ReferenceAddedToken => {
+                (R_INPUT_ADDED_TOKEN, "hf_added_token", json!({}))
+            }
+            FastEncodeSource::ReferenceEngineGuard => (
+                R_INPUT_GUARD_ROUTED,
+                "hf_engine_guard",
+                json!({"stage": "engine_guard"}),
+            ),
             FastEncodeSource::Gigatoken => unreachable!(),
         };
-        self.record_event(code, BACKEND_FAST_CPU, BACKEND_REFERENCE, json!({}));
+        self.record_event(code, BACKEND_FAST_CPU, BACKEND_REFERENCE, detail);
         path
     }
 
@@ -501,24 +655,27 @@ impl NativeRouter {
         for index in start..self.chain.len() {
             match self.chain[index] {
                 BackendKind::Gpu => {
-                    let gpu = self.gpu.as_ref().expect("constructor gate");
-                    match gpu.encode_ids(text) {
-                        Ok(ids) => {
-                            self.record_execution(
-                                BACKEND_GPU,
-                                input_bytes,
-                                start,
-                                Some(gpu.delivery()),
-                                Some("gpu_full"),
-                            );
-                            return Ok(RoutedIds {
-                                ids,
-                                backend: BACKEND_GPU.to_owned(),
-                                source: Some(gpu.delivery().to_owned()),
-                                path: Some("gpu_full".to_owned()),
-                            });
-                        }
-                        Err(error) => self.gpu_fault_event(index, &error),
+                    let cell = self.gpu.as_ref().expect("constructor gate");
+                    match cell.engine() {
+                        Err(error) => self.gpu_open_fault_event(index, &error),
+                        Ok(gpu) => match gpu.encode_ids(text) {
+                            Ok(ids) => {
+                                self.record_execution(
+                                    BACKEND_GPU,
+                                    input_bytes,
+                                    start,
+                                    Some(gpu.delivery()),
+                                    Some("gpu_full"),
+                                );
+                                return Ok(RoutedIds {
+                                    ids,
+                                    backend: BACKEND_GPU.to_owned(),
+                                    source: Some(gpu.delivery().to_owned()),
+                                    path: Some("gpu_full".to_owned()),
+                                });
+                            }
+                            Err(error) => self.gpu_fault_event(index, &error),
+                        },
                     }
                 }
                 BackendKind::FastCpu => {
@@ -626,7 +783,14 @@ impl NativeRouter {
         for index in start..self.chain.len() {
             match self.chain[index] {
                 BackendKind::Gpu => {
-                    let gpu = self.gpu.as_ref().expect("constructor gate");
+                    let cell = self.gpu.as_ref().expect("constructor gate");
+                    let gpu = match cell.engine() {
+                        Ok(gpu) => gpu,
+                        Err(error) => {
+                            self.gpu_open_fault_event(index, &error);
+                            continue;
+                        }
+                    };
                     match gpu.encode_ids(text) {
                         Ok(ids) => {
                             // Both modes share one fail-closed acceptance
@@ -651,6 +815,7 @@ impl NativeRouter {
                             };
                             match accepted {
                                 Ok(payload) => {
+                                    let state_encode_path = payload.accelerated_state_encode_path();
                                     self.record_execution(
                                         BACKEND_GPU,
                                         input_bytes,
@@ -659,9 +824,9 @@ impl NativeRouter {
                                         Some("gpu_full"),
                                     );
                                     self.record_state_encode(
-                                        "accelerated_with_reconstructed_spans",
+                                        state_encode_path,
                                         json!({
-                                            "path": "accelerated_with_reconstructed_spans",
+                                            "path": state_encode_path,
                                             "backend": BACKEND_GPU,
                                             "input_bytes": input_bytes,
                                         }),
@@ -732,6 +897,7 @@ impl NativeRouter {
                                 },
                                 FastSeedPayload::Reference(encoding) => StatePayload::Soa(encoding),
                             };
+                            let state_encode_path = payload.accelerated_state_encode_path();
                             self.record_execution(
                                 BACKEND_FAST_CPU,
                                 input_bytes,
@@ -740,9 +906,9 @@ impl NativeRouter {
                                 Some("gigatoken_full"),
                             );
                             self.record_state_encode(
-                                "accelerated_with_reconstructed_spans",
+                                state_encode_path,
                                 json!({
-                                    "path": "accelerated_with_reconstructed_spans",
+                                    "path": state_encode_path,
                                     "backend": BACKEND_FAST_CPU,
                                     "input_bytes": input_bytes,
                                 }),
@@ -756,6 +922,8 @@ impl NativeRouter {
                                         .to_owned(),
                                 ));
                             };
+                            let payload = StatePayload::Soa(encoding);
+                            let state_encode_path = payload.accelerated_state_encode_path();
                             let path = self.fast_cpu_reference_path(source);
                             self.record_execution(
                                 BACKEND_REFERENCE,
@@ -765,14 +933,14 @@ impl NativeRouter {
                                 Some(path),
                             );
                             self.record_state_encode(
-                                "accelerated_with_reconstructed_spans",
+                                state_encode_path,
                                 json!({
-                                    "path": "accelerated_with_reconstructed_spans",
+                                    "path": state_encode_path,
                                     "backend": BACKEND_REFERENCE,
                                     "input_bytes": input_bytes,
                                 }),
                             );
-                            return Ok((StatePayload::Soa(encoding), path.to_owned()));
+                            return Ok((payload, path.to_owned()));
                         }
                     }
                 }
@@ -810,7 +978,7 @@ impl NativeRouter {
             let start = self.start_index(input_bytes);
             for index in start..self.chain.len() - 1 {
                 self.record_event(
-                    R_EXEC_FAULT,
+                    R_INPUT_POSTPROCESS_ROUTED,
                     self.chain[index].as_str(),
                     self.chain[index + 1].as_str(),
                     json!({
@@ -861,7 +1029,7 @@ impl NativeRouter {
                 let start = self.start_index(input_bytes);
                 for index in start..self.chain.len() - 1 {
                     self.record_event(
-                        R_EXEC_FAULT,
+                        R_INPUT_POSTPROCESS_ROUTED,
                         self.chain[index].as_str(),
                         self.chain[index + 1].as_str(),
                         json!({
@@ -941,7 +1109,17 @@ impl NativeRouter {
             let batch = indices.iter().map(|row| texts[*row]).collect::<Vec<_>>();
             match self.chain[stage] {
                 BackendKind::Gpu => {
-                    let gpu = self.gpu.as_ref().expect("constructor gate");
+                    let cell = self.gpu.as_ref().expect("constructor gate");
+                    let gpu = match cell.engine() {
+                        Ok(gpu) => gpu,
+                        Err(error) => {
+                            for row in indices {
+                                self.gpu_open_fault_event(stage, &error);
+                                next[row] += 1;
+                            }
+                            continue;
+                        }
+                    };
                     let rows = gpu.encode_batch_ids(&batch);
                     if rows.len() != indices.len() {
                         return Err(EngineError(
@@ -986,32 +1164,14 @@ impl NativeRouter {
                                         source: Some("gigatoken".to_owned()),
                                         path: Some("gigatoken_full".to_owned()),
                                     },
-                                    FastEncodeSource::ReferenceAddedToken => {
-                                        self.record_event(
-                                            R_INPUT_ADDED_TOKEN,
-                                            BACKEND_FAST_CPU,
-                                            BACKEND_REFERENCE,
-                                            json!({}),
-                                        );
+                                    source @ (FastEncodeSource::ReferenceAddedToken
+                                    | FastEncodeSource::ReferenceEngineGuard) => {
+                                        let path = self.fast_cpu_reference_path(source);
                                         RoutedIds {
                                             ids,
                                             backend: BACKEND_REFERENCE.to_owned(),
                                             source: None,
-                                            path: Some("hf_added_token".to_owned()),
-                                        }
-                                    }
-                                    FastEncodeSource::ReferenceEngineGuard => {
-                                        self.record_event(
-                                            R_INPUT_GUARD_ROUTED,
-                                            BACKEND_FAST_CPU,
-                                            BACKEND_REFERENCE,
-                                            json!({}),
-                                        );
-                                        RoutedIds {
-                                            ids,
-                                            backend: BACKEND_REFERENCE.to_owned(),
-                                            source: None,
-                                            path: Some("hf_engine_guard".to_owned()),
+                                            path: Some(path.to_owned()),
                                         }
                                     }
                                 };
@@ -1107,8 +1267,31 @@ impl SessionEncoder for NativeRouter {
             });
         }
         match (&self.fast_cpu, self.repair_fast_cpu) {
-            (Some(engine), true) => engine.append(tail, delta),
-            _ => self.reference.append(tail, delta),
+            (Some(engine), true) => {
+                let (report, repair_input_bytes) = engine.append_with_repair_input(tail, delta)?;
+                if let Some(input_bytes) = repair_input_bytes {
+                    self.record_execution_from(
+                        BACKEND_FAST_CPU,
+                        input_bytes,
+                        BACKEND_FAST_CPU,
+                        Some("gigatoken"),
+                        Some(&report.path),
+                    );
+                }
+                Ok(report)
+            }
+            _ => {
+                let input_bytes = tail.text_bytes() as u64 + delta.len() as u64;
+                let report = self.reference.append(tail, delta)?;
+                self.record_execution_from(
+                    BACKEND_REFERENCE,
+                    input_bytes,
+                    BACKEND_REFERENCE,
+                    None,
+                    Some(&report.path),
+                );
+                Ok(report)
+            }
         }
     }
 
@@ -1135,7 +1318,9 @@ impl SessionEncoder for NativeRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokenizers::models::bpe::BPE;
+    use sha2::{Digest, Sha256};
+    use tokenizers::models::bpe::{Vocab, BPE};
+    use tokenizers::pre_tokenizers::byte_level::ByteLevel;
     use tokenizers::Tokenizer;
 
     #[derive(Debug)]
@@ -1166,6 +1351,107 @@ mod tests {
         )
     }
 
+    fn assert_guard_events_have_stage(stats: &RuntimeStats) {
+        let guard_events = stats
+            .events
+            .iter()
+            .filter(|event| event.code == R_INPUT_GUARD_ROUTED)
+            .collect::<Vec<_>>();
+        assert!(!guard_events.is_empty(), "expected a guard-routing event");
+        for event in guard_events {
+            assert!(
+                event.detail.get("stage").is_some(),
+                "guard event has no stage: {event:?}"
+            );
+        }
+    }
+
+    fn byte_level_tokenizer_json() -> Vec<u8> {
+        let visible = (33u32..=126)
+            .chain(161..=172)
+            .chain(174..=255)
+            .collect::<Vec<_>>();
+        let mut extra = 0u32;
+        let mut vocab = Vocab::default();
+        for byte in 0u32..=255 {
+            let codepoint = if visible.contains(&byte) {
+                byte
+            } else {
+                let mapped = 256 + extra;
+                extra += 1;
+                mapped
+            };
+            vocab.insert(char::from_u32(codepoint).unwrap().to_string(), byte);
+        }
+        let model = BPE::builder()
+            .vocab_and_merges(vocab, Vec::new())
+            .build()
+            .unwrap();
+        let mut tokenizer = Tokenizer::new(model);
+        let byte_level = ByteLevel::new(false, true, true);
+        tokenizer.with_pre_tokenizer(Some(byte_level));
+        tokenizer.with_decoder(Some(byte_level));
+        tokenizer.to_string(false).unwrap().into_bytes()
+    }
+
+    fn repair_router(gpu: Arc<dyn NativeGpuEngine>) -> NativeRouter {
+        let tokenizer_json = byte_level_tokenizer_json();
+        let reference = Arc::new(ReferenceEngine::from_bytes(&tokenizer_json).unwrap());
+        let digest = Sha256::digest(&tokenizer_json)
+            .iter()
+            .map(|value| format!("{value:02x}"))
+            .collect::<String>();
+        let mut spec = crate::FastRepairSpec::new("tiny_bytes".to_owned(), digest, 4, 2, false);
+        spec.window_chars = 64;
+        spec.max_retries = 2;
+        let mut pclass = vec![0u8; crate::N_CODEPOINTS];
+        for value in b'a'..=b'z' {
+            pclass[value as usize] = 2;
+        }
+        for value in b'A'..=b'Z' {
+            pclass[value as usize] = 2;
+        }
+        for value in b'0'..=b'9' {
+            pclass[value as usize] = 3;
+        }
+        pclass[b' ' as usize] = 1;
+        let fast = Arc::new(
+            FastCpuEngine::from_reference(&tokenizer_json, Arc::clone(&reference), spec, pclass)
+                .unwrap(),
+        );
+        NativeRouter::new(
+            vec![
+                BACKEND_GPU.to_owned(),
+                BACKEND_FAST_CPU.to_owned(),
+                BACKEND_REFERENCE.to_owned(),
+            ],
+            vec![1024, 0, 0],
+            reference,
+            Some(fast),
+            true,
+            Some(NativeGpuSource::Open(gpu)),
+            false,
+            true,
+        )
+        .unwrap()
+    }
+
+    fn reference_reencode_router(gpu: Arc<dyn NativeGpuEngine>) -> NativeRouter {
+        let tokenizer_json = byte_level_tokenizer_json();
+        let reference = Arc::new(ReferenceEngine::from_bytes(&tokenizer_json).unwrap());
+        NativeRouter::new(
+            vec![BACKEND_GPU.to_owned(), BACKEND_REFERENCE.to_owned()],
+            vec![1, 0],
+            reference,
+            None,
+            false,
+            Some(NativeGpuSource::Open(gpu)),
+            false,
+            true,
+        )
+        .unwrap()
+    }
+
     #[test]
     fn native_batch_groups_rows_and_preserves_ordered_fallbacks() {
         let router = NativeRouter::new(
@@ -1174,7 +1460,7 @@ mod tests {
             reference(),
             None,
             false,
-            Some(Arc::new(MockGpu)),
+            Some(NativeGpuSource::Open(Arc::new(MockGpu))),
             false,
             true,
         )
@@ -1203,6 +1489,64 @@ mod tests {
         );
     }
 
+    #[test]
+    fn fast_cpu_guard_events_name_the_engine_guard_stage() {
+        let router = NativeRouter::new(
+            vec![BACKEND_REFERENCE.to_owned()],
+            vec![0],
+            reference(),
+            None,
+            false,
+            None,
+            false,
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(
+            router.fast_cpu_reference_path(FastEncodeSource::ReferenceEngineGuard),
+            "hf_engine_guard"
+        );
+        let stats = router.stats();
+        assert_guard_events_have_stage(&stats);
+        assert_eq!(stats.events[0].detail, json!({"stage": "engine_guard"}));
+    }
+
+    #[test]
+    fn postprocessing_bypass_has_its_own_reason_code() {
+        let router = NativeRouter::new(
+            vec![BACKEND_GPU.to_owned(), BACKEND_REFERENCE.to_owned()],
+            vec![0, 0],
+            reference(),
+            None,
+            false,
+            Some(NativeGpuSource::Open(Arc::new(MockGpu))),
+            true,
+            true,
+        )
+        .unwrap();
+
+        let single = router.encode_ids("a", true).unwrap();
+        assert_eq!(single.backend, BACKEND_REFERENCE);
+        let batch = router.encode_batch_ids(&["a", "aa"], true).unwrap();
+        assert!(batch
+            .iter()
+            .all(|outcome| outcome.backend == BACKEND_REFERENCE));
+
+        let stats = router.stats();
+        assert_eq!(
+            stats.fallback_counts.get(R_INPUT_POSTPROCESS_ROUTED),
+            Some(&3)
+        );
+        assert_eq!(stats.fallback_counts.get(R_EXEC_FAULT), None);
+        assert_eq!(stats.execution_counts.get(BACKEND_REFERENCE), Some(&3));
+        assert_eq!(stats.events.len(), 3);
+        assert!(stats
+            .events
+            .iter()
+            .all(|event| event.code == R_INPUT_POSTPROCESS_ROUTED));
+    }
+
     /// GPU whose IDs are the exact core stream for pure-"a" inputs, so the
     /// known-ID span bridge closes and the state seed stays on the GPU row.
     /// The address of the last produced ID allocation is recorded so tests
@@ -1210,6 +1554,100 @@ mod tests {
     #[derive(Debug, Default)]
     struct ClosingGpu {
         last_ids_ptr: std::sync::atomic::AtomicUsize,
+    }
+
+    #[derive(Debug)]
+    struct ByteGpu;
+
+    impl NativeGpuEngine for ByteGpu {
+        fn encode_ids(&self, text: &str) -> Result<Vec<u32>, NativeRuntimeError> {
+            Ok(text.bytes().map(u32::from).collect())
+        }
+
+        fn delivery(&self) -> &'static str {
+            "prebuilt"
+        }
+    }
+
+    #[test]
+    fn native_repair_replaces_the_seed_ledger_and_noop_leaves_it_unchanged() {
+        let router = repair_router(Arc::new(ByteGpu));
+        let mut store = toktier_store_core::SessionStore::with_defaults();
+        let key = store.register_fingerprint([6u8; 32], 0).unwrap();
+        let base = ("alpha 123 beta 456 ".repeat(60)) + "tail";
+        let delta = " appended text 789";
+        let put = store.put(key, &base, &router).unwrap();
+        assert_eq!(
+            router.stats().last_execution.unwrap()["executed_backend"],
+            BACKEND_GPU
+        );
+
+        let appended = store
+            .append_patch(put.handle, delta, put.revision, &router)
+            .unwrap();
+
+        assert_eq!(appended.path, "gigatoken_repair");
+        let stats = router.stats();
+        assert_eq!(stats.execution_counts.get(BACKEND_GPU), Some(&1));
+        assert_eq!(stats.execution_counts.get(BACKEND_FAST_CPU), Some(&1));
+        assert_eq!(
+            stats.last_execution,
+            Some(json!({
+                "input_bytes": 64 + delta.len(),
+                "selected_start": BACKEND_FAST_CPU,
+                "executed_backend": BACKEND_FAST_CPU,
+                "source": "gigatoken",
+                "path": "gigatoken_repair",
+            }))
+        );
+
+        let noop = store
+            .append_patch(put.handle, "", appended.revision, &router)
+            .unwrap();
+        assert_eq!(noop.path, "noop");
+        let after_noop = router.stats();
+        assert_eq!(after_noop.execution_counts, stats.execution_counts);
+        assert_eq!(after_noop.last_execution, stats.last_execution);
+    }
+
+    #[test]
+    fn native_reference_reencode_replaces_the_seed_ledger_and_noop_leaves_it_unchanged() {
+        let router = reference_reencode_router(Arc::new(ByteGpu));
+        let mut store = toktier_store_core::SessionStore::with_defaults();
+        let key = store.register_fingerprint([7u8; 32], 0).unwrap();
+        let base = "alpha βeta 123";
+        let delta = " appended café 中";
+        let put = store.put(key, base, &router).unwrap();
+        assert_eq!(
+            router.stats().last_execution.unwrap()["executed_backend"],
+            BACKEND_GPU
+        );
+
+        let appended = store
+            .append_patch(put.handle, delta, put.revision, &router)
+            .unwrap();
+
+        assert_eq!(appended.path, "native_hf_full_reencode");
+        let stats = router.stats();
+        assert_eq!(stats.execution_counts.get(BACKEND_GPU), Some(&1));
+        assert_eq!(stats.execution_counts.get(BACKEND_REFERENCE), Some(&1));
+        assert_eq!(
+            stats.last_execution,
+            Some(json!({
+                "input_bytes": (base.len() + delta.len()) as u64,
+                "selected_start": BACKEND_REFERENCE,
+                "executed_backend": BACKEND_REFERENCE,
+                "path": "native_hf_full_reencode",
+            }))
+        );
+
+        let noop = store
+            .append_patch(put.handle, "", appended.revision, &router)
+            .unwrap();
+        assert_eq!(noop.path, "noop");
+        let after_noop = router.stats();
+        assert_eq!(after_noop.execution_counts, stats.execution_counts);
+        assert_eq!(after_noop.last_execution, stats.last_execution);
     }
 
     impl NativeGpuEngine for ClosingGpu {
@@ -1234,7 +1672,9 @@ mod tests {
             reference(),
             None,
             false,
-            Some(Arc::clone(&gpu) as Arc<dyn NativeGpuEngine>),
+            Some(NativeGpuSource::Open(
+                Arc::clone(&gpu) as Arc<dyn NativeGpuEngine>
+            )),
             false,
             true,
         )
@@ -1255,14 +1695,14 @@ mod tests {
     }
 
     #[test]
-    fn gpu_state_seed_adopts_reconstructed_soa_spans() {
+    fn gpu_state_seed_names_lazy_checkpoints_and_materialized_spans_separately() {
         let router = NativeRouter::new(
             vec![BACKEND_GPU.to_owned(), BACKEND_REFERENCE.to_owned()],
             vec![1, 0],
             reference(),
             None,
             false,
-            Some(Arc::new(ClosingGpu::default())),
+            Some(NativeGpuSource::Open(Arc::new(ClosingGpu::default()))),
             false,
             true,
         )
@@ -1276,8 +1716,22 @@ mod tests {
         assert_eq!(
             stats
                 .state_encode_counts
-                .get("accelerated_with_reconstructed_spans"),
+                .get("accelerated_with_lazy_span_checkpoints"),
             Some(&1)
+        );
+        assert_eq!(
+            stats
+                .state_encode_counts
+                .get("accelerated_with_reconstructed_spans"),
+            None
+        );
+        assert_eq!(
+            stats.last_state_encode,
+            Some(json!({
+                "path": "accelerated_with_lazy_span_checkpoints",
+                "backend": BACKEND_GPU,
+                "input_bytes": 4,
+            }))
         );
         assert_eq!(
             stats.last_execution,
@@ -1293,6 +1747,27 @@ mod tests {
         let pairs = <NativeRouter as SessionEncoder>::encode(&router, "aaaa").unwrap();
         assert_eq!(pairs.ids, vec![0, 0, 0, 0]);
         assert_eq!(pairs.spans, vec![(0, 1), (1, 2), (2, 3), (3, 4)]);
+        let stats = router.stats();
+        assert_eq!(
+            stats
+                .state_encode_counts
+                .get("accelerated_with_lazy_span_checkpoints"),
+            Some(&1)
+        );
+        assert_eq!(
+            stats
+                .state_encode_counts
+                .get("accelerated_with_reconstructed_spans"),
+            Some(&1)
+        );
+        assert_eq!(
+            stats.last_state_encode,
+            Some(json!({
+                "path": "accelerated_with_reconstructed_spans",
+                "backend": BACKEND_GPU,
+                "input_bytes": 4,
+            }))
+        );
     }
 
     #[test]
@@ -1306,7 +1781,7 @@ mod tests {
             reference(),
             None,
             false,
-            Some(Arc::new(MockGpu)),
+            Some(NativeGpuSource::Open(Arc::new(MockGpu))),
             false,
             true,
         )
@@ -1317,6 +1792,8 @@ mod tests {
         assert_eq!(store.all_ids(put.handle).unwrap(), vec![0, 0]);
         let stats = router.stats();
         assert_eq!(stats.fallback_counts.get(R_INPUT_GUARD_ROUTED), Some(&1));
+        assert_guard_events_have_stage(&stats);
+        assert_eq!(stats.events[0].detail["stage"], "span_bridge");
         assert_eq!(stats.state_encode_counts.get("hf_span_guard"), Some(&1));
         assert_eq!(
             stats.last_state_encode,
@@ -1453,7 +1930,7 @@ mod tests {
             reference(),
             None,
             false,
-            Some(gpu),
+            Some(NativeGpuSource::Open(gpu)),
             false,
             true,
         )
@@ -1530,6 +2007,7 @@ mod tests {
             let put = store.put(key, text, &router).unwrap();
             let stats = router.stats();
             assert_eq!(stats.fallback_counts.get(R_INPUT_GUARD_ROUTED), Some(&1));
+            assert_guard_events_have_stage(&stats);
             assert_eq!(stats.state_encode_counts.get("hf_span_guard"), Some(&1));
             outcomes.push((
                 store.all_ids(put.handle).unwrap(),
@@ -1629,5 +2107,187 @@ mod tests {
             workers_before,
             "the bounded pool size changed under concurrent seeds"
         );
+    }
+
+    // --------------------------------------------------------------
+    // Deferred engine opening: the opener runs on the first request
+    // that actually routes to the GPU backend, exactly once, and a
+    // failed open is latched with per-request fallback accounting.
+    // --------------------------------------------------------------
+
+    use std::sync::atomic::AtomicUsize;
+
+    fn counting_deferred_router(
+        opens: &Arc<AtomicUsize>,
+        outcome: Result<(), &'static str>,
+    ) -> NativeRouter {
+        let opens = Arc::clone(opens);
+        let opener: NativeGpuOpener = Box::new(move || {
+            opens.fetch_add(1, Ordering::SeqCst);
+            match outcome {
+                Ok(()) => Ok(Arc::new(ClosingGpu::default()) as Arc<dyn NativeGpuEngine>),
+                Err(message) => Err(NativeRuntimeError::new(message)),
+            }
+        });
+        NativeRouter::new(
+            vec![BACKEND_GPU.to_owned(), BACKEND_REFERENCE.to_owned()],
+            vec![4, 0],
+            reference(),
+            None,
+            false,
+            Some(NativeGpuSource::Deferred(opener)),
+            false,
+            true,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn deferred_gpu_opens_on_the_first_routed_request_and_only_once() {
+        let opens = Arc::new(AtomicUsize::new(0));
+        let router = counting_deferred_router(&opens, Ok(()));
+        assert!(!router.gpu_engine_opened());
+        assert_eq!(router.gpu_engine_open_error(), None);
+
+        // Below the crossover: the reference row serves and the device
+        // stays untouched.
+        let below = router.encode_ids("a", false).unwrap();
+        assert_eq!(below.backend, BACKEND_REFERENCE);
+        assert!(!router.gpu_engine_opened());
+        assert_eq!(opens.load(Ordering::SeqCst), 0);
+
+        // At the crossover: the first routed request opens the engine.
+        let routed = router.encode_ids("aaaa", false).unwrap();
+        assert_eq!(routed.backend, BACKEND_GPU);
+        assert!(router.gpu_engine_opened());
+        assert_eq!(opens.load(Ordering::SeqCst), 1);
+
+        // Later routed requests reuse the one opened engine.
+        let again = router.encode_ids("aaaaa", false).unwrap();
+        assert_eq!(again.backend, BACKEND_GPU);
+        assert_eq!(opens.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn deferred_gpu_batch_opens_only_when_a_row_routes_to_the_gpu() {
+        let opens = Arc::new(AtomicUsize::new(0));
+        let router = counting_deferred_router(&opens, Ok(()));
+
+        let rows = router.encode_batch_ids(&["a", "aa"], false).unwrap();
+        assert!(rows.iter().all(|row| row.backend == BACKEND_REFERENCE));
+        assert!(!router.gpu_engine_opened());
+        assert_eq!(opens.load(Ordering::SeqCst), 0);
+
+        let rows = router.encode_batch_ids(&["a", "aaaa"], false).unwrap();
+        assert_eq!(rows[0].backend, BACKEND_REFERENCE);
+        assert_eq!(rows[1].backend, BACKEND_GPU);
+        assert!(router.gpu_engine_opened());
+        assert_eq!(opens.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn deferred_gpu_state_seed_opens_on_the_first_routed_seed() {
+        let opens = Arc::new(AtomicUsize::new(0));
+        let router = counting_deferred_router(&opens, Ok(()));
+        let mut store = toktier_store_core::SessionStore::with_defaults();
+        let key = store.register_fingerprint([40u8; 32], 0).unwrap();
+
+        let short = store.put(key, "a", &router).unwrap();
+        assert_eq!(store.all_ids(short.handle).unwrap(), vec![0]);
+        assert!(!router.gpu_engine_opened());
+
+        let routed = store.put(key, "aaaaaaa", &router).unwrap();
+        assert_eq!(store.all_ids(routed.handle).unwrap(), vec![0u32; 7]);
+        assert!(router.gpu_engine_opened());
+        assert_eq!(opens.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            router.stats().execution_counts.get(BACKEND_GPU),
+            Some(&1),
+            "the routed seed did not execute on the opened engine"
+        );
+    }
+
+    #[test]
+    fn concurrent_first_requests_share_one_deferred_open() {
+        let opens = Arc::new(AtomicUsize::new(0));
+        let router = Arc::new(counting_deferred_router(&opens, Ok(())));
+        std::thread::scope(|scope| {
+            for _ in 0..8 {
+                let router = Arc::clone(&router);
+                scope.spawn(move || {
+                    let routed = router.encode_ids("aaaa", false).unwrap();
+                    assert_eq!(routed.backend, BACKEND_GPU);
+                });
+            }
+        });
+        assert_eq!(opens.load(Ordering::SeqCst), 1, "the open was not shared");
+        assert!(router.gpu_engine_opened());
+        assert_eq!(
+            router.stats().execution_counts.get(BACKEND_GPU),
+            Some(&8),
+            "a concurrent first request missed the shared engine"
+        );
+    }
+
+    #[test]
+    fn deferred_gpu_open_failure_is_latched_and_falls_back_per_request() {
+        let opens = Arc::new(AtomicUsize::new(0));
+        let router = counting_deferred_router(&opens, Err("injected open failure"));
+
+        for round in 1..=2u64 {
+            let routed = router.encode_ids("aaaa", false).unwrap();
+            assert_eq!(routed.backend, BACKEND_REFERENCE);
+            assert_eq!(routed.ids, vec![0u32; 4]);
+            let stats = router.stats();
+            assert_eq!(stats.fallback_counts.get(R_EXEC_FAULT), Some(&round));
+        }
+        // The failed open ran once; later requests reuse the latched
+        // outcome instead of retrying the device.
+        assert_eq!(opens.load(Ordering::SeqCst), 1);
+        assert!(!router.gpu_engine_opened());
+        assert_eq!(
+            router.gpu_engine_open_error(),
+            Some("injected open failure".to_owned())
+        );
+        let stats = router.stats();
+        assert_eq!(stats.execution_counts.get(BACKEND_REFERENCE), Some(&2));
+        let event = stats
+            .events
+            .iter()
+            .find(|event| event.code == R_EXEC_FAULT)
+            .expect("open failure event");
+        assert_eq!(event.backend, BACKEND_GPU);
+        assert_eq!(event.target, BACKEND_REFERENCE);
+        assert_eq!(
+            event.detail,
+            json!({
+                "error": "NativeGpuOpenError",
+                "message": "injected open failure",
+                "scope": "engine",
+                "stage": "engine_open",
+            })
+        );
+    }
+
+    #[test]
+    fn deferred_gpu_open_failure_state_seed_falls_back_identically() {
+        let opens = Arc::new(AtomicUsize::new(0));
+        let router = counting_deferred_router(&opens, Err("injected open failure"));
+        let mut store = toktier_store_core::SessionStore::with_defaults();
+        let key = store.register_fingerprint([41u8; 32], 0).unwrap();
+        let put = store.put(key, "aaaa", &router).unwrap();
+        assert_eq!(store.all_ids(put.handle).unwrap(), vec![0u32; 4]);
+        let stats = router.stats();
+        assert_eq!(stats.fallback_counts.get(R_EXEC_FAULT), Some(&1));
+        assert_eq!(stats.execution_counts.get(BACKEND_REFERENCE), Some(&1));
+        assert_eq!(opens.load(Ordering::SeqCst), 1);
+        assert!(!router.gpu_engine_opened());
+    }
+
+    #[test]
+    fn an_open_source_reports_opened_without_any_request() {
+        let router = gpu_router(Arc::new(ClosingGpu::default()));
+        assert!(router.gpu_engine_opened());
+        assert_eq!(router.gpu_engine_open_error(), None);
     }
 }

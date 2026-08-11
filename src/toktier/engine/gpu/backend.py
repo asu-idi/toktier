@@ -14,7 +14,7 @@ Two behaviors are the adapter's own:
   the certified GPU chain produces the core stream only, so the call
   raises :class:`~toktier.errors.BackendExecutionFault` and the routing
   layer re-runs the input on the reference backend, counted as
-  ``R_EXEC_FAULT``.
+  ``R_INPUT_POSTPROCESS_ROUTED``.
 - Expected device and runtime failures (``RuntimeError`` from the
   accelerator stack, which is how CUDA errors surface) are wrapped in
   :class:`~toktier.errors.BackendExecutionFault`. Every other exception

@@ -17,6 +17,10 @@ the repository's hygiene scan requires, so sample text uses escapes.
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -24,6 +28,42 @@ import pytest
 pytestmark = pytest.mark.gpu
 
 FAMILY = "qwen3_8b"
+_CHILD_TEST_ENV = "TOKTIER_FACADE_JIT_CHILD_TEST"
+_IS_CHILD_TEST_PROCESS = _CHILD_TEST_ENV in os.environ
+_TEST_FILE = Path(__file__).resolve()
+_REPO_ROOT = _TEST_FILE.parents[2]
+
+
+def _run_in_fresh_process(test_name: str, config: pytest.Config) -> None:
+    if _IS_CHILD_TEST_PROCESS or _CHILD_TEST_ENV in os.environ:
+        raise RuntimeError("refusing to spawn a nested JIT facade test process")
+    artifact_manifest = config.getoption("--artifact-manifest")
+    assert artifact_manifest is not None
+    environment = dict(os.environ)
+    environment[_CHILD_TEST_ENV] = "1"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-p",
+            "no:cacheprovider",
+            f"{_TEST_FILE}::{test_name}",
+            "--artifact-manifest",
+            str(artifact_manifest),
+        ],
+        cwd=str(_REPO_ROOT),
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=600,
+    )
+    assert completed.returncode == 0, (
+        f"isolated JIT facade test failed: {test_name}\n"
+        f"stdout:\n{completed.stdout}\n"
+        f"stderr:\n{completed.stderr}"
+    )
 
 
 @pytest.fixture(scope="module")
@@ -64,7 +104,13 @@ def jit_facade_config(
 
 def test_jit_default_lookup_executes_gpu_and_reports_honestly(
     jit_facade_config: dict[str, Any],
+    request: pytest.FixtureRequest,
 ) -> None:
+    # A fresh process keeps the process-level single-delivery fact independent.
+    if not _IS_CHILD_TEST_PROCESS:
+        _run_in_fresh_process(request.node.name, request.config)
+        return
+
     import tokenizers
 
     import toktier
@@ -123,8 +169,13 @@ def test_jit_default_lookup_executes_gpu_and_reports_honestly(
 
 def test_jit_lookup_off_still_executes_gpu(
     jit_facade_config: dict[str, Any],
+    request: pytest.FixtureRequest,
 ) -> None:
     """The evaluation's working control keeps working after the fix."""
+    if not _IS_CHILD_TEST_PROCESS:
+        _run_in_fresh_process(request.node.name, request.config)
+        return
+
     import tokenizers
 
     import toktier

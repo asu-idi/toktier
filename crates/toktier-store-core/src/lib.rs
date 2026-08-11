@@ -1,5 +1,9 @@
 //! toktier session store, core crate.
 //!
+//! This is an internal supporting crate of TokTier, versioned with the
+//! workspace and carrying no independent API stability promise; use the
+//! `toktier` package for the supported Rust surface.
+//!
 //! An append-only "text to token ids" session store with certified
 //! extension: every session's delivered ids stay bit-identical to a
 //! from-scratch reference encode of the accumulated text. The store owns

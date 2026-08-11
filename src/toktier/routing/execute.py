@@ -9,22 +9,25 @@ what was decided and why. Every runtime fallback is recorded with its
 reason code, so a degraded run is visible in ``explain()`` rather than
 merely slower or, worse, silently different.
 
-Three runtime routings live here:
+Five runtime routings live here:
 
 - ``R_INPUT_BELOW_GPU_THRESHOLD`` -- a small input starts at the next
   eligible backend in the immutable chain instead of paying GPU launch cost.
 - ``R_INPUT_ADDED_TOKEN`` -- the input holds an added-token literal.
   Part of the certified pipeline design, not an incident.
-- ``R_EXEC_FAULT`` -- an accelerated path raised
+- ``R_INPUT_GUARD_ROUTED`` -- a facade-owned state-encoding guard routed
+  the final result to reference. Its detail always names the ``stage``.
+- ``R_INPUT_POSTPROCESS_ROUTED`` -- a core-stream-only accelerated backend
+  is bypassed before execution when the request asks for postprocessing.
+- ``R_EXEC_FAULT`` -- an accelerated path genuinely failed while opening
+  or executing and raised
   :class:`~toktier.errors.BackendExecutionFault`, the one exception
   type backends use for recoverable execution failures. The affected
   input is re-run on the next backend in the chain; the reference
-  backend answers when the chain reaches it. (The native one-call
-  runtime records this same code when a core-stream-only backend is
-  bypassed for requested postprocessing.) Every other exception
-  propagates: an unexpected
-  error is a defect to surface, not a route, and an exception from the
-  reference backend itself has nothing further to fall back to.
+  backend answers when the chain reaches it. Every other exception
+  propagates: an unexpected error is a defect to surface, not a route,
+  and an exception from the reference backend itself has nothing
+  further to fall back to.
 """
 
 from __future__ import annotations
@@ -35,7 +38,13 @@ from dataclasses import dataclass
 from typing import Protocol, cast
 
 from ..errors import BackendExecutionFault, BackendUnavailable
-from ..policy import BACKEND_GPU, BACKEND_REFERENCE, ReasonCode, RoutePlan
+from ..policy import (
+    BACKEND_FAST_CPU,
+    BACKEND_GPU,
+    BACKEND_REFERENCE,
+    ReasonCode,
+    RoutePlan,
+)
 from .added_route import AddedTokenRouter
 
 __all__ = [
@@ -348,6 +357,8 @@ class RoutedExecutor:
             input_bytes, selected_start, _literal = self._starting_route(text)
             routed_from = chain[selected_start]
 
+        if reason is ReasonCode.R_INPUT_GUARD_ROUTED:
+            detail.setdefault("stage", "state_encode")
         if routed_from != BACKEND_REFERENCE:
             self._record(
                 reason,
@@ -362,6 +373,16 @@ class RoutedExecutor:
             input_bytes=input_bytes,
             selected_start=selected_start,
             source="state_encode",
+            path=path,
+        )
+
+    def record_repair_result(self, *, input_bytes: int, path: str) -> None:
+        """Record a successful facade-owned corrected-CPU repair window."""
+        self._record_execution(
+            BACKEND_FAST_CPU,
+            input_bytes=input_bytes,
+            selected_start=self._plan.fallback_chain.index(BACKEND_FAST_CPU),
+            source="gigatoken",
             path=path,
         )
 
@@ -415,19 +436,27 @@ class RoutedExecutor:
         target: str,
         scope: str,
     ) -> None:
-        """Count one recoverable fault, keeping its message and origin.
+        """Count one recoverable route, keeping its message and origin.
 
         The traceback is recorded only on diagnostic events: counters
         stay cheap, and the event is where debugging starts.
         """
+        stage = exc.details.get("stage")
+        code = (
+            ReasonCode.R_INPUT_POSTPROCESS_ROUTED
+            if stage == "add_special_tokens"
+            else ReasonCode.R_EXEC_FAULT
+        )
         detail: dict[str, object] = {
             "error": type(exc).__name__,
             "message": str(exc),
             "scope": scope,
         }
+        if code is ReasonCode.R_INPUT_POSTPROCESS_ROUTED:
+            detail["stage"] = stage
         if self._diagnostics:
             detail["traceback"] = "".join(traceback.format_exception(exc))
-        self._record(ReasonCode.R_EXEC_FAULT, backend=backend, target=target, **detail)
+        self._record(code, backend=backend, target=target, **detail)
 
     def _encode_from(
         self,

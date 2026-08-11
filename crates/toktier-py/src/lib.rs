@@ -1,5 +1,9 @@
 //! Thin Python facade over the toktier session store.
 //!
+//! This is an internal supporting crate of TokTier, versioned with the
+//! workspace and carrying no independent API stability promise; use the
+//! `toktier` package for the supported Rust surface.
+//!
 //! This crate adds no store logic: it converts arguments, adapts a
 //! Python-callable encoder onto the core [`SessionEncoder`] trait, maps
 //! [`StoreError`] onto the structured exception contract
@@ -33,8 +37,9 @@ use pyo3::types::{PyBytes, PyDict, PyList, PyString, PyStringMethods};
 
 use toktier_routing_core::{
     BpeSyncBoundary, EntryStoreOpenError, FastCpuEngine, FastRepairSpec, LiteralMode,
-    LiteralPrefix, NativeEntryStore, NativePrebuiltGpu, NativePrebuiltGpuConfig, NativeRouter,
-    ReferenceEngine, RouteSelector as CoreRouteSelector,
+    LiteralPrefix, NativeEntryStore, NativeGpuEngine, NativeGpuOpener, NativeGpuSource,
+    NativePrebuiltGpu, NativePrebuiltGpuConfig, NativeRouter, ReferenceEngine,
+    RouteSelector as CoreRouteSelector,
 };
 use toktier_store_core::{
     AppendReport, BoundaryCut, Encoding, EngineError, KeyId, RecoveryMaterial, SemanticFingerprint,
@@ -463,11 +468,32 @@ impl NativeReferenceEngine {
 
 // ---------------------------------------------------------- prebuilt GPU --
 
-/// Manifest-bound CUDA Driver host. Construction performs all Python-owned
-/// artifact/table projection; request execution thereafter is entirely Rust.
+/// Owned engine inputs held between construction and the deferred open.
+/// The buffers move into the engine (device upload) when the opener runs.
+struct PendingNativeGpu {
+    config: NativePrebuiltGpuConfig,
+    reference: ReferenceEngine,
+    fatbin: Vec<u8>,
+    symbols: BTreeMap<String, String>,
+    class_table: Vec<u8>,
+    pair_keys: Vec<u8>,
+    pair_vals: Vec<u8>,
+    byte_id: Vec<u8>,
+    vocab_keys: Vec<u8>,
+    vocab_vals: Vec<u8>,
+    vocab_blob: Vec<u8>,
+    unsafe_bits: Vec<u8>,
+}
+
+/// Manifest-bound CUDA Driver host, prepared here and opened deferred.
+/// Construction performs all Python-owned artifact/table projection and the
+/// device-free shape checks, then keeps one owned copy of the engine
+/// inputs; it makes no CUDA call. A `NativeRuntime` claims the inputs as a
+/// one-shot opener and runs it, GIL released, on the first request that
+/// actually routes to the GPU backend.
 #[pyclass(name = "NativePrebuiltGpu", module = "toktier._native")]
 struct PyNativePrebuiltGpu {
-    inner: Arc<NativePrebuiltGpu>,
+    pending: Mutex<Option<PendingNativeGpu>>,
 }
 
 #[pymethods]
@@ -541,27 +567,87 @@ impl PyNativePrebuiltGpu {
             delivery: "prebuilt".to_owned(),
         };
         let reference = reference.native();
-        let engine = py
+        let pending = py
             .allow_threads(|| {
-                NativePrebuiltGpu::new(
-                    config,
-                    (*reference).clone(),
-                    fatbin,
-                    symbols,
+                NativePrebuiltGpu::preflight(
+                    &config,
                     class_table,
                     pair_keys,
                     pair_vals,
                     byte_id,
                     vocab_keys,
                     vocab_vals,
-                    vocab_blob,
                     unsafe_bits,
-                )
+                )?;
+                Ok(PendingNativeGpu {
+                    config,
+                    reference: (*reference).clone(),
+                    fatbin: fatbin.to_vec(),
+                    symbols,
+                    class_table: class_table.to_vec(),
+                    pair_keys: pair_keys.to_vec(),
+                    pair_vals: pair_vals.to_vec(),
+                    byte_id: byte_id.to_vec(),
+                    vocab_keys: vocab_keys.to_vec(),
+                    vocab_vals: vocab_vals.to_vec(),
+                    vocab_blob: vocab_blob.to_vec(),
+                    unsafe_bits: unsafe_bits.to_vec(),
+                })
             })
-            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+            .map_err(|error: toktier_routing_core::NativeRuntimeError| {
+                PyRuntimeError::new_err(error.to_string())
+            })?;
         Ok(Self {
-            inner: Arc::new(engine),
+            pending: Mutex::new(Some(pending)),
         })
+    }
+}
+
+impl PyNativePrebuiltGpu {
+    /// Move the engine inputs into a one-shot opener. Each prepared engine
+    /// backs exactly one runtime; a second claim is a construction error.
+    fn claim_opener(&self) -> PyResult<NativeGpuOpener> {
+        let pending = self
+            .pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+            .ok_or_else(|| {
+                PyValueError::new_err(
+                    "this prepared native GPU engine was already claimed by a runtime",
+                )
+            })?;
+        Ok(Box::new(move || {
+            let PendingNativeGpu {
+                config,
+                reference,
+                fatbin,
+                symbols,
+                class_table,
+                pair_keys,
+                pair_vals,
+                byte_id,
+                vocab_keys,
+                vocab_vals,
+                vocab_blob,
+                unsafe_bits,
+            } = pending;
+            NativePrebuiltGpu::new(
+                config,
+                reference,
+                &fatbin,
+                symbols,
+                &class_table,
+                &pair_keys,
+                &pair_vals,
+                &byte_id,
+                &vocab_keys,
+                &vocab_vals,
+                &vocab_blob,
+                &unsafe_bits,
+            )
+            .map(|engine| Arc::new(engine) as Arc<dyn NativeGpuEngine>)
+        }))
     }
 }
 
@@ -1042,7 +1128,13 @@ impl PyNativeRuntime {
             .as_ref()
             .map(|engine| engine.reference_arc())
             .unwrap_or_else(|| reference.native());
-        let gpu = gpu_encoder.map(|engine| Arc::clone(&engine.inner));
+        // The prepared engine inputs move into a deferred source: the
+        // router opens the device on the first request it actually
+        // routes to the GPU backend, on a thread that has already
+        // released the GIL, and construction stays CUDA-free.
+        let gpu = gpu_encoder
+            .map(|engine| engine.claim_opener().map(NativeGpuSource::Deferred))
+            .transpose()?;
         let router = Arc::new(
             NativeRouter::new(
                 fallback_chain,
@@ -1050,7 +1142,7 @@ impl PyNativeRuntime {
                 reference,
                 fast,
                 repair_fast_cpu,
-                gpu.map(|engine| engine as Arc<dyn toktier_routing_core::NativeGpuEngine>),
+                gpu,
                 postprocessor_adds_tokens,
                 diagnostics,
             )
@@ -1193,6 +1285,20 @@ impl PyNativeRuntime {
         let native = store.native_stats();
         output.set_item("append_paths", native.path_counts)?;
         Ok(output)
+    }
+
+    /// Whether a routed request has already opened the deferred GPU
+    /// engine. Reads the router's once-cell only; it never triggers an
+    /// open.
+    #[getter]
+    fn gpu_engine_loaded(&self) -> bool {
+        self.router.gpu_engine_opened()
+    }
+
+    /// The latched message of a failed deferred GPU open, if one happened.
+    #[getter]
+    fn gpu_engine_open_error(&self) -> Option<String> {
+        self.router.gpu_engine_open_error()
     }
 
     #[getter]

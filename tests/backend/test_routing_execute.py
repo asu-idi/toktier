@@ -329,6 +329,14 @@ def test_span_guard_replaces_the_accelerated_final_result() -> None:
         "source": "state_encode",
         "path": "hf_span_guard",
     }
+    guard_events = [
+        event
+        for event in executor.events
+        if event.code is ReasonCode.R_INPUT_GUARD_ROUTED
+    ]
+    assert guard_events
+    assert all("stage" in event.detail for event in guard_events)
+    assert guard_events[0].detail["stage"] == "state_encode"
 
 
 def test_gpu_crossover_partitions_mixed_batches_and_preserves_order() -> None:
@@ -443,6 +451,7 @@ def test_explain_distinguishes_certified_from_certified_source() -> None:
     certification = explanation["certification"]
     assert isinstance(certification, dict)
     assert certification["state"] == "certified_source"
+    assert certification["effective_verdict"] == "certified"
 
     binary_view = support.registry(backends={BACKEND_GPU: support.certified_entry()})
     binary_snapshot = support.snapshot(registry_view=binary_view)
@@ -453,10 +462,15 @@ def test_explain_distinguishes_certified_from_certified_source() -> None:
     binary_certification = binary_explanation["certification"]
     assert isinstance(binary_certification, dict)
     assert binary_certification["state"] == "certified"
+    assert binary_certification["effective_verdict"] == "certified"
 
 
 def test_explain_marks_reference_only_on_oracle_mismatch() -> None:
-    """An oracle outside the certified set is reported, not hidden."""
+    """An oracle outside the certified set is reported, not hidden.
+
+    The reference that runs here is not the pinned one, so this is the
+    case ``unverified`` is for: nothing is known about the output.
+    """
     view = support.registry()
     snapshot = support.snapshot(registry_view=view, oracle_version="0.23.0")
     config = support.config()
@@ -465,6 +479,44 @@ def test_explain_marks_reference_only_on_oracle_mismatch() -> None:
     certification = explanation["certification"]
     assert isinstance(certification, dict)
     assert certification["state"] == "reference_only"
+    assert certification["effective_verdict"] == "unverified"
+
+
+def test_explain_reports_the_pinned_reference_route_as_reference() -> None:
+    """The pinned oracle's own output is not an unverified result.
+
+    No acceleration certificate attaches to a reference execution
+    because there is no accelerated route to certify. Saying
+    ``unverified`` there answered a different question -- whether the
+    ids can be trusted -- with the same word.
+    """
+    view = support.registry()
+    snapshot = support.snapshot(registry_view=view, driver_version="550.0")
+    config = support.config()
+    route_plan = plan(snapshot, RoutingPolicy.CERTIFIED, view, config)
+    assert route_plan.backend == BACKEND_REFERENCE
+
+    explanation = build_explanation(route_plan=route_plan, snapshot=snapshot)
+
+    certification = explanation["certification"]
+    assert isinstance(certification, dict)
+    assert certification["state"] == "reference"
+    assert certification["effective_verdict"] == "reference"
+
+
+def test_explain_keeps_unverified_without_a_registry_record() -> None:
+    """No record consulted means no claim in either direction."""
+    view = support.registry()
+    snapshot = support.snapshot(registry_view=view, artifact_sha256="1" * 64)
+    config = support.config()
+    route_plan = plan(snapshot, RoutingPolicy.CERTIFIED, view, config)
+
+    explanation = build_explanation(route_plan=route_plan, snapshot=snapshot)
+
+    certification = explanation["certification"]
+    assert isinstance(certification, dict)
+    assert certification["state"] == "uncertified"
+    assert certification["effective_verdict"] == "unverified"
 
 
 def test_explain_lists_experimental_waivers() -> None:
@@ -487,6 +539,46 @@ def test_explain_lists_experimental_waivers() -> None:
     certification = explanation["certification"]
     assert isinstance(certification, dict)
     assert certification["state"] == "uncertified"
+    assert certification["effective_verdict"] == "experimental"
+
+
+def test_explain_marks_an_unreviewed_jit_execution_as_experimental() -> None:
+    """A registry row cannot hide a waiver effective in this process."""
+    view = support.registry()
+    snapshot = support.snapshot(
+        registry_view=view,
+        kernel_cache=support.gpu_ready_kernel_cache(
+            toolchain="11.8",
+            toolchain_satisfied=False,
+        ),
+    )
+    config = support.config()
+    policy = RoutingPolicy.EXPERIMENTAL
+    route_plan = plan(snapshot, policy, view, config)
+    explanation = build_explanation(
+        route_plan=route_plan,
+        snapshot=snapshot,
+        assessments=assessments_for(snapshot, policy, view, config),
+        gpu_delivery="jit",
+    )
+
+    waivers = explanation["experimental_waivers"]
+    assert isinstance(waivers, list)
+    assert waivers == [
+        {
+            "code": ReasonCode.R_UNCERTIFIED_ARTIFACT.value,
+            "backend": BACKEND_GPU,
+            "detail": {
+                "cause": "toolchain_unverified",
+                "constraint": support.TOOLCHAIN,
+                "observed": "11.8",
+            },
+        }
+    ]
+    certification = explanation["certification"]
+    assert isinstance(certification, dict)
+    assert certification["state"] == "certified_source"
+    assert certification["effective_verdict"] == "experimental"
 
 
 def test_explain_headlines_the_executed_backend_over_the_plan() -> None:

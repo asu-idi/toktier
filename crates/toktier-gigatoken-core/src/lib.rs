@@ -1,5 +1,9 @@
 //! Audited Rust core of TokTier's corrected Gigatoken build.
 //!
+//! This is an internal supporting crate of TokTier, versioned with the
+//! workspace and carrying no independent API stability promise; use the
+//! `toktier` package for the supported Rust surface.
+//!
 //! The implementation is vendored from upstream commit
 //! `34a15995fc930c3807cd176bfd8ee91c166ee2fe`, with TokTier's pinned repair
 //! patch applied.  Python bindings, training, batch/file input, and unrelated

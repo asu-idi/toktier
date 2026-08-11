@@ -10,6 +10,8 @@
 //! A source identity is a bare SHA-256 over a domain tag plus
 //! length-framed path/content pairs, in `PathBuf` component order.
 
+use std::env;
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -18,6 +20,17 @@ use sha2::{Digest, Sha256};
 pub const RUST_API_DOMAIN: &[u8] = b"toktier.rust_api.integrated_source.v1\0";
 pub const FAST_CPU_DOMAIN: &[u8] = b"toktier.fast_cpu.integrated_source.v1\0";
 pub const NATIVE_HOST_DOMAIN: &[u8] = b"toktier.prebuilt.native_host_source.v1\0";
+pub const IDENTITY_SENTINEL_ENV: &str = "TOKTIER_IDENTITY_SENTINEL";
+pub const IDENTITY_SENTINEL_HEX: &str = concat!(
+    "73656e74696e656c",
+    "73656e74696e656c",
+    "73656e74696e656c",
+    "73656e74696e656c",
+);
+
+pub fn identity_sentinel_enabled() -> bool {
+    env::var_os(IDENTITY_SENTINEL_ENV).as_deref() == Some(OsStr::new("1"))
+}
 
 fn collect_tree(root: &Path, path: &Path, output: &mut Vec<PathBuf>) {
     let mut entries = fs::read_dir(path)

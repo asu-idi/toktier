@@ -199,6 +199,36 @@ def test_valid_documents_pass_their_schema() -> None:
     assert registry_common.schema_violations(evidence, EVIDENCE_SCHEMA) == []
 
 
+def test_v2_identity_columns_are_additive_under_schema_version_one() -> None:
+    document = minimal_registry()
+    backend = document["artifacts"][0]["backends"]["gpu"]
+    backend.update(
+        {
+            "source_digest_v2": DIGEST_A,
+            "host_source_digest_v2": DIGEST_B,
+            "direct_host_source_digest_v2": DIGEST_C,
+        }
+    )
+    document["runtime_builds"] = [
+        {
+            "runtime": "rust_api",
+            "source_digest": DIGEST_A,
+            "source_digest_v2": DIGEST_B,
+            "fast_cpu_source_digest": DIGEST_A,
+            "fast_cpu_source_digest_v2": DIGEST_B,
+            "native_host_source_digest": DIGEST_A,
+            "native_host_source_digest_v2": DIGEST_B,
+            "build_flags": ["profile=release"],
+            "toolchain": "rustc test",
+            "evidence_id": "ev-example-v1",
+        }
+    ]
+    registry = with_root_digest(document, REGISTRY_DOMAIN_TAG)
+
+    assert registry["schema_version"] == 1
+    assert registry_common.schema_violations(registry, REGISTRY_SCHEMA) == []
+
+
 def test_certified_source_without_its_bindings_is_rejected() -> None:
     document = with_root_digest(minimal_registry(), REGISTRY_DOMAIN_TAG)
     del document["artifacts"][0]["backends"]["gpu"]["source_digest"]

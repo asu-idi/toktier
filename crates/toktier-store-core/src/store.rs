@@ -549,12 +549,13 @@ impl Session {
         }
     }
 
-    /// Chain link hash of the current committed state (Section 4.2 of
-    /// the format contract), computed over the full core stream. The
-    /// payload digest continues from the running sealed-prefix state and
-    /// feeds only the mutable tail; the resulting bytes are identical to
-    /// the full [`payload_digest_parts`] recomputation, which debug
-    /// builds re-run as an oracle on every commit.
+    /// Chain link hash of the current committed state. The link hashes the
+    /// Section 4.2 metadata (revision, lengths, fingerprint, previous hash,
+    /// and witness) plus a payload digest over all core IDs followed by the
+    /// stored mutable UTF-8 tail. That digest continues the sealed-ID hasher
+    /// with only the tail IDs and text, without retaining sealed-prefix
+    /// plaintext; debug builds compare it with a full
+    /// [`payload_digest_parts`] recomputation on every commit.
     fn commit_hash(&self, fingerprint: &SemanticFingerprint) -> BlockHash {
         let digest = self
             .sealed_payload

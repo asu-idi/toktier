@@ -56,6 +56,8 @@ def _certification_state(
     snapshot: ProbeSnapshot,
     route_plan: RoutePlan,
     gpu_delivery: str | None = None,
+    *,
+    has_experimental_waiver: bool = False,
 ) -> dict[str, object]:
     """How the running configuration is labeled.
 
@@ -75,11 +77,30 @@ def _certification_state(
     label belongs to. The per-delivery detail stays under ``deliveries``
     either way; the headline just stops labeling the loaded delivery
     with a neighbouring one's status.
+
+    ``effective_verdict`` answers the separate in-process question. It
+    collapses both certified registry kinds to ``certified``, reports an
+    eligible route that depends on a waiver as ``experimental``, reports
+    ``reference`` when the pinned reference oracle itself served the
+    request, and is otherwise ``unverified``.
+
+    ``reference`` exists because ``unverified`` was answering two very
+    different questions with one word. Under the reference route the
+    output *is* the pinned oracle -- the implementation that defines the
+    exact-ID contract every other route is judged against -- and no
+    acceleration certificate attaches because there is no accelerated
+    route to certify. ``unverified`` now means what it says: no
+    certificate and no such guarantee, as when the artifact carries no
+    registry record or the installed oracle is outside the certified set
+    (``reference_only``).
     """
     match = snapshot.certification
     if match is None:
         return {
             "state": "uncertified",
+            "effective_verdict": (
+                "experimental" if has_experimental_waiver else "unverified"
+            ),
             "identity": None,
             "evidence_id": None,
             "backend_status": {},
@@ -95,10 +116,8 @@ def _certification_state(
     gpu_entry = record.backends.get(BACKEND_GPU)
     labelled_delivery: str | None = None
     if gpu_entry is not None and gpu_delivery is not None:
-        delivery_entry = (getattr(gpu_entry, "deliveries", None) or {}).get(
-            gpu_delivery
-        )
-        if delivery_entry is not None:
+        delivery_entry = gpu_entry.for_delivery(gpu_delivery)
+        if delivery_entry is not gpu_entry:
             statuses[BACKEND_GPU] = delivery_entry.status
             labelled_delivery = gpu_delivery
     accelerated_open = route_plan.backend != BACKEND_REFERENCE
@@ -113,8 +132,18 @@ def _certification_state(
         )
     else:
         state = "reference_only" if oracle_mismatch else "reference"
+    effective_verdict = (
+        "experimental"
+        if has_experimental_waiver or state == "experimental"
+        else "certified"
+        if state in {"certified", "certified_source"}
+        else "reference"
+        if state == "reference"
+        else "unverified"
+    )
     return {
         "state": state,
+        "effective_verdict": effective_verdict,
         "identity": match.identity,
         "evidence_id": record.evidence_id,
         "suite_version": record.suite_version,
@@ -313,6 +342,11 @@ def build_explanation(
                 else None
             ),
         ),
-        "certification": _certification_state(snapshot, route_plan, gpu_delivery),
+        "certification": _certification_state(
+            snapshot,
+            route_plan,
+            gpu_delivery,
+            has_experimental_waiver=bool(waivers),
+        ),
         "probe": snapshot.summary(),
     }

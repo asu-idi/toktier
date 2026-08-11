@@ -13,10 +13,11 @@ use crate::{Error, ErrorCode, ExecutionFacts, Result};
 /// }
 /// ```
 ///
-/// Construction adopts the given vector's allocation as the single
-/// shared owner (no element copy), and internal session results share
-/// the store's own allocation the same way, so a retained buffer keeps
-/// observing exactly the memory it was created over.
+/// Construction adopts the given vector as one shared allocation (no
+/// element copy); clones and row views share that allocation through
+/// `Arc`. Internal session results share the store's own allocation the
+/// same way, so a retained buffer keeps observing exactly the memory it
+/// was created over.
 #[derive(Debug, Clone, Default)]
 pub struct TokenBuffer {
     values: Arc<Vec<u32>>,
@@ -226,6 +227,11 @@ impl RaggedEncoding {
         self.values.slice(start, end)
     }
 
+    /// Materialize and copy every row into a separate `Vec<u32>`.
+    ///
+    /// For zero-copy iteration, iterate `0..self.len()` and call
+    /// [`Self::row`] for each index; [`Self::row_buffer`] returns a
+    /// shareable zero-copy row view.
     pub fn into_rows(self) -> Vec<Vec<u32>> {
         (0..self.len())
             .map(|row| self.row(row).expect("validated ragged offsets").to_vec())

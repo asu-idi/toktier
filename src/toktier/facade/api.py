@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -88,6 +89,10 @@ _LOOKUP_VALUES = (None, "auto", "off")
 _REPAIR_BACKENDS = ("auto", "reference", "fastokens")
 _DEVICES = ("auto", "cpu", "cuda")
 _GPU_DELIVERIES = ("auto", "prebuilt", "jit")
+_ACCELERATED_STATE_ENCODE_PATHS = {
+    "materialized": "accelerated_with_reconstructed_spans",
+    "lazy_seed": "accelerated_with_lazy_span_checkpoints",
+}
 
 #: Measured crossover used by the automatic facade. It is public through
 #: ``gpu_min_bytes`` and ``explain()`` rather than hidden in an engine.
@@ -141,6 +146,70 @@ def _jit_toolchain_rejection(route_plan: RoutePlan) -> PlanReason | None:
 def _uncertified_jit_remedy(family: str) -> str:
     """Explicit CLI opt-in for an unjudged JIT toolchain."""
     return f"toktier gpu compile {family} --accept-uncertified-jit"
+
+
+def _last_execution_view(report: Mapping[str, object]) -> Mapping[str, object]:
+    """The routing ledger's last-request record, or an empty mapping."""
+    runtime = report.get("runtime_policy")
+    if not isinstance(runtime, Mapping):
+        return {}
+    last = runtime.get("last_execution")
+    return last if isinstance(last, Mapping) else {}
+
+
+def _explanation_summary(report: Mapping[str, object]) -> dict[str, object]:
+    """Select the flat headline view from one full facade explanation.
+
+    The keys deliberately name their time scope, because the facts here
+    belong to different ones: what the last request did, what the
+    immutable plan says, what this process has loaded, and what has
+    happened over the process lifetime. Every key of the 0.2.0 summary
+    keeps its meaning; the ``last_execution_*`` group and the two
+    delivery keys are additions that let a reader answer "what just
+    happened?" without opening the full report.
+    """
+    certification = cast(Mapping[str, object], report["certification"])
+    fallback_counts = cast(Mapping[str, int], report["fallback_counts"])
+    runtime = report.get("runtime_policy")
+    last = _last_execution_view(report)
+    executed = last.get("executed_backend")
+    selected_start = last.get("selected_start")
+    return {
+        "family": report["family"],
+        "backend": report["backend"],
+        "backend_basis": report["backend_basis"],
+        "planned_backend": report["planned_backend"],
+        "kernel_delivery": report["kernel_delivery"],
+        "certification_state": certification["state"],
+        "effective_verdict": certification["effective_verdict"],
+        "fallback_occurred": bool(fallback_counts),
+        # -- the last request, explicitly scoped ----------------------
+        "last_execution_backend": executed if isinstance(executed, str) else None,
+        "last_execution_path": (
+            last["path"] if isinstance(last.get("path"), str) else None
+        ),
+        "last_execution_source": (
+            last["source"] if isinstance(last.get("source"), str) else None
+        ),
+        # True when that request finished on a backend other than the
+        # one the router selected for it -- a mid-request fault or
+        # guard route. The crossover decision happens before selection
+        # and a bounded session repair starts where it runs, so neither
+        # sets this.
+        "last_execution_fallback": (
+            isinstance(executed, str)
+            and isinstance(selected_start, str)
+            and executed != selected_start
+        ),
+        # -- process lifetime and process/plan facts ------------------
+        "fallback_ever_occurred": bool(fallback_counts),
+        "selected_kernel_delivery": (
+            runtime.get("gpu_delivery_selected")
+            if isinstance(runtime, Mapping)
+            else None
+        ),
+        "loaded_kernel_delivery": report["kernel_delivery"],
+    }
 
 
 class _OracleTokenizer(Protocol):
@@ -386,8 +455,10 @@ class Tokenizer:
         self._native_session_encoder_initialised = False
         self._native_request: Any | None = None
         self._native_request_initialised = False
+        self._native_request_lock = threading.Lock()
         self._native_request_guard: dict[str, object] | None = None
-        self._native_gpu_engine: Any | None = None
+        self._native_gpu_prepared: Any | None = None
+        self._native_gpu_publication_guard: dict[str, object] | None = None
         self._session_repair_guard: dict[str, object] | None = None
         self._state_encode_counts: dict[str, int] = {}
         self._last_state_encode: dict[str, object] | None = None
@@ -454,16 +525,15 @@ class Tokenizer:
             )
         native = self._native_request_runtime()
         if native is not None:
-            return Encoding(
-                ids=tuple(
-                    native.encode(
-                        text,
-                        session=session,
-                        lookup_auto=lookup != "off",
-                        add_special_tokens=add_special_tokens,
-                    )
-                )
+            native_ids = native.encode(
+                text,
+                session=session,
+                lookup_auto=lookup != "off",
+                add_special_tokens=add_special_tokens,
             )
+            if self._native_gpu_prepared is not None:
+                self._observe_native_gpu_open(native)
+            return Encoding(ids=tuple(native_ids))
         ids: list[int] | None = None
         if session is not None:
             ids = self._store().encode_session(session, text)
@@ -490,6 +560,8 @@ class Tokenizer:
             rows = native.encode_batch(
                 list(texts), add_special_tokens=add_special_tokens
             )
+            if self._native_gpu_prepared is not None:
+                self._observe_native_gpu_open(native)
             return [Encoding(ids=tuple(row)) for row in rows]
         rows = self._executor.encode_batch(texts, add_special_tokens=add_special_tokens)
         return [Encoding(ids=tuple(row)) for row in rows]
@@ -501,8 +573,17 @@ class Tokenizer:
 
     # -- diagnostics ---------------------------------------------------
 
-    def explain(self) -> dict[str, object]:
+    def explain(self, *, summary: bool = False) -> dict[str, object]:
         """The active plan, its reasons, and accumulated counters.
+
+        With ``summary=True``, the fully assembled report is reduced to
+        its scalar headline fields. Those fields name their time scope:
+        the ``last_execution_*`` group describes the request that most
+        recently returned, ``planned_backend`` the immutable plan,
+        ``selected_kernel_delivery`` / ``loaded_kernel_delivery`` the
+        process's delivery, and ``fallback_ever_occurred`` the process
+        lifetime. The no-argument call returns the complete
+        machine-readable report described below.
 
         The report is the routing layer's own explanation
         (:func:`toktier.routing.explain.build_explanation`) plus the
@@ -538,11 +619,16 @@ class Tokenizer:
         an explicitly selected experimental Fastokens adapter, or exact
         HF full re-encoding.
         ``runtime_policy``, ``gpu_backend``, and ``state_encode`` report
-        the automatic crossover and the path that actually ran.
+        the automatic crossover and the path that actually ran. Successful
+        accelerated state paths use
+        ``accelerated_with_lazy_span_checkpoints`` for a native lazy seed and
+        ``accelerated_with_reconstructed_spans`` for a materialized payload.
         """
         native_runtime = (
             self._native_request if self._native_request_initialised else None
         )
+        if native_runtime is not None and self._native_gpu_prepared is not None:
+            self._observe_native_gpu_open(native_runtime)
         native_stats = (
             native_runtime.runtime_stats() if native_runtime is not None else None
         )
@@ -621,11 +707,21 @@ class Tokenizer:
                 else None
             ),
         }
-        native_gpu_loaded = self._native_gpu_engine is not None
+        # On the native request path the engine opens below PyO3, on the
+        # first request routed to the GPU; the runtime's once-cell is the
+        # authoritative record of whether (and how) that open happened.
+        native_gpu_loaded = (
+            bool(native_runtime.gpu_engine_loaded)
+            if native_runtime is not None
+            else False
+        )
+        native_gpu_open_error = (
+            native_runtime.gpu_engine_open_error if native_runtime is not None else None
+        )
         legacy_gpu_loaded = (
             self._gpu_backend.loaded if self._gpu_backend is not None else False
         )
-        report["gpu_backend"] = {
+        gpu_report: dict[str, object] = {
             "planned": BACKEND_GPU in self._plan.fallback_chain,
             "device": (
                 self._gpu_device
@@ -636,9 +732,12 @@ class Tokenizer:
             "load_error": (
                 str(self._gpu_backend.load_error)
                 if self._gpu_backend and self._gpu_backend.load_error
-                else None
+                else native_gpu_open_error
             ),
         }
+        if self._native_gpu_publication_guard is not None:
+            gpu_report["publication_guard"] = dict(self._native_gpu_publication_guard)
+        report["gpu_backend"] = gpu_report
         report["state_encode"] = (
             {
                 "counts": dict(native_stats["state_encode_counts"]),
@@ -656,7 +755,7 @@ class Tokenizer:
         )
         if self._native_request_guard is not None:
             report["native_request_guard"] = dict(self._native_request_guard)
-        return report
+        return _explanation_summary(report) if summary else report
 
     def close(self) -> None:
         """Release the loaded backend. Idempotent."""
@@ -664,7 +763,7 @@ class Tokenizer:
             return
         self._closed = True
         self._native_request = None
-        self._native_gpu_engine = None
+        self._native_gpu_prepared = None
         self._native_session_encoder = None
         self._oracle_handle = None
         self._backend.close()
@@ -676,6 +775,31 @@ class Tokenizer:
     def _require_open(self) -> None:
         if self._closed:
             raise RuntimeError("backend is closed")
+
+    def _observe_native_gpu_open(self, native: Any) -> None:
+        """Publish the loaded delivery once the deferred open happened.
+
+        The engine opens below PyO3, so the process-wide loader fact is
+        recorded at the first Python-visible moment afterwards -- the end
+        of the request that opened it, or an ``explain()`` call.  A
+        publication the loader refuses has already voided the process
+        certificate there; the refusal is kept for ``explain()`` instead
+        of failing the request that carried it.
+        """
+        prepared = self._native_gpu_prepared
+        if prepared is None or prepared.published:
+            return
+        if not native.gpu_engine_loaded:
+            return
+        try:
+            prepared.publish_loaded()
+        except KernelIncompatible as error:
+            self._native_gpu_publication_guard = {
+                "reason": "native_gpu_loaded_publication_guard",
+                "error": type(error).__name__,
+                "message": str(error),
+            }
+            prepared.published = True
 
     # -- internals -----------------------------------------------------
 
@@ -741,10 +865,11 @@ class Tokenizer:
     def _state_encode(self, text: str) -> tuple[list[int], list[tuple[int, int]]]:
         """Seed store state through the active full-encode route.
 
-        A certified Gigatoken repair object supplies the byte-closure and
-        normalizer guards needed to reconstruct spans around ids returned
-        by either the CPU engine or GPU. If those premises do not hold,
-        or this family has no certified repair path, state is seeded by HF.
+        This compatibility callback materializes spans around ids returned
+        by either the CPU engine or GPU. The native request runtime instead
+        records its closure-verified lazy seed under the other accelerated
+        payload name. If the reconstruction premises do not hold, or this
+        family has no certified repair path, state is seeded by HF.
         """
         repair = self._repair_callback()
         if not isinstance(repair, GigatokenRepair):
@@ -790,11 +915,35 @@ class Tokenizer:
             return result
         backend = str(execution.get("executed_backend", "unknown"))
         self._count_state_encode(
-            "accelerated_with_reconstructed_spans",
+            _ACCELERATED_STATE_ENCODE_PATHS["materialized"],
             backend=backend,
             input_bytes=len(text.encode("utf-8")),
         )
         return ids, spans
+
+    def _gigatoken_append(
+        self,
+        tail_text: str,
+        tail_ids: list[int],
+        tail_spans: Sequence[tuple[int, int]],
+        delta: str,
+    ) -> tuple[list[int], list[tuple[int, int]], int, str]:
+        """Run one adapter repair and publish its bounded execution facts."""
+        repair = self._session_repair
+        assert isinstance(repair, GigatokenRepair)
+        result = repair(tail_text, tail_ids, tail_spans, delta)
+        path = result[3]
+        if path == "gigatoken_repair":
+            last = repair.stats()["last"]
+            assert isinstance(last, dict)
+            window_chars = last["window_chars"]
+            assert isinstance(window_chars, int)
+            window_text = tail_text[-window_chars:] + delta
+            self._executor.record_repair_result(
+                input_bytes=len(window_text.encode("utf-8")),
+                path=path,
+            )
+        return result
 
     def _store(self) -> EntryStore:
         if self._entry_store is None:
@@ -822,7 +971,11 @@ class Tokenizer:
                     repair, native_fast_cpu=native_repair
                 ),
                 encode=self._state_encode,
-                append=repair,
+                append=(
+                    self._gigatoken_append
+                    if isinstance(repair, GigatokenRepair)
+                    else repair
+                ),
                 append_stats=(
                     native_encoder.stats
                     if native_encoder is not None
@@ -862,6 +1015,20 @@ class Tokenizer:
         return self._entry_store
 
     def _native_request_runtime(self) -> Any | None:
+        """Return the one latched native request-runtime decision."""
+        if self._native_request_initialised:
+            return self._native_request
+        with self._native_request_lock:
+            # Another thread may have completed construction while this
+            # thread waited for the lock. Mypy does not model that interleaving.
+            if self._native_request_initialised:
+                return self._native_request  # type: ignore[unreachable]
+            try:
+                return self._construct_native_request_runtime()
+            finally:
+                self._native_request_initialised = True
+
+    def _construct_native_request_runtime(self) -> Any | None:
         """Construct the one-call native request path when every engine fits.
 
         JIT delivery and the explicitly experimental Fastokens repair adapter
@@ -869,9 +1036,6 @@ class Tokenizer:
         this runtime directly; prebuilt CUDA joins it through the native driver
         host rather than through a callback.
         """
-        if self._native_request_initialised:
-            return self._native_request
-        self._native_request_initialised = True
         if self._repair_backend_request == "fastokens":
             return None
         if (
@@ -903,7 +1067,7 @@ class Tokenizer:
                 )
             gpu_encoder = None
             if BACKEND_GPU in self._plan.fallback_chain:
-                from ..engine.gpu.native import open_native_prebuilt_gpu
+                from ..engine.gpu.native import prepare_native_prebuilt_gpu
 
                 device_ordinal = int(self._gpu_device.partition(":")[2] or "0")
                 device = next(
@@ -918,7 +1082,10 @@ class Tokenizer:
                     raise RuntimeError(
                         "the native GPU device disappeared after planning"
                     )
-                gpu_encoder = open_native_prebuilt_gpu(
+                # Projection and the delivery reservation happen here; the
+                # engine itself opens on the first request the native
+                # runtime routes to the GPU, at or above ``gpu_min_bytes``.
+                prepared = prepare_native_prebuilt_gpu(
                     artifact=self._artifact_handle,
                     family=self.family,
                     cache_dir=Path(self._config.cache_dir),
@@ -926,7 +1093,8 @@ class Tokenizer:
                     architecture=device.architecture,
                     reference=reference,
                 )
-                self._native_gpu_engine = gpu_encoder
+                gpu_encoder = prepared.engine
+                self._native_gpu_prepared = prepared
             self._native_request = _native.NativeRuntime(
                 list(self._plan.fallback_chain),
                 [

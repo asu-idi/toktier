@@ -145,13 +145,23 @@ def test_executor_falls_back_to_reference_on_a_gpu_fault() -> None:
     assert "device lost" in str(executor.events[0].detail["message"])
 
 
-def test_executor_routes_scaffolded_defaults_to_reference() -> None:
-    """add_special_tokens=True on a scaffolding artifact lands on hf."""
+def test_executor_records_postprocessing_bypass_separately_from_faults() -> None:
+    """A planned core-stream bypass lands on HF without fault accounting."""
     gpu = GpuBackend(StubEncoder(adds_special_tokens=True))
     reference = support.FakeBackend(BACKEND_REFERENCE)
-    executor = RoutedExecutor(PLAN, {BACKEND_GPU: gpu, BACKEND_REFERENCE: reference})
+    executor = RoutedExecutor(
+        PLAN,
+        {BACKEND_GPU: gpu, BACKEND_REFERENCE: reference},
+        diagnostics=True,
+    )
     assert executor.encode("hello") == [5, 1]
-    assert executor.fallback_counts == {ReasonCode.R_EXEC_FAULT.value: 1}
+    assert executor.fallback_counts == {
+        ReasonCode.R_INPUT_POSTPROCESS_ROUTED.value: 1
+    }
+    assert ReasonCode.R_EXEC_FAULT.value not in executor.fallback_counts
+    event = executor.events[0]
+    assert event.code is ReasonCode.R_INPUT_POSTPROCESS_ROUTED
+    assert event.detail["stage"] == "add_special_tokens"
 
 
 def test_lazy_adapter_does_not_materialize_until_first_nonempty_call() -> None:

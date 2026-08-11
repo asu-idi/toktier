@@ -3,10 +3,11 @@
 //!
 //! Layout follows the pre-release prototype's session state: UTF-8 text plus
 //! structure-of-arrays token storage (`ids`, `span_start`, `span_end`,
-//! spans in character units). All mutation goes through validating
-//! methods, so an ill-behaved encoder cannot leave the state with
-//! mismatched lengths; illegal states are not representable through the
-//! public API.
+//! spans in character units). Span storage is either materialized arrays or
+//! the lazy sparse-checkpoint form adopted from a closure-verified engine
+//! payload. All mutation goes through validating methods, so an ill-behaved
+//! encoder cannot leave the state with mismatched lengths; illegal states are
+//! not representable through the public API.
 
 use std::sync::{Arc, OnceLock};
 

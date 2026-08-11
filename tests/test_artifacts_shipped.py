@@ -23,6 +23,7 @@ import pytest
 
 from toktier.artifacts import ArtifactManifest
 from toktier.artifacts.tables import ARTIFACT_MANIFEST
+from toktier.errors import ArtifactNotFound
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,6 +57,35 @@ def test_the_shipped_manifest_pins_every_family_it_offers() -> None:
             # a truncated transfer fails before anything is hashed.
             assert item.size is not None, f"{family}/{item.name}"
             assert item.size > 0, f"{family}/{item.name}"
+
+
+def test_shipped_manifest_suggests_close_family_ids() -> None:
+    manifest = ArtifactManifest.load(ARTIFACT_MANIFEST)
+
+    with pytest.raises(ArtifactNotFound) as caught:
+        manifest.get("qwen3_8bb")
+
+    assert str(caught.value) == (
+        "unknown tokenizer family 'qwen3_8bb'; closest valid family IDs: "
+        "'qwen3_8b', 'qwen3_5_08b'"
+    )
+    assert caught.value.details["suggestions"] == ["qwen3_8b", "qwen3_5_08b"]
+
+
+def test_shipped_manifest_exact_family_lookup_is_unchanged() -> None:
+    manifest = ArtifactManifest.load(ARTIFACT_MANIFEST)
+
+    assert manifest.get("qwen3_8b").family == "qwen3_8b"
+
+
+def test_shipped_manifest_unrelated_family_has_empty_suggestions() -> None:
+    manifest = ArtifactManifest.load(ARTIFACT_MANIFEST)
+
+    with pytest.raises(ArtifactNotFound) as caught:
+        manifest.get("utterly_unrelated")
+
+    assert str(caught.value) == "unknown tokenizer family 'utterly_unrelated'"
+    assert caught.value.details["suggestions"] == []
 
 
 def test_the_shipped_manifest_passes_its_generator_check() -> None:

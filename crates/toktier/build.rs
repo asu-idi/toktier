@@ -12,8 +12,9 @@ use sha2::{Digest, Sha256};
 mod source_identity;
 
 use source_identity::{
-    fast_cpu_source_paths, hex, native_host_source_paths, rust_api_source_paths, source_digest,
-    FAST_CPU_DOMAIN, NATIVE_HOST_DOMAIN, RUST_API_DOMAIN,
+    fast_cpu_source_paths, hex, identity_sentinel_enabled, native_host_source_paths,
+    rust_api_source_paths, source_digest, FAST_CPU_DOMAIN, IDENTITY_SENTINEL_ENV,
+    IDENTITY_SENTINEL_HEX, NATIVE_HOST_DOMAIN, RUST_API_DOMAIN,
 };
 
 const PACKAGE_IDENTITY_SCHEMA: &str = "toktier.rust_package_source_identity.v1";
@@ -25,7 +26,7 @@ fn main() {
         .and_then(Path::parent)
         .expect("workspace root");
     let workspace_mode = root.join("crates/toktier-routing-core").is_dir();
-    let (rust_api_source, fast_cpu_source, native_host_source) = if workspace_mode {
+    let computed_sources = if workspace_mode {
         let rust_api_paths = rust_api_source_paths(root);
         let fast_cpu_paths = fast_cpu_source_paths(root);
         let native_host_paths = native_host_source_paths(root);
@@ -72,6 +73,13 @@ fn main() {
             field("fast_cpu_source_sha256"),
             field("native_host_source_sha256"),
         )
+    };
+    println!("cargo:rerun-if-env-changed={IDENTITY_SENTINEL_ENV}");
+    let (rust_api_source, fast_cpu_source, native_host_source) = if identity_sentinel_enabled() {
+        let sentinel = IDENTITY_SENTINEL_HEX.to_owned();
+        (sentinel.clone(), sentinel.clone(), sentinel)
+    } else {
+        computed_sources
     };
 
     let support_registry = if workspace_mode {

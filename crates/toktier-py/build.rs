@@ -11,8 +11,8 @@ use std::process::Command;
 mod source_identity;
 
 use source_identity::{
-    fast_cpu_source_paths, native_host_source_paths, source_digest, FAST_CPU_DOMAIN,
-    NATIVE_HOST_DOMAIN,
+    fast_cpu_source_paths, identity_sentinel_enabled, native_host_source_paths, source_digest,
+    FAST_CPU_DOMAIN, IDENTITY_SENTINEL_ENV, IDENTITY_SENTINEL_HEX, NATIVE_HOST_DOMAIN,
 };
 
 fn main() {
@@ -26,8 +26,17 @@ fn main() {
     for path in fast_cpu_paths.iter().chain(native_host_paths.iter()) {
         println!("cargo:rerun-if-changed={}", root.join(path).display());
     }
-    let fast_cpu_digest = source_digest(root, FAST_CPU_DOMAIN, &fast_cpu_paths);
-    let native_host_digest = source_digest(root, NATIVE_HOST_DOMAIN, &native_host_paths);
+    let computed_digests = (
+        source_digest(root, FAST_CPU_DOMAIN, &fast_cpu_paths),
+        source_digest(root, NATIVE_HOST_DOMAIN, &native_host_paths),
+    );
+    println!("cargo:rerun-if-env-changed={IDENTITY_SENTINEL_ENV}");
+    let (fast_cpu_digest, native_host_digest) = if identity_sentinel_enabled() {
+        let sentinel = IDENTITY_SENTINEL_HEX.to_owned();
+        (sentinel.clone(), sentinel)
+    } else {
+        computed_digests
+    };
 
     let rustc = env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
     let rustc_version = Command::new(rustc)

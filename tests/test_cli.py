@@ -32,12 +32,22 @@ from toktier.artifacts import (
     ArtifactFile,
     ArtifactManifest,
 )
+from toktier.engine.gpu.toolchain import JIT_TOOLCHAIN_CONSTRAINT, NvccFacts
 from toktier.errors import BackendUnavailable
 
 FAMILY = "demo_family"
 REVISION = "a" * 40
 GOOD = b'{"version": "1.0", "model": {}}\n'
 BAD = b"corrupted bytes\n"
+
+_DOCTOR_DEVICES = (
+    (0, "NVIDIA Test GPU", "sm_120"),
+    (1, "NVIDIA Test GPU 2", "sm_90"),
+)
+_DOCTOR_DRIVER_VERSION = "595.84"
+#: (torch distribution version, torch runtime CUDA). Together with the
+#: fixture's NVCC 13.0 this is one of the judged JIT triples.
+_JUDGED_TORCH_FACTS = ("2.13.0+cu130", "13.0")
 
 
 class StaticSource:
@@ -85,6 +95,8 @@ def _set_doctor_probes(monkeypatch: pytest.MonkeyPatch) -> None:
     from toktier.engine.gpu import native as native_gpu
     from toktier.engine.gpu.native import NativeHostBuildFacts
     from toktier.repair import fastokens
+
+    _set_doctor_device_probe(monkeypatch)
 
     def find_spec(name: str) -> object | None:
         assert name in {"torch", "cuda", "transformers", "ninja"}
@@ -134,10 +146,48 @@ def _set_doctor_probes(monkeypatch: pytest.MonkeyPatch) -> None:
         "fastokens_distribution_identity",
         lambda: (importlib.metadata.version("fastokens"), "d" * 64),
     )
+    # The JIT judgement asks the installed torch for its two version
+    # facts and asks the build system which compiler it would select.
+    # Both are supplied here so the outcome does not depend on whether
+    # the test machine happens to have torch installed.
+    monkeypatch.setattr(cli, "_torch_build_facts", lambda: _JUDGED_TORCH_FACTS)
+    monkeypatch.setattr(cli, "_jit_nvcc_report", cli._nvcc_report)
     # The nvcc search consults the loader's toolkit roots first; unset
     # them so the deterministic outcome is the PATH lookup above.
     monkeypatch.delenv("CUDA_HOME", raising=False)
     monkeypatch.delenv("CUDA_PATH", raising=False)
+
+
+def _set_doctor_device_probe(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    devices: tuple[tuple[int, str, str], ...] = _DOCTOR_DEVICES,
+    driver_version: str | None = _DOCTOR_DRIVER_VERSION,
+) -> None:
+    """Supply host facts without touching the test machine's accelerator."""
+    from toktier.engine.gpu import host_probe
+    from toktier.routing.probe import DeviceInfo
+
+    observed = tuple(
+        DeviceInfo(index=index, name=name, architecture=architecture)
+        for index, name, architecture in devices
+    )
+
+    class StaticCudaHostProbe:
+        def __init__(self, *, config: object, delivery: str) -> None:
+            del config
+            assert delivery in {"prebuilt", "jit"}
+
+        def devices(self) -> tuple[DeviceInfo, ...]:
+            return observed
+
+        def driver_version(self) -> str | None:
+            return driver_version
+
+        def kernel_cache(self) -> NoReturn:
+            raise AssertionError("doctor must not inspect or load a kernel")
+
+    monkeypatch.setattr(host_probe, "CudaHostProbe", StaticCudaHostProbe)
 
 
 _NVCC_CHECKED_VIA_PATH = [
@@ -207,7 +257,18 @@ def test_doctor_human(
         "automatic_gpu_delivery: prebuilt\n"
         "automatic_gpu_min_bytes: 65536\n"
         "automatic_gpu_candidate: true\n"
+        "automatic_gpu_eligible: true\n"
+        "automatic_effective_backend: gpu\n"
+        "jit_toolchain_satisfied: none\n"
+        "jit_toolchain_observed: none\n"
+        "jit_toolchain_constraint: none\n"
         "cuda_available: false\n"
+        "cuda_hardware_present: true\n"
+        "devices: 0: NVIDIA Test GPU (sm_120); "
+        "1: NVIDIA Test GPU 2 (sm_90)\n"
+        f"driver_version: {_DOCTOR_DRIVER_VERSION}\n"
+        "automatic_gpu_delivery_certification: "
+        "sm_120=certified; sm_90=experimental\n"
         "prebuilt_fatbin_available: true\n"
         f"prebuilt_fatbin_digest: {_shipped_prebuilt_digest()}\n"
         "prebuilt_native_host_ready: true\n"
@@ -266,7 +327,30 @@ def test_doctor_json(
         "automatic_gpu_delivery": "prebuilt",
         "automatic_gpu_min_bytes": 65536,
         "automatic_gpu_candidate": True,
+        "automatic_gpu_eligible": True,
+        "automatic_effective_backend": "gpu",
+        "jit_toolchain_satisfied": None,
+        "jit_toolchain_observed": None,
+        "jit_toolchain_constraint": None,
         "cuda_available": False,
+        "cuda_hardware_present": True,
+        "devices": [
+            {
+                "index": 0,
+                "name": "NVIDIA Test GPU",
+                "architecture": "sm_120",
+            },
+            {
+                "index": 1,
+                "name": "NVIDIA Test GPU 2",
+                "architecture": "sm_90",
+            },
+        ],
+        "driver_version": _DOCTOR_DRIVER_VERSION,
+        "automatic_gpu_delivery_certification": {
+            "sm_120": "certified",
+            "sm_90": "experimental",
+        },
         "prebuilt_fatbin_available": True,
         "prebuilt_fatbin_digest": _shipped_prebuilt_digest(),
         "prebuilt_native_host_ready": True,
@@ -307,6 +391,178 @@ def test_doctor_json(
     )
     assert json.loads(captured.out) == expected
     assert captured.err == ""
+
+
+def test_doctor_certification_follows_the_selected_jit_delivery(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The architecture labels follow JIT, not the prebuilt row beside it."""
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    _set_doctor_probes(monkeypatch)
+
+    def find_spec(name: str) -> object | None:
+        assert name in {"torch", "cuda", "transformers", "ninja"}
+        return object() if name in {"torch", "transformers", "ninja"} else None
+
+    monkeypatch.setattr(importlib.util, "find_spec", find_spec)
+
+    exit_code = cli.main(["doctor", "--json"])
+
+    report = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert report["automatic_gpu_delivery"] == "jit"
+    assert report["automatic_gpu_delivery_certification"] == {
+        "sm_120": "certified_source",
+        "sm_90": "uncertified",
+    }
+
+
+def _set_certified_oracle_versions(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Report the oracle pair the certified CPU profile is bound to."""
+    versions = {"tokenizers": "0.22.2", "transformers": "4.57.6"}
+    monkeypatch.setattr(cli, "_installed_version", versions.get)
+
+
+def _select_jit_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make ninja importable, which is what selects the JIT delivery."""
+
+    def find_spec(name: str) -> object | None:
+        assert name in {"torch", "cuda", "transformers", "ninja"}
+        return object() if name in {"torch", "transformers", "ninja"} else None
+
+    monkeypatch.setattr(importlib.util, "find_spec", find_spec)
+
+
+def test_doctor_reports_a_judged_jit_toolchain_as_eligible(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A judged triple: the observation is reported and the route is open."""
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    _set_doctor_probes(monkeypatch)
+    _select_jit_profile(monkeypatch)
+
+    exit_code = cli.main(["doctor", "--json"])
+
+    report = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert report["automatic_gpu_delivery"] == "jit"
+    assert report["jit_toolchain_satisfied"] is True
+    assert report["jit_toolchain_observed"] == (
+        "NVCC 13.0 (V13.0.88; /opt/cuda/bin/nvcc) / torch CUDA 13.0 "
+        "/ torch 2.13.0+cu130"
+    )
+    assert report["jit_toolchain_constraint"] == JIT_TOOLCHAIN_CONSTRAINT
+    assert report["automatic_gpu_candidate"] is True
+    assert report["automatic_gpu_eligible"] is True
+    assert report["automatic_effective_backend"] == "gpu"
+
+
+def test_doctor_reports_an_unjudged_jit_toolchain_as_ineligible(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The case a new user hit: architecture judged, compiler not.
+
+    ``automatic_gpu_candidate`` stays true because torch is installed and
+    the architecture is in the source certificate. The new fields say
+    what the next ``toktier gpu compile`` would say: this exact compiler
+    release was never judged, so automatic requests run on the CPU.
+    """
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    _set_doctor_probes(monkeypatch)
+    _select_jit_profile(monkeypatch)
+    _set_certified_oracle_versions(monkeypatch)
+    monkeypatch.setattr(
+        cli,
+        "_jit_nvcc_report",
+        lambda: NvccFacts(
+            path="/usr/local/cuda/bin/nvcc",
+            resolved_path="/usr/local/cuda-13.2/bin/nvcc",
+            release="13.2",
+            build="V13.2.86",
+            error=None,
+            checked=("torch CUDA_HOME: /usr/local/cuda/bin/nvcc (found)",),
+        ),
+    )
+
+    exit_code = cli.main(["doctor", "--json"])
+
+    report = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert report["automatic_gpu_delivery"] == "jit"
+    assert report["automatic_gpu_delivery_certification"]["sm_120"] == (
+        "certified_source"
+    )
+    assert report["automatic_gpu_candidate"] is True
+    assert report["jit_toolchain_satisfied"] is False
+    assert report["jit_toolchain_observed"] == (
+        "NVCC 13.2 (V13.2.86; /usr/local/cuda/bin/nvcc) / torch CUDA 13.0 "
+        "/ torch 2.13.0+cu130"
+    )
+    assert report["jit_toolchain_constraint"] == JIT_TOOLCHAIN_CONSTRAINT
+    assert report["automatic_gpu_eligible"] is False
+    assert report["automatic_effective_backend"] == "fast_cpu"
+
+
+def test_doctor_reports_the_reference_backend_without_a_certified_cpu_profile(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """No eligible GPU and no certified CPU profile leaves the oracle."""
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    _set_doctor_probes(monkeypatch)
+    _set_doctor_device_probe(monkeypatch, devices=(), driver_version=None)
+    from toktier.backends import fast_cpu
+    from toktier.backends.fast_cpu import FastCpuEngineFacts
+
+    monkeypatch.setattr(fast_cpu, "fast_cpu_engine_facts", FastCpuEngineFacts)
+
+    exit_code = cli.main(["doctor", "--json"])
+
+    report = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert report["cuda_hardware_present"] is False
+    assert report["automatic_gpu_candidate"] is True
+    assert report["automatic_gpu_eligible"] is False
+    assert report["gigatoken_runtime_ready"] is False
+    assert report["automatic_effective_backend"] == "hf"
+
+
+def test_doctor_reports_a_disabled_gpu_as_ineligible(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``TOKTIER_DISABLE_GPU`` closes the route the report describes."""
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    monkeypatch.setenv("TOKTIER_DISABLE_GPU", "1")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    _set_doctor_probes(monkeypatch)
+
+    exit_code = cli.main(["doctor", "--json"])
+
+    report = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert report["automatic_gpu_candidate"] is False
+    assert report["automatic_gpu_eligible"] is False
+    # The fixture's tokenizers/transformers versions are not the
+    # certified pair, so the honest CPU answer is the reference oracle.
+    assert report["automatic_effective_backend"] == "hf"
 
 
 def test_doctor_separates_a_configuration_from_an_offline_source(
@@ -354,6 +610,7 @@ def test_doctor_nvcc_follows_the_build_system_search_order(
     nvcc.write_text("#!/bin/sh\n")
     monkeypatch.setenv("CUDA_HOME", str(cuda_home))
     monkeypatch.delenv("CUDA_PATH", raising=False)
+    _set_doctor_device_probe(monkeypatch, devices=(), driver_version=None)
 
     exit_code = cli.main(["doctor", "--json"])
 
@@ -362,6 +619,10 @@ def test_doctor_nvcc_follows_the_build_system_search_order(
     assert report["nvcc_available"] is True
     assert report["nvcc_path"] == str(nvcc)
     assert report["nvcc_checked"] == [f"CUDA_HOME: {nvcc} (found)"]
+    assert report["cuda_hardware_present"] is False
+    assert report["devices"] == []
+    assert report["driver_version"] is None
+    assert report["automatic_gpu_delivery_certification"] == {}
 
 
 def test_doctor_treats_a_set_cuda_home_as_authoritative(
@@ -383,6 +644,7 @@ def test_doctor_treats_a_set_cuda_home_as_authoritative(
     empty_home.mkdir()
     monkeypatch.setenv("CUDA_HOME", str(empty_home))
     monkeypatch.delenv("CUDA_PATH", raising=False)
+    _set_doctor_device_probe(monkeypatch, devices=(), driver_version=None)
 
     exit_code = cli.main(["doctor", "--json"])
 

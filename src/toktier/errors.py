@@ -136,10 +136,12 @@ class BackendExecutionFault(ToktierError):
 
     Raised by accelerated backends around expected device and runtime
     failures. The executor re-runs the affected input on the next
-    backend in the plan's chain and records ``R_EXEC_FAULT``; any other
-    exception type propagates unchanged, because an unexpected error is
-    a defect to surface, not a route. Typical details: ``backend``,
-    ``stage``.
+    backend in the plan's chain and records ``R_EXEC_FAULT`` for genuine
+    failures. Adapters also use ``stage="add_special_tokens"`` internally
+    to request a planned reference route; that route is recorded as
+    ``R_INPUT_POSTPROCESS_ROUTED`` instead. Any other exception type
+    propagates unchanged, because an unexpected error is a defect to
+    surface, not a route. Typical details: ``backend``, ``stage``.
     """
 
     CODE = "BACKEND_EXECUTION_FAULT"

@@ -205,6 +205,19 @@ class BackendEntry:
             architectures.setdefault(device, STATUS_EXPERIMENTAL)
         return architectures
 
+    def for_delivery(self, delivery: str | None) -> BackendEntry:
+        """The entry for one selected delivery, or this compatibility view.
+
+        Delivery-refined GPU records keep the historical JIT view at the
+        backend level. Callers that know which delivery will run must follow
+        that delivery's row so a prebuilt binary is not labeled with the JIT
+        row beside it. Records without a matching refinement retain their
+        backend-level meaning.
+        """
+        if delivery is None:
+            return self
+        return self.deliveries.get(delivery, self)
+
 
 @dataclass(frozen=True)
 class OracleRecord:
@@ -439,6 +452,34 @@ class RegistryView:
         if record is None:
             return None
         return CertificationMatch(record=record, identity="composition")
+
+    def shared_delivery_architecture_statuses(
+        self, backend_id: str, delivery: str
+    ) -> dict[str, str]:
+        """Architecture labels shared by this delivery's artifact records.
+
+        ``doctor`` has no artifact argument, so it may report only delivery
+        facts that agree across the shipped records carrying that backend.
+        The current GPU delivery rows are generated from one kernel evidence
+        set and therefore share this map. Selection and labeling stay on the
+        same :class:`BackendEntry` helpers used by ``explain()``.
+        """
+        entries: list[BackendEntry] = []
+        for record in self._by_sha.values():
+            entry = record.backends.get(backend_id)
+            if entry is not None:
+                entries.append(entry.for_delivery(delivery))
+        if not entries:
+            return {}
+        shared = entries[0].architecture_statuses()
+        for entry in entries[1:]:
+            statuses = entry.architecture_statuses()
+            shared = {
+                architecture: status
+                for architecture, status in shared.items()
+                if statuses.get(architecture) == status
+            }
+        return shared
 
 
 def empty_registry() -> RegistryView:

@@ -804,6 +804,7 @@ impl FastCpuEngine {
         &self,
         tail: &mut TailState,
         delta: &str,
+        repair_input_bytes: &mut Option<u64>,
     ) -> Result<AppendReport, EngineError> {
         if delta.is_empty() {
             let kept = tail.n_tokens();
@@ -860,6 +861,7 @@ impl FastCpuEngine {
                             tail.fill(&full, Encoding { ids, spans })
                                 .map_err(|error| EngineError(error.to_string()))?;
                             self.count("gigatoken_repair", None, left_end, window, retries);
+                            *repair_input_bytes = Some(window_text.len() as u64);
                             return Ok(AppendReport {
                                 path: "gigatoken_repair".to_owned(),
                                 kept_tokens: left_end,
@@ -897,6 +899,30 @@ impl FastCpuEngine {
             kept_tokens: 0,
         })
     }
+
+    /// Append while retaining the exact UTF-8 size of a successful repair
+    /// window for the outer runtime's execution ledger.
+    pub(crate) fn append_with_repair_input(
+        &self,
+        tail: &mut TailState,
+        delta: &str,
+    ) -> Result<(AppendReport, Option<u64>), EngineError> {
+        if tail.text().is_empty() {
+            let (encoded, _source) = self.encode_state_with_source(delta)?;
+            tail.fill_soa(delta, encoded)
+                .map_err(|error| EngineError(error.to_string()))?;
+            return Ok((
+                AppendReport {
+                    path: "cold_full".to_owned(),
+                    kept_tokens: 0,
+                },
+                None,
+            ));
+        }
+        let mut repair_input_bytes = None;
+        let report = self.repair_append(tail, delta, &mut repair_input_bytes)?;
+        Ok((report, repair_input_bytes))
+    }
 }
 
 impl SessionEncoder for FastCpuEngine {
@@ -906,16 +932,8 @@ impl SessionEncoder for FastCpuEngine {
     }
 
     fn append(&self, tail: &mut TailState, delta: &str) -> Result<AppendReport, EngineError> {
-        if tail.text().is_empty() {
-            let (encoded, _source) = self.encode_state_with_source(delta)?;
-            tail.fill_soa(delta, encoded)
-                .map_err(|error| EngineError(error.to_string()))?;
-            return Ok(AppendReport {
-                path: "cold_full".to_owned(),
-                kept_tokens: 0,
-            });
-        }
-        self.repair_append(tail, delta)
+        self.append_with_repair_input(tail, delta)
+            .map(|(report, _input_bytes)| report)
     }
 
     fn last_certified_boundary(

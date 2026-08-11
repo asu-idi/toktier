@@ -22,6 +22,7 @@ __all__ = [
     "JIT_TOOLCHAIN_CONSTRAINT",
     "JUDGED_JIT_TOOLCHAINS",
     "NvccFacts",
+    "installed_torch_facts",
     "jit_toolchain_observation",
     "jit_toolchain_satisfied",
     "locate_nvcc",
@@ -201,6 +202,31 @@ def selected_nvcc_facts() -> NvccFacts:
     return _facts_for_path(
         candidate,
         (f"torch CUDA_HOME: {candidate} (found)",),
+    )
+
+
+def installed_torch_facts() -> tuple[str, str] | None:
+    """``(distribution version, runtime CUDA)`` of the installed torch.
+
+    The two axes JIT certification binds beside the compiler, read as
+    plain attributes.  ``None`` when torch cannot be imported at all.
+    Nothing here initializes CUDA, enumerates devices, or builds
+    anything; the runtime CUDA label is reported as ``"unknown"`` when a
+    CPU-only distribution exposes none, which is the spelling the
+    observation string and the judged set already use.
+
+    This lives beside the compiler probe because it is the other half of
+    the same observation, and because the accelerator runtime may be
+    imported only from this lane.
+    """
+    try:
+        import torch
+    except Exception:  # pragma: no cover - a broken install reads as absent
+        return None
+    cuda = getattr(getattr(torch, "version", None), "cuda", None)
+    return (
+        str(getattr(torch, "__version__", "")),
+        str(cuda) if cuda is not None else "unknown",
     )
 
 

@@ -1,5 +1,9 @@
 //! SQLite persistence for the toktier session store.
 //!
+//! This is an internal supporting crate of TokTier, versioned with the
+//! workspace and carrying no independent API stability promise; use the
+//! `toktier` package for the supported Rust surface.
+//!
 //! One store maps to one SQLite database file that is owned exclusively
 //! by this Rust layer: the connection takes `locking_mode=EXCLUSIVE`, so
 //! no other process (including any Python `sqlite3` handle) can read or
@@ -21,6 +25,8 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::Path;
+#[cfg(unix)]
+use std::path::PathBuf;
 
 use rusqlite::{Connection, OptionalExtension};
 use toktier_store_core::{
@@ -31,6 +37,8 @@ use toktier_store_core::{
 /// Errors of the SQLite tier.
 #[derive(Debug)]
 pub enum DbError {
+    /// Filesystem operation outside SQLite failed.
+    Io(std::io::Error),
     /// Underlying SQLite failure.
     Sqlite(rusqlite::Error),
     /// A store-format or store-semantics failure (carries the contract
@@ -47,6 +55,7 @@ pub enum DbError {
 impl fmt::Display for DbError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            DbError::Io(e) => write!(f, "io error: {e}"),
             DbError::Sqlite(e) => write!(f, "sqlite error: {e}"),
             DbError::Store(e) => write!(f, "{e}"),
             DbError::Schema(msg) => write!(f, "schema error: {msg}"),
@@ -58,6 +67,12 @@ impl fmt::Display for DbError {
 }
 
 impl std::error::Error for DbError {}
+
+impl From<std::io::Error> for DbError {
+    fn from(e: std::io::Error) -> DbError {
+        DbError::Io(e)
+    }
+}
 
 impl From<rusqlite::Error> for DbError {
     fn from(e: rusqlite::Error) -> DbError {
@@ -163,16 +178,71 @@ pub struct StoreDb {
     conn: Connection,
 }
 
+#[cfg(unix)]
+fn sqlite_sidecar(path: &Path, suffix: &str) -> PathBuf {
+    let mut value = path.as_os_str().to_os_string();
+    value.push(suffix);
+    PathBuf::from(value)
+}
+
+#[cfg(unix)]
+fn prepare_private_database(path: &Path) -> Result<Vec<PathBuf>, DbError> {
+    use std::fs::{self, OpenOptions};
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+    let mut sidecars = Vec::new();
+    for suffix in ["-wal", "-shm"] {
+        let sidecar = sqlite_sidecar(path, suffix);
+        if !sidecar.try_exists()? {
+            sidecars.push(sidecar);
+        }
+    }
+
+    // create_new gives this layer exact set-on-create semantics: files a
+    // caller supplied retain their mode, while new databases never pass
+    // through an umask-derived visibility window.
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).create_new(true).mode(0o600);
+    match options.open(path) {
+        Ok(file) => file.set_permissions(fs::Permissions::from_mode(0o600))?,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error.into()),
+    }
+    Ok(sidecars)
+}
+
+#[cfg(unix)]
+fn set_materialized_sidecars_private(sidecars: &[PathBuf]) -> Result<(), DbError> {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    for sidecar in sidecars {
+        if sidecar.try_exists()? {
+            fs::set_permissions(sidecar, fs::Permissions::from_mode(0o600))?;
+        }
+    }
+    Ok(())
+}
+
 impl StoreDb {
     /// Open (creating if needed) a store database and take exclusive
     /// ownership of the file for the lifetime of this handle.
     pub fn open(path: &Path) -> Result<StoreDb, DbError> {
+        #[cfg(unix)]
+        let new_sidecars = prepare_private_database(path)?;
         let conn = Connection::open(path)?;
         // WAL for crash safety, EXCLUSIVE so the file has one owner.
         // Both pragmas answer with a row; read it rather than assume.
         let _mode: String = conn.query_row("PRAGMA journal_mode=WAL", [], |r| r.get(0))?;
         let _lock: String = conn.query_row("PRAGMA locking_mode=EXCLUSIVE", [], |r| r.get(0))?;
         conn.execute_batch(SCHEMA_SQL)?;
+        #[cfg(unix)]
+        {
+            // SQLite owns WAL/SHM creation and may remove or recreate them.
+            // Tighten instances materialized during open; the Rust session
+            // path's 0700 store home is the durable lifecycle guarantee.
+            set_materialized_sidecars_private(&new_sidecars)?;
+        }
         Ok(StoreDb { conn })
     }
 

@@ -86,7 +86,7 @@ def family_certification(
         }
     view = entry
     if entry.deliveries:
-        view = entry.deliveries.get(delivery or "jit", entry)
+        view = entry.for_delivery(delivery or "jit")
     reasons: list[str] = []
     oracle = oracle_binding(
         registry, {record.family: record}, installed=installed_oracle

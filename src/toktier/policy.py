@@ -155,14 +155,18 @@ class ReasonCode(enum.Enum):
     R_INPUT_BELOW_GPU_THRESHOLD = "R_INPUT_BELOW_GPU_THRESHOLD"
     #: A per-input guard premise on an accelerated path (a guarded
     #: fast-CPU input, or a state-seed closure/span premise) could not
-    #: be proved; the input was routed to reference.
+    #: be proved; the input was routed to reference. Event detail always
+    #: identifies the guard stage.
     R_INPUT_GUARD_ROUTED = "R_INPUT_GUARD_ROUTED"
     #: A session append found no certified safe cut point; the
     #: accumulated text was fully re-encoded.
     R_SESSION_NO_SAFE_CUT = "R_SESSION_NO_SAFE_CUT"
-    #: An accelerated path raised an internal error; the input was
+    #: An accelerated engine failed to open or execute; the input was
     #: re-run on the next backend in the fallback chain.
     R_EXEC_FAULT = "R_EXEC_FAULT"
+    #: A core-stream-only accelerated backend was bypassed before execution
+    #: because the request asked for postprocessing; routed to reference.
+    R_INPUT_POSTPROCESS_ROUTED = "R_INPUT_POSTPROCESS_ROUTED"
 
 
 @dataclass(frozen=True)

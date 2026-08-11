@@ -19,10 +19,16 @@ use crate::{
     TokenBuffer,
 };
 
-/// Options for a one-shot encode.
+/// Options for a one-shot encode. Both fields default to `false`.
+///
+/// A single encode with both `offsets` and `add_special_tokens` enabled
+/// returns [`ErrorCode::InvalidArgument`]. Batch encodes do not support
+/// `offsets`; requesting them also returns [`ErrorCode::InvalidArgument`].
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct EncodeOptions {
+    /// Request post-processor special tokens.
     pub add_special_tokens: bool,
+    /// Request offsets for a single encode.
     pub offsets: bool,
 }
 
@@ -88,6 +94,10 @@ impl Default for RuntimeBuilder {
 }
 
 impl RuntimeBuilder {
+    /// Set the runtime home directory.
+    ///
+    /// This implicitly enables persistent sessions; see
+    /// [`Self::persistent_sessions`].
     pub fn home(mut self, path: impl Into<PathBuf>) -> Self {
         self.config.home = Some(path.into());
         self.config.persistent_sessions = true;
@@ -506,7 +516,11 @@ impl Runtime {
                 Arc::clone(&reference),
                 fast_cpu.clone(),
                 repair_fast_cpu,
-                gpu,
+                // The Rust API reads device facts (architecture, driver
+                // version) into its route plan at build time, so its engine
+                // is already open here; the deferred source is the Python
+                // facade's construction path.
+                gpu.map(toktier_routing_core::NativeGpuSource::Open),
                 postprocessor_adds_tokens,
                 self.inner.config.diagnostics,
             )

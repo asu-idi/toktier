@@ -64,6 +64,17 @@ diagnostics.
 Variables outside this set that may exist during development are not
 contract and can disappear without notice.
 
+Layer scope: this table is the Python product's configuration surface. The
+`toktier` Rust crate is configured through `RuntimeBuilder`, and in 0.2.1 its
+directory defaults come from `TOKTIER_ARTIFACT_CACHE` and (with the `jit`
+feature) `TOKTIER_JIT_CACHE` rather than from `TOKTIER_HOME` or XDG; its
+session state is set by `RuntimeBuilder::home()` and is in-memory when that is
+unset. Those two variables are the crate's own defaults, documented in
+`docs/rust-lifecycle.md`; they are not part of this frozen Python set, and
+they set directory locations only -- the "no switch may change output
+correctness" rule above covers both layers. Aligning the crate with this
+table's `TOKTIER_HOME` behaviour is intended for 0.3.
+
 ## 5. Directory layout: cache vs state (frozen distinction)
 
 - **Cache** (artifacts, built kernels): fully rebuildable. Deleting it
@@ -77,10 +88,14 @@ contract and can disappear without notice.
     for application name `toktier` (XDG on Linux:
     `~/.cache/toktier`, `~/.local/state/toktier`; the platformdirs
     conventions on other platforms).
-- The Python facade's store files default to owner-only permissions
-  (0700 directories, 0600 files). The Rust SQLite session path currently
-  inherits the process umask; callers who need owner-only state there
-  should pre-create a protected store home.
+- This resolution is the Python product's. The Rust crate's directory defaults
+  are its own (Section 4, layer scope) and are tabulated in
+  `docs/rust-lifecycle.md`.
+- The Python facade and Rust SQLite session path create owner-only store state
+  (0700 directories, 0600 files). These modes apply to paths each layer
+  creates; pre-existing user directories retain their modes. The 0700 Rust
+  store directory is the primary protection across SQLite-managed WAL/SHM
+  sidecar lifecycles.
 
 ## 6. Configuration file (frozen slot; minimal v1 scope)
 

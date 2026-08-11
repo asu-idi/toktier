@@ -56,6 +56,34 @@ the named variable when constructing a request. Token values are redacted from
 Use `ArtifactSource::None` as an additional explicit statement that only the
 verified cache or an imported bundle is allowed.
 
+### Where the crate puts its directories (0.2.1)
+
+The Rust crate resolves its own directories and, in 0.2.1, does **not** read
+`TOKTIER_HOME`, `XDG_CACHE_HOME`, or `XDG_STATE_HOME`. Those variables are the
+Python product's contract (`docs/contracts/config.md` Sections 4-5); the crate
+has a separate one:
+
+| Directory | Explicit setting | Environment default | Final fallback |
+|---|---|---|---|
+| Artifact cache | `RuntimeBuilder::artifact_cache()` / `ArtifactManager::builder().cache()` | `TOKTIER_ARTIFACT_CACHE` | `$HOME/.cache/toktier/artifacts`, else `./.toktier/artifacts` |
+| Direct-JIT cache (`jit` feature) | the JIT builder's cache setting | `TOKTIER_JIT_CACHE` | `$HOME/.cache/toktier/jit-rust`, else `./.toktier/jit-rust` |
+| Session state | `RuntimeBuilder::home()` | none | in-memory sessions when `home()` is unset |
+
+Two consequences worth stating plainly, because the shipped examples run with
+the defaults:
+
+- Setting `TOKTIER_HOME` before `cargo run --release -p toktier --example cpu`
+  relocates nothing on the Rust side; the example reads and writes
+  `$HOME/.cache/toktier/artifacts` unless `TOKTIER_ARTIFACT_CACHE` is set.
+  Point that variable at a scratch directory to run an example against
+  workspace-local state only.
+- `RuntimeBuilder::home()` governs persistent session state, not the artifact
+  cache. The two are set independently.
+
+Aligning the crate's defaults with the Python `TOKTIER_HOME`/XDG contract is
+intended for 0.3. Until then this table, rather than the Python one, is the
+crate's directory contract.
+
 ## Mirrors and air-gap bundles
 
 `ArtifactManager::mirror` writes the familiar
@@ -98,8 +126,10 @@ timeout. The cache key binds:
 - Rust CUDA-host source, rustc, release flags, and certification result.
 
 The product and manifest are reopened and authenticated before their directory
-is atomically published. Every manifest field is recomputed into the binding
-digest on reuse; changing metadata or fatbin bytes quarantines the entry.
+is atomically published. Every binding-input field is recomputed into the
+binding digest on reuse, and the compiled fatbin bytes are separately
+re-authenticated against their recorded SHA-256; changing metadata or fatbin
+bytes quarantines the entry.
 
 An exact compiler-binary/architecture tuple must appear in the registry for
 automatic certified compilation. Otherwise no cache directory is created and

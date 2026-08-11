@@ -15,6 +15,36 @@ axis they speak about.
 | 5 | **Kernel ABI version** | Registry backend entries; C symbol prefix `toktier_` | In the JIT delivery mode this axis versions the source-level kernel interface (bound via source digest + build flags + toolchain); when prebuilt kernels ship, it versions the stable C ABI between core and kernel package. |
 | 6 | **Certification suite version** | `suite_version` in registry records and evidence manifests | Identifies the judgment battery that produced the evidence. New suite versions never silently re-label old evidence. |
 
+### Version-to-tokenization boundary
+
+Axis 1 version strings may flow into package METADATA and immutable build facts
+used for reporting. They do not select, configure, or otherwise enter a
+tokenization path. In particular, Rust package-version constants and Python
+distribution-version reads are not tokenization inputs. This boundary is
+machine-enforced over the certification source coverage by
+`tools/scan_version_constants.py`; its small allowlist contains only the
+enumerated build-fact reporting sites.
+
+The version-normalized source identities do not broaden this rule. Identity v2
+normalizes only the workspace package version, the enumerated internal path
+dependency constraints, and the corresponding workspace-member `Cargo.lock`
+rows. Any other change remains byte-significant. The evidence exception rules
+for that identity are defined in `evidence-carryover.md`.
+
+### Rust crate surfaces
+
+The workspace's six published crates carry the workspace package version
+together. Axis 2's frozen, stability-promised surface remains the Python
+facade in `api.md`; the package version does not extend that promise to every
+Rust crate. The `toktier` crate is the documented Rust API preview and the
+supported Rust package surface. Its supporting crates --
+`toktier-routing-core`, `toktier-store-core`, `toktier-store-sqlite`,
+`toktier-cuda-driver`, `toktier-gigatoken-core`, and the unpublished
+`toktier-py` wheel binding -- are internal implementation details with no
+independent API stability promise. The five supporting crates on crates.io
+are published only for dependency resolution; supporting-crate Rust APIs may
+change in any release.
+
 ## 2. Sub-axes bound inside the fingerprint
 
 The semantic fingerprint (`fingerprint.md`) additionally binds a

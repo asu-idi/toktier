@@ -40,6 +40,25 @@ in that order; `toktier doctor` reports the same search and the parsed
 compiler release/build identity). A minimal construction and encode example
 is in Section 9.
 
+The same probe-only `doctor` command reports each detected device's index,
+name, and architecture, the observed driver version, and the selected
+delivery's certification status on every observed architecture. It never loads
+a kernel. In its output, `cuda_available` means that TokTier's CUDA runtime
+binding is installed; `cuda_hardware_present` is the separate device-presence
+answer.
+
+Under the JIT delivery it also reports the toolchain judgement itself, so the
+refusal below is visible before a build is attempted:
+`jit_toolchain_observed` is this machine's compiler/runtime triple,
+`jit_toolchain_constraint` is the judged set it is compared against, and
+`jit_toolchain_satisfied` is the shared judgement (`null` under the prebuilt
+delivery, which has no compiler premise). `automatic_gpu_eligible` combines
+that with candidacy, the observed architectures, and the delivery's own
+materials, and `automatic_effective_backend` names what an at-or-above-
+crossover automatic request would then use. `automatic_gpu_candidate` remains
+the installation-level fact -- torch importable, GPU not disabled -- and is
+not an eligibility answer.
+
 Because a JIT build product is machine-local, it is not bit-identical
 to the build the certification runs judged. The registry therefore
 records the JIT delivery as `certified_source` rather than `certified`,
@@ -294,16 +313,17 @@ detection, and `gpu_min_bytes=` changes the UTF-8 byte crossover. The explicit
 engine below remains available for benchmarking and low-level integration.
 
 When the GPU engine opens is a separate question from which backend runs a
-given input, and the two deliveries answer it differently. Under certified
+given input, and both deliveries answer it the same way. Under certified
 prebuilt delivery -- the default path on a supported GPU -- requests take the
-native single-call route, and that runtime opens the GPU engine while it is
-being constructed, on the first request of the tokenizer whatever that
-request's size is. `explain()["gpu_backend"]["loaded"]` therefore reads
-`true` after a short first request, while the crossover keeps deciding per
-input which backend actually executes. Under JIT delivery, and under the
-experimental `repair_backend="fastokens"` adapter, requests stay on the Python
-host, whose GPU backend still opens lazily at the first input that routes to
-the GPU, that is at or above the crossover.
+native single-call route, and that runtime opens the GPU engine on the first
+request that actually routes to the GPU, that is at or above the crossover;
+requests below it leave the device untouched.
+`explain()["gpu_backend"]["loaded"]` therefore stays `false` while only short
+requests have run, and a failed open is latched and reported as
+`gpu_backend.load_error` while the frozen fallback chain keeps serving
+exact ids. Under JIT delivery, and under the experimental
+`repair_backend="fastokens"` adapter, requests stay on the Python host, whose
+GPU backend opens the same way, at the first input that routes to the GPU.
 
 The JIT toolchain gate is fail-closed. A registry-judged triple of the actual
 selected NVCC release, `torch.version.cuda`, and PyTorch distribution version

@@ -4,7 +4,7 @@
 
 **整段对话只分词一次，之后只处理新增内容。**
 
-toktier 是面向智能体 LLM 服务的有状态分词系统。它保留每个会话的 token
+TokTier 是面向智能体 LLM 服务的有状态分词系统。它保留每个会话的 token
 状态，通过认证 CPU 路径对追加文本执行 repair，并为全新请求或大型请求提供
 认证 GPU 路径。两条快速路径返回的 token ID 序列，都与 Hugging Face（HF）
 `tokenizers` 从头完整编码得到的 token ID 序列**完全一致（bit-identical）**。
@@ -12,14 +12,12 @@ toktier 是面向智能体 LLM 服务的有状态分词系统。它保留每个�
 - **大规模精确验证。** 发布验证覆盖 14 个 tokenizer 工件、38 亿篇真实文档，
   共记录 **532 亿次检查**（12.33 万亿字符），未观察到任何不一致。
 - **CPU 与 GPU 均有快速路径。** 在已记录的整套基准测试中，GPU 路径处理一个
-  全新的 400 万字符请求（约 78.6 万 token）仅需 **3.88 ms**；对 419 万字符会话
-  追加 256 个字符时，原生有界 CPU repair 仅需 **1.68 ms**。该读数对应
-  `toktier repair (HF tokenizers window)` 这一测试系列，也就是该数据单元测量的
-  repair 窗口；修正版 Gigatoken 窗口是同一图中的另一测试系列（追加 65,536 个
-  字符时为 2.39 ms）。两者都是下方路由表涵盖的有界 repair；图表数据标明了
-  每根柱所属的测试系列。上述测量仅涵盖 repair 操作本身，不包含将完整历史
-  token 序列物化为 Python tuple 的成本；原生 Rust serving 集成可以保留会话
-  状态并仅使用 repair 后的 token 后缀，从而避免物化完整历史序列。
+  全新的 400 万字符请求（约 78.6 万 token）用时 **3.88 ms**；对 419 万字符
+  会话追加 256 个字符时，有界 CPU repair 为 **1.68 ms**。
+  [基准协议](docs/benchmarks.md)明确排除引擎构造开销，因此 **3.88 ms**
+  的前提是引擎已构造并就绪，不是冷启动首次调用的数字。repair 读数只测量
+  repair 操作本身，
+  不包含将完整历史 token 序列物化为 Python tuple 的成本。
 - **先认证，再加速。** 只有精确的 tokenizer 工件、参考实现版本、kernel 交付方式
   和架构均有记录证据覆盖时，系统才会采用快速路径。`explain()` 会报告实际路由
   及其原因。
@@ -27,13 +25,33 @@ toktier 是面向智能体 LLM 服务的有状态分词系统。它保留每个�
 <picture>
   <source media="(prefers-color-scheme: dark)"
           srcset="docs/figures/hero_session_vs_reencode_dark.svg">
-  <img alt="toktier 与完整重编码在三种 400 万字符会话负载下的延迟对比，线性坐标"
+  <img alt="toktier 与完整重编码在三种 400 万字符量级负载下的延迟对比，线性坐标"
        src="docs/figures/hero_session_vs_reencode.svg">
 </picture>
 
-图中每根柱都是实测中位数。精确数值、负载大小和样本数见
+图中每根柱均表示实测中位数。上文的 1.68 ms 来自
+`toktier repair (HF tokenizers window)` 测试系列，也就是取得该读数时采用的
+repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测试系列（追加
+65,536 个字符时为 2.39 ms）。两者都是下方路由表涵盖的有界 repair，图表
+数据标明了每根柱所属的测试系列。原生 Rust serving 集成可通过保留会话状态
+并仅使用 repair 后的 token 后缀，避免物化完整历史序列。精确数值、负载大小和
+样本数见
 [`hero_session_vs_reencode.data.json`](docs/figures/hero_session_vs_reencode.data.json)，
 完整的扫描测试结果见 [`docs/benchmarks.md`](docs/benchmarks.md)。
+
+## 最新动态
+
+- **2026.08.11** 🚀 **toktier 0.2.1** 发布——维护版本：诊断信息更完整
+  （`doctor` 会报告 JIT 工具链是否合格，`explain()` 摘要逐项标明所指的时间
+  范围），并修正了文档；对外返回的 ID、store 格式与 kernel ABI 都没有变化。
+  详见 [v0.2.1 发布说明](docs/releases/v0.2.1.md)。
+- **2026.08.10** 🚀 **toktier 0.2.0** 发布——首个公开版本：提供采用有界
+  CPU repair、ID 精确性已获认证的会话，以及预编译 GPU 路径和 Rust
+  serving API；分别以 Python wheel（[PyPI](https://pypi.org/project/toktier/)）
+  和六个 Rust crate（[crates.io](https://crates.io/crates/toktier)）的
+  形式发行。
+- **2026.07.31** 📄 论文 [*TokTier: Exact Stateful CPU+GPU Tokenization
+  for Agentic LLM Serving*](https://arxiv.org/abs/2607.29678) 上线 arXiv。
 
 ## 快速开始
 
@@ -42,16 +60,16 @@ toktier 是面向智能体 LLM 服务的有状态分词系统。它保留每个�
 ```python
 import toktier
 
-tok = toktier.load("qwen3_8b")          # support matrix 中的 family id
+tok = toktier.load("qwen3_8b")          # 支持矩阵中的 family id
 enc = tok.encode("hello world")         # token ID
 print(enc.ids)
 print(tok.decode(enc.ids))
-print(tok.explain())                    # 实际后端及选择原因
+print(tok.explain(summary=True))        # 简明路由与判定
 ```
 
 先 `encode` 再 `decode`，不一定能还原为完全相同的文本：如果 tokenizer 的处理
 流程包含归一化（例如 NFC），返回的会是归一化后的文本。这是 tokenizer 自身的
-行为，并非 TokTier 造成的不一致。TokTier 只保证 ID 一致，这项保证不受影响：
+行为，并非 TokTier 造成的不一致。TokTier 给出的保证是关于 ID 的，这项保证不受影响：
 对于同一输入，其 ID 与 HF 从头编码的结果相同，而且两个解码器返回的文本也相同。
 
 如果应用代码拿到的是 Hugging Face 模型仓库，而不是 TokTier family id，也可以
@@ -62,14 +80,17 @@ tok = toktier.from_pretrained("Qwen/Qwen3-0.6B")
 ```
 
 对于已登记的 sibling 或 canonical 仓库，`from_pretrained()` 会下载经审计的
-不可变 revision（未知仓库在未显式传入 `revision=` 时解析 `main`），精确计算
-实际文件的 SHA-256，再查询受根摘要校验的 210 仓库 sibling 注册表。字节完全相同、
-canonical 化等价或序列化等价的记录，会通过同一套 CPU/GPU 路由
-使用已经认证的 canonical 工件。已知仓库的字节内容一旦变化，或遇到任何未登记
+不可变 revision，对解析到的那个文件计算 SHA-256，再查询由根摘要校验的
+sibling 注册表（收录 210 个仓库）。对于未登记的仓库，`from_pretrained()`
+在未显式传入 `revision=` 时解析 `main`。字节完全相同、经 canonicalization
+后等价或序列化等价的记录，会通过同一套 CPU/GPU 路由使用已经认证的
+canonical 工件。已知仓库的字节内容一旦变化，或遇到任何未登记
 内容，在允许参考实现 fallback 的策略下都会继续使用 HF；
 `REQUIRE_ACCELERATED` 策略则会报错。`explain()["model_resolution"]` 会同时报告
 来源身份和实际执行的 canonical 身份。`load(family)` 仍是直接的 family API，
 也是适合气隙环境的路径。
+
+### 会话
 
 为不断增长的对话记录指定 `session=`，即可跨调用和进程保存 token 状态：
 
@@ -82,15 +103,17 @@ enc = tok.encode(transcript, session="chat-42")
 transcript += "user: what changed since my last call?\n"
 enc = tok.encode(transcript, session="chat-42")
 
-# 存储路径与从头编码路径返回相同的 ID。
+# 使用 store 的路径与从头编码路径返回相同的 ID。
 assert enc.ids == tok.encode(transcript, lookup="off").ids
 ```
 
-不传 `session=` 时，store 也可以按内容找到经过逐字节验证的已存前缀。传入
-`lookup="off"` 可跳过这次 lookup。字节验证失败只会被视为未命中，绝不会成为
-可信命中；缓存淘汰只影响延迟，不影响输出。长会话的稳定前缀封存后，重启时
-仍可复用：恢复记录前，TokTier 会先将它与调用方提供的历史前缀绑定；绑定缺失
-或损坏时则执行冷编码。
+不传 `session=` 时，store 也可以按内容查找经过逐字节验证的已存前缀。传入
+`lookup="off"` 可跳过此次查找。逐字节验证失败只会被视为未命中，绝不会当作
+可信命中；缓存淘汰只影响延迟，不影响输出。封存长会话的稳定前缀后，该前缀
+在重启后仍可复用：TokTier 会先将记录与调用方提供的历史前缀绑定，再恢复
+记录；绑定缺失或损坏时则执行冷编码。
+
+### 路由与策略
 
 路由策略可以选择，也可以查看：
 
@@ -111,23 +134,38 @@ tok = toktier.load("qwen3_8b", policy=RoutingPolicy.CERTIFIED)
 
 | 默认 `CERTIFIED` 策略下的情形 | 自动路由 |
 |---|---|
-| `toktier`，11 个认证 tokenizer 工件（覆盖 12 个 family）之一 | 修正版 Gigatoken 完成 CPU 全量编码；任一绑定检查失败则使用 HF |
-| `toktier[gpu]`，小于 GPU crossover（默认 64 KiB）的冷请求/普通请求 | 修正版 Gigatoken CPU 路径（没有 CPU-fast 认证的 family 使用 HF） |
-| `toktier[gpu]`，达到或超过 GPU crossover（默认 64 KiB）的冷请求/普通请求 | 随包预编译 GPU 路径；随后按固定 fallback 链依次使用修正版 Gigatoken 和 HF |
-| 已存在的 session 收到严格追加 | 覆盖范围内的 12 个 family 使用修正版 Gigatoken CPU repair，不受完整对话总长度影响 |
+| 安装项为 `toktier`，且使用 11 个认证 tokenizer 工件（覆盖 12 个 family）之一 | 修正版 Gigatoken 完成 CPU 全量编码；任一绑定检查失败则使用 HF |
+| 安装项为 `toktier[gpu]`，且冷请求/普通请求的输入大小低于 GPU crossover（默认 64 KiB） | 修正版 Gigatoken CPU 路径（没有 CPU-fast 认证的 family 使用 HF） |
+| 安装项为 `toktier[gpu]`，且冷请求/普通请求的输入大小达到或超过 GPU crossover（默认 64 KiB） | 随包预编译 GPU 路径；随后按固定 fallback 链依次使用修正版 Gigatoken 和 HF |
+| 已存在的会话收到严格追加 | 覆盖范围内的 12 个 family 使用修正版 Gigatoken CPU repair，不受完整对话总长度影响 |
 | Added-token 或 repair guard 无法证明前提 | 该输入使用 HF 参考路径 |
 
-`explain()` 会报告固定路由链、crossover 判定（`gpu_min_bytes`，默认 64 KiB）、
-最后实际返回结果的后端，以及每类 fallback 的计数。
+`explain(summary=True)` 报告：
+
+- 主要路由与认证结论；
+- 最近一次请求的实际执行情况（`last_execution_backend` / `_path` /
+  `_source`，如果请求结束时的后端与起始后端不同，还会给出
+  `last_execution_fallback`）；
+- 整个进程生命周期内是否发生过 fallback（`fallback_ever_occurred`，
+  常规的低于阈值 crossover 路由也计入其中）。
+
+完整的无参数 `explain()` 报告则再给出固定路由链、crossover 判定
+（`gpu_min_bytes`，默认 64 KiB）、详细的探测与认证数据，以及每类
+fallback 的计数。
 
 ## Rust serving API
 
-工作区现在提供无需 Python 的 Rust serving facade，供直接保留 token 状态的
-前端使用。它支持固定版本工件的获取、镜像同步和气隙操作，参考实现、修正版 CPU、
-预编译或 direct-JIT GPU 路由，连续 token 缓冲区，不依赖 executor 的有界批处理，
-持久化命名 session，以及原生增量 `TokenPatch` 结果：
+工作区（Cargo workspace）提供无需 Python 的 Rust serving facade，供直接
+保留 token 状态的前端使用。它提供：
 
-```rust,no_run
+- 固定版本工件的获取、镜像与气隙操作
+- 参考实现、修正版 CPU、预编译或 direct-JIT 的 GPU 路由
+- 连续 token 缓冲区
+- 不依赖 executor 的有界批处理
+- 持久化的命名会话
+- 原生增量的 `TokenPatch` 结果
+
+```rust
 use toktier::{Device, Runtime};
 
 let runtime = Runtime::builder().device(Device::Auto).build()?;
@@ -135,10 +173,9 @@ let tokenizer = runtime.load("qwen3_8b")?;
 let mut session = tokenizer.open_session("agent-42")?;
 let seed = session.seed("user: hello\n")?;
 let patch = session.append("assistant: hi\n")?;
-# Ok::<(), toktier::Error>(())
 ```
 
-`patch.keep_tokens()` 给出下游已保留 ID 缓冲区的截断位置；
+`patch.keep_tokens()` 指出下游保留的 ID 缓冲区应当截断到哪里；
 `patch.replacement_ids()` 是 repair 后的精确后缀。除非调用方显式请求
 `snapshot()`，此次追加不会分配完整历史 ID 序列。该 crate 自 0.2.0 起发布在
 crates.io 上，并跟随包版本号，因此 `cargo add toktier` 会从注册表解析它。
@@ -162,9 +199,16 @@ cargo add toktier                   # 无 Python 依赖的 Rust serving API
 
 | 安装项 | 交付内容 | 要求 |
 |---|---|---|
-| `toktier` | 修正版 Gigatoken CPU 全量编码与 session repair、HF fallback、持久化 store、路由和 CLI | Linux x86_64、glibc 2.34+、CPython 3.10+；固定安装 `tokenizers==0.22.2` 与 `transformers==4.57.6` |
+| `toktier` | 修正版 Gigatoken CPU 全量编码与会话 repair、HF fallback、持久化 store、路由和 CLI | Linux x86_64、glibc 2.34+、CPython 3.10+；固定安装 `tokenizers==0.22.2` 与 `transformers==4.57.6` |
 | `toktier[gpu]` | `toktier` 的严格超集；通过 64 KiB crossover 自动路由到随包的多架构 CUDA fatbin | NVIDIA GPU、驱动版本 580.65.06+、`torch`；无需编译器，首次使用不编译 |
 | `toktier[gpu-jit]` | CPU/GPU 路由与 `toktier[gpu]` 相同；在本机编译认证 kernel 源码 | 经评审的 NVCC / torch-runtime CUDA / PyTorch 三元组、`torch`、`ninja`；首次使用需要编译 |
+
+两个 GPU extras 都会引入 `torch` 及其 CUDA wheel，请预留空间：全新的
+`[gpu]` 或 `[gpu-jit]` 虚拟环境实测约 5 GiB，无缓存安装会下载数个几百 MB 级
+的 wheel（pip 缓存规模相当）。这是 Torch 生态的体量，而非 TokTier 自身——基础
+`toktier` wheel 完全不需要这些。
+
+### JIT 工具链认证
 
 JIT 在工具链边界采用严格的 fail-closed 策略。认证会将 PyTorch 扩展构建器
 实际选择的 `nvcc`、`torch.version.cuda` 和 PyTorch 发行版版本分别作为独立维度
@@ -184,10 +228,12 @@ toktier gpu compile qwen3_8b --accept-uncertified-jit
 ```
 
 **这不会让生成的 kernel 获得认证。** 该命令在 `EXPERIMENTAL` 策略下运行，打印
-`UNCERTIFIED JIT OPT-IN` 警告，并记录所有获豁免的前提。应用程序代码也必须显式
-传入 `policy="experimental", gpu_delivery="jit"`；这项风险确认不会持久化，也不会被
-后续认证进程继承。使用结果前请检查
+`UNCERTIFIED JIT OPT-IN` 警告，并记录所有获豁免的前提。应用代码也必须显式
+传入 `policy="experimental", gpu_delivery="jit"`；这项风险确认刻意不做持久化，
+也不会被后续认证进程继承。使用结果前请检查
 `explain()["experimental_waivers"]`。
+
+### CPU 引擎来源与构建身份
 
 经过修正并固定 Unicode 数据版本的 Gigatoken 实现已直接链接到核心 `toktier._native`
 扩展中。TokTier 不会安装或信任名为 `gigatoken` 的顶层包，wheel 也不包含第二个
@@ -199,8 +245,19 @@ CPU 原生模块。基础 wheel 还固定了启用这条认证路径所需的 HF
 
 ```bash
 python tools/fast_cpu_source_identity.py
+python tools/compute_identity_v2.py
+python tools/compute_identity_v2.py --show-diff
 maturin build --locked --release
 ```
+
+三个既有身份脚本（`fast_cpu_source_identity.py`、
+`native_host_source_identity.py`、`rust_api_source_identity.py`）仍提供
+当前构建信息所使用的逐字节 v1 视图。`compute_identity_v2.py` 仅归一化明确
+列出的工作区版本字段，随后在各自的新域中对同一批 fast-CPU、native-host 与
+Rust-API 覆盖集计算哈希；`--show-diff` 会逐行打印归一化后的内容，便于
+审阅。`tools/dev.py check` 还会拒绝受覆盖的 Rust 或 Python 代码在明确列出
+的构建信息报告位置之外读取包版本，从而确保允许的元数据变化不会影响运行时
+行为。
 
 [来源与构建记录](packaging/fast_cpu/README.md)中固定了上游 commit、补丁、Unicode
 数据、编译器和发布参数。运行中的扩展会报告经过域分隔的源码摘要、精确 Rust
@@ -212,18 +269,22 @@ TokTier 当前只发布 ABI3 Linux x86-64 wheel，不发布 sdist。任意安装
 都会产生不同的工具链/构建身份，因此在单独认证前会 fail-closed。带有 tag 的仓库
 包含完整源码与固定构建记录；是否发布 sdist 仍是独立的发布决策。
 
+### GPU 交付
+
 预编译 fatbin 包含 `sm_75/80/86/89/90/100/120` 镜像以及
 `compute_75` PTX fallback。绑定二进制摘要的认证覆盖 `sm_89` 和
 `sm_120`；其他随包架构标记为 `experimental`。使用默认 facade 时，
 `toktier[gpu]` 选择预编译交付，`toktier[gpu-jit]` 则根据检测到的配置选择
-JIT；显式 `gpu_delivery=` 参数可覆盖该检测结果。预编译交付下，GPU 引擎会在
-构造原生请求路径时初始化；无论首个请求大小如何，都会触发这一过程，因此
-短请求过后 `explain()["gpu_backend"]["loaded"]` 也可能读到 `true`；crossover 仍会
-逐个输入决定实际由哪个后端执行。JIT 交付继续使用 Python 主机端，其 GPU 后端直到
-首个路由到 GPU 的输入到来时才会加载。JIT 交付在 `sm_89` 和
+JIT；显式 `gpu_delivery=` 参数可覆盖该检测结果。预编译交付下，GPU 引擎按需
+初始化：只有首个路由到 GPU（达到或超过 crossover）的请求才会触发加载，因此
+在只跑过短请求的情况下，`explain()["gpu_backend"]["loaded"]` 会保持 `false`；crossover 仍会
+逐个输入决定实际由哪个后端执行。JIT 交付继续使用 Python 主机端，其 GPU 后端
+同样直到首个路由到 GPU 的输入到来时才会加载。JIT 交付在 `sm_89` 和
 `sm_120` 上的状态为 `certified_source`，其证书绑定源码、类别表、编译参数
 和工具链约束，而不是本机生成的二进制。自动 facade、显式引擎 API 和交付
 诊断见 [`docs/gpu-jit.md`](docs/gpu-jit.md)。
+
+### tokenizer 工件、镜像与气隙主机
 
 tokenizer 工件不打包在 wheel 中，而是从固定的上游 revision 获取并用
 SHA-256 验证。CLI 同时支持联网、镜像和气隙环境：
@@ -241,10 +302,54 @@ toktier doctor --json
 wheel 及其全部依赖 wheel（wheelhouse 或本地索引）；bundle 格式本身不携带
 任何 Python 发行包。
 
-核心包不依赖 `torch`，导入时不需要 CUDA、网络连接或硬件探测。工件缓存、
-编译 kernel 缓存和持久化会话状态分别存放：两个缓存跟随 `XDG_CACHE_HOME`，
-会话 store 跟随 `XDG_STATE_HOME`——因为状态不属于缓存。要一次性迁移全部目录，
-可使用 `TOKTIER_HOME`（见 `docs/contracts/config.md` 第 5 节）。
+### doctor：这台机器实际会走哪条路
+
+`toktier doctor` 只做探测，从不加载 CUDA kernel。`devices` 中的每个条目
+都会报告序号、名称和架构；`driver_version` 报告共享主机探针检测到的驱动
+版本；`automatic_gpu_delivery_certification` 将检测到的每种架构映射到
+所选安装配置对应交付方式的认证状态。`cuda_available` 报告 TokTier 的
+CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测是否至少
+找到一台可用的 CUDA 设备。
+
+它还会回答“这台机器实际会走哪条路”，且不构造 tokenizer、不尝试编译：
+
+| 字段 | 含义 |
+|---|---|
+| `automatic_gpu_candidate` | 仅反映安装层面：`torch` 可导入，且配置未禁用 GPU；并非合格性判定 |
+| `jit_toolchain_satisfied` | JIT 交付下，本机检测到的编译器/运行时三元组是否属于注册表已评审的组合；预编译交付没有这项前提，因此报告 `null` |
+| `jit_toolchain_observed` / `jit_toolchain_constraint` | 本机检测到的三元组，以及用于对照的已评审集合 |
+| `automatic_gpu_eligible` | 以下条件的合取结果：候选条件成立；至少检测到一台设备，且其架构已通过所选交付方式的评审；该交付方式自身的材料齐备；工具链前提成立 |
+| `automatic_effective_backend` | 对具备 CPU 快路径认证的 family，达到或超过 crossover 的自动请求实际使用的后端：`gpu`、`fast_cpu` 或 `hf` |
+
+因此，在未经评审的编译器上安装 `toktier[gpu-jit]`，会同时报告
+`automatic_gpu_candidate: true`、`jit_toolchain_satisfied: false`、
+`automatic_gpu_eligible: false` 与 `automatic_effective_backend: fast_cpu`
+——其结论与 `toktier gpu compile` 一致，而且无需先运行该命令。
+
+### 缓存、状态与目录布局
+
+核心包不依赖 `torch`，导入时无需 CUDA、网络连接或硬件探测。工件缓存、
+已编译 kernel 缓存和持久化会话状态分别使用独立目录：前两类缓存遵循
+`XDG_CACHE_HOME`，会话 store 遵循 `XDG_STATE_HOME`——因为状态不属于缓存。
+如需统一指定所有目录的位置，可使用 `TOKTIER_HOME`（见
+`docs/contracts/config.md` 第 5 节）。
+
+上述目录规则针对 Python 产品。在 0.2.1 中，Rust crate 自行解析目录，
+**不会**读取 `TOKTIER_HOME` 或 XDG 变量：
+
+| 层 | 工件缓存 | 已编译 kernel 缓存 | 会话状态 |
+|---|---|---|---|
+| Python（`toktier`） | `TOKTIER_HOME` / `XDG_CACHE_HOME` | `TOKTIER_HOME` / `XDG_CACHE_HOME` | `TOKTIER_HOME` / `XDG_STATE_HOME` |
+| Rust（`toktier` crate） | `TOKTIER_ARTIFACT_CACHE`，否则 `$HOME/.cache/toktier/artifacts` | `TOKTIER_JIT_CACHE`，否则 `$HOME/.cache/toktier/jit-rust`（`jit` feature） | `RuntimeBuilder::home()`；未设置时仅存于内存 |
+
+因此 `TOKTIER_HOME=/somewhere cargo run --release -p toktier --example cpu`
+不会改变该 Rust 示例的工件缓存位置——需要改用 `TOKTIER_ARTIFACT_CACHE`
+（或调用 `RuntimeBuilder::artifact_cache()`）。计划在 0.3 将 Rust 默认目录
+与 Python 的 `TOKTIER_HOME`/XDG 约定对齐；在此之前，文档会分别说明两层的
+行为，不应假定二者一致。参见
+[`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)。
+
+### 实验性：Fastokens 对照
 
 Fastokens 0.3.1 只作为显式实验性对照使用：
 
@@ -255,7 +360,8 @@ tok = toktier.load(
 ```
 
 该适配器会重新编码完整会话，并报告 `exact_id_guarantee: false`；认证策略永远
-不会自动选择它，它也不属于修正版 Gigatoken 的 12.4 TB 验证声明。
+不会自动选择它，它也不在修正版 Gigatoken 的 12.4 TB（12.33 万亿字符）声明
+的覆盖范围内。
 
 ## 正确性与证据
 
@@ -275,10 +381,11 @@ tok = toktier.load(
 [`evidence/evidence_manifest_added_families.json`](evidence/evidence_manifest_added_families.json)
 和 [`tables/support_registry.json`](tables/support_registry.json)。随版本提供的
 逐工件测量记录覆盖 49,920,199,013 次检查；早期归档阶段覆盖其余
-3,280,031,861 次，两者相加得到上面的总数。通过历史公开 session API 进行的
-一次聚焦的端到端复验记录在
+3,280,031,861 次，两者相加得到上面的总数。经由既有的公开会话 API 做的
+一次针对性端到端复验，记录在
 [`readings/fast_cpu_focused_parity.json`](readings/fast_cpu_focused_parity.json)；
-实际执行的单次调用 Rust 前端则在全部 11 个支持 CPU 快速路径的工件上另行检查，记录在
+实际执行的单次调用 Rust 前端则在全部 11 个支持 CPU 快速路径的工件上另行
+检查，记录在
 [`readings/fast_cpu_native_frontend_parity.json`](readings/fast_cpu_native_frontend_parity.json)。
 
 三个状态把证据与运行时行为区分开：
@@ -297,6 +404,7 @@ fallback 仍是系统契约的一部分。
 ```bash
 pip install pytest==9.1.1 jsonschema==4.26.0    # 或：pip install --group test
 python tools/generate_evidence.py --check
+python tools/verify_carryover.py --check
 python tools/generate_native_legal.py --check    # 需要 cargo
 python tools/validate_registry.py tables/support_registry.json
 python tools/generate_registry.py --release-check
@@ -331,15 +439,19 @@ README 顶部的图比较了对同一文本执行自动 GPU/repair 路由与完�
 | GPU 端到端（文本输入、ID 输出） | 0.6028 GB/s | 单张 RTX PRO 6000 Blackwell |
 | HF 参考 CPU 路径 | 0.0047 GB/s | 同一主机、同一输入、单 CPU 核 |
 
-这组数据使用 2.2 GB 驻留内存的真实网页文本，报告按墙钟时间计算的 UTF-8 字节
-吞吐量，并物化主机侧 ID 数组。完整协议、每个数据单元格和溯源信息见
-[`docs/benchmarks.md`](docs/benchmarks.md)。
+这组数据使用常驻内存中的 2.2 GB 真实网页文本，在物化主机侧 ID 数组的前提
+下，报告按墙钟时间计算的 UTF-8 字节吞吐。完整协议、每个数据单元格和溯源
+信息见 [`docs/benchmarks.md`](docs/benchmarks.md)。
 
 主要实验使用 RTX PRO 6000 Blackwell，但消费级 RTX 5090 在相同协议下的一轮
 测试反而**快 11–17%**（所报告 family 的吞吐量为 4.24–5.50 GB/s）。因此，
 消费级硬件是实际可行的部署目标，并非降级模式：RTX 4090 也通过了针对 `sm_89`
 的整套正确性与预编译交付测试。这些观察结果并不保证每张 GPU 都有相同比例的
 提升；实际性能仍取决于架构、负载和主机端交付方式。
+
+图中明确标注了 Hugging Face（HF）`tokenizers`，并注明每幅图对应的
+`docs/figures/*.data.json` 机器可读文件。基准文档还展示了直接使用其他引擎
+速度更快的适用区间。
 
 ![单请求延迟](docs/figures/f1_single_request_latency.svg)
 
@@ -348,10 +460,6 @@ README 顶部的图比较了对同一文本执行自动 GPU/repair 路由与完�
 ![会话状态内存](docs/figures/f3_session_state_memory.svg)
 
 ![repair 路径的等效吞吐](docs/figures/f4_repair_equivalent_throughput.svg)
-
-图中明确标注了 Hugging Face（HF）`tokenizers`，并注明每幅图对应的
-`docs/figures/*.data.json` 机器可读文件。基准文档还展示了直接使用其他引擎
-速度更快的适用区间。
 
 ## 支持矩阵
 
@@ -371,15 +479,15 @@ SHA-256、后端状态，以及 **210 个已验证模型仓库**；这些仓库�
 210 个 sibling 条目中，191 个会映射到当前 wheel 随附的 canonical 工件。
 其余 19 个不会获得加速准入，因为对应 canonical 工件尚未打包：7 个
 WordPiece 条目使用 HF，12 个源码级 `kimi_k3` 条目目前还需要转换工件，因而
-会给出可操作的错误，而不会假装可以直接加载 `tiktoken.model`。
+会给出可操作的错误，而不会暗示可以直接加载 `tiktoken.model`。
 `toktier inspect` 仍是随包 family 列表的权威来源。
 
 ## 与现有工作的关系
 
-Incremental BPE 研究关注 merge 阶段如何随新字节到来而扩展。toktier 工作在它的
-上一层：会话状态保存整个 tokenizer 处理流程的 token ID 和 span，涵盖
-normalization、pre-tokenization、merge 和 added-token 处理；只有边界检查通过
-后才会接受追加内容。
+Incremental BPE 研究的是 merge 阶段如何随新字节到来而增量扩展。TokTier
+位于其上一层：会话状态保存完整 tokenizer 处理流程对应的 token ID 和
+span，涵盖 normalization、pre-tokenization、merge 和 added-token 处理；
+只有边界检查通过后，系统才会接受追加内容。
 
 `llm-tokenizer` 和 NVIDIA Dynamo 的 `dynamo-tokenizers` 等服务项目也会
 缓存编码结果。主要接口差异如下：
@@ -389,14 +497,14 @@ normalization、pre-tokenization、merge 和 added-token 处理；只有边界�
 | 生命周期 | 可持久化、跨进程 | 跟随 tokenizer 进程 |
 | 命中验证 | 摘要用于筛选候选，再由已存字节验证 | 以摘要为键进行 lookup |
 | 复用边界 | 经过认证的 tokenizer 边界 | 通常是 special-token 边界 |
-| 使用界面 | 供自行管理会话状态的应用使用的 Python 库 | 服务网关组件 |
+| 接口形态 | 供自行持有会话状态的应用使用的 Python 库 | 服务网关组件 |
 
-两层共同使用的方法见
+两层如何配合使用，见
 [`docs/integration/dynamo.md`](docs/integration/dynamo.md)。
 
 ## 文档
 
-- [`docs/releases/v0.2.0.md`](docs/releases/v0.2.0.md) — 本版本发布说明（英文）。
+- [`docs/releases/v0.2.1.md`](docs/releases/v0.2.1.md) — 本版本发布说明（英文）。
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — 分层、路由与 store 格式。
 - [`ROADMAP.md`](ROADMAP.md) — 发布范围与后续集成。
 - [`docs/support-matrix.md`](docs/support-matrix.md) — 工件与覆盖仓库。
@@ -413,7 +521,7 @@ TokTier 的 CPU Fast Pass 和 Fast Repair 建立在
 [Fastokens](https://github.com/crusoecloud/fastokens) 两项优秀的开源工作之上。感谢
 两项工作的作者和贡献者将这些成果开源。
 
-修正版 Gigatoken 是 11 个唯一 tokenizer 工件的默认认证 repair-window 引擎；
+修正版 Gigatoken 是 11 个唯一 tokenizer 工件的默认认证 repair 窗口引擎；
 由于 NVIDIA Nemotron-Terminal 随附了逐字节完全相同的 `qwen3_8b` tokenizer，
 这些工件覆盖 12 个 family。TokTier 的兼容性补丁使 Gigatoken 的 Unicode
 数据和 UTF-8 处理与冻结的

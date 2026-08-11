@@ -181,10 +181,12 @@ frontend does not require a Python callback.
   then execute in Rust with the frozen synchronizing-transition predicate,
   byte-fallback clean-cut rule, added-literal end guard, and a retained repair
   window. No per-seal Python token/span list is materialized.
-- The Python facade creates store files with restrictive permissions (0700
-  directories, 0600 files); the Rust SQLite session path currently inherits
-  the process umask, so a protected store home is the caller's responsibility
-  there. Logs do not contain source text. Capacity limits and per-session
+- The Python facade and Rust SQLite session path create store files with
+  restrictive permissions (0700 directories, 0600 files). The Rust path
+  tightens only directories and files it creates, leaving pre-existing user
+  directories unchanged; its 0700 store directory remains the primary
+  protection across SQLite-managed WAL/SHM sidecar lifecycles. Logs do not
+  contain source text. Capacity limits and per-session
   deletion are exposed; TTL and a full-store wipe are not part of the current
   0.x public API (deleting the store directory remains the documented reset).
 

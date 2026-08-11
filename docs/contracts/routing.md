@@ -106,22 +106,25 @@ that may accompany them is not a machine interface.
 |---|---|
 | `R_INPUT_ADDED_TOKEN` | Input contains an added-token literal; this input is routed to the reference frontend path. Part of the certified pipeline design, not a correctness incident. |
 | `R_INPUT_BELOW_GPU_THRESHOLD` | Input is smaller than the configured GPU crossover, so execution starts at the next eligible backend in the immutable fallback chain. This is a normal latency policy, not a fault. |
-| `R_INPUT_GUARD_ROUTED` | A per-input guard premise on an accelerated path could not be proved -- a guarded fast-CPU input, or a state-seed closure/span premise -- so this input was routed to the reference backend. |
+| `R_INPUT_GUARD_ROUTED` | A per-input guard premise on an accelerated path could not be proved -- a guarded fast-CPU input, or a state-seed closure/span premise -- so this input was routed to the reference backend. Every event detail identifies the failing `stage`: `engine_guard` for the fast-CPU engine guard, `span_bridge` for the native accelerated state-seed bridge, or `state_encode` for a facade-owned state-encoding guard. |
 | `R_SESSION_NO_SAFE_CUT` | A session append found no certified safe cut point; the accumulated text was fully re-encoded. Correctness preserved by construction. |
-| `R_EXEC_FAULT` | An accelerated backend raised an internal error, or a core-stream-only backend was bypassed for requested postprocessing; execution continued at the next eligible backend in the fallback chain, and the reference runs when the chain reaches it. Returned certified IDs remain reference-equal. |
+| `R_EXEC_FAULT` | An accelerated engine failed to open or raised an internal error while executing; execution continued at the next eligible backend in the fallback chain, and the reference runs when the chain reaches it. Returned certified IDs remain reference-equal. |
+| `R_INPUT_POSTPROCESS_ROUTED` | A core-stream-only accelerated backend was bypassed before execution because the request asked for postprocessing that can change the ID stream. The reference backend produced the postprocessed result. This is a capability route, not an execution fault. |
 
 ### 5.3 Interaction with `REQUIRE_ACCELERATED`
 
 `REQUIRE_ACCELERATED` constrains plan time only: construction raises if
 no certified accelerated backend can be planned. Run-time input-level
-routing (`R_INPUT_ADDED_TOKEN`, `R_INPUT_BELOW_GPU_THRESHOLD`) and correctness fallbacks
-(`R_EXEC_FAULT`, `R_SESSION_NO_SAFE_CUT`) remain active -- they are part
-of the certified configuration, and disabling them is not offered.
+routing (`R_INPUT_ADDED_TOKEN`, `R_INPUT_BELOW_GPU_THRESHOLD`,
+`R_INPUT_POSTPROCESS_ROUTED`) and correctness fallbacks
+(`R_INPUT_GUARD_ROUTED`, `R_EXEC_FAULT`, `R_SESSION_NO_SAFE_CUT`) remain
+active -- they are part of the certified configuration, and disabling
+them is not offered.
 
 ### 5.4 Extension policy (frozen)
 
 - The `R_*` namespace is append-only: codes are never renamed, reused,
-  or re-meant. New codes may be added in minor releases.
+  or re-meant. New codes may be added in any 0.x release.
 - Consumers must tolerate unknown reason codes (treat as opaque
   diagnostics). Machine logic should switch on the codes it knows and
   pass the rest through.

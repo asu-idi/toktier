@@ -41,12 +41,28 @@ through the recorded digest and size before an atomic cache publication. An
 explicit verified directory remains available through `artifact_directory()`
 or `load_local()`. See [Rust lifecycle and distribution](rust-lifecycle.md).
 
+Without `artifact_cache()`, the cache root comes from `TOKTIER_ARTIFACT_CACHE`
+and otherwise defaults to `$HOME/.cache/toktier/artifacts`. In 0.2.1 the crate
+does not read `TOKTIER_HOME` or the XDG variables -- those govern the Python
+product -- and `home()` above sets the session-state directory only, not the
+artifact cache. The complete table, including the `jit` feature's
+`TOKTIER_JIT_CACHE`, is in
+[Rust lifecycle and distribution](rust-lifecycle.md); aligning the two layers
+is intended for 0.3.
+
 `Runtime::doctor()` returns typed build and CUDA-probe facts. Device probing
 does not load a kernel. `Tokenizer::plan()` is the immutable admitted route;
 every result carries `ExecutionFacts` naming the backend that actually ran.
 Accelerated admission also requires the exact Rust facade source, rustc,
 features, target, and release-profile facts to appear in the shipped
-`runtime_builds` registry. A development or otherwise unregistered build falls
+`runtime_builds` registry. The registered identity snapshots the workspace
+`Cargo.lock`, but the certification check compares those compile-time facts
+only: when the crate is built as an ordinary dependency, Cargo resolves
+transitive crate versions from the consumer's own lockfile, and those
+resolved versions are outside the judgement. A build that must match the
+judged dependency graph exactly should build inside the source workspace
+with `--locked`; the shipped wheel is always produced that way. A
+development or otherwise unregistered build falls
 to HF under `Policy::Certified`; an explicit CUDA request returns
 `UNCERTIFIED_RUNTIME`. Only `Policy::Experimental` can opt an unregistered
 build into an accelerated candidate, and every result remains labelled
@@ -174,7 +190,12 @@ move but has one mutable owner; duplicate processes still meet the store's
 revision and integrity gates.
 
 Errors expose a stable `ErrorCode`; display messages are diagnostic and are
-not a compatibility interface. `ArtifactHashMismatch` is reserved for actual
+not a compatibility interface. A per-code meaning table for the Rust surface
+is not yet published (planned for 0.3); `docs/contracts/errors.md` documents
+the Python facade contract, and Rust can apply the same stable code strings
+to broader conditions than that table lists (for example,
+`SessionRevisionConflict` also covers a repeated seed and an in-process
+writer lease). `ArtifactHashMismatch` is reserved for actual
 content-hash verification failures; a hash-verified artifact that later fails
 to parse reports the failing stage instead (`KernelIncompatible` from GPU
 table construction, `Internal` from a reference-engine load). The `serde`

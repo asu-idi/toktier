@@ -70,8 +70,11 @@ When an accelerated result seeds stored state, its ID row is closure-verified
 against the shared verified HF reference vocabulary and adopted together with
 sparse span checkpoints; token spans are rebuilt per window on demand, while
 the materialized compatibility route still reconstructs full spans. This
-bridge does not initialize Gigatoken; a failed premise routes the seed through
-native HF before anything is committed.
+payload reports `accelerated_with_lazy_span_checkpoints` in the facade's
+``state_encode`` diagnostics. The materialized route retains the published
+`accelerated_with_reconstructed_spans` value. This bridge does not initialize
+Gigatoken; a failed premise routes the seed through native HF before anything
+is committed.
 
 ## Recovery and content lookup
 
@@ -116,12 +119,24 @@ and not the cost of materializing a million-token Python tuple.
 Phase-2 profiles report native engine/store time separately from Python result
 materialization. This separation matters: the internal route can be entirely
 Rust while the ergonomic Python API still pays once to allocate its documented
-`tuple[int, ...]`. A future Rust-native serving adapter can consume native
-buffers directly without changing TokTier's tokenization semantics.
+`tuple[int, ...]`. A Rust frontend can skip that allocation entirely: the
+`toktier` crate shipped in 0.2.0 consumes the same native buffers directly,
+without changing TokTier's tokenization semantics
+([`rust-api.md`](rust-api.md)).
 
 ## Remaining native work
 
-The prebuilt path is native; local GPU JIT compilation and hosting are not.
-Zero-copy result views, a stable Rust/server integration surface, and native
-artifact acquisition are possible follow-ups. They are performance or
-integration work, not prerequisites for the one-call Python request path.
+The prebuilt path is native; the Python facade's local GPU JIT compilation and
+hosting are not -- that delivery keeps the Python/PyTorch host. The Rust crate's
+own `jit` feature compiles through the selected `nvcc` directly
+([`rust-lifecycle.md`](rust-lifecycle.md)), so the two surfaces differ here.
+
+Shipped since 0.2.0, and therefore no longer open work: the Rust serving
+facade with `TokenBuffer`/`RaggedEncoding` borrowing and zero-copy pool row
+views, and native artifact acquisition, mirroring, and air-gap bundles. What
+remains open is a Python-side zero-copy result view (the facade still
+materializes a `tuple[int, ...]`), a non-Rust C ABI (deliberately deferred, see
+[`rust-api.md`](rust-api.md) and the lifecycle document's boundary decision),
+and moving the facade's JIT delivery onto the native compiler. These are
+performance or integration work, not prerequisites for the one-call Python
+request path.

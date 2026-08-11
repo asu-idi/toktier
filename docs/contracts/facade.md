@@ -35,7 +35,8 @@ enc = tok.encode(text, session="chat-42")    # named session entry
 enc = tok.encode(text, lookup="auto")        # content lookup (the default)
 ids = tok.encode_batch(texts)                # list[Encoding]
 txt = tok.decode(enc.ids)
-tok.explain()                                # plan, reasons, counters
+tok.explain(summary=True)                    # flat route/verdict headline
+tok.explain()                                # full plan, reasons, counters
 ```
 
 - `load(family, *, store=None, device="auto", config=None, policy=None,
@@ -191,6 +192,60 @@ block, and a probe summary), runtime route/fallback counts, and -- once the
 store has been touched -- store counters (hits, appends, overwrites,
 misses, collision rejects, degradations, rebuilds, evictions).
 
+The top-level `fallback_counts` mapping preserves the run-time reason-code
+distinctions in `routing.md` Section 5.2. In particular, a core-stream-only
+backend bypassed for requested postprocessing increments
+`R_INPUT_POSTPROCESS_ROUTED`; `R_EXEC_FAULT` is reserved for an engine-open
+or execution failure. Guard-routing diagnostic events always carry a `stage`
+key so their fast-CPU, native span-bridge, and facade state-encoding sources can
+be distinguished without parsing messages.
+
+`explain(summary=True)` returns a flat headline selected from that same full
+payload, with no additional probing. Its facts belong to four different time
+scopes, and the keys say which:
+
+| Scope | Keys |
+|---|---|
+| The request that most recently returned | `backend` (with `backend_basis`), `last_execution_backend`, `last_execution_path`, `last_execution_source`, `last_execution_fallback` |
+| The immutable construction plan | `planned_backend` |
+| This process | `kernel_delivery`, `selected_kernel_delivery`, `loaded_kernel_delivery`, `certification_state`, `effective_verdict` |
+| This process's lifetime | `fallback_occurred`, `fallback_ever_occurred` |
+
+Plus `family`, which is constant. Every key of the 0.2.0 summary keeps its
+meaning; the rest are additions.
+
+Details worth stating exactly:
+
+- `last_execution_*` mirror `runtime_policy.last_execution`:
+  `executed_backend`, `path`, and `source`, each `null` before anything has
+  run or when the ledger record carries no such field.
+- `last_execution_fallback` is true exactly when that request finished on a
+  backend other than the one the router selected for it -- a mid-request
+  execution fault or a guard route to the reference. It is false for the
+  GPU crossover, which decides the starting backend before selection, and
+  false for a bounded session repair, which starts where it runs.
+- `fallback_occurred` is unchanged: it is derived from the lifetime
+  `fallback_counts` mapping and is therefore true once any reason code has
+  been counted, including the ordinary below-threshold crossover
+  (`R_INPUT_BELOW_GPU_THRESHOLD`) and other non-fault routing decisions. It
+  is sticky: a later successful GPU request does not clear it.
+  `fallback_ever_occurred` is the same value under a name that says so, and
+  is the key to prefer in new code.
+- `kernel_delivery` is unchanged and reports the delivery this process has
+  actually loaded, `null` before any load. `loaded_kernel_delivery` is the
+  same value spelled unambiguously, and `selected_kernel_delivery` is the
+  delivery chosen for a future lazy load
+  (`runtime_policy.gpu_delivery_selected`), which is set even while nothing
+  is loaded.
+- `certification_state` and `effective_verdict` mirror `certification.state`
+  and `certification.effective_verdict`. They describe the selected delivery
+  and the process, not necessarily the backend that served the last request;
+  `certification.backend_status` in the full report carries the per-backend
+  view.
+
+The no-argument `explain()` call remains the complete machine-readable form
+above.
+
 The headline ``backend`` answers "what ran", not "what was planned".
 Once this tokenizer has returned a result it is the backend of that
 result -- the same value as
@@ -223,6 +278,29 @@ different questions. The 0.x facade plans against the digest-verified shipped
 registry. Its ``certification`` block names the artifact identity consulted for
 the request, while every runtime eligibility premise is still checked by the
 planner.
+``certification.effective_verdict`` gives the resulting in-process answer:
+
+| Value | Meaning |
+|---|---|
+| ``certified`` | every premise of the accelerated route attaches |
+| ``experimental`` | an eligible route depends on an explicit waiver |
+| ``reference`` | the pinned reference oracle served the request |
+| ``unverified`` | no certificate attaches and the output carries no such claim |
+
+``reference`` and ``unverified`` are deliberately different answers. Under
+``REFERENCE`` policy -- and under any policy whose accelerated premises did not
+attach, leaving the reference route -- the served ids **are** the pinned
+Hugging Face `tokenizers` oracle's own output. That implementation is what
+defines the exact-ID contract every accelerated route is judged against, so
+"no acceleration certificate attaches" is the whole of what is being said: it
+is a statement about acceleration, not a doubt about the ids. ``unverified``
+is reserved for the cases where nothing is known -- no registry record for the
+artifact, or an installed oracle outside the certified set
+(``certification.state == "reference_only"``), where the reference that runs
+is not the pinned one.
+
+The registry-derived ``certification.state`` remains unchanged beside it, and
+its ``reference`` / ``reference_only`` values keep their existing meanings.
 Outside the ``REFERENCE`` policy, ``device="auto"`` and ``device="cuda"``
 supply a real device probe; ``probe.devices_probed`` is true even when it finds
 no usable GPU, so ``R_NO_GPU_DETECTED`` is an observed machine fact. Under
@@ -269,6 +347,15 @@ guard), ``runtime_policy.last_execution`` reports `executed_backend="hf"` plus
 `source="state_encode"` and the matching state path. The final-result execution
 count and canonical runtime fallback counter are updated exactly once; the
 static plan remains unchanged.
+
+Successful accelerated state seeding distinguishes its payload form in
+``state_encode.counts`` and ``state_encode.last.path``. The native session-seed
+payload, which adopts closure-verified ids with sparse span checkpoints, reports
+`accelerated_with_lazy_span_checkpoints`. The materialized compatibility
+payload, which reconstructs the complete span row, continues to report the
+published `accelerated_with_reconstructed_spans` value. Both values are part of
+the informational diagnostic namespace; the older value remains in use and no
+existing value was removed.
 
 The ``session_repair`` block reports the active repair engine and request
 path -- Rust-native corrected repair (``request_path: rust_native``), the

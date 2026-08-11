@@ -4,8 +4,8 @@ Status: frozen for the first public release: the three-identity model,
 the status vocabulary, the oracle version policy, the root digest rule,
 and the generative discipline. The JSON shapes are normatively defined
 by the schemas in `schemas/` (`support_registry.schema.json`,
-`evidence_manifest.schema.json`, and `sibling_aliases.schema.json`); this
-document explains their meaning.
+`evidence_manifest.schema.json`, `evidence_carryover.schema.json`, and
+`sibling_aliases.schema.json`); this document explains their meaning.
 
 Framing rule: the registry states exactly what has been certified, no
 more. Anything not certified runs as reference and is labeled as such.
@@ -221,6 +221,16 @@ raise `REGISTRY_INVALID`.
   planned for a later release. The manifest states what was run and what
   was observed; it does not claim more than that.
 
+### 5.1 Explicit evidence carry-over
+
+Full recertification remains the default after a covered source identity
+changes. The two narrow exceptions are sentinel artifact equivalence and the
+enumerated code-identity-v2 version axis. Their add-only record, applicability
+rules, witness requirements, and chain limits are defined by
+`evidence_carryover.v1` in `evidence-carryover.md`. A carry-over record points
+to the original registry/readings records; it does not rewrite or relabel
+those records.
+
 ## 6. Root digest (frozen construction)
 
 The support registry, evidence manifests, and sibling mapping carry a
@@ -248,6 +258,9 @@ root_digest = "sha256:" + hex( SHA-256(
 - CI runs `--check` on every change touching these files; a failing
   check blocks merge. Schema validation failures and root digest
   failures at load time raise `RegistryInvalid` (`REGISTRY_INVALID`).
+- `tools/verify_carryover.py --check` validates every add-only carry-over
+  record, resolves its original-evidence pointers, derives the chain, and
+  enforces the chain and minor-version campaign rules as a release gate.
 - The verifiers need the `jsonschema` package (it is in the `test`
   dependency group, not a runtime dependency of the library); without
   it, `--check` stops with an actionable install message.

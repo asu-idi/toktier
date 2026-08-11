@@ -217,11 +217,13 @@ Failure handling by path:
   optimistic `expected_revision`; conflicts surface as
   `SESSION_REVISION_CONFLICT` (see `errors.md`). Last-writer-wins is not
   offered.
-- Only streams produced by certified configurations may be written to a
-  persistent store. Sessions running under `EXPERIMENTAL` routing policy
-  are in-memory only (see `routing.md`); their streams carry no
-  certification claim and must never become replayable into a certified
-  configuration through the store.
+- Sessions running under `EXPERIMENTAL` routing policy may be written to a
+  persistent store under their implementation fingerprint. Persistence does
+  not constitute a certification claim. The separate 0.x facade fingerprint
+  domain and its engine bindings (see `fingerprint.md` Section 4) prevent an
+  experimental record from matching a certified configuration or any other
+  engine meaning; replay under the same experimental configuration is
+  expected.
 
 ## 7. Division of responsibility (settled micro-decision)
 

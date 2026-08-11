@@ -28,12 +28,12 @@ class ToktierError(Exception):
 
 | Class | `.code` | Raised when | Typical `details` keys |
 |---|---|---|---|
-| `ArtifactNotFound` | `ARTIFACT_NOT_FOUND` | The tokenizer artifact cannot be resolved: unknown family, missing local file, or offline mode with an empty cache. | `family`, `searched`, `offline` |
+| `ArtifactNotFound` | `ARTIFACT_NOT_FOUND` | The tokenizer artifact cannot be resolved: unknown family, missing local file, or offline mode with an empty cache. | `family`, `searched`, `offline`, `suggestions` |
 | `ArtifactHashMismatch` | `ARTIFACT_HASH_MISMATCH` | A fetched or cached artifact fails content-hash verification. Online: after quarantine and one re-fetch both failed. Offline: immediately. | `expected_sha256`, `observed_sha256`, `path`, `remedy` |
 | `UncertifiedTokenizer` | `UNCERTIFIED_TOKENIZER` | `REQUIRE_ACCELERATED` policy and the artifact has no eligible certification identity. (Under `CERTIFIED` this is not an error; the plan falls back to reference with `R_UNCERTIFIED_ARTIFACT`.) | `artifact_sha256`, `family` |
 | `OracleVersionUnsupported` | `ORACLE_VERSION_UNSUPPORTED` | The installed oracle package version is outside every certified set and reference execution itself is impossible (for example the package is absent or incompatible at import level). | `package`, `installed`, `certified` |
 | `BackendUnavailable` | `BACKEND_UNAVAILABLE` | A required backend cannot be used under a policy or explicit device request that demands it (`REQUIRE_ACCELERATED` or `device="cuda"`). `missing` says which precondition failed: the backend module name when the package/extra is not importable, `"cuda_device"` when a performed device probe found no usable device, or `"device_probe"` when device enumeration was deliberately omitted (`R_ACCELERATOR_NOT_ADOPTED`, for example `device="cpu"`). An unjudged explicit JIT request also carries the one-process experimental compile command in `remedy`; invoking it does not expand certification. | `backend`, `missing`, `reason_code`, `reason`, `remedy` |
-| `BackendExecutionFault` | `BACKEND_EXECUTION_FAULT` | A backend failed on an input in a way the routing layer may recover from: an accelerated backend wraps expected device and runtime failures in this type, and the executor re-runs the affected input on the next backend in the chain (`R_EXEC_FAULT`). Any other exception type propagates unchanged. | `backend`, `stage` |
+| `BackendExecutionFault` | `BACKEND_EXECUTION_FAULT` | A backend failed on an input in a way the routing layer may recover from: an accelerated backend wraps expected device and runtime failures in this type, and the executor re-runs the affected input on the next backend in the chain (`R_EXEC_FAULT`). Core-stream-only adapters also use `stage="add_special_tokens"` as an internal route signal; the executor records that planned pre-execution bypass as `R_INPUT_POSTPROCESS_ROUTED`, not as a fault. Any other exception type propagates unchanged. | `backend`, `stage` |
 | `KernelIncompatible` | `KERNEL_INCOMPATIBLE` | Kernel constraints fail verification under a policy that demands the kernel: uncertified SM, kernel or class-table digest mismatch, or build failure. | `backend`, `reason_code`, `sm`, `expected_digest`, `observed_digest`, `class_table_digest` |
 | `CudaDriverTooOld` | `CUDA_DRIVER_TOO_OLD` | Driver below certified minimum, under a policy that demands the GPU backend. | `installed`, `required` |
 | `StoreCorrupt` | `STORE_CORRUPT` | An explicit integrity operation (verify/fsck-style API) found a checksum, linkage, or structural failure. On the ordinary read path, integrity failures degrade to a counted miss instead of raising -- we prefer a miss over a wrong result. | `path`, `record`, `failure` |
@@ -60,10 +60,23 @@ and `UncertifiedTokenizer` under `REQUIRE_ACCELERATED`.
 
 ## 4. Command-line surface
 
-A failed command exits `2` and writes its report to standard error. A
-command invoked with `--json` writes that report as one JSON object so
-that `--json` describes the whole command rather than only its success
-path:
+A failed command exits `2` and writes its report to standard error.
+Without `--json` that report is the single line `error <CODE>: <message>`.
+
+`--json` is a per-command option, not a root option. The commands that
+accept it in 0.2.1 are:
+
+| Command | `--json` |
+|---|---|
+| `toktier doctor` | yes |
+| `toktier inspect [FAMILY]` | yes |
+| `toktier gpu compile FAMILY` | yes |
+| `toktier artifacts fetch/verify/export/import` | no (argparse rejects it, exit `64`) |
+| `toktier version` | no |
+
+Where the option exists, it describes the whole command rather than only
+its success path: a failure writes the report as one JSON object on
+standard error and still exits `2`.
 
 ```json
 {"error": {"code": "BACKEND_UNAVAILABLE",
@@ -75,8 +88,16 @@ path:
 text, and `details` is the same mapping the exception carries in
 process. `details` is open, so a value of a type JSON cannot express is
 rendered as its `repr` rather than dropped or allowed to break the
-envelope. Without `--json` the single line `error <CODE>: <message>` is
-written instead, unchanged.
+envelope.
+
+The envelope shape is frozen; the set of commands offering `--json` is
+not, and is append-only in the same sense as the code table. A shared
+root-level `--json` that wraps every command failure is a 0.3 candidate;
+until then a script that wants machine-readable failures from the
+artifact commands should switch on the exit status (`2` for a
+library-domain condition, `64` for a usage error) or drive the
+`toktier.artifacts` API directly, where the same `.code` and `.details`
+are available in process.
 
 ## 5. Extension policy (frozen)
 

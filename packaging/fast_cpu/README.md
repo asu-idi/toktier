@@ -33,6 +33,18 @@ compares those observed values, the repair-table digest, oracle version, and
 tokenizer artifact with `tools/fast_cpu_binding.json`; any mismatch closes the
 fast path and runs the HF reference.
 
+### Sentinel equivalence builds
+
+Maintainer equivalence builds may set `TOKTIER_IDENTITY_SENTINEL=1` to replace
+every source-identity digest embedded by the Python-extension and Rust-facade
+build scripts with the fixed, equal-length 64-hex sentinel
+`73656e74696e656c73656e74696e656c73656e74696e656c73656e74696e656c`.
+This mode leaves the content-derived GNU build-ID intact and does not rewrite
+the artifact. `tools/verify_release_artifacts.py` rejects a release wheel if
+any member contains either the sentinel bytes or its hex-string form, so this
+mode is only for artifact-equivalence judging and must not be used for a
+distribution build.
+
 ## Historical campaign lineage
 
 For reproducibility, the original standalone corrected build can still be

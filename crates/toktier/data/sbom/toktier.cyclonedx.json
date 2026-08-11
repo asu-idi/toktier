@@ -3938,64 +3938,64 @@
       "version": "0.22.2"
     },
     {
-      "bom-ref": "pkg:cargo/toktier-cuda-driver@0.2.0",
+      "bom-ref": "pkg:cargo/toktier-cuda-driver@0.2.1",
       "licenses": [
         {
           "expression": "Apache-2.0"
         }
       ],
       "name": "toktier-cuda-driver",
-      "purl": "pkg:cargo/toktier-cuda-driver@0.2.0",
+      "purl": "pkg:cargo/toktier-cuda-driver@0.2.1",
       "type": "library",
-      "version": "0.2.0"
+      "version": "0.2.1"
     },
     {
-      "bom-ref": "pkg:cargo/toktier-gigatoken-core@0.2.0",
+      "bom-ref": "pkg:cargo/toktier-gigatoken-core@0.2.1",
       "licenses": [
         {
           "expression": "MIT"
         }
       ],
       "name": "toktier-gigatoken-core",
-      "purl": "pkg:cargo/toktier-gigatoken-core@0.2.0",
+      "purl": "pkg:cargo/toktier-gigatoken-core@0.2.1",
       "type": "library",
-      "version": "0.2.0"
+      "version": "0.2.1"
     },
     {
-      "bom-ref": "pkg:cargo/toktier-routing-core@0.2.0",
+      "bom-ref": "pkg:cargo/toktier-routing-core@0.2.1",
       "licenses": [
         {
           "expression": "Apache-2.0"
         }
       ],
       "name": "toktier-routing-core",
-      "purl": "pkg:cargo/toktier-routing-core@0.2.0",
+      "purl": "pkg:cargo/toktier-routing-core@0.2.1",
       "type": "library",
-      "version": "0.2.0"
+      "version": "0.2.1"
     },
     {
-      "bom-ref": "pkg:cargo/toktier-store-core@0.2.0",
+      "bom-ref": "pkg:cargo/toktier-store-core@0.2.1",
       "licenses": [
         {
           "expression": "Apache-2.0"
         }
       ],
       "name": "toktier-store-core",
-      "purl": "pkg:cargo/toktier-store-core@0.2.0",
+      "purl": "pkg:cargo/toktier-store-core@0.2.1",
       "type": "library",
-      "version": "0.2.0"
+      "version": "0.2.1"
     },
     {
-      "bom-ref": "pkg:cargo/toktier-store-sqlite@0.2.0",
+      "bom-ref": "pkg:cargo/toktier-store-sqlite@0.2.1",
       "licenses": [
         {
           "expression": "Apache-2.0"
         }
       ],
       "name": "toktier-store-sqlite",
-      "purl": "pkg:cargo/toktier-store-sqlite@0.2.0",
+      "purl": "pkg:cargo/toktier-store-sqlite@0.2.1",
       "type": "library",
-      "version": "0.2.0"
+      "version": "0.2.1"
     },
     {
       "bom-ref": "pkg:cargo/typenum@1.20.1",
@@ -6321,10 +6321,10 @@
     },
     {
       "dependsOn": [
-        "pkg:cargo/toktier-cuda-driver@0.2.0",
-        "pkg:cargo/toktier-routing-core@0.2.0",
-        "pkg:cargo/toktier-store-core@0.2.0",
-        "pkg:cargo/toktier-store-sqlite@0.2.0",
+        "pkg:cargo/toktier-cuda-driver@0.2.1",
+        "pkg:cargo/toktier-routing-core@0.2.1",
+        "pkg:cargo/toktier-store-core@0.2.1",
+        "pkg:cargo/toktier-store-sqlite@0.2.1",
         "pkg:cargo/flate2@1.1.9",
         "pkg:cargo/fs2@0.4.3",
         "pkg:cargo/serde@1.0.228",
@@ -6333,13 +6333,13 @@
         "pkg:cargo/tar@0.4.46",
         "pkg:cargo/ureq@3.4.0"
       ],
-      "ref": "pkg:cargo/toktier@0.2.0"
+      "ref": "pkg:cargo/toktier@0.2.1"
     },
     {
       "dependsOn": [
         "pkg:cargo/libc@0.2.177"
       ],
-      "ref": "pkg:cargo/toktier-cuda-driver@0.2.0"
+      "ref": "pkg:cargo/toktier-cuda-driver@0.2.1"
     },
     {
       "dependsOn": [
@@ -6361,13 +6361,13 @@
         "pkg:cargo/unicode-normalization-alignments@0.1.12",
         "pkg:cargo/winnow@1.0.4"
       ],
-      "ref": "pkg:cargo/toktier-gigatoken-core@0.2.0"
+      "ref": "pkg:cargo/toktier-gigatoken-core@0.2.1"
     },
     {
       "dependsOn": [
-        "pkg:cargo/toktier-cuda-driver@0.2.0",
-        "pkg:cargo/toktier-gigatoken-core@0.2.0",
-        "pkg:cargo/toktier-store-core@0.2.0",
+        "pkg:cargo/toktier-cuda-driver@0.2.1",
+        "pkg:cargo/toktier-gigatoken-core@0.2.1",
+        "pkg:cargo/toktier-store-core@0.2.1",
         "pkg:cargo/aho-corasick@1.1.3",
         "pkg:cargo/base64@0.22.1",
         "pkg:cargo/memchr@2.8.3",
@@ -6377,21 +6377,21 @@
         "pkg:cargo/sha2@0.11.0",
         "pkg:cargo/tokenizers@0.22.2"
       ],
-      "ref": "pkg:cargo/toktier-routing-core@0.2.0"
+      "ref": "pkg:cargo/toktier-routing-core@0.2.1"
     },
     {
       "dependsOn": [
         "pkg:cargo/blake2b_simd@1.0.3",
         "pkg:cargo/sha2@0.11.0"
       ],
-      "ref": "pkg:cargo/toktier-store-core@0.2.0"
+      "ref": "pkg:cargo/toktier-store-core@0.2.1"
     },
     {
       "dependsOn": [
-        "pkg:cargo/toktier-store-core@0.2.0",
+        "pkg:cargo/toktier-store-core@0.2.1",
         "pkg:cargo/rusqlite@0.39.0"
       ],
-      "ref": "pkg:cargo/toktier-store-sqlite@0.2.0"
+      "ref": "pkg:cargo/toktier-store-sqlite@0.2.1"
     },
     {
       "dependsOn": [],
@@ -6699,16 +6699,16 @@
   ],
   "metadata": {
     "component": {
-      "bom-ref": "pkg:cargo/toktier@0.2.0",
+      "bom-ref": "pkg:cargo/toktier@0.2.1",
       "licenses": [
         {
           "expression": "Apache-2.0"
         }
       ],
       "name": "toktier",
-      "purl": "pkg:cargo/toktier@0.2.0",
+      "purl": "pkg:cargo/toktier@0.2.1",
       "type": "library",
-      "version": "0.2.0"
+      "version": "0.2.1"
     },
     "tools": {
       "components": [

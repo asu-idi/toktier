@@ -6,7 +6,8 @@
   "engine_distribution": "toktier",
   "engine_module": "toktier._native",
   "engine_delivery": "integrated",
-  "source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
+  "source_digest": "ea3258a3cf10e7748faf0c3d0d767635e30db0e6da5f984499f7be953c2d4bf9",
+  "source_digest_v2": "986a3c6e8304e449171f9d68442bd482981b23c5c9d2a28c4ed7a35882183780",
   "source_digest_of": "domain-separated, path-bound source/build set enumerated identically by tools/fast_cpu_source_identity.py and crates/toktier-py/build.rs",
   "build_flags": [
     "profile=release",
@@ -29,9 +30,9 @@
   "legal": {
     "sbom_path": "packaging/fast_cpu/gigatoken.cyclonedx.json",
     "sbom_distribution_path": ".dist-info/sboms/gigatoken.cyclonedx.json",
-    "sbom_sha256": "51f8a5f551386f48523829a7eede9ae9497d6e9116eba7036ce837720dd6ad92",
+    "sbom_sha256": "b91bc22bca5f5fbf888d481618c971e95170fa28154abd8cf736854277a2e0f4",
     "license_bundle_path": "packaging/fast_cpu/THIRD_PARTY_LICENSES-gigatoken.txt",
-    "license_bundle_sha256": "7a0da46670c248bcf317697c1acb4cc008c5aa0ce29fe6d31bea17d704fba1ec"
+    "license_bundle_sha256": "72ecabb3908e301d6121c6181422707e21560afb2529789d1088c5820b3c9693"
   },
   "lineage": {
     "campaign_id": "gigatoken-pinned-differential-v1",

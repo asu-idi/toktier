@@ -1,6 +1,7 @@
 {
   "runtime": "rust_api",
-  "source_digest": "44313872dc4b9368a93cf2901bd924fbad41c83d02296720a26efbc89518af8c",
+  "source_digest": "df104ebdfc0ef62b4d4e05f721d49573bf22bc1991ab7899dcc18e0d5eea66c6",
+  "source_digest_v2": "39c256ed9e2bfc43d4a8184c4992b51cbfb2872516cdb33f5fa5c4444aa6ff2a",
   "build_flags": [
     "profile=release",
     "opt-level=3",
@@ -13,8 +14,10 @@
     "features=default,network,prebuilt-gpu,serving,sqlite"
   ],
   "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-  "fast_cpu_source_digest": "09fa70b210209761a506dd63e67d25be174bb808418bd0010809acab1517a2e4",
-  "native_host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+  "fast_cpu_source_digest": "ea3258a3cf10e7748faf0c3d0d767635e30db0e6da5f984499f7be953c2d4bf9",
+  "fast_cpu_source_digest_v2": "986a3c6e8304e449171f9d68442bd482981b23c5c9d2a28c4ed7a35882183780",
+  "native_host_source_digest": "244d4a51183bb24712d4909b42be25f661cf39dc7ca91b15a28d1ee5c6c2f602",
+  "native_host_source_digest_v2": "e216c1609c060deb232c71a1872ef128a52129fd23e317f915c115f304d84532",
   "evidence_id": "ev-rust-api-plan160-default-v1",
   "additional_builds": [
     {

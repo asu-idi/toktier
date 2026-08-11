@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the exact, single-wheel artifact set allowed for release 0.2.0."""
+"""Verify the exact, single-wheel artifact set allowed for release 0.2.1."""
 
 from __future__ import annotations
 
@@ -18,7 +18,9 @@ from pathlib import Path
 from typing import NoReturn
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_WHEEL = "toktier-0.2.0-cp310-abi3-manylinux_2_34_x86_64.whl"
+EXPECTED_WHEEL = "toktier-0.2.1-cp310-abi3-manylinux_2_34_x86_64.whl"
+IDENTITY_SENTINEL_HEX = "73656e74696e656c" * 4
+IDENTITY_SENTINEL_BYTES = bytes.fromhex(IDENTITY_SENTINEL_HEX)
 
 
 def _fail(message: str) -> NoReturn:
@@ -30,6 +32,18 @@ def _one(names: list[str], suffix: str) -> str:
     if len(matches) != 1:
         _fail(f"expected one *{suffix}, found {matches}")
     return matches[0]
+
+
+def _verify_no_identity_sentinel(
+    archive: zipfile.ZipFile, names: list[str]
+) -> None:
+    sentinel_hex = IDENTITY_SENTINEL_HEX.encode("ascii")
+    for name in names:
+        if name.endswith("/"):
+            continue
+        payload = archive.read(name)
+        if sentinel_hex in payload or IDENTITY_SENTINEL_BYTES in payload:
+            _fail(f"wheel member {name} contains the sentinel build identity")
 
 
 def _verify_record(archive: zipfile.ZipFile, names: list[str]) -> None:
@@ -81,6 +95,7 @@ def verify(wheel: Path) -> None:
         _fail(f"unexpected wheel name {wheel.name!r}; expected {EXPECTED_WHEEL!r}")
     with zipfile.ZipFile(wheel) as archive:
         names = archive.namelist()
+        _verify_no_identity_sentinel(archive, names)
         if any(
             name.startswith("gigatoken/")
             or re.match(r"^gigatoken-[^/]+\.dist-info/", name)
@@ -130,7 +145,7 @@ def verify(wheel: Path) -> None:
 
         metadata_name = _one(names, ".dist-info/METADATA")
         metadata = BytesParser(policy=default).parsebytes(archive.read(metadata_name))
-        if metadata["Name"] != "toktier" or metadata["Version"] != "0.2.0":
+        if metadata["Name"] != "toktier" or metadata["Version"] != "0.2.1":
             _fail("wheel metadata has the wrong distribution identity")
         requirements = metadata.get_all("Requires-Dist", failobj=[])
         if any(re.match(r"(?i)^gigatoken(?:\s|\[|;|$)", item) for item in requirements):

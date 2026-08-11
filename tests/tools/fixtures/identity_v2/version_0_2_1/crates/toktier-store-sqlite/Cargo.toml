@@ -1,0 +1,6 @@
+[package]
+name = "toktier-store-sqlite"
+version.workspace = true
+
+[dependencies]
+toktier-store-core = { path = "../toktier-store-core", version = "=0.2.1" }

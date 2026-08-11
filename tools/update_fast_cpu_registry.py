@@ -17,6 +17,7 @@ import zlib
 from pathlib import Path
 from typing import Any
 
+from compute_identity_v2 import source_digest as source_digest_v2
 from fast_cpu_source_identity import source_digest
 from registry_common import (
     REGISTRY_DOMAIN_TAG,
@@ -100,6 +101,12 @@ def _verify_identity(binding: dict[str, Any]) -> None:
             "integrated fast CPU source digest drifted: "
             f"recorded={recorded_source}, observed={observed_source}"
         )
+    if binding.get("source_digest_v2") is not None:
+        recorded_v2 = _require_digest(
+            binding.get("source_digest_v2"), label="source_digest_v2"
+        )
+        if recorded_v2 != source_digest_v2("fast_cpu"):
+            raise GenerationError("integrated fast CPU v2 source digest drifted")
     _require_digest(binding.get("patch_sha256"), label="patch_sha256")
     if sha256_of_file(PATCH_PATH) != binding.get("patch_sha256"):
         raise GenerationError("the shipped Gigatoken patch digest does not match")
@@ -280,6 +287,11 @@ def _verify_native_reading(
         or engine.get("toolchain") != binding.get("toolchain")
     ):
         raise GenerationError("integrated native-frontend parity binding drifted")
+    if engine.get("source_digest_v2") not in {
+        None,
+        source_digest_v2("fast_cpu"),
+    }:
+        raise GenerationError("integrated native-frontend v2 binding drifted")
     rows = reading.get("rows")
     if not isinstance(rows, list):
         raise GenerationError("native-frontend reading has no rows")
@@ -300,10 +312,24 @@ def _verify_native_reading(
             raise GenerationError(f"{family}: native-frontend parity did not pass")
 
 
+def _records_v2(registry: dict[str, Any]) -> bool:
+    return any(
+        isinstance(entry, dict) and "source_digest_v2" in entry
+        for row in registry.get("artifacts", [])
+        if isinstance(row, dict)
+        for entry in [(row.get("backends") or {}).get("fast_cpu")]
+    )
+
+
 def augmented_document(
-    registry: dict[str, Any], binding: dict[str, Any]
+    registry: dict[str, Any],
+    binding: dict[str, Any],
+    *,
+    include_v2: bool | None = None,
 ) -> dict[str, Any]:
     """Return ``registry`` with exactly the binding-owned entries applied."""
+    if include_v2 is None:
+        include_v2 = _records_v2(registry)
     _verify_identity(binding)
     completed = copy.deepcopy(registry)
     loadable, rejected, by_family, _coverage = _verify_coverage(completed, binding)
@@ -324,6 +350,8 @@ def augmented_document(
         "config_id": str(binding["repair_config_id"]),
         "config_digest": config_digest,
     }
+    if include_v2:
+        certified_entry["source_digest_v2"] = source_digest_v2("fast_cpu")
     artifacts = completed["artifacts"]
     assert isinstance(artifacts, list)
     for row in artifacts:
@@ -363,7 +391,11 @@ def main(argv: list[str] | None = None) -> int:
 
     registry = _require_mapping(load_json(DEFAULT_REGISTRY), label="registry")
     binding = _require_mapping(load_json(BINDING_PATH), label="binding")
-    generated = augmented_document(registry, binding)
+    generated = augmented_document(
+        registry,
+        binding,
+        include_v2=not arguments.check or _records_v2(registry),
+    )
     violations = schema_violations(generated, load_json(SCHEMA_PATH))
     if violations:
         raise GenerationError(

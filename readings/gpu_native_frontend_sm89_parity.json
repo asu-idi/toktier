@@ -21,7 +21,8 @@
       "target=x86_64-unknown-linux-gnu",
       "pyo3=abi3-py310+extension-module"
     ],
-    "host_source_digest": "44e5c7fcedbba76827430c81a88c30f203ce1fbef075fbdea88677805ed803e2",
+    "host_source_digest": "244d4a51183bb24712d4909b42be25f661cf39dc7ca91b15a28d1ee5c6c2f602",
+    "host_source_digest_v2": "e216c1609c060deb232c71a1872ef128a52129fd23e317f915c115f304d84532",
     "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
   },
   "one_python_to_rust_call_per_batch": true,

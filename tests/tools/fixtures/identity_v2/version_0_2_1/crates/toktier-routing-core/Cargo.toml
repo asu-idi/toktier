@@ -1,0 +1,11 @@
+[package]
+name = "toktier-routing-core"
+version.workspace = true
+
+[dependencies]
+toktier-gigatoken-core = { path = "../toktier-gigatoken-core", version = "=0.2.1" }
+toktier-cuda-driver = { path = "../toktier-cuda-driver", version = "=0.2.1" }
+toktier-store-core = { path = "../toktier-store-core", version = "=0.2.1" }
+
+[dev-dependencies]
+toktier-store-core = { path = "../toktier-store-core", features = ["testing"] }

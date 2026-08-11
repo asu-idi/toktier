@@ -10,6 +10,7 @@ from pathlib import Path
 import fast_cpu_source_identity
 import native_host_source_identity
 import rust_api_source_identity
+from compute_identity_v2 import source_digest as source_digest_v2
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "crates/toktier/data/build/source_identity.json"
@@ -22,8 +23,11 @@ def document() -> dict[str, object]:
             "content-addressed source sets; independent of repository history"
         ),
         "rust_api_source_sha256": rust_api_source_identity.source_digest(),
+        "rust_api_source_sha256_v2": source_digest_v2("rust_api"),
         "fast_cpu_source_sha256": fast_cpu_source_identity.source_digest(),
+        "fast_cpu_source_sha256_v2": source_digest_v2("fast_cpu"),
         "native_host_source_sha256": native_host_source_identity.source_digest(),
+        "native_host_source_sha256_v2": source_digest_v2("native_host"),
     }
 
 

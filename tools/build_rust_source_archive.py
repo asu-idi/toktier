@@ -18,7 +18,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 # Names the archive after the crate it carries; the crate inherits the
 # workspace version, so this follows `crates/toktier/Cargo.toml`.
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 DEFAULT_OUTPUT = ROOT / f"dist/rust/toktier-rust-source-{VERSION}.tar.gz"
 TOP = f"toktier-rust-source-{VERSION}"
 

@@ -1,0 +1,17 @@
+{
+  "dev_dependency_version": {
+    "fast_cpu": "7056a79e43507c10797345befad450d65f7d4ca7ad11e929fc408b6b4e775aa8",
+    "native_host": "d85f9d97748d6450455f3feb1fbaebccaf986edc765f211b461fe3436e1d6f4b",
+    "rust_api": "d5a39040af486d5894aa4871f81a640bafbe6f41a65267d268987a2c9d64d65c"
+  },
+  "version_0_2_0": {
+    "fast_cpu": "b1b4c1373df980cb3b9e3353604e448bccee374da998e9569e041b54d65dd8be",
+    "native_host": "be72a1c86249767d17dcef7395d08c31df5a7d1d0e8eb947883451b7abed8b15",
+    "rust_api": "37e780fd41d54b967ef84d54037e66f4b140935726acfdb3659c9dfdaca426c4"
+  },
+  "version_0_2_1": {
+    "fast_cpu": "b1b4c1373df980cb3b9e3353604e448bccee374da998e9569e041b54d65dd8be",
+    "native_host": "be72a1c86249767d17dcef7395d08c31df5a7d1d0e8eb947883451b7abed8b15",
+    "rust_api": "37e780fd41d54b967ef84d54037e66f4b140935726acfdb3659c9dfdaca426c4"
+  }
+}

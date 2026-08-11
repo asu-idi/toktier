@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from compute_identity_v2 import source_digest as source_digest_v2
 from registry_common import GenerationError, load_json
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,6 +89,7 @@ def aggregate_cpu(directory: Path) -> dict[str, Any]:
             "delivery": facts["engine_delivery"],
             "module": facts["engine_module"],
             "source_digest": facts["source_digest"],
+            "source_digest_v2": source_digest_v2("fast_cpu"),
             "build_flags": facts["build_flags"],
             "toolchain": facts["toolchain"],
         },
@@ -128,6 +130,7 @@ def aggregate_gpu(directory: Path, architecture: str) -> dict[str, Any]:
     assert isinstance(host_facts, dict)
     bound_host_facts = {
         "host_source_digest": host_facts.get("source_digest"),
+        "host_source_digest_v2": source_digest_v2("native_host"),
         "host_build_flags": host_facts.get("build_flags"),
         "host_toolchain": host_facts.get("toolchain"),
     }

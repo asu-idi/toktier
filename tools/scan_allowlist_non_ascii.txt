@@ -13,6 +13,8 @@ crates/toktier-gigatoken-core/**
 # Native reference/repair unit tests intentionally use Unicode scalar vectors.
 crates/toktier-routing-core/src/fast_cpu.rs
 crates/toktier-routing-core/src/reference.rs
+# Native runtime tests exercise multilingual append and ledger accounting.
+crates/toktier-routing-core/src/runtime.rs
 # Public Rust examples and store regressions intentionally exercise Unicode.
 crates/toktier/examples/batch.rs
 crates/toktier/examples/correctness_campaign.rs

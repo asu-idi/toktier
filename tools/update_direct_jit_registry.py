@@ -10,6 +10,7 @@ from typing import Any
 
 import native_host_source_identity
 import rust_api_source_identity
+from compute_identity_v2 import source_digest as source_digest_v2
 from registry_common import (
     REGISTRY_DOMAIN_TAG,
     GenerationError,
@@ -68,6 +69,13 @@ def validate(reading: dict[str, Any]) -> None:
             raise GenerationError(
                 f"direct-JIT reading {key}={reading.get(key)!r}; expected {value!r}"
             )
+    expected_v2 = {
+        "runtime_source_digest_v2": source_digest_v2("rust_api"),
+        "native_host_source_digest_v2": source_digest_v2("native_host"),
+    }
+    for key, value in expected_v2.items():
+        if reading.get(key) not in {None, value}:
+            raise GenerationError(f"direct-JIT reading {key} does not match the tree")
     if reading.get("compiler_world_writable_component") is not None:
         raise GenerationError("direct-JIT compiler has a world-writable path component")
     for key in ("compiler_release", "compiler_build", "compiler_sha256"):
@@ -130,7 +138,26 @@ def validate(reading: dict[str, Any]) -> None:
         raise GenerationError("direct-JIT family roster does not equal the registry")
 
 
-def augmented(registry: dict[str, Any], reading: dict[str, Any]) -> dict[str, Any]:
+def _records_v2(registry: dict[str, Any]) -> bool:
+    return any(
+        "direct_host_source_digest_v2" in jit
+        for raw in registry.get("artifacts", [])
+        if isinstance(raw, dict)
+        for gpu in [(raw.get("backends") or {}).get("gpu")]
+        if isinstance(gpu, dict)
+        for jit in [(gpu.get("deliveries") or {}).get("jit")]
+        if isinstance(jit, dict)
+    )
+
+
+def augmented(
+    registry: dict[str, Any],
+    reading: dict[str, Any],
+    *,
+    include_v2: bool | None = None,
+) -> dict[str, Any]:
+    if include_v2 is None:
+        include_v2 = _records_v2(registry)
     validate(reading)
     completed = dict(registry)
     artifacts = []
@@ -164,6 +191,8 @@ def augmented(registry: dict[str, Any], reading: dict[str, Any]) -> dict[str, An
                 ],
             }
         )
+        if include_v2:
+            jit["direct_host_source_digest_v2"] = source_digest_v2("native_host")
         new_deliveries = dict(deliveries)
         new_deliveries["jit"] = jit
         new_gpu = dict(gpu)
@@ -182,7 +211,12 @@ def main() -> int:
     parser.add_argument("--reading", type=Path, default=READING)
     arguments = parser.parse_args()
     reading = mapping(load_json(arguments.reading), "direct-JIT reading")
-    document = augmented(mapping(load_json(REGISTRY), "support registry"), reading)
+    registry = mapping(load_json(REGISTRY), "support registry")
+    document = augmented(
+        registry,
+        reading,
+        include_v2=not arguments.check or _records_v2(registry),
+    )
     violations = schema_violations(document, load_json(SCHEMA))
     if violations:
         raise GenerationError(

@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toktier:schema:evidence-carryover:1",
+  "title": "TokTier evidence carry-over record",
+  "description": "An add-only pointer from one certified source identity set to another, justified by an artifact-equivalence or code-identity-v2 witness.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record",
+    "mechanism",
+    "from_source_identity",
+    "to_source_identity",
+    "witness",
+    "carried_evidence"
+  ],
+  "properties": {
+    "record": { "const": "evidence_carryover.v1" },
+    "mechanism": {
+      "enum": ["artifact_equivalence", "code_identity_v2"]
+    },
+    "from_source_identity": { "$ref": "#/$defs/source_identity" },
+    "to_source_identity": { "$ref": "#/$defs/source_identity" },
+    "witness": { "$ref": "#/$defs/witness" },
+    "carried_evidence": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^(tables/support_registry\\.json|readings/[^#]+\\.json)(#.*)?$"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "mechanism": { "const": "artifact_equivalence" } },
+        "required": ["mechanism"]
+      },
+      "then": {
+        "properties": {
+          "witness": {
+            "required": ["sentinel_artifacts", "recipe", "applicability"],
+            "properties": {
+              "sentinel_artifacts": { "minItems": 2 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "mechanism": { "const": "code_identity_v2" } },
+        "required": ["mechanism"]
+      },
+      "then": {
+        "properties": {
+          "witness": {
+            "required": ["recipe", "applicability", "code_identity_v2"]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fast_cpu", "native_host", "rust_api"],
+      "properties": {
+        "fast_cpu": { "$ref": "#/$defs/sha256" },
+        "native_host": { "$ref": "#/$defs/sha256" },
+        "rust_api": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact"],
+      "properties": {
+        "artifact": { "type": "string", "minLength": 1 },
+        "sha256_both": { "$ref": "#/$defs/sha256" },
+        "bytes": { "type": "integer", "minimum": 1 },
+        "from_sha256": { "$ref": "#/$defs/sha256" },
+        "to_sha256": { "$ref": "#/$defs/sha256" },
+        "from_bytes": { "type": "integer", "minimum": 1 },
+        "to_bytes": { "type": "integer", "minimum": 1 },
+        "byte_equal": { "type": "boolean" }
+      },
+      "anyOf": [
+        { "required": ["sha256_both", "bytes"] },
+        {
+          "required": [
+            "from_sha256",
+            "to_sha256",
+            "from_bytes",
+            "to_bytes"
+          ]
+        }
+      ]
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["purpose", "cwd", "argv"],
+      "properties": {
+        "purpose": { "type": "string", "minLength": 1 },
+        "cwd": { "type": "string", "minLength": 1 },
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rust_toolchain_sha256",
+        "rustc",
+        "cargo",
+        "maturin"
+      ],
+      "properties": {
+        "rust_toolchain_sha256": { "$ref": "#/$defs/sha256" },
+        "rustc": { "type": "string", "minLength": 1 },
+        "cargo": { "type": "string", "minLength": 1 },
+        "maturin": { "type": "string", "minLength": 1 },
+        "python": { "type": "string", "minLength": 1 },
+        "python_abi": { "type": "string", "minLength": 1 },
+        "native_tools": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "host_fingerprint": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["description", "sha256", "facts"],
+          "properties": {
+            "description": { "type": "string", "minLength": 1 },
+            "sha256": { "$ref": "#/$defs/sha256" },
+            "facts": { "type": "object" }
+          }
+        }
+      ]
+    },
+    "recipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commands", "toolchain", "host_fingerprint"],
+      "properties": {
+        "tree_path": { "type": "string", "minLength": 1 },
+        "cargo_target_dir": { "type": "string", "minLength": 1 },
+        "rustflags": { "type": "string", "minLength": 1 },
+        "cargo_home_roots": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "cargo_home_enumeration": { "type": "object" },
+        "locked": { "const": true },
+        "fresh_target_for_each_tree": { "const": true },
+        "sequential_same_path_builds": { "const": true },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "toolchain": { "$ref": "#/$defs/toolchain" },
+        "ambient_environment": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "null"]
+          }
+        },
+        "effective_environment": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "removed_environment": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        },
+        "cargo_config_search_paths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        },
+        "cargo_configs": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "host_fingerprint": { "$ref": "#/$defs/host_fingerprint" },
+        "same_host_only": { "const": true }
+      }
+    },
+    "file_comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "from_sha256", "to_sha256", "unchanged"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "from_sha256": {
+          "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        },
+        "to_sha256": {
+          "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        },
+        "unchanged": { "type": "boolean" }
+      }
+    },
+    "applicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["diff_files", "cargo_lock_unchanged"],
+      "properties": {
+        "diff_files": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "cargo_lock_unchanged": { "type": "boolean" },
+        "cargo_lock": { "$ref": "#/$defs/file_comparison" },
+        "protected_files_unchanged": { "type": "boolean" },
+        "protected_files": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/file_comparison" }
+        },
+        "checks": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      }
+    },
+    "code_identity_v2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value_both", "normalization_diff"],
+      "properties": {
+        "value_both": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "$ref": "#/$defs/source_identity" }
+          ]
+        },
+        "normalization_diff": { "type": "string", "minLength": 1 }
+      }
+    },
+    "witness": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sentinel_artifacts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/artifact" }
+        },
+        "recipe": { "$ref": "#/$defs/recipe" },
+        "applicability": { "$ref": "#/$defs/applicability" },
+        "code_identity_v2": { "$ref": "#/$defs/code_identity_v2" }
+      }
+    }
+  }
+}

@@ -47,6 +47,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from compute_identity_v2 import source_digest as source_digest_v2
 from native_host_source_identity import source_digest as native_host_source_digest
 from registry_common import (
     PLACEHOLDER_SHA256,
@@ -171,7 +172,7 @@ def _adopt_installed_native_extension() -> Path | None:
     return path
 
 
-def native_host_bindings() -> dict[str, Any]:
+def native_host_bindings(*, include_v2: bool = False) -> dict[str, Any]:
     """Source/build facts of the Rust host that executes prebuilt requests.
 
     The facts are compile-time constants of the extension, so this needs
@@ -211,11 +212,14 @@ def native_host_bindings() -> dict[str, Any]:
         )
     if not facts.build_flags or facts.toolchain is None:
         raise GenerationError("the loaded native host exposes incomplete build facts")
-    return {
+    bindings = {
         "host_source_digest": source,
         "host_build_flags": list(facts.build_flags),
         "host_toolchain": facts.toolchain,
     }
+    if include_v2:
+        bindings["host_source_digest_v2"] = source_digest_v2("native_host")
+    return bindings
 
 
 def kernel_bindings() -> tuple[str, str | None]:
@@ -402,6 +406,14 @@ def prebuilt_binding_problems(registry_path: Path) -> list[str]:
                     f"{family}/gpu: deliveries.prebuilt.{key} does not "
                     "match the loaded native request host"
                 )
+        if prebuilt.get("host_source_digest_v2") not in {
+            None,
+            source_digest_v2("native_host"),
+        }:
+            problems.append(
+                f"{family}/gpu: deliveries.prebuilt.host_source_digest_v2 "
+                "does not match the normalized native request host"
+            )
         recorded = {
             str(key): str(value)
             for key, value in (prebuilt.get("architecture_digests") or {}).items()
@@ -493,13 +505,17 @@ def prebuilt_hardware_evidence_problems(registry_path: Path) -> list[str]:
         expected_characters = sum(
             int(row.get("characters", 0)) for row in by_family.values()
         )
+        recorded_host = reading.get("native_host_build_facts")
+        expected_host = dict(host_bindings)
+        if isinstance(recorded_host, dict) and "host_source_digest_v2" in recorded_host:
+            expected_host["host_source_digest_v2"] = source_digest_v2("native_host")
         if (
             reading.get("schema") != "toktier.gpu.native_frontend_parity.v1"
             or reading.get("architecture") != architecture
             or reading.get("fatbin_digest") != shipped_digest
             or reading.get("architecture_digest")
             != architecture_digests.get(architecture)
-            or reading.get("native_host_build_facts") != host_bindings
+            or recorded_host != expected_host
             or reading.get("families") != len(artifact_rows)
             or int(reading.get("documents", -1)) != expected_documents
             or int(reading.get("characters", -1)) != expected_characters
@@ -542,7 +558,7 @@ def sync_prebuilt_bindings(registry_path: Path) -> None:
             "prebuilt hardware evidence failed:\n  " + "\n  ".join(problems)
         )
     manifest = load_manifest()
-    host_bindings = native_host_bindings()
+    host_bindings = native_host_bindings(include_v2=True)
     kernel_source, class_table = kernel_bindings()
     if class_table is None:
         raise GenerationError(

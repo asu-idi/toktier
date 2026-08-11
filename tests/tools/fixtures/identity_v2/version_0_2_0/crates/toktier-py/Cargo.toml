@@ -1,0 +1,8 @@
+[package]
+name = "toktier-py"
+version.workspace = true
+
+[dependencies]
+toktier-routing-core = { path = "../toktier-routing-core", version = "=0.2.0" }
+toktier-store-core = { path = "../toktier-store-core", version = "=0.2.0" }
+toktier-store-sqlite = { path = "../toktier-store-sqlite", version = "=0.2.0" }

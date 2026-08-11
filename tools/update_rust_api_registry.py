@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from compute_identity_v2 import source_digest as source_digest_v2
 from fast_cpu_source_identity import source_digest as fast_cpu_source_digest
 from native_host_source_identity import source_digest as native_host_source_digest
 from registry_common import (
@@ -66,6 +67,17 @@ def verify_binding(binding: dict[str, Any]) -> None:
                 f"Rust API binding {key} does not match the current tree "
                 f"(recorded={binding.get(key)!r}, current={value!r})"
             )
+    expected_v2 = {
+        "source_digest_v2": source_digest_v2("rust_api"),
+        "fast_cpu_source_digest_v2": source_digest_v2("fast_cpu"),
+        "native_host_source_digest_v2": source_digest_v2("native_host"),
+    }
+    present_v2 = set(expected_v2) & set(binding)
+    if present_v2 and present_v2 != set(expected_v2):
+        raise GenerationError("Rust API binding has an incomplete v2 identity tuple")
+    for key in present_v2:
+        if binding[key] != expected_v2[key]:
+            raise GenerationError(f"Rust API binding {key} does not match the tree")
     _verify_build(binding, label="Rust API default build")
     additional = binding.get("additional_builds", [])
     if not isinstance(additional, list):
@@ -103,6 +115,11 @@ def verify_shared_evidence(binding: dict[str, Any]) -> None:
         raise GenerationError(
             "CPU native-front-end evidence does not admit this Rust build"
         )
+    if engine.get("source_digest_v2") not in {
+        None,
+        source_digest_v2("fast_cpu"),
+    }:
+        raise GenerationError("CPU native-front-end v2 identity drifted")
     for architecture, path in GPU_READINGS.items():
         reading = _mapping(load_json(path), label=f"{architecture} GPU reading")
         host = _mapping(reading.get("native_host_build_facts"), label="GPU host facts")
@@ -118,6 +135,11 @@ def verify_shared_evidence(binding: dict[str, Any]) -> None:
                 f"{architecture} native-front-end evidence does not admit "
                 "this Rust build"
             )
+        if host.get("host_source_digest_v2") not in {
+            None,
+            source_digest_v2("native_host"),
+        }:
+            raise GenerationError(f"{architecture} native-host v2 identity drifted")
 
 
 def verify_public_matrix(binding: dict[str, Any], *, bootstrap: bool) -> None:
@@ -202,9 +224,24 @@ def verify_additional_builds(binding: dict[str, Any], *, bootstrap: bool) -> Non
             raise GenerationError(
                 f"Rust API additional build {name} has incomplete certified rows"
             )
+
+
+def _records_v2(registry: dict[str, Any]) -> bool:
+    return any(
+        isinstance(row, dict) and "source_digest_v2" in row
+        for row in registry.get("runtime_builds", [])
+    )
+
+
 def augmented_document(
-    registry: dict[str, Any], binding: dict[str, Any], *, bootstrap: bool = False
+    registry: dict[str, Any],
+    binding: dict[str, Any],
+    *,
+    bootstrap: bool = False,
+    include_v2: bool | None = None,
 ) -> dict[str, Any]:
+    if include_v2 is None:
+        include_v2 = _records_v2(registry)
     verify_binding(binding)
     verify_shared_evidence(binding)
     verify_public_matrix(binding, bootstrap=bootstrap)
@@ -219,6 +256,14 @@ def augmented_document(
             "native_host_source_digest",
         )
     }
+    if include_v2:
+        common.update(
+            {
+                "source_digest_v2": source_digest_v2("rust_api"),
+                "fast_cpu_source_digest_v2": source_digest_v2("fast_cpu"),
+                "native_host_source_digest_v2": source_digest_v2("native_host"),
+            }
+        )
     builds = [binding, *binding.get("additional_builds", [])]
     completed["runtime_builds"] = [
         {
@@ -246,7 +291,14 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--check and --bootstrap are mutually exclusive")
     registry = _mapping(load_json(REGISTRY), label="support registry")
     binding = _mapping(load_json(BINDING), label="Rust API binding")
-    generated = augmented_document(registry, binding, bootstrap=arguments.bootstrap)
+    generated = augmented_document(
+        registry,
+        binding,
+        bootstrap=arguments.bootstrap,
+        include_v2=(
+            not arguments.check or arguments.bootstrap or _records_v2(registry)
+        ),
+    )
     violations = schema_violations(generated, load_json(SCHEMA))
     if violations:
         raise GenerationError(

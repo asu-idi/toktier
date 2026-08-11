@@ -12,6 +12,11 @@ Command = tuple[str, ...]
 CHECK_COMMANDS: tuple[Command, ...] = (
     ("ruff", "check", "--no-cache", "."),
     ("mypy", "--no-site-packages", "--no-incremental", "."),
+    (sys.executable, "tools/scan_non_ascii.py"),
+    (sys.executable, "tools/scan_name_residue.py"),
+    (sys.executable, "tools/scan_secrets.py"),
+    (sys.executable, "tools/scan_version_constants.py"),
+    (sys.executable, "tools/verify_carryover.py", "--check"),
     ("cargo", "fmt", "--check"),
     (
         "cargo",

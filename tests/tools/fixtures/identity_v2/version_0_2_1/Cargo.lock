@@ -1,0 +1,33 @@
+version = 4
+
+[[package]]
+name = "toktier"
+version = "0.2.1"
+
+[[package]]
+name = "toktier-cuda-driver"
+version = "0.2.1"
+
+[[package]]
+name = "toktier-gigatoken-core"
+version = "0.2.1"
+
+[[package]]
+name = "toktier-py"
+version = "0.2.1"
+
+[[package]]
+name = "toktier-routing-core"
+version = "0.2.1"
+
+[[package]]
+name = "toktier-store-core"
+version = "0.2.1"
+
+[[package]]
+name = "toktier-store-sqlite"
+version = "0.2.1"
+
+[[package]]
+name = "unrelated"
+version = "0.2.0"

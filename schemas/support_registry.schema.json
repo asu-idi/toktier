@@ -125,6 +125,10 @@
       "properties": {
         "runtime": { "const": "rust_api" },
         "source_digest": { "$ref": "#/$defs/sha256_hex" },
+        "source_digest_v2": {
+          "$ref": "#/$defs/sha256_hex",
+          "description": "Version-normalized v2 identity over the runtime source set."
+        },
         "build_flags": {
           "type": "array",
           "minItems": 1,
@@ -132,7 +136,15 @@
         },
         "toolchain": { "type": "string" },
         "fast_cpu_source_digest": { "$ref": "#/$defs/sha256_hex" },
+        "fast_cpu_source_digest_v2": {
+          "$ref": "#/$defs/sha256_hex",
+          "description": "Version-normalized v2 identity over the integrated fast-CPU source set."
+        },
         "native_host_source_digest": { "$ref": "#/$defs/sha256_hex" },
+        "native_host_source_digest_v2": {
+          "$ref": "#/$defs/sha256_hex",
+          "description": "Version-normalized v2 identity over the native-host source set."
+        },
         "evidence_id": { "$ref": "#/$defs/identifier" }
       }
     },
@@ -184,6 +196,10 @@
           "$ref": "#/$defs/sha256_hex",
           "description": "Required when status is certified_source: digest of the kernel source set."
         },
+        "source_digest_v2": {
+          "$ref": "#/$defs/sha256_hex",
+          "description": "Version-normalized v2 identity paired with an integrated source_digest."
+        },
         "build_flags": {
           "type": "array",
           "items": { "type": "string" },
@@ -196,6 +212,10 @@
         "host_source_digest": {
           "$ref": "#/$defs/sha256_hex",
           "description": "Domain-separated digest of the Rust request host paired with a certified prebuilt GPU image. The release verifier requires it on every prebuilt delivery marked certified."
+        },
+        "host_source_digest_v2": {
+          "$ref": "#/$defs/sha256_hex",
+          "description": "Version-normalized v2 identity of the Rust request host."
         },
         "host_build_flags": {
           "type": "array",
@@ -213,6 +233,10 @@
         "direct_host_source_digest": {
           "$ref": "#/$defs/sha256_hex",
           "description": "Domain-separated digest of the Rust CUDA Driver request host that loads a direct-JIT product."
+        },
+        "direct_host_source_digest_v2": {
+          "$ref": "#/$defs/sha256_hex",
+          "description": "Version-normalized v2 identity of the direct-JIT Rust request host."
         },
         "direct_build_flags": {
           "type": "array",

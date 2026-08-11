@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "README.md"
 OUTPUT = ROOT / "README.pypi.md"
 REPOSITORY = "https://github.com/asu-idi/toktier"
-RELEASE_REF = "v0.2.0"
+RELEASE_REF = "v0.2.1"
 RAW = f"https://raw.githubusercontent.com/asu-idi/toktier/{RELEASE_REF}"
 
 _PICTURE = re.compile(r"<picture>.*?</picture>", re.DOTALL)

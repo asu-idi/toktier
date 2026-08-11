@@ -1425,7 +1425,7 @@ dependencies = [
 
 [[package]]
 name = "toktier"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "flate2",
  "fs2",
@@ -1442,14 +1442,14 @@ dependencies = [
 
 [[package]]
 name = "toktier-cuda-driver"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "libc",
 ]
 
 [[package]]
 name = "toktier-gigatoken-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "aho-corasick",
  "base64 0.22.1",
@@ -1469,7 +1469,7 @@ dependencies = [
 
 [[package]]
 name = "toktier-routing-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "aho-corasick",
  "base64 0.22.1",
@@ -1501,7 +1501,7 @@ dependencies = [
 
 [[package]]
 name = "toktier-store-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "blake2b_simd",
  "sha2",
@@ -1509,7 +1509,7 @@ dependencies = [
 
 [[package]]
 name = "toktier-store-sqlite"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "rusqlite",
  "toktier-store-core",

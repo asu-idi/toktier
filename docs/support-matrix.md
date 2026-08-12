@@ -79,7 +79,7 @@ and the one-call native-front-end rerun is in
 | `nemotron_3_nano_4b` | `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` | 623c34567aeb | certified (Gigatoken) | certified (prebuilt) |
 | `olmo_3_7b` | `allenai/Olmo-3-1025-7B` | 73fd5254624f | certified (Gigatoken) | certified (prebuilt) |
 | `hy3` | `tencent/Hy3` | 446e0b59cd94 | unsupported by Gigatoken; HF | certified (prebuilt) |
-| `kimi_k3` | `moonshotai/Kimi-K3` | 773c2476259d | unsupported by Gigatoken; not packaged | reference-only |
+| `kimi_k3` | `moonshotai/Kimi-K3` | 773c2476259d | unsupported by Gigatoken; HF | certified (prebuilt) |
 | `ling_3_0_flash` | `inclusionAI/Ling-3.0-flash` | 40fb9d7d7795 | unsupported by Gigatoken; HF | certified (prebuilt) |
 | `laguna_s_2_1` | `poolside/Laguna-S-2.1` | 809240f7a182 | unsupported by Gigatoken; HF | certified (prebuilt) |
 
@@ -95,9 +95,17 @@ the registry records both, per delivery, and the loader verifies the
 delivery it actually runs.
 
 `kimi_k3` note: the upstream repository ships a `tiktoken.model` rather than a
-`tokenizer.json`. The frozen artifact is a conversion of that file, gated by a
-zero-divergence check against the upstream form; comparisons for sibling
-repositories are made at `tiktoken.model` level.
+`tokenizer.json`. The frozen artifact is a conversion of that file, produced on
+the installing machine from pinned upstream bytes; comparisons for sibling
+repositories, and for that repository itself, are made at `tiktoken.model`
+level. The recorded zero-divergence check between the conversion and the
+upstream form covers 2,220,065 texts and is evidence on file, not a check this
+package re-runs: it needs the upstream tokenizer runtime, which this package
+deliberately does not depend on. What ships instead is
+`toktier artifacts check-conversion`, which re-runs on your machine the three
+properties that bind your bytes to that evidence -- the conversion is
+deterministic, its output is the pinned sha256 and byte count, and the reserved
+added-token block is contiguous and complete.
 
 ## WordPiece families
 
@@ -110,10 +118,10 @@ repositories are made at `tiktoken.model` level.
 ## Availability in this package
 
 Recorded differential evidence and package availability are separate facts,
-and for four rows the two currently differ. The artifact manifest shipped inside the package is
+and for three rows the two currently differ. The artifact manifest shipped inside the package is
 generated from the differential-campaign registry
-(`tables/support_registry.json`) and therefore carries exactly its 14
-families. `kimi_k3` and the three WordPiece families have
+(`tables/support_registry.json`) and therefore carries exactly its 15
+families. The three WordPiece families have
 boundary-predicate evidence, a second evidence family that has not been wired into
 the shipped registry yet, so no packaged artifact identity exists for them:
 `toktier artifacts fetch` and `toktier.load()` report `ARTIFACT_NOT_FOUND`

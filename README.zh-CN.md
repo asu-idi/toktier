@@ -371,16 +371,17 @@ tok = toktier.load(
 
 | 验证活动 | 规模 | 观测到的不一致 |
 |---|---:|---:|
-| 全语料差分验证 | 14 个工件 × 3,800,016,491 篇文档 = **53,200,230,874 次检查** | 0 |
+| 全语料差分验证 | 15 个工件 × 3,800,016,491 篇文档 = **57,000,247,365 次检查** | 0 |
 | 语料体量 | 12,328,592,579,973 个 Unicode 码点 | — |
 | 发布代码一致性验证 | 15,960,166 篇文档 | 0 |
 | 修正版 Gigatoken CPU repair | 11 个唯一工件 × 3,800,016,491 篇文档 = **41,800,181,401 次检查**（通过精确工件继承覆盖 12 个 family） | 0 |
 
 机器可读记录位于
 [`evidence/evidence_manifest.json`](evidence/evidence_manifest.json)、
-[`evidence/evidence_manifest_added_families.json`](evidence/evidence_manifest_added_families.json)
+[`evidence/evidence_manifest_added_families.json`](evidence/evidence_manifest_added_families.json)、
+[`evidence/evidence_manifest_kimi_band.json`](evidence/evidence_manifest_kimi_band.json)
 和 [`tables/support_registry.json`](tables/support_registry.json)。随版本提供的
-逐工件测量记录覆盖 49,920,199,013 次检查；早期归档阶段覆盖其余
+逐工件测量记录覆盖 53,720,215,504 次检查；早期归档阶段覆盖其余
 3,280,031,861 次，两者相加得到上面的总数。经由既有的公开会话 API 做的
 一次针对性端到端复验，记录在
 [`readings/fast_cpu_focused_parity.json`](readings/fast_cpu_focused_parity.json)；
@@ -476,11 +477,11 @@ SHA-256、后端状态，以及 **210 个已验证模型仓库**；这些仓库�
 `toktier.from_pretrained(repo_id)` 会在运行时落实这条规则：对解析到的文件
 计算哈希，将登记内容映射到 canonical 工件，其他内容继续使用 HF。
 
-210 个 sibling 条目中，191 个会映射到当前 wheel 随附的 canonical 工件。
-其余 19 个不会获得加速准入，因为对应 canonical 工件尚未打包：7 个
-WordPiece 条目使用 HF，12 个源码级 `kimi_k3` 条目目前还需要转换工件，因而
-会给出可操作的错误，而不会暗示可以直接加载 `tiktoken.model`。
-`toktier inspect` 仍是随包 family 列表的权威来源。
+210 个 sibling 条目中，203 个会映射到当前 wheel 随附的 canonical 工件。
+其余 7 个是 WordPiece 条目，对应 canonical 工件尚未打包，因而使用 HF。
+12 个源码级 `kimi_k3` 条目已在这 203 个之内：其 canonical 工件由钉死的
+上游字节在本机推导得到，因此比对仍在 `tiktoken.model` 层面进行，而载入的
+对象是那份已认证的转换件。`toktier inspect` 仍是随包 family 列表的权威来源。
 
 ## 与现有工作的关系
 

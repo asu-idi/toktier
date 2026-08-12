@@ -3,8 +3,8 @@
   "generated_by": {
     "tool": "tools/generate_readme_backfill.py",
     "tool_version": "1.1.0",
-    "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
-    "generated_at": "2026-08-07T10:44:36Z"
+    "source_commit": "abce1eb79f83e236f3215c18f3983d7fb6c8ce36",
+    "generated_at": "2026-08-12T22:50:11Z"
   },
   "summary": {
     "marker_keys": 0,
@@ -23,9 +23,9 @@
     },
     "corpus.check_count": {
       "kind": "number",
-      "value": 53200230874,
+      "value": 57000247365,
       "source": "differential campaign judgment records (aggregated), with the earlier-phase campaign ledger",
-      "note": "14 families x 3,800,016,491 documents = 53,200,230,874 checks; the local phase and the earlier phase of the campaign cover disjoint corpus shards and add up to the full corpus. The per artifact readings in tables/support_registry.json sum to less than this: each record cites one evidence manifest and therefore carries only that phase's share.",
+      "note": "15 families x 3,800,016,491 documents = 57,000,247,365 checks; the local phase and the earlier phase of the campaign cover disjoint corpus shards and add up to the full corpus. The per artifact readings in tables/support_registry.json sum to less than this: each record cites one evidence manifest and therefore carries only that phase's share.",
       "markers": []
     },
     "corpus.doc_count": {
@@ -37,9 +37,9 @@
     },
     "corpus.family_count": {
       "kind": "number",
-      "value": 14,
+      "value": 15,
       "source": "differential campaign judgment records (aggregated), with the earlier-phase campaign ledger",
-      "note": "14 families x 3,800,016,491 documents = 53,200,230,874 checks; the local phase and the earlier phase of the campaign cover disjoint corpus shards and add up to the full corpus. The per artifact readings in tables/support_registry.json sum to less than this: each record cites one evidence manifest and therefore carries only that phase's share.",
+      "note": "15 families x 3,800,016,491 documents = 57,000,247,365 checks; the local phase and the earlier phase of the campaign cover disjoint corpus shards and add up to the full corpus. The per artifact readings in tables/support_registry.json sum to less than this: each record cites one evidence manifest and therefore carries only that phase's share.",
       "markers": []
     },
     "corpus.mismatch_count": {
@@ -60,14 +60,14 @@
       "kind": "pending",
       "value": "evidence/evidence_manifest.json",
       "source": "generated in this repository",
-      "note": "A second manifest ships alongside this one and the sentence in the README should name both: evidence/evidence_manifest_added_families.json (root digest sha256:ca0641f8315c688a37ba28c91569ba4b63790e4dd3f35ef6be25d30218750877).",
+      "note": "Two further manifests ship alongside this one and the sentence in the README should name all three: evidence/evidence_manifest_added_families.json (root digest sha256:ca0641f8315c688a37ba28c91569ba4b63790e4dd3f35ef6be25d30218750877) and evidence/evidence_manifest_kimi_band.json (root digest sha256:e9785fd4c20af3ea9502e4b0277ab66867da7c2cc17f3599605689f61c82f24d).",
       "markers": []
     },
     "evidence.manifest_root_digest": {
       "kind": "pending",
       "value": "sha256:08c2b4573ccc9a13a420874a7edc2fa643046ac399c93027e2e2ba49ce3f5752",
       "source": "generated in this repository",
-      "note": "A second manifest ships alongside this one and the sentence in the README should name both: evidence/evidence_manifest_added_families.json (root digest sha256:ca0641f8315c688a37ba28c91569ba4b63790e4dd3f35ef6be25d30218750877).",
+      "note": "Two further manifests ship alongside this one and the sentence in the README should name all three: evidence/evidence_manifest_added_families.json (root digest sha256:ca0641f8315c688a37ba28c91569ba4b63790e4dd3f35ef6be25d30218750877) and evidence/evidence_manifest_kimi_band.json (root digest sha256:e9785fd4c20af3ea9502e4b0277ab66867da7c2cc17f3599605689f61c82f24d).",
       "markers": []
     },
     "oracle.tokenizers_version": {
@@ -422,9 +422,9 @@
     },
     "support.status.kimi_k3.gpu": {
       "kind": "pending",
-      "value": "reference-only",
+      "value": "certified_source",
       "source": "campaign harness kernel-coverage table",
-      "note": "No end-to-end GPU kernel exists for this family.",
+      "note": "The end-to-end kernel of this family's band was wired to the engine in this release and judged on both certified architectures.",
       "markers": []
     },
     "support.status.laguna_s_2_1.cpu": {

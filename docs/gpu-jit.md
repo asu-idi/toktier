@@ -130,15 +130,12 @@ band's artifacts (`deepseek_v3`, `deepseek_v4_flash`, `hy3`) and
 `--manifest` is a JSON object mapping family name to `{"local_dir":
 ...}`; families it does not define are looked up in the local toktier
 artifact cache (`toktier artifacts fetch <family>`, honoring
-`TOKTIER_HOME`), so the three deepseek-band families need no manifest
-once fetched. `kimi_k3` ships no artifact identity in the packaged
-manifest in this release, so the full check needs an explicit manifest
-entry for it; without one, check everything else by selection:
+`TOKTIER_HOME`), so the four families this check reads need no manifest
+once fetched. To check a subset instead, name the tables:
 
 ```
 python tools/generate_class_tables.py --out-dir src/toktier/kernels/tables \
-    --check --table cl100k_v3 --table cl100k_m2l_v3 --table deepseek_v1 \
-    --table o200k_v4 --table nfc_qc_v1
+    --check --table cl100k_v3 --table cl100k_m2l_v3 --table nfc_qc_v1
 ```
 
 Each table is written with a sha256, the digests go into the routing

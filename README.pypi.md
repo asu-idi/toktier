@@ -406,7 +406,7 @@ routing is disabled and the request remains on the installed reference path.
 
 | Campaign | Scale | Recorded divergence |
 |---|---:|---:|
-| Full-corpus differential | 14 artifacts × 3,800,016,491 documents = **53,200,230,874 checks** | 0 |
+| Full-corpus differential | 15 artifacts × 3,800,016,491 documents = **57,000,247,365 checks** | 0 |
 | Corpus volume | 12,328,592,579,973 Unicode code points | — |
 | Released-code parity | 15,960,166 documents | 0 |
 | Corrected Gigatoken CPU repair | 11 unique artifacts × 3,800,016,491 documents = **41,800,181,401 checks** (12 model families by exact-artifact inheritance) | 0 |
@@ -414,8 +414,9 @@ routing is disabled and the request remains on the installed reference path.
 The machine-readable records are
 [`evidence/evidence_manifest.json`](https://github.com/asu-idi/toktier/blob/v0.2.1/evidence/evidence_manifest.json),
 [`evidence/evidence_manifest_added_families.json`](https://github.com/asu-idi/toktier/blob/v0.2.1/evidence/evidence_manifest_added_families.json),
+[`evidence/evidence_manifest_kimi_band.json`](https://github.com/asu-idi/toktier/blob/v0.2.1/evidence/evidence_manifest_kimi_band.json),
 and [`tables/support_registry.json`](https://github.com/asu-idi/toktier/blob/v0.2.1/tables/support_registry.json). Shipped
-per-artifact readings account for 49,920,199,013 checks; an archived earlier
+per-artifact readings account for 53,720,215,504 checks; an archived earlier
 phase accounts for the remaining 3,280,031,861. Together they produce the
 headline total above. A focused end-to-end rerun through the historical public
 session API is kept in
@@ -522,12 +523,13 @@ content, not repository naming. `toktier.from_pretrained(repo_id)` enforces
 that rule at runtime: it hashes the resolved file, maps registered content to
 the canonical artifact, and otherwise remains on HF.
 
-Of the 210 sibling rows, 191 map to canonical artifacts present in this wheel.
-The other 19 do not admit acceleration because their canonical artifacts are
-not packaged: 7 WordPiece rows run through HF, while the 12 source-level
-`kimi_k3` rows currently need a conversion artifact and therefore produce an
-actionable error rather than implying that `tiktoken.model` can be loaded
-directly. `toktier inspect` is the authoritative packaged-family list.
+Of the 210 sibling rows, 203 map to canonical artifacts present in this wheel.
+The other 7 are WordPiece rows, whose canonical artifacts are not packaged and
+which therefore run through HF. The 12 source-level `kimi_k3` rows are among
+the 203: their canonical artifact is derived on your machine from pinned
+upstream bytes, so the comparison stays at `tiktoken.model` level while the
+loaded object is the certified conversion. `toktier inspect` is the
+authoritative packaged-family list.
 
 ## Relation to existing work
 

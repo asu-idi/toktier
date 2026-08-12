@@ -147,7 +147,10 @@ impl From<toktier_store_core::StoreError> for Error {
             "ENGINE_ERROR" => ErrorCode::BackendExecutionFault,
             _ => ErrorCode::Internal,
         };
-        Self::new(code, error.to_string())
+        // `StoreError`'s own `Display` already writes its code prefix, and
+        // this type writes one too; take the body so the rendered error
+        // names its code once.
+        Self::new(code, error.message())
     }
 }
 
@@ -173,3 +176,64 @@ impl From<toktier_store_sqlite::DbError> for Error {
 
 /// Public result alias.
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[cfg(test)]
+mod tests {
+    use super::{Error, ErrorCode};
+
+    #[test]
+    fn a_converted_store_error_names_its_code_once() {
+        let error: Error = toktier_store_core::StoreError::ChecksumMismatch.into();
+        assert_eq!(error.code(), ErrorCode::StoreCorrupt);
+        assert_eq!(error.message(), "record checksum mismatch");
+        assert_eq!(
+            error.to_string(),
+            "[STORE_CORRUPT] record checksum mismatch"
+        );
+        assert_eq!(error.to_string().matches("[STORE_CORRUPT]").count(), 1);
+    }
+
+    #[test]
+    fn conversion_keeps_the_mapped_code_for_every_store_family() {
+        let cases = [
+            (
+                toktier_store_core::StoreError::BadMagic,
+                ErrorCode::StoreCorrupt,
+            ),
+            (
+                toktier_store_core::StoreError::UnsupportedFormatVersion(9),
+                ErrorCode::StoreFormatUnsupported,
+            ),
+            (
+                toktier_store_core::StoreError::RevisionConflict {
+                    expected: 1,
+                    actual: 2,
+                },
+                ErrorCode::SessionRevisionConflict,
+            ),
+            (
+                toktier_store_core::StoreError::FingerprintMismatch,
+                ErrorCode::SessionStateMismatch,
+            ),
+            (
+                toktier_store_core::StoreError::InvalidConfig("root".to_owned()),
+                ErrorCode::ConfigInvalid,
+            ),
+            (
+                toktier_store_core::StoreError::Engine("boom".to_owned()),
+                ErrorCode::BackendExecutionFault,
+            ),
+        ];
+        for (store_error, expected) in cases {
+            let rendered = store_error.to_string();
+            let error: Error = store_error.into();
+            assert_eq!(error.code(), expected);
+            assert!(!error.message().starts_with('['), "{rendered}");
+            assert_eq!(
+                error.to_string().matches(&format!("[{expected}]")).count(),
+                1,
+                "{rendered}"
+            );
+        }
+    }
+}

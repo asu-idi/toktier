@@ -116,11 +116,21 @@ impl StoreError {
     pub fn is_rejection(&self) -> bool {
         matches!(self.code(), "STORE_CORRUPT" | "STORE_FORMAT_UNSUPPORTED")
     }
-}
 
-impl fmt::Display for StoreError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}] ", self.code())?;
+    /// The human-readable body alone, without the `[CODE]` prefix that
+    /// [`Display`](fmt::Display) writes. Callers that add their own code
+    /// prefix use this so one message does not carry the code twice.
+    pub fn message(&self) -> String {
+        struct Body<'a>(&'a StoreError);
+        impl fmt::Display for Body<'_> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                self.0.fmt_message(f)
+            }
+        }
+        Body(self).to_string()
+    }
+
+    fn fmt_message(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             StoreError::Truncated { context } => {
                 write!(f, "record truncated while reading {context}")
@@ -181,4 +191,47 @@ impl fmt::Display for StoreError {
     }
 }
 
+impl fmt::Display for StoreError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[{}] ", self.code())?;
+        self.fmt_message(f)
+    }
+}
+
 impl std::error::Error for StoreError {}
+
+#[cfg(test)]
+mod tests {
+    use super::StoreError;
+
+    #[test]
+    fn display_carries_the_code_prefix_and_message_does_not() {
+        let error = StoreError::ChecksumMismatch;
+        assert_eq!(
+            error.to_string(),
+            "[STORE_CORRUPT] record checksum mismatch"
+        );
+        assert_eq!(error.message(), "record checksum mismatch");
+    }
+
+    #[test]
+    fn message_is_the_display_body_for_every_variant() {
+        let cases = [
+            StoreError::Truncated { context: "header" },
+            StoreError::BadMagic,
+            StoreError::UnsupportedFormatVersion(9),
+            StoreError::MalformedRecord("field".to_owned()),
+            StoreError::RevisionConflict {
+                expected: 1,
+                actual: 2,
+            },
+            StoreError::InvalidConfig("root".to_owned()),
+            StoreError::Engine("boom".to_owned()),
+            StoreError::Internal("bug".to_owned()),
+        ];
+        for error in cases {
+            let prefix = format!("[{}] ", error.code());
+            assert_eq!(error.to_string(), format!("{prefix}{}", error.message()));
+        }
+    }
+}

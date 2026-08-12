@@ -216,12 +216,6 @@ fn build_image(
             format!("family {family} has no end-to-end kernel mapping"),
         )
     })?;
-    if kernel.band == "kimi" {
-        return Err(Error::new(
-            ErrorCode::KernelIncompatible,
-            "the kimi kernel band is split-only",
-        ));
-    }
     let class_spec = registry
         .class_tables
         .get(&kernel.class_table)

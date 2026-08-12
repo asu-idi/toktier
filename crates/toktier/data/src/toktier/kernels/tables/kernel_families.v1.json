@@ -93,9 +93,11 @@
       "note": "o200k splitter group; the fused entry is CUDA-Graph capturable, and the batched channel needs windowed piece starts."
     },
     "kimi": {
-      "e2e": false,
+      "e2e": true,
+      "encoder": "encoder_kimi",
       "pretok": "pretok_kimi",
-      "note": "Split-layer kernel only. There is no end-to-end encoder for this band, so end-to-end requests fall back to the reference backend."
+      "windowed_starts": true,
+      "note": "o200k splitter group plus a leading Han branch. The eager entry is the only end-to-end form this band declares; there is no fused or graph-captured form, because the splitter resolves its sparse cases in device windows driven from the host. The batched channel needs windowed piece starts."
     }
   },
   "families": {
@@ -211,7 +213,7 @@
       "digits_max": 3,
       "class_table": "kimi_v1",
       "contractions": true,
-      "note": "Split layer only: this band has no end-to-end encoder, so encode requests run on the reference backend. digits_max is 3 because the artifact's digit alternative is {1,3}; the kernel compiles that bound in, so no other value can be honoured."
+      "note": "digits_max is 3 because the artifact's digit alternative is {1,3}; the kernel compiles that bound in, so no other value can be honoured. The contraction suffix is always on for this splitter, likewise compiled in."
     }
   }
 }

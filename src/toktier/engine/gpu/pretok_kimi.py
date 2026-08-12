@@ -19,9 +19,10 @@ a piece.
 
 What this module computes
 -------------------------
-:class:`GpuPretokKimi` is a split-layer class only: it produces the
-boolean piece-start mask and nothing else. This band has no end-to-end
-GPU encoder, so encode requests for it run on the reference backend.
+:class:`GpuPretokKimi` is the split layer: it produces the boolean
+piece-start mask and nothing else. The band's end-to-end encoder is that
+mask followed by the shared byte-level BPE layer, which is where the
+rest of the chain lives.
 
 The implementation is the five propagation stages of the o200k band
 instantiated for this family (the shared run primitives are imported from

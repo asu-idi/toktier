@@ -113,17 +113,40 @@ def test_unknown_family_is_reported_as_uncertified(
     assert caught.value.code == "UNCERTIFIED_TOKENIZER"
 
 
-def test_split_only_band_is_declared_honestly(table: KernelFamilyTable) -> None:
-    """A band with no end-to-end encoder must say so in the data.
+def test_a_split_only_band_is_read_as_split_only(
+    table: KernelFamilyTable,
+) -> None:
+    """A band with no end-to-end encoder is reported as such.
 
-    One certified band implements the split layer only. If the routing
-    data did not carry that, the engine would report the family as
-    GPU-certified end to end, which it is not.
+    The shipped data need not contain one -- every band it currently
+    describes has an end-to-end encoder -- but the reading has to stay
+    exact, because a band read as end-to-end when it is not would report
+    a family as GPU-certified end to end when it is not. So the property
+    is checked against a document that declares one, and against the
+    shipped document for the converse.
     """
-    split_only = [name for name in table.names() if not table.supports_e2e(name)]
-    assert split_only, "the split-only band should still be described"
-    for name in split_only:
-        assert table.get(name).note, name
+    document = json.loads(
+        DEFAULT_FAMILY_TABLE_PATH.read_text(encoding="utf-8")
+    )
+    name, spec = next(iter(document["bands"].items()))
+    spec["e2e"] = False
+    spec.pop("encoder", None)
+    modified = KernelFamilyTable(document)
+    band = modified.band_spec(name)
+    assert band.e2e is False
+    assert band.encoder is None
+    affected = [
+        family
+        for family in modified.names()
+        if modified.get(family).band == name
+    ]
+    assert affected
+    for family in affected:
+        assert modified.supports_e2e(family) is False
+
+    for family in table.names():
+        assert table.supports_e2e(family) is True, family
+        assert table.band_spec(table.get(family).band).encoder, family
 
 
 def test_bad_schema_is_rejected() -> None:
@@ -181,11 +204,8 @@ def test_split_only_band_with_encoder_is_rejected() -> None:
     document = json.loads(
         DEFAULT_FAMILY_TABLE_PATH.read_text(encoding="utf-8")
     )
-    band = next(
-        name
-        for name, spec in document["bands"].items()
-        if not spec.get("e2e")
-    )
+    band = next(iter(document["bands"]))
+    document["bands"][band]["e2e"] = False
     document["bands"][band]["encoder"] = "encoder"
     with pytest.raises(RegistryInvalid):
         KernelFamilyTable(document)

@@ -52,7 +52,7 @@ const SIBLING_ALIASES_SHA256: &str =
 const REPAIR_MANIFEST_SHA256: &str =
     "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853";
 const KERNEL_FAMILIES_SHA256: &str =
-    "40834dc72faf3d5437fe5b60f2d2752b71728ad149327b5658268221aa6f0b9c";
+    "87ed2b84499ac37430bb1dc2c60728c8e90304987c9c17db46f286ce78c391f7";
 const PREBUILT_MANIFEST_SHA256: &str =
     "9f193e6b42408a09ee0796cbff525e283836389c40a91d67aa4ec1271db8acbe";
 
@@ -337,7 +337,7 @@ impl Registry {
                     "kernel family {family} names an unknown class table"
                 )));
             }
-            if !band.e2e && family != "kimi_k3" {
+            if !band.e2e {
                 return Err(registry_error(format!(
                     "unexpected non-e2e kernel family {family}"
                 )));

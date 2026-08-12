@@ -18,8 +18,9 @@ Module map:
     Explicit tuning options; nothing here reads the environment.
 ``pretok`` / ``pretok_o200k`` / ``pretok_kimi``
     Piece-start computation per band.
-``encoder`` / ``encoder_o200k``
-    End-to-end encoders, eager and fused forms.
+``encoder`` / ``encoder_o200k`` / ``encoder_kimi``
+    End-to-end encoders; the first two in eager and fused forms, the
+    third eager only.
 ``batched``
     The many-documents-per-pass channel behind ``encode_batch``.
 ``engine``

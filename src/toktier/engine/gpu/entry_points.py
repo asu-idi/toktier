@@ -47,6 +47,12 @@ def _encoder_o200k() -> Mapping[str, Any]:
     }
 
 
+def _encoder_kimi() -> Mapping[str, Any]:
+    from .encoder_kimi import GpuTokenizerKimi
+
+    return {"eager": GpuTokenizerKimi}
+
+
 def _pretok() -> Any:
     from .pretok import CudaPretok
 
@@ -70,6 +76,7 @@ def _pretok_kimi() -> Any:
 ENCODER_ENTRY_POINTS: Mapping[str, Callable[[], Mapping[str, Any]]] = {
     "encoder": _encoder,
     "encoder_o200k": _encoder_o200k,
+    "encoder_kimi": _encoder_kimi,
 }
 
 #: Piece-start (split layer) entry points: id -> lazy loader returning

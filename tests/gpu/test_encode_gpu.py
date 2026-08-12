@@ -70,6 +70,22 @@ def _e2e_families(engine: Any, handles: dict[str, Any]) -> list[str]:
     ]
 
 
+def _declared_kinds(engine: Any, family: str) -> list[str]:
+    """The delivery forms this family's band actually provides.
+
+    Bands differ here: the ones whose splitter has a single capturable
+    call provide all three, the one that resolves its sparse cases in
+    host-selected device windows provides the stage-by-stage form only.
+    Tests read the declaration instead of assuming all three exist.
+    """
+    from toktier.engine.gpu.entry_points import encoder_deliveries
+
+    entry = engine.families.get(family)
+    band = engine.families.band_spec(entry.band)
+    assert band.encoder is not None
+    return sorted(encoder_deliveries(band.encoder))
+
+
 def _samples_without_added_literals(encoder: Any) -> list[str]:
     """Drop samples that contain an added-token literal.
 
@@ -131,26 +147,30 @@ def test_encode_matches_the_reference(
 def test_delivery_forms_agree(
     gpu_engine: Any, artifact_handles: dict[str, Any]
 ) -> None:
-    """Eager, fused and graph forms are delivery choices, not semantics."""
+    """Every form a band declares is a delivery choice, not semantics."""
     for family in _e2e_families(gpu_engine, artifact_handles):
+        kinds = _declared_kinds(gpu_engine, family)
+        assert "eager" in kinds, family
         encoders = {
-            kind: gpu_engine.encoder(family, kind=kind)
-            for kind in ("eager", "fused", "graph")
+            kind: gpu_engine.encoder(family, kind=kind) for kind in kinds
         }
         for text in _samples_without_added_literals(encoders["eager"]):
             ids = {
                 kind: encoder.encode(text) for kind, encoder in encoders.items()
             }
-            assert ids["eager"] == ids["fused"] == ids["graph"], (family, text)
+            assert set(map(tuple, ids.values())) == {
+                tuple(ids["eager"])
+            }, (family, text)
 
 
 def test_numpy_delivery_matches_list_delivery(
     gpu_engine: Any, artifact_handles: dict[str, Any]
 ) -> None:
     for family in _e2e_families(gpu_engine, artifact_handles):
-        encoder = gpu_engine.encoder(family, kind="graph")
-        for text in _samples_without_added_literals(encoder):
-            assert encoder.encode_np(text).tolist() == encoder.encode(text)
+        for kind in _declared_kinds(gpu_engine, family):
+            encoder = gpu_engine.encoder(family, kind=kind)
+            for text in _samples_without_added_literals(encoder):
+                assert encoder.encode_np(text).tolist() == encoder.encode(text)
 
 
 # -- the batched channel -------------------------------------------------
@@ -276,3 +296,26 @@ def test_unknown_encoder_kind_refuses(
     family = _e2e_families(gpu_engine, artifact_handles)[0]
     with pytest.raises(UnsupportedConfig):
         gpu_engine.encoder(family, kind="turbo")
+
+
+def test_undeclared_delivery_form_refuses(
+    gpu_engine: Any, artifact_handles: dict[str, Any]
+) -> None:
+    """A form the band does not provide is refused, never substituted.
+
+    Serving a different form silently would report a delivery the caller
+    never got. The default single-request form, by contrast, is resolved
+    from what the band declares, so it always exists.
+    """
+    from toktier.errors import UnsupportedConfig
+
+    for family in _e2e_families(gpu_engine, artifact_handles):
+        declared = _declared_kinds(gpu_engine, family)
+        preferred = gpu_engine.single_request_kind(family)
+        assert preferred in declared, family
+        gpu_engine.encoder(family, kind=preferred)
+        for kind in ("eager", "fused", "graph"):
+            if kind in declared:
+                continue
+            with pytest.raises(UnsupportedConfig):
+                gpu_engine.encoder(family, kind=kind)

@@ -28,7 +28,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ...errors import ArtifactNotFound, UncertifiedTokenizer, UnsupportedConfig
+from ...errors import (
+    ArtifactNotFound,
+    RegistryInvalid,
+    UncertifiedTokenizer,
+    UnsupportedConfig,
+)
 from ...kernels.bpe_tables import BpeTableStore
 from ...policy import BACKEND_GPU
 from .backend import GpuBackend
@@ -47,12 +52,25 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from ...routing.registry_view import ArtifactRecord, RegistryView
     from .encoder import AddedTokenFrontend, GpuTokenizer
 
-__all__ = ["ENCODER_KINDS", "GpuBackend", "GpuEngine", "oracle_binding"]
+__all__ = [
+    "ENCODER_KINDS",
+    "SINGLE_REQUEST_PREFERENCE",
+    "GpuBackend",
+    "GpuEngine",
+    "oracle_binding",
+]
 
 #: Encoder delivery forms. ``eager`` runs the chain stage by stage;
 #: ``fused`` runs it in one call; ``graph`` additionally captures that
-#: call per size bucket. All three produce the same ids.
+#: call per size bucket. All three produce the same ids. A band's
+#: encoder entry point declares which of them it provides; a band whose
+#: splitter has no single capturable call provides ``eager`` only.
 ENCODER_KINDS = ("eager", "fused", "graph")
+
+#: Preference order used when a caller asks for a single-request encoder
+#: without naming a form: the one-call form when the band has it, the
+#: stage-by-stage form otherwise.
+SINGLE_REQUEST_PREFERENCE = ("fused", "eager")
 
 
 @dataclass(frozen=True)
@@ -175,10 +193,11 @@ class GpuEngine:
 
         Raises:
             UncertifiedTokenizer: the family is not in the routing data,
-                or its band has no end-to-end encoder (the split-only
+                or its band has no end-to-end encoder (a split-only
                 band). Under the default policy the caller turns this
                 into a reference fallback, not a failure.
-            UnsupportedConfig: unknown encoder kind.
+            UnsupportedConfig: unknown encoder kind, or a kind this
+                band's encoder does not provide.
         """
         if kind not in ENCODER_KINDS:
             raise UnsupportedConfig(
@@ -202,7 +221,21 @@ class GpuEngine:
             resolved = resolved.replace(use_cuda_graph=False)
         elif kind == "graph":
             resolved = resolved.replace(use_cuda_graph=True)
-        encoder_class = encoder_deliveries(band.encoder)[kind]
+        deliveries = encoder_deliveries(band.encoder)
+        encoder_class = deliveries.get(kind)
+        if encoder_class is None:
+            # A band whose encoder declares fewer forms is refused here
+            # rather than served by a different form: substituting one
+            # delivery for another silently would report a delivery the
+            # caller never got.
+            raise UnsupportedConfig(
+                f"family {family!r} has no {kind!r} end-to-end delivery",
+                details={
+                    "option": "kind",
+                    "value": kind,
+                    "reason": f"this band provides {sorted(deliveries)}",
+                },
+            )
         encoder: GpuTokenizer = encoder_class(
             ext=self.ext,
             family=entry,
@@ -261,11 +294,42 @@ class GpuEngine:
             windowed_starts=band.windowed_starts,
         )
 
+    def single_request_kind(self, family: str) -> str:
+        """The delivery form this family's band offers a single request.
+
+        The one-call form when the band's encoder declares one, the
+        stage-by-stage form otherwise. Both produce the same ids, so the
+        choice is a delivery decision and never an id decision; it is
+        read from the entry point's own declaration rather than from a
+        second table.
+        """
+        entry = self.families.get(family)
+        band = self.families.band_spec(entry.band)
+        if not band.e2e or band.encoder is None:
+            raise UncertifiedTokenizer(
+                f"family {family!r} has a split-layer kernel only; "
+                "end-to-end encoding runs on the reference backend",
+                details={"family": family, "artifact_sha256": None},
+            )
+        declared = encoder_deliveries(band.encoder)
+        for candidate in SINGLE_REQUEST_PREFERENCE:
+            if candidate in declared:
+                return candidate
+        raise RegistryInvalid(
+            f"encoder entry point {band.encoder!r} declares no "
+            "single-request delivery form",
+            details={
+                "path": None,
+                "failure": "no_single_request_delivery",
+                "declared": sorted(declared),
+            },
+        )
+
     def backend(
         self,
         family: str,
         *,
-        kind: str = "fused",
+        kind: str | None = None,
         frontend: AddedTokenFrontend | None = None,
         options: GpuOptions | None = None,
     ) -> GpuBackend:
@@ -274,10 +338,16 @@ class GpuEngine:
         Owns a single-request encoder of the given delivery ``kind``
         plus the family's batched channel, behind the one protocol the
         routing executor runs against
-        (``toktier.backends.protocol.Backend``).
+        (``toktier.backends.protocol.Backend``). ``kind`` defaults to
+        the form the family's band offers a single request.
         """
+        resolved_kind = (
+            self.single_request_kind(family) if kind is None else kind
+        )
         return GpuBackend(
-            self.encoder(family, kind=kind, frontend=frontend, options=options),
+            self.encoder(
+                family, kind=resolved_kind, frontend=frontend, options=options
+            ),
             batched=self.batched(family, options=options),
         )
 

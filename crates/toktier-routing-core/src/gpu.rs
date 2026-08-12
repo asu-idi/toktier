@@ -43,6 +43,7 @@ enum Ruleset {
     Deepseek,
     Laguna,
     O200k,
+    Kimi,
 }
 
 impl Ruleset {
@@ -52,6 +53,7 @@ impl Ruleset {
             "deepseek" => Ok(Self::Deepseek),
             "laguna" => Ok(Self::Laguna),
             "o200k" => Ok(Self::O200k),
+            "kimi" => Ok(Self::Kimi),
             other => Err(NativeRuntimeError::new(format!(
                 "unsupported native GPU ruleset {other:?}"
             ))),
@@ -63,8 +65,19 @@ impl Ruleset {
             Self::Cl100k => Some(0),
             Self::Deepseek => Some(1),
             Self::Laguna => Some(2),
-            Self::O200k => None,
+            Self::O200k | Self::Kimi => None,
         }
+    }
+
+    /// Whether this ruleset runs the windowed splitter group: the same
+    /// five kernels, with the Han branch selected by a runtime flag.
+    fn windowed(self) -> bool {
+        matches!(self, Self::O200k | Self::Kimi)
+    }
+
+    /// Whether the Han branch of the windowed group is active.
+    fn han_branch(self) -> bool {
+        matches!(self, Self::Kimi)
     }
 }
 
@@ -165,7 +178,10 @@ impl Workspace {
             chan_neg: alloc(i32s(4usize.saturating_mul(capacity)))?,
             starts: alloc(capacity)?,
             doc_starts: alloc(capacity)?,
-            trig2: alloc(2usize.saturating_mul(capacity))?,
+            // Three trigger planes: the punctuation-or-mark plane, the
+            // contraction-chain plane, and the Han plane the Han branch
+            // writes. Each is one byte per input byte.
+            trig2: alloc(3usize.saturating_mul(capacity))?,
             sparse_flags: alloc(8)?,
             pb: alloc(i32s(capacity.saturating_add(1)))?,
             counts: alloc(16)?,
@@ -180,6 +196,35 @@ impl Workspace {
             meta: alloc(12)?,
             scan_levels,
         })
+    }
+}
+
+/// What one pipeline pass reports after the merge stage.
+///
+/// `chain`, `ambiguous` and `han` are the sparse surfaces of the
+/// windowed splitter group. Each one marks input the group's parallel
+/// rules do not decide by themselves; the exact answer needs a local
+/// sequential re-resolution, which this host does not run. Reporting the
+/// surface as a fault instead routes the input to the next backend in
+/// the chain, so the ids stay exact and the fallback stays counted.
+#[derive(Debug, Clone, Copy, Default)]
+struct Tail {
+    tokens: i32,
+    chain: i32,
+    ambiguous: i32,
+    han: i32,
+}
+
+impl Tail {
+    fn sparse_guard(self) -> Option<String> {
+        if self.chain == 0 && self.ambiguous == 0 && self.han == 0 {
+            return None;
+        }
+        Some(format!(
+            "windowed splitter sparse guard requested exact fallback \
+             (chain={}, ambiguous={}, han={})",
+            self.chain, self.ambiguous, self.han
+        ))
     }
 }
 
@@ -469,15 +514,18 @@ impl Executor {
         result
     }
 
-    fn encode_in_workspace(
-        &self,
-        bytes: &[u8],
-        workspace: &Workspace,
-    ) -> Result<Vec<u32>, NativeRuntimeError> {
-        self.launch_pipeline(bytes, 0, workspace)?;
-        let cap = bytes.len();
+    /// Issue the tail reads of one pipeline pass and wait for them.
+    ///
+    /// The windowed splitter group reports its token count and its two
+    /// sparse flags through one device-side pack; the Han branch adds a
+    /// third surface, a per-character plane whose set positions are
+    /// counted by an inclusive scan. Every other ruleset reads the token
+    /// count alone. The caller may issue further copies before this
+    /// call; the stream is ordered, so one wait covers them all.
+    fn read_tail(&self, cap: usize, workspace: &Workspace) -> Result<Tail, NativeRuntimeError> {
         let mut metadata = [0i32; 3];
-        if self.ruleset == Ruleset::O200k {
+        let mut han = [0i32; 1];
+        if self.ruleset.windowed() {
             self.launch(
                 "k_o2k_meta3",
                 1,
@@ -491,24 +539,51 @@ impl Executor {
             self.stream
                 .copy_from_device(&mut metadata, workspace.meta.ptr())
                 .map_err(driver_error)?;
+            if self.ruleset.han_branch() {
+                // The scan scratch is free once the piece dispatch has
+                // consumed it, which happens before the merge stage.
+                self.scan(
+                    han_plane(cap, workspace),
+                    workspace.scan_out.ptr(),
+                    cap,
+                    true,
+                    workspace,
+                )?;
+                self.stream
+                    .copy_from_device(&mut han, add(workspace.scan_out.ptr(), 4 * (cap - 1)))
+                    .map_err(driver_error)?;
+            }
         } else {
             self.stream
                 .copy_from_device(&mut metadata[..1], add(workspace.offsets.ptr(), 4 * cap))
                 .map_err(driver_error)?;
         }
         self.stream.synchronize().map_err(driver_error)?;
-        let count = usize::try_from(metadata[0])
+        Ok(Tail {
+            tokens: metadata[0],
+            chain: metadata[1],
+            ambiguous: metadata[2],
+            han: han[0],
+        })
+    }
+
+    fn encode_in_workspace(
+        &self,
+        bytes: &[u8],
+        workspace: &Workspace,
+    ) -> Result<Vec<u32>, NativeRuntimeError> {
+        self.launch_pipeline(bytes, 0, workspace)?;
+        let cap = bytes.len();
+        let tail = self.read_tail(cap, workspace)?;
+        let count = usize::try_from(tail.tokens)
             .map_err(|_| NativeRuntimeError::new("native GPU returned a negative token count"))?;
         if count > cap {
             return Err(NativeRuntimeError::new(format!(
                 "native GPU returned {count} tokens for capacity {cap}"
             )));
         }
-        if self.ruleset == Ruleset::O200k && (metadata[1] != 0 || metadata[2] != 0) {
-            return Err(NativeRuntimeError::new(format!(
-                "o200k sparse guard requested exact fallback (chain={}, ambiguous={})",
-                metadata[1], metadata[2]
-            )));
+        if let Some(reason) = tail.sparse_guard() {
+            return Err(NativeRuntimeError::new(reason));
         }
         let mut signed = vec![0i32; count];
         self.stream
@@ -578,39 +653,18 @@ impl Executor {
             self.launch_pipeline(&joined, workspace.doc_starts.ptr(), &workspace)?;
 
             let cap = joined.len();
-            let mut metadata = [0i32; 3];
-            if self.ruleset == Ruleset::O200k {
-                self.launch(
-                    "k_o2k_meta3",
-                    1,
-                    1,
-                    &[
-                        KernelArg::Ptr(add(workspace.offsets.ptr(), 4 * cap)),
-                        KernelArg::Ptr(workspace.sparse_flags.ptr()),
-                        KernelArg::Ptr(workspace.meta.ptr()),
-                    ],
-                )?;
-                self.stream
-                    .copy_from_device(&mut metadata, workspace.meta.ptr())
-                    .map_err(driver_error)?;
-            } else {
-                self.stream
-                    .copy_from_device(&mut metadata[..1], add(workspace.offsets.ptr(), 4 * cap))
-                    .map_err(driver_error)?;
-            }
             let mut piece_count = [0i32; 1];
             self.stream
                 .copy_from_device(&mut piece_count, workspace.counts.ptr())
                 .map_err(driver_error)?;
-            self.stream.synchronize().map_err(driver_error)?;
+            let tail = self.read_tail(cap, &workspace)?;
 
-            if self.ruleset == Ruleset::O200k && (metadata[1] != 0 || metadata[2] != 0) {
+            if let Some(reason) = tail.sparse_guard() {
                 return Err(NativeRuntimeError::new(format!(
-                    "o200k batched sparse guard requested exact per-document fallback (chain={}, ambiguous={})",
-                    metadata[1], metadata[2]
+                    "batched {reason}; the rows are redone one at a time"
                 )));
             }
-            let token_count = usize::try_from(metadata[0]).map_err(|_| {
+            let token_count = usize::try_from(tail.tokens).map_err(|_| {
                 NativeRuntimeError::new("native GPU returned a negative batch token count")
             })?;
             let pieces = usize::try_from(piece_count[0]).map_err(|_| {
@@ -740,7 +794,9 @@ impl Executor {
         )?;
         let char_count = add(workspace.cpos.ptr(), 4 * (cap - 1));
         match self.ruleset {
-            Ruleset::O200k => self.o200k_middle(cap, char_count, doc_starts, workspace)?,
+            ruleset if ruleset.windowed() => {
+                self.windowed_middle(cap, char_count, doc_starts, workspace)?
+            }
             ruleset => self.generic_middle(ruleset, cap, char_count, doc_starts, workspace)?,
         }
         self.bpe_tail(cap, workspace)
@@ -894,7 +950,7 @@ impl Executor {
                 (doc_starts, workspace.dso.ptr(), 0)
             }
             Ruleset::Cl100k => (0, 0, 0),
-            Ruleset::O200k => unreachable!(),
+            Ruleset::O200k | Ruleset::Kimi => unreachable!(),
         };
         self.stream
             .memset_u8(workspace.heads.ptr(), 0, cap)
@@ -972,13 +1028,21 @@ impl Executor {
         self.piece_dispatch(cap, workspace)
     }
 
-    fn o200k_middle(
+    /// The middle section of the windowed splitter group.
+    ///
+    /// One set of five kernels serves both members: the Han branch is a
+    /// runtime flag, and when it is on the rules kernel also fills the
+    /// Han trigger plane. Everything else -- the four run channels, the
+    /// anchor and back-reference channels, the rule evaluation -- is the
+    /// same code for both.
+    fn windowed_middle(
         &self,
         cap: usize,
         char_count: DevicePtr,
         doc_starts: DevicePtr,
         workspace: &Workspace,
     ) -> Result<(), NativeRuntimeError> {
+        let han = self.ruleset.han_branch();
         self.stream
             .memset_u8(workspace.heads.ptr(), 0, 4 * cap)
             .map_err(driver_error)?;
@@ -997,7 +1061,7 @@ impl Executor {
                 KernelArg::Ptr(add(workspace.heads.ptr(), cap)),
                 KernelArg::Ptr(add(workspace.heads.ptr(), 2 * cap)),
                 KernelArg::Ptr(add(workspace.heads.ptr(), 3 * cap)),
-                KernelArg::Bool(false),
+                KernelArg::Bool(han),
             ],
         )?;
         for channel in 0..4 {
@@ -1047,7 +1111,7 @@ impl Executor {
                 KernelArg::Ptr(workspace.run_start.ptr()),
                 KernelArg::Ptr(first_anchor),
                 KernelArg::Ptr(last_m_pm),
-                KernelArg::Bool(false),
+                KernelArg::Bool(han),
             ],
         )?;
         self.launch(
@@ -1074,14 +1138,14 @@ impl Executor {
                 KernelArg::Ptr(f_l1),
                 KernelArg::Ptr(f_l2),
                 KernelArg::Ptr(pm_fp),
-                KernelArg::Bool(false),
+                KernelArg::Bool(han),
             ],
         )?;
         self.stream
             .memset_u8(workspace.starts.ptr(), 0, cap)
             .map_err(driver_error)?;
         self.stream
-            .memset_u8(workspace.trig2.ptr(), 0, 2 * cap)
+            .memset_u8(workspace.trig2.ptr(), 0, 3 * cap)
             .map_err(driver_error)?;
         self.stream
             .memset_u32(workspace.sparse_flags.ptr(), 0, 2)
@@ -1120,8 +1184,8 @@ impl Executor {
                 KernelArg::Ptr(char_count),
                 KernelArg::Ptr(add(workspace.sparse_flags.ptr(), 4)),
                 KernelArg::Ptr(doc_starts),
-                KernelArg::Bool(false),
-                KernelArg::Ptr(0),
+                KernelArg::Bool(han),
+                KernelArg::Ptr(if han { han_plane(cap, workspace) } else { 0 }),
             ],
         )?;
         self.piece_dispatch(cap, workspace)
@@ -1528,6 +1592,13 @@ fn validate_tables(
     Ok(())
 }
 
+/// Third trigger plane of the workspace, one byte per input byte: where
+/// the Han branch met a Han character that is also a number or a
+/// punctuation mark, which the parallel rules do not decide alone.
+fn han_plane(cap: usize, workspace: &Workspace) -> DevicePtr {
+    add(workspace.trig2.ptr(), 2 * cap)
+}
+
 fn required_functions(ruleset: Ruleset) -> Vec<&'static str> {
     let mut names = vec![
         "tk_scan_u8_blocks",
@@ -1571,7 +1642,7 @@ fn required_functions(ruleset: Ruleset) -> Vec<&'static str> {
                 names.push("k_lag_bmask");
             }
         }
-        Ruleset::O200k => names.extend([
+        Ruleset::O200k | Ruleset::Kimi => names.extend([
             "k_o2k_heads",
             "k_o2k_runinfo1",
             "k_o2k_runinfo2",
@@ -1625,7 +1696,41 @@ mod tests {
         assert_eq!(Ruleset::parse("deepseek").unwrap().numeric(), Some(1));
         assert_eq!(Ruleset::parse("laguna").unwrap().numeric(), Some(2));
         assert_eq!(Ruleset::parse("o200k").unwrap().numeric(), None);
+        assert_eq!(Ruleset::parse("kimi").unwrap().numeric(), None);
+        assert!(Ruleset::parse("nonesuch").is_err());
         assert_eq!(grid(1).unwrap(), 1);
         assert_eq!(grid(257).unwrap(), 2);
+    }
+
+    #[test]
+    fn the_windowed_group_shares_one_kernel_set() {
+        let o200k = required_functions(Ruleset::O200k);
+        assert_eq!(required_functions(Ruleset::Kimi), o200k);
+        assert!(Ruleset::O200k.windowed() && Ruleset::Kimi.windowed());
+        assert!(!Ruleset::Cl100k.windowed());
+        // Only the Han member turns the branch on.
+        assert!(Ruleset::Kimi.han_branch());
+        assert!(!Ruleset::O200k.han_branch());
+    }
+
+    #[test]
+    fn the_sparse_guard_reports_every_surface() {
+        assert!(Tail::default().sparse_guard().is_none());
+        for tail in [
+            Tail {
+                chain: 1,
+                ..Tail::default()
+            },
+            Tail {
+                ambiguous: 1,
+                ..Tail::default()
+            },
+            Tail {
+                han: 1,
+                ..Tail::default()
+            },
+        ] {
+            assert!(tail.sparse_guard().is_some());
+        }
     }
 }

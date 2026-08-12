@@ -234,16 +234,23 @@ Two of those removals matter for correctness:
 
 ## 6. Bands and what each one supports
 
-| Band | End to end | Notes |
-|---|---|---|
-| cl100k | yes | GPT-style splitter; a variant adds a stage-0 newline-run cut |
-| deepseek | yes | three-splitter ruleset, single-pass kernel |
-| o200k | yes | fused entry is CUDA-Graph capturable |
-| kimi | **no** | split layer only; encode falls back to reference |
+| Band | End to end | Delivery forms | Notes |
+|---|---|---|---|
+| cl100k | yes | eager, fused, graph | GPT-style splitter; a variant adds a stage-0 newline-run cut |
+| deepseek | yes | eager, fused, graph | three-splitter ruleset, single-pass kernel |
+| o200k | yes | eager, fused, graph | fused entry is CUDA-Graph capturable |
+| kimi | yes | eager | o200k splitter plus a leading Han branch; the sparse cases are resolved in host-selected device windows, so there is no single capturable call |
 
-The split-only band is declared as such in the routing data. Reporting
-it as GPU-certified end to end would be a claim the evidence does not
-support, so the engine refuses the request instead.
+Which delivery forms a band has is declared by its encoder entry point,
+and a form a band does not provide is refused rather than replaced by
+another: serving a different form silently would report a delivery the
+caller never got. A caller that names no form gets the one the band
+offers a single request.
+
+A band with no end-to-end encoder at all is likewise declared as such in
+the routing data, and the engine refuses end-to-end requests for it
+rather than reporting it as GPU-certified end to end. No band currently
+shipped is in that state.
 
 ## 7. Normalization
 

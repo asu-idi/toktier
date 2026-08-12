@@ -18,6 +18,11 @@ use crate::{Error, ErrorCode, Result};
 
 /// Refuse parent-directory, symlink, and non-directory components on the
 /// way to `path`. `label` names the caller's surface in the messages.
+///
+/// The three refusals are policy decisions about a configured location,
+/// not failures of an attempted operation, so they report
+/// [`ErrorCode::ConfigInvalid`]; a real filesystem failure met while
+/// walking the chain still reports [`ErrorCode::Io`].
 pub(crate) fn reject_symlink_components(path: &Path, label: &str) -> Result<()> {
     let absolute = if path.is_absolute() {
         path.to_path_buf()
@@ -30,7 +35,7 @@ pub(crate) fn reject_symlink_components(path: &Path, label: &str) -> Result<()> 
     for component in absolute.components() {
         if matches!(component, std::path::Component::ParentDir) {
             return Err(Error::new(
-                ErrorCode::Io,
+                ErrorCode::ConfigInvalid,
                 format!("{label} paths may not contain parent-directory components"),
             )
             .with_path(path));
@@ -39,14 +44,14 @@ pub(crate) fn reject_symlink_components(path: &Path, label: &str) -> Result<()> 
         match fs::symlink_metadata(&current) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
                 return Err(Error::new(
-                    ErrorCode::Io,
+                    ErrorCode::ConfigInvalid,
                     format!("{label} path contains a symbolic-link component"),
                 )
                 .with_path(current));
             }
             Ok(metadata) if current != absolute && !metadata.is_dir() => {
                 return Err(Error::new(
-                    ErrorCode::Io,
+                    ErrorCode::ConfigInvalid,
                     format!("{label} path contains a non-directory component"),
                 )
                 .with_path(current));
@@ -76,7 +81,7 @@ pub(crate) fn ensure_private_directory(
     let metadata = fs::symlink_metadata(path)
         .map_err(|error| Error::new(ErrorCode::Io, error.to_string()).with_path(path))?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err(Error::new(ErrorCode::Io, not_directory).with_path(path));
+        return Err(Error::new(ErrorCode::ConfigInvalid, not_directory).with_path(path));
     }
     #[cfg(unix)]
     {

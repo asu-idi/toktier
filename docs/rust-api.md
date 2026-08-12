@@ -190,17 +190,55 @@ move but has one mutable owner; duplicate processes still meet the store's
 revision and integrity gates.
 
 Errors expose a stable `ErrorCode`; display messages are diagnostic and are
-not a compatibility interface. A per-code meaning table for the Rust surface
-is not yet published (planned for 0.3); `docs/contracts/errors.md` documents
-the Python facade contract, and Rust can apply the same stable code strings
-to broader conditions than that table lists (for example,
-`SessionRevisionConflict` also covers a repeated seed and an in-process
-writer lease). `ArtifactHashMismatch` is reserved for actual
-content-hash verification failures; a hash-verified artifact that later fails
-to parse reports the failing stage instead (`KernelIncompatible` from GPU
-table construction, `Internal` from a reference-engine load). The `serde`
-feature serializes typed plans, execution facts, doctor facts, and store
-statistics.
+not a compatibility interface. `docs/contracts/errors.md` is the Python
+facade's frozen contract; the table below is the Rust surface's own, and the
+two use the same stable code strings. Where a Rust row is wider than the
+Python row of the same name, the row says so. `ArtifactHashMismatch` is
+reserved for actual content-hash verification failures; a hash-verified
+artifact that later fails to parse reports the failing stage instead
+(`KernelIncompatible` from GPU table construction, `Internal` from a
+reference-engine load). The `serde` feature serializes typed plans, execution
+facts, doctor facts, and store statistics.
+
+### `ErrorCode` on the Rust surface
+
+Codes are append-only: a variant is never renamed, reused, or re-meant. The
+enum is `#[non_exhaustive]`, so a `match` on it needs a catch-all arm.
+
+| Variant / string | Raised when |
+|---|---|
+| `InvalidArgument` / `INVALID_ARGUMENT` | Caller misuse the type system cannot refuse: a batch row out of range, an offset request on the ID-only batch API, a revision that is not an immutable 40-hex commit, a value that does not fit the platform. |
+| `ConfigInvalid` / `CONFIG_INVALID` | A configuration value is impossible or self-contradictory: a CPU device with GPU delivery, an empty or zero bound, a URL carrying credentials or control characters, and (since 0.2.3) a **path this crate refuses by policy** -- a parent-directory component, a symbolic-link component, a non-directory component, or a final path that is not a regular directory. Wider than the Python row, which covers configuration values only. |
+| `ArtifactNotFound` / `ARTIFACT_NOT_FOUND` | An artifact cannot be resolved: an unknown family (the message carries the closest valid ids), a missing or non-regular `tokenizer.json`, a missing bundle or bundle member, an empty cache under offline mode. |
+| `ArtifactHashMismatch` / `ARTIFACT_HASH_MISMATCH` | Verified bytes do not match the manifest digest. Content-hash failures only. |
+| `ArtifactSizeMismatch` / `ARTIFACT_SIZE_MISMATCH` | A file's byte count differs from the manifest, including a stream that stops early or overruns. Reported before the digest so the cheaper fact is not hidden behind the expensive one. |
+| `BundleInvalid` / `BUNDLE_INVALID` | An air-gap bundle violates the frozen archive format: unsafe or duplicate members, link members, a member set that disagrees with its manifest, resource-limit violations. |
+| `CacheBusy` / `CACHE_BUSY` | A bounded wait for a cache lock expired, or a staging name could not be allocated. Retryable by construction. |
+| `Network` / `NETWORK_ERROR` | An HTTPS request failed or exhausted its retry budget. Only with the `network` feature. |
+| `NetworkDisabled` / `NETWORK_DISABLED` | Acquisition was requested with the `network` feature off, or in offline mode. |
+| `RegistryInvalid` / `REGISTRY_INVALID` | Shipped registry, manifest, or table bytes fail their embedded digest, schema, or cross-reference checks. This is a package-integrity failure, not a caller error. |
+| `UncertifiedRuntime` / `UNCERTIFIED_RUNTIME` | An accelerated route was demanded from a build whose identity is not in the shipped `runtime_builds` register. |
+| `UncertifiedTokenizer` / `UNCERTIFIED_TOKENIZER` | The artifact itself has no certification row for the demanded route, or a repository/revision is outside the shipped equivalence table. |
+| `KernelIncompatible` / `KERNEL_INCOMPATIBLE` | The kernel cannot be admitted: uncertified SM, fatbin or class-table digest mismatch, a family the kernel does not cover, a device-side constraint. |
+| `JitCompileFailed` / `JIT_COMPILE_FAILED` | The `jit` feature ran NVCC and the compile, its inputs, or its products failed. |
+| `UncertifiedJit` / `UNCERTIFIED_JIT` | A JIT product outside the judged toolchain set was requested without `Policy::Experimental`. |
+| `QueueFull` / `QUEUE_FULL` | A bounded serving queue, byte budget, or per-session in-flight bound is at its limit. Backpressure, not failure. |
+| `RequestCancelled` / `REQUEST_CANCELLED` | A serving request was cancelled. Work already started may still have committed; the code does not claim a rollback. |
+| `DeadlineExceeded` / `DEADLINE_EXCEEDED` | A serving request passed its deadline. Same non-rollback caveat. |
+| `RuntimeShutdown` / `RUNTIME_SHUTDOWN` | A request arrived after the serving pool began shutting down. |
+| `BackendExecutionFault` / `BACKEND_EXECUTION_FAULT` | A backend failed on an input in a way the router may recover from, and the store's `ENGINE_ERROR` when the session encoder reports one. |
+| `SessionRevisionConflict` / `SESSION_REVISION_CONFLICT` | An optimistic write met a different stored revision, a session name was seeded twice, or a second writer in this process asked for the same session. Wider than the Python row, which covers the stored-revision case. |
+| `SessionStateMismatch` / `SESSION_STATE_MISMATCH` | Stored state does not belong to this tokenizer or does not extend as claimed: fingerprint or witness-category mismatch, a transcript that is shorter than or diverges from the stored session, a missing recovery transcript. Wider than the Python row. |
+| `StoreCorrupt` / `STORE_CORRUPT` | An explicit integrity operation found a checksum, linkage, or structural failure. On the ordinary read path an integrity failure becomes a counted miss instead: a miss is preferred over a wrong result. |
+| `StoreFormatUnsupported` / `STORE_FORMAT_UNSUPPORTED` | A record is well-formed but not decodable by this reader (future version, unknown mandatory flag, unknown witness category). Reached through the store conversion, distinct from corruption by design. |
+| `Io` / `IO_ERROR` | A filesystem or process operation failed as attempted -- the underlying `std::io::Error` text is carried. Policy refusals about a path are `ConfigInvalid`, not this. |
+| `Internal` / `INTERNAL` | An invariant of this crate was broken. Never a caller error; report it. |
+
+Before 0.2.3 the four path-policy refusals in the third row reported
+`IO_ERROR`. That answer was hard to act on -- a caller retrying I/O would
+retry forever -- so they were moved to `CONFIG_INVALID` and named here.
+Code matching on `Io` for a refused cache, bundle, or JIT root needs the
+one-line update; nothing else changed, and the messages are unchanged.
 
 The current feature surface is:
 

@@ -110,11 +110,32 @@ fn bundle_rejects_symlink_sources_and_cache_roots() {
     std::fs::create_dir(&real_cache).unwrap();
     let linked_cache = temporary.path().join("linked-cache");
     symlink(&real_cache, &linked_cache).unwrap();
+    // A destination the crate refuses to write into is a statement
+    // about the configured location, not about an attempted write.
     assert_eq!(
         import_bundle(&bundle, &linked_cache).unwrap_err().code(),
-        ErrorCode::Io
+        ErrorCode::ConfigInvalid
     );
     assert!(!real_cache.join("demo-deadbeef0000").exists());
+
+    let parent_relative = temporary.path().join("cache/../escaped-cache");
+    let error = import_bundle(&bundle, &parent_relative).unwrap_err();
+    assert_eq!(error.code(), ErrorCode::ConfigInvalid);
+    assert!(
+        error
+            .message()
+            .contains("may not contain parent-directory components"),
+        "{error}"
+    );
+
+    let occupied = temporary.path().join("occupied");
+    std::fs::write(&occupied, b"not a directory").unwrap();
+    assert_eq!(
+        import_bundle(&bundle, occupied.join("below"))
+            .unwrap_err()
+            .code(),
+        ErrorCode::ConfigInvalid
+    );
 }
 
 #[test]

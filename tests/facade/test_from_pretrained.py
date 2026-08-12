@@ -6,6 +6,7 @@ import hashlib
 import json
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -246,7 +247,7 @@ def test_unregistered_content_honors_require_accelerated(
         )
 
 
-def test_source_only_kimi_row_has_an_actionable_error(
+def test_source_only_row_without_a_packaged_anchor_is_refused(
     rig: Rig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source = tmp_path / "tiktoken.model"
@@ -272,4 +273,50 @@ def test_source_only_kimi_row_has_an_actionable_error(
             device="cpu",
         )
     assert caught.value.details["source_file"] == "tiktoken.model"
-    assert "conversion artifact" in str(caught.value.details["remedy"])
+    assert "packaged canonical artifact" in str(caught.value.details["remedy"])
+
+
+def test_a_converted_family_reads_its_own_repository_through_the_recipe(
+    rig: Rig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A locally derived artifact has no tokenizer.json upstream.
+
+    Its canonical repository publishes the conversion's input instead, so
+    resolving that repository by name has to ask for that file. Which file
+    it is comes from the conversion routing data, so this checks the wiring
+    rather than a second list of names.
+    """
+    source = tmp_path / "upstream.bin"
+    source.write_bytes(b"pinned upstream bytes")
+    requested: list[str] = []
+
+    def fake_download(
+        repo_id: str, file_name: str, revision: str, *, offline: bool
+    ) -> Path:
+        requested.append(file_name)
+        return source
+
+    registry = SiblingAliasRegistry(records=(), root_digest=ROOT_DIGEST)
+    monkeypatch.setattr(facade_api, "shipped_sibling_aliases", lambda: registry)
+    monkeypatch.setattr(
+        model_resolution_module, "_download_model_file", fake_download
+    )
+    entry = rig.manifest.entries[rig.family]
+    recipe = SimpleNamespace(
+        family=rig.family,
+        inputs=(SimpleNamespace(name="upstream.bin", sha256=None, size=None),),
+    )
+    monkeypatch.setattr(
+        model_resolution_module,
+        "recipe_for",
+        lambda family: recipe if family == rig.family else None,
+    )
+
+    with pytest.raises(ArtifactNotFound, match="cannot materialize"):
+        toktier.from_pretrained(
+            entry.repo_id,
+            config=rig.config,
+            manifest=rig.manifest,
+            device="cpu",
+        )
+    assert requested == ["upstream.bin"]

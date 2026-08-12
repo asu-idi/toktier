@@ -1,7 +1,7 @@
 {
   "runtime": "rust_api",
-  "source_digest": "df104ebdfc0ef62b4d4e05f721d49573bf22bc1991ab7899dcc18e0d5eea66c6",
-  "source_digest_v2": "39c256ed9e2bfc43d4a8184c4992b51cbfb2872516cdb33f5fa5c4444aa6ff2a",
+  "source_digest": "7da893d94a4a21fee71d60584e55043eb4eab426d45a50e81c35586ddd8705d3",
+  "source_digest_v2": "68d84d9d30e2d53cf955b0f7ef2dbe57778fe96b74b021dc7966dd73bdb882a1",
   "build_flags": [
     "profile=release",
     "opt-level=3",
@@ -16,8 +16,8 @@
   "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
   "fast_cpu_source_digest": "ea3258a3cf10e7748faf0c3d0d767635e30db0e6da5f984499f7be953c2d4bf9",
   "fast_cpu_source_digest_v2": "986a3c6e8304e449171f9d68442bd482981b23c5c9d2a28c4ed7a35882183780",
-  "native_host_source_digest": "244d4a51183bb24712d4909b42be25f661cf39dc7ca91b15a28d1ee5c6c2f602",
-  "native_host_source_digest_v2": "e216c1609c060deb232c71a1872ef128a52129fd23e317f915c115f304d84532",
+  "native_host_source_digest": "ff8f455e863719999a1e8dc495efa45241c53996919ad9e1dea6f9e4a4a073b8",
+  "native_host_source_digest_v2": "c94ec3ea432d07847c0846a36dd8aff70708467ffdd5a47a10fb2b3288ae03aa",
   "evidence_id": "ev-rust-api-plan160-default-v1",
   "additional_builds": [
     {

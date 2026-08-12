@@ -54,8 +54,8 @@ _EXPECTED_COUNTS = {
     "equivalent_canonicalisation": 10,
     "equivalent_serialisation": 38,
     "total": 210,
-    "packaged": 191,
-    "reference_only": 19,
+    "packaged": 203,
+    "reference_only": 7,
 }
 _TOP_LEVEL_KEYS = {
     "schema_version",

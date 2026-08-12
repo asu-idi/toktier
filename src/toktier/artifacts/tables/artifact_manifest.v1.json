@@ -49,6 +49,16 @@
       }
     }
   },
+  "kimi_k3": {
+    "repo_id": "moonshotai/Kimi-K3",
+    "revision": "9f62e4e9fffbd0a83ddd60e1c209d828994b3569",
+    "files": {
+      "tokenizer.json": {
+        "sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
+        "size": 9703692
+      }
+    }
+  },
   "laguna_s_2_1": {
     "repo_id": "poolside/Laguna-S-2.1",
     "revision": "00af5a51782109b587a3b3bbf11875e566036fa7",

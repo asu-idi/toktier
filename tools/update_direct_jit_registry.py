@@ -35,6 +35,12 @@ FLAGS = [
 ]
 
 
+#: Families the direct-JIT matrix has to cover, and the documents that
+#: follows from the seven fixed cases each family is asked.
+DIRECT_JIT_FAMILIES = 15
+DIRECT_JIT_DOCUMENTS = DIRECT_JIT_FAMILIES * 7
+
+
 def direct_source_digest() -> str:
     digest = hashlib.sha256(b"toktier.rust_jit_source.v1\0")
     for name in ("prebuilt_unit.cu", "pretok_kernel.cu"):
@@ -60,8 +66,8 @@ def validate(reading: dict[str, Any]) -> None:
         "native_host_source_digest": native_host_source_identity.source_digest(),
         "source_digest": direct_source_digest(),
         "direct_build_flags": FLAGS,
-        "families": 14,
-        "documents": 98,
+        "families": DIRECT_JIT_FAMILIES,
+        "documents": DIRECT_JIT_DOCUMENTS,
         "mismatches": 0,
     }
     for key, value in expected.items():
@@ -84,7 +90,7 @@ def validate(reading: dict[str, Any]) -> None:
     if len(reading["compiler_sha256"]) != 64:
         raise GenerationError("direct-JIT compiler digest is not a bare SHA-256")
     rows = reading.get("rows")
-    if not isinstance(rows, list) or len(rows) != 14:
+    if not isinstance(rows, list) or len(rows) != DIRECT_JIT_FAMILIES:
         raise GenerationError("direct-JIT reading has an incomplete family roster")
     registry = mapping(load_json(REGISTRY), "support registry")
     expected_artifacts = {

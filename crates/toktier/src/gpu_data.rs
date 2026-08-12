@@ -32,6 +32,10 @@ const CLASS_O200K: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/data/src/toktier/kernels/tables/pretok_classes_o200k.v4.npy"
 ));
+const CLASS_KIMI: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/data/src/toktier/kernels/tables/pretok_classes_kimi.v1.npy"
+));
 const DEEPSEEK_META: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/data/src/toktier/kernels/tables/pretok_classes_deepseek.v1.meta.json"
@@ -323,6 +327,7 @@ fn class_file(name: &str) -> Result<&'static [u8]> {
         "pretok_classes_cl100k_marks_as_letters.v3.npy" => Ok(CLASS_CL100K_M2L),
         "pretok_classes_deepseek.v1.npy" => Ok(CLASS_DEEPSEEK),
         "pretok_classes_o200k.v4.npy" => Ok(CLASS_O200K),
+        "pretok_classes_kimi.v1.npy" => Ok(CLASS_KIMI),
         other => Err(Error::new(
             ErrorCode::KernelIncompatible,
             format!("class table {other:?} is not embedded in the Rust crate"),
@@ -687,5 +692,26 @@ mod tests {
             Err(error) => error,
         };
         assert_eq!(error.code(), ErrorCode::KernelIncompatible);
+    }
+
+    #[test]
+    fn every_class_table_the_routing_data_names_is_embedded() {
+        // The crate carries its own copy of each table, so a family whose
+        // table is packaged but not embedded would only fail on hardware,
+        // and only for that family.
+        let registry = crate::manifest::Registry::load().expect("registry");
+        for (family, kernel) in &registry.kernel_families {
+            let spec = registry
+                .class_tables
+                .get(&kernel.class_table)
+                .unwrap_or_else(|| panic!("{family}: class table mapping is incomplete"));
+            let embedded =
+                class_file(&spec.file).unwrap_or_else(|error| panic!("{family}: {error}"));
+            assert_eq!(
+                sha256_hex(embedded),
+                spec.sha256.trim_start_matches("sha256:"),
+                "{family}: embedded table disagrees with the routing digest"
+            );
+        }
     }
 }

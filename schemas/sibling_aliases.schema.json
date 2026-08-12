@@ -100,8 +100,8 @@
         "equivalent_canonicalisation": { "const": 10 },
         "equivalent_serialisation": { "const": 38 },
         "total": { "const": 210 },
-        "packaged": { "const": 191 },
-        "reference_only": { "const": 19 }
+        "packaged": { "const": 203 },
+        "reference_only": { "const": 7 }
       }
     },
     "alias": {

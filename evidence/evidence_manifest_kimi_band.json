@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "evidence_id": "ev-kimi-band-v1",
+  "generated_by": {
+    "tool": "tools/generate_evidence.py",
+    "tool_version": "1.1.0",
+    "source_commit": "12efff80cb98c05ece05a05ccb0827e7b203221a",
+    "generated_at": "2026-08-12T22:12:03Z"
+  },
+  "root_digest": "sha256:e9785fd4c20af3ea9502e4b0277ab66867da7c2cc17f3599605689f61c82f24d",
+  "run": {
+    "run_id": "kimi-band-differential-campaign",
+    "date": "2026-08-11",
+    "suite_version": "gpu-e2e-differential-v1"
+  },
+  "oracle": {
+    "package": "tokenizers",
+    "version": "0.22.2"
+  },
+  "artifacts": [
+    {
+      "artifact_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
+      "family": "kimi_k3"
+    }
+  ],
+  "corpora": [
+    {
+      "corpus_id": "nvidia/Nemotron-CC-v2.1@ba6f2aaef7ada865bb08fc08640ca292150097db",
+      "docs": 3800016491,
+      "bytes": 12328592579973
+    }
+  ],
+  "totals": {
+    "docs": 3800016491,
+    "bytes": 12328592579973,
+    "mismatches": 0,
+    "routed": 3112
+  },
+  "environment": {
+    "os": "Ubuntu 24.04.4 LTS, Linux 7.0.0-28-generic x86_64 on both judged hosts; the campaign readings do not record the kernel build, so this is the build the hosts report",
+    "python": "3.12.3",
+    "gpus": [
+      "NVIDIA GeForce RTX 4090",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition"
+    ],
+    "dependencies_digest": "0de04510b4dcac41b8a8d88037e507214b32b1cf69af99cfe4b047a75b1af4d5"
+  }
+}

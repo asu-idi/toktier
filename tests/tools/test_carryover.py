@@ -18,10 +18,13 @@ import verify_carryover  # noqa: E402
 # record anchors to the live campaign only when its source identities appear in
 # the evidence it points at, so these literals track the registry and are
 # refreshed by each recertification.
+# The identities the shipped runtime-build row records. A carryover record
+# anchors to a campaign only when its source identities are exactly the ones
+# the registry carries, so these move with every recertification wave.
 CERTIFIED = {
     "fast_cpu": "ea3258a3cf10e7748faf0c3d0d767635e30db0e6da5f984499f7be953c2d4bf9",
-    "native_host": "244d4a51183bb24712d4909b42be25f661cf39dc7ca91b15a28d1ee5c6c2f602",
-    "rust_api": "df104ebdfc0ef62b4d4e05f721d49573bf22bc1991ab7899dcc18e0d5eea66c6",
+    "native_host": "ff8f455e863719999a1e8dc495efa45241c53996919ad9e1dea6f9e4a4a073b8",
+    "rust_api": "7da893d94a4a21fee71d60584e55043eb4eab426d45a50e81c35586ddd8705d3",
 }
 
 

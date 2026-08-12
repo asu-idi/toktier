@@ -15,6 +15,7 @@ from pathlib import Path
 from ..backends.protocol import TOKENIZER_FILE
 from ..config import Config
 from ..errors import ArtifactNotFound, RegistryInvalid
+from .conversion import recipe_for
 from .manifest import ArtifactEntry, ArtifactManifest
 from .sibling_aliases import SiblingAliasRecord, SiblingAliasRegistry
 from .sources import LocalDirectorySource
@@ -226,7 +227,12 @@ def resolve_model_repository(
         source_file = alias_hint.source_file
         default_revision = alias_hint.revision
     elif manifest_hint is not None:
-        source_file = TOKENIZER_FILE
+        # A family whose artifact is derived locally has no tokenizer.json
+        # upstream, so its own repository is read through the same file the
+        # conversion reads. Which file that is comes from the conversion
+        # routing data, not from a second list here.
+        recipe = recipe_for(manifest_hint.family)
+        source_file = TOKENIZER_FILE if recipe is None else recipe.inputs[0].name
         default_revision = manifest_hint.revision
     else:
         source_file = TOKENIZER_FILE
@@ -306,8 +312,8 @@ def resolve_model_repository(
                     match.canonical_family if match is not None else None
                 ),
                 "remedy": (
-                    "use a repository that ships tokenizer.json or wait for "
-                    "the Kimi conversion artifact to be packaged"
+                    "use a repository that ships tokenizer.json, or one whose "
+                    "source file matches a packaged canonical artifact"
                 ),
             },
         )

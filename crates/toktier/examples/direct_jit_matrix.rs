@@ -200,10 +200,15 @@ fn main() -> toktier::Result<()> {
             first_gpu_request_us,
         });
     }
-    if rows.len() != 14 || mismatches != 0 {
+    // Every family the campaign manifest names has to produce a row: a short
+    // roster would be a hole rather than a smaller campaign. Which roster is
+    // the certified one is checked where the reading is consumed, against the
+    // shipped registry, not by a number repeated here.
+    if rows.len() != manifest.len() || mismatches != 0 {
         return Err(std::io::Error::other(format!(
-            "direct JIT matrix has {} families and {mismatches} divergences",
-            rows.len()
+            "direct JIT matrix has {} of {} families and {mismatches} divergences",
+            rows.len(),
+            manifest.len()
         ))
         .into());
     }

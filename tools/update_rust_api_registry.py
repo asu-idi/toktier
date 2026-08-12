@@ -38,6 +38,19 @@ MATRIX_READINGS = {
     "sm_120": ROOT / "readings/rust_api_matrix_sm120.json",
 }
 
+#: Families every venue matrix has to cover, and the documents that follows
+#: from the seven fixed cases each family is asked. A matrix that answers for
+#: fewer families is a hole, not a smaller campaign.
+MATRIX_FAMILIES = 15
+MATRIX_DOCUMENTS = MATRIX_FAMILIES * 7
+
+#: Families the GPU parity readings cover; the same roster.
+GPU_FAMILIES = MATRIX_FAMILIES
+
+#: Backend roster the CPU venue must observe: the artifacts with a certified
+#: Gigatoken row run there, and the rest answer through the reference engine.
+CPU_MATRIX_BACKENDS = {"FastCpu": 11, "HuggingFace": 4}
+
 
 def _mapping(value: object, *, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
@@ -126,7 +139,7 @@ def verify_shared_evidence(binding: dict[str, Any]) -> None:
         if (
             reading.get("schema") != "toktier.gpu.native_frontend_parity.v1"
             or reading.get("architecture") != architecture
-            or reading.get("families") != 14
+            or reading.get("families") != GPU_FAMILIES
             or reading.get("mismatches") != 0
             or reading.get("all_ids_equal_hf") is not True
             or host.get("host_source_digest") != binding["native_host_source_digest"]
@@ -154,8 +167,8 @@ def verify_public_matrix(binding: dict[str, Any], *, bootstrap: bool) -> None:
             != binding["native_host_source_digest"]
             or reading.get("toolchain") != binding["toolchain"]
             or reading.get("build_flags") != binding["build_flags"]
-            or reading.get("families") != 14
-            or reading.get("documents") != 98
+            or reading.get("families") != MATRIX_FAMILIES
+            or reading.get("documents") != MATRIX_DOCUMENTS
             or reading.get("mismatches") != 0
             or (not bootstrap and reading.get("runtime_build_certified") is not True)
         ):
@@ -163,7 +176,7 @@ def verify_public_matrix(binding: dict[str, Any], *, bootstrap: bool) -> None:
                 f"Rust API {target} matrix does not match the binding"
             )
         rows = reading.get("rows")
-        if not isinstance(rows, list) or len(rows) != 14:
+        if not isinstance(rows, list) or len(rows) != MATRIX_FAMILIES:
             raise GenerationError(
                 f"Rust API {target} matrix has an incomplete family roster"
             )
@@ -174,9 +187,9 @@ def verify_public_matrix(binding: dict[str, Any], *, bootstrap: bool) -> None:
             backend = str(row.get("backend"))
             backend_counts[backend] = backend_counts.get(backend, 0) + 1
         expected = (
-            {"FastCpu": 11, "HuggingFace": 3}
+            dict(CPU_MATRIX_BACKENDS)
             if target == "cpu"
-            else {"Gpu": 14}
+            else {"Gpu": MATRIX_FAMILIES}
         )
         if backend_counts != expected:
             raise GenerationError(
@@ -202,8 +215,8 @@ def verify_additional_builds(binding: dict[str, Any], *, bootstrap: bool) -> Non
             != binding["native_host_source_digest"]
             or reading.get("rust_toolchain") != build["toolchain"]
             or reading.get("rust_build_flags") != build["build_flags"]
-            or reading.get("families") != 14
-            or reading.get("documents") != 98
+            or reading.get("families") != MATRIX_FAMILIES
+            or reading.get("documents") != MATRIX_DOCUMENTS
             or reading.get("mismatches") != 0
             or (
                 not bootstrap
@@ -215,7 +228,7 @@ def verify_additional_builds(binding: dict[str, Any], *, bootstrap: bool) -> Non
                 f"Rust API additional build {name} does not match its evidence"
             )
         rows = reading.get("rows")
-        if not isinstance(rows, list) or len(rows) != 14 or any(
+        if not isinstance(rows, list) or len(rows) != MATRIX_FAMILIES or any(
             not isinstance(row, dict)
             or row.get("mismatches") != 0
             or row.get("certified") is not True

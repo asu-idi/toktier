@@ -35,6 +35,7 @@ Usage::
 
     python tools/generate_evidence.py --check --campaign main
     python tools/generate_evidence.py --check --campaign extra
+    python tools/generate_evidence.py --check --campaign kimi
 
 The check needs the ``jsonschema`` package (in the ``test`` dependency
 group; not a runtime dependency of the library).
@@ -63,6 +64,7 @@ SCHEMA_PATH = REPOSITORY_ROOT / "schemas" / "evidence_manifest.schema.json"
 DEFAULT_OUTPUTS = {
     "main": REPOSITORY_ROOT / "evidence" / "evidence_manifest.json",
     "extra": REPOSITORY_ROOT / "evidence" / "evidence_manifest_added_families.json",
+    "kimi": REPOSITORY_ROOT / "evidence" / "evidence_manifest_kimi_band.json",
 }
 
 

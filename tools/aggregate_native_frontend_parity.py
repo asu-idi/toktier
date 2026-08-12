@@ -13,6 +13,13 @@ from registry_common import GenerationError, load_json
 
 ROOT = Path(__file__).resolve().parents[1]
 
+#: Families the GPU parity readings must cover. The registry check refuses a
+#: reading whose family set differs from the certified set, so this is the
+#: same number stated where the reading is built rather than only where it is
+#: consumed: an aggregation over a short roster would otherwise produce a
+#: well-formed document that only fails much later.
+GPU_FAMILIES = 15
+
 
 def _rows(directory: Path, backend: str) -> list[dict[str, Any]]:
     paths = sorted(directory.glob("*.json"))
@@ -118,8 +125,10 @@ def aggregate_gpu(directory: Path, architecture: str) -> dict[str, Any]:
     )
 
     rows = _rows(directory, "gpu")
-    if len(rows) != 14:
-        raise GenerationError(f"GPU parity requires 14 rows, found {len(rows)}")
+    if len(rows) != GPU_FAMILIES:
+        raise GenerationError(
+            f"GPU parity requires {GPU_FAMILIES} rows, found {len(rows)}"
+        )
     manifest = load_manifest()
     host_rows = [row.get("native_host_build_facts") for row in rows]
     if not all(
@@ -164,7 +173,7 @@ def aggregate_gpu(directory: Path, architecture: str) -> dict[str, Any]:
         "toolchain": manifest["toolchain"],
         "native_host_build_facts": bound_host_facts,
         "devices": devices,
-        "families": 14,
+        "families": GPU_FAMILIES,
         "documents": sum(int(row["documents"]) for row in rows),
         "characters": sum(int(row["characters"]) for row in rows),
         "mismatches": 0,

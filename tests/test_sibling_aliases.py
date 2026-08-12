@@ -26,7 +26,7 @@ def test_shipped_registry_closes_to_the_documented_coverage() -> None:
     ]
     assert len(equivalent) == 48
     assert sum(record.canonical_packaged for record in equivalent) == 46
-    assert sum(record.canonical_packaged for record in registry.records) == 191
+    assert sum(record.canonical_packaged for record in registry.records) == 203
     assert registry.root_digest.startswith("sha256:")
 
 

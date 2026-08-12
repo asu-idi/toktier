@@ -41,7 +41,7 @@ def test_fast_cpu_registry_counts_unique_artifacts_without_inflation() -> None:
     assert sum(status == "certified_source" for status in states.values()) == 11
     assert {
         family for family, status in states.items() if status == "unsupported"
-    } == {"hy3", "laguna_s_2_1", "ling_3_0_flash"}
+    } == {"hy3", "kimi_k3", "laguna_s_2_1", "ling_3_0_flash"}
 
     inherited = coverage["exact_artifact_inheritance"]
     assert isinstance(inherited, dict)

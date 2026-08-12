@@ -3,10 +3,10 @@
   "generated_by": {
     "tool": "tools/generate_sibling_aliases.py",
     "tool_version": "1.0.0",
-    "source_commit": "58f125bbb9d777564898ea8d02c8a38560316a3f",
-    "generated_at": "2026-08-08T08:46:42Z"
+    "source_commit": "12efff80cb98c05ece05a05ccb0827e7b203221a",
+    "generated_at": "2026-08-12T22:25:57Z"
   },
-  "root_digest": "sha256:6ef5f449d3b8270a679fd239ca83183ced5ed8ef402ffdc8a5fde7b48f2510ab",
+  "root_digest": "sha256:cdca62d8a447f8e4ee5ac43ec7f7ab7e9378e1c5ac3e142331344c564fec7cc1",
   "provenance": {
     "audit_date": "2026-08-04",
     "audit_rows": 470,
@@ -20,8 +20,8 @@
     "equivalent_canonicalisation": 10,
     "equivalent_serialisation": 38,
     "total": 210,
-    "packaged": 191,
-    "reference_only": 19
+    "packaged": 203,
+    "reference_only": 7
   },
   "aliases": [
     {
@@ -407,7 +407,7 @@
       "canonical_family": "kimi_k3",
       "canonical_anchor_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
       "basis": "identical_source",
-      "canonical_packaged": false
+      "canonical_packaged": true
     },
     {
       "repo_id": "moonshotai/Kimi-K2-Instruct",
@@ -418,7 +418,7 @@
       "canonical_family": "kimi_k3",
       "canonical_anchor_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
       "basis": "identical_source",
-      "canonical_packaged": false
+      "canonical_packaged": true
     },
     {
       "repo_id": "moonshotai/Kimi-K2-Instruct-0905",
@@ -429,7 +429,7 @@
       "canonical_family": "kimi_k3",
       "canonical_anchor_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
       "basis": "identical_source",
-      "canonical_packaged": false
+      "canonical_packaged": true
     },
     {
       "repo_id": "moonshotai/Kimi-K2-Thinking",
@@ -440,7 +440,7 @@
       "canonical_family": "kimi_k3",
       "canonical_anchor_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
       "basis": "identical_source",
-      "canonical_packaged": false
+      "canonical_packaged": true
     },
     {
       "repo_id": "moonshotai/Kimi-K2.5",
@@ -451,7 +451,7 @@
       "canonical_family": "kimi_k3",
       "canonical_anchor_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
       "basis": "identical_source",
-      "canonical_packaged": false
+      "canonical_packaged": true
     },
     {
       "repo_id": "moonshotai/Kimi-K2.6",
@@ -462,7 +462,7 @@
       "canonical_family": "kimi_k3",
       "canonical_anchor_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
       "basis": "identical_source",
-      "canonical_packaged": false
+      "canonical_packaged": true
     },
     {
       "repo_id": "moonshotai/Kimi-K2.7-Code",
@@ -473,7 +473,7 @@
       "canonical_family": "kimi_k3",
       "canonical_anchor_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
       "basis": "identical_source",
-      "canonical_packaged": false
+      "canonical_packaged": true
     },
     {
       "repo_id": "moonshotai/Kimi-Linear-48B-A3B-Base",
@@ -484,7 +484,7 @@
       "canonical_family": "kimi_k3",
       "canonical_anchor_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
       "basis": "identical_source",
-      "canonical_packaged": false
+      "canonical_packaged": true
     },
     {
       "repo_id": "moonshotai/Kimi-Linear-48B-A3B-Instruct",
@@ -495,7 +495,7 @@
       "canonical_family": "kimi_k3",
       "canonical_anchor_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
       "basis": "identical_source",
-      "canonical_packaged": false
+      "canonical_packaged": true
     },
     {
       "repo_id": "moonshotai/Kimi-VL-A3B-Instruct",
@@ -506,7 +506,7 @@
       "canonical_family": "kimi_k3",
       "canonical_anchor_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
       "basis": "identical_source",
-      "canonical_packaged": false
+      "canonical_packaged": true
     },
     {
       "repo_id": "moonshotai/Kimi-VL-A3B-Thinking",
@@ -517,7 +517,7 @@
       "canonical_family": "kimi_k3",
       "canonical_anchor_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
       "basis": "identical_source",
-      "canonical_packaged": false
+      "canonical_packaged": true
     },
     {
       "repo_id": "moonshotai/Kimi-VL-A3B-Thinking-2506",
@@ -528,7 +528,7 @@
       "canonical_family": "kimi_k3",
       "canonical_anchor_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
       "basis": "identical_source",
-      "canonical_packaged": false
+      "canonical_packaged": true
     },
     {
       "repo_id": "nvidia/Llama-3.1-Nemotron-70B-Instruct-HF",

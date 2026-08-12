@@ -1,9 +1,9 @@
 {
   "schema": "toktier.rust_api.matrix.v1",
   "requested_device": "cpu",
-  "runtime_source_digest": "df104ebdfc0ef62b4d4e05f721d49573bf22bc1991ab7899dcc18e0d5eea66c6",
+  "runtime_source_digest": "7da893d94a4a21fee71d60584e55043eb4eab426d45a50e81c35586ddd8705d3",
   "fast_cpu_source_digest": "ea3258a3cf10e7748faf0c3d0d767635e30db0e6da5f984499f7be953c2d4bf9",
-  "native_host_source_digest": "244d4a51183bb24712d4909b42be25f661cf39dc7ca91b15a28d1ee5c6c2f602",
+  "native_host_source_digest": "ff8f455e863719999a1e8dc495efa45241c53996919ad9e1dea6f9e4a4a073b8",
   "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
   "build_flags": [
     "profile=release",
@@ -17,9 +17,9 @@
     "features=default,network,prebuilt-gpu,serving,sqlite"
   ],
   "runtime_build_certified": true,
-  "families": 14,
-  "documents": 98,
-  "token_checks": 595182,
+  "families": 15,
+  "documents": 105,
+  "token_checks": 633086,
   "mismatches": 0,
   "rows": [
     {
@@ -60,6 +60,14 @@
       "backend": "HuggingFace",
       "documents": 7,
       "token_checks": 39953,
+      "mismatches": 0
+    },
+    {
+      "family": "kimi_k3",
+      "artifact_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
+      "backend": "HuggingFace",
+      "documents": 7,
+      "token_checks": 37904,
       "mismatches": 0
     },
     {

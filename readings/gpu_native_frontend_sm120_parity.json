@@ -2,12 +2,12 @@
   "all_ids_equal_hf": true,
   "architecture": "sm_120",
   "architecture_digest": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
-  "characters": 49185005184,
+  "characters": 52698219840,
   "devices": [
     "NVIDIA RTX PRO 6000 Blackwell Server Edition, 12.0, 595.71.05"
   ],
-  "documents": 15437450,
-  "families": 14,
+  "documents": 16540125,
+  "families": 15,
   "fatbin_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
   "gil_released": true,
   "mismatches": 0,
@@ -21,8 +21,8 @@
       "target=x86_64-unknown-linux-gnu",
       "pyo3=abi3-py310+extension-module"
     ],
-    "host_source_digest": "244d4a51183bb24712d4909b42be25f661cf39dc7ca91b15a28d1ee5c6c2f602",
-    "host_source_digest_v2": "e216c1609c060deb232c71a1872ef128a52129fd23e317f915c115f304d84532",
+    "host_source_digest": "ff8f455e863719999a1e8dc495efa45241c53996919ad9e1dea6f9e4a4a073b8",
+    "host_source_digest_v2": "c94ec3ea432d07847c0846a36dd8aff70708467ffdd5a47a10fb2b3288ae03aa",
     "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
   },
   "one_python_to_rust_call_per_batch": true,
@@ -73,6 +73,16 @@
       "characters": 3513214656,
       "documents": 1102675,
       "family": "hy3",
+      "gil_released": true,
+      "mismatches": 0,
+      "one_python_to_rust_call_per_batch": true
+    },
+    {
+      "all_ids_equal_hf": true,
+      "artifact_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
+      "characters": 3513214656,
+      "documents": 1102675,
+      "family": "kimi_k3",
       "gil_released": true,
       "mismatches": 0,
       "one_python_to_rust_call_per_batch": true

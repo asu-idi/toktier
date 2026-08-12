@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -15,6 +16,7 @@ from toktier.artifacts.conversion import (
     ConvertingSource,
     conversion_report,
     convert_kimi_tiktoken,
+    load_conversions,
     recipe_for,
 )
 from toktier.artifacts.manifest import ArtifactEntry, ArtifactFile
@@ -355,3 +357,100 @@ def test_every_recipe_names_a_family_the_release_knows() -> None:
         entry = manifest.entries.get(family)
         if entry is not None:
             assert [item.name for item in entry.files] == ["tokenizer.json"]
+
+
+def test_the_shipped_conversion_table_is_what_the_module_serves() -> None:
+    """The recipes come from data, not from a table written in Python."""
+    from toktier.artifacts.tables import ARTIFACT_CONVERSIONS
+
+    document = json.loads(ARTIFACT_CONVERSIONS.read_text(encoding="utf-8"))
+    assert set(document["conversions"]) == set(CONVERSIONS)
+    for family, raw in document["conversions"].items():
+        recipe = CONVERSIONS[family]
+        assert recipe.family == family
+        assert recipe.converter == raw["converter"]
+        assert recipe.upstream_license == raw["upstream_license"]
+        assert list(recipe.input_names()) == [
+            item["name"] for item in raw["inputs"]
+        ]
+
+
+def _shipped_entry() -> tuple[str, dict[str, Any]]:
+    """One shipped recipe, as a mutable copy the damage cases edit."""
+    from toktier.artifacts.tables import ARTIFACT_CONVERSIONS
+
+    document = json.loads(ARTIFACT_CONVERSIONS.read_text(encoding="utf-8"))
+    family, entry = next(iter(document["conversions"].items()))
+    entry = dict(entry)
+    entry["inputs"] = [dict(item) for item in entry["inputs"]]
+    return str(family), entry
+
+
+def _write_table(path: Path, family: str, entry: dict[str, Any]) -> Path:
+    path.write_text(
+        json.dumps({"version": 1, "conversions": {family: entry}}),
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        pytest.param({"converter": "not_implemented"}, id="unknown_converter"),
+        pytest.param({"inputs": []}, id="no_inputs"),
+        pytest.param({"upstream_license": ""}, id="no_licence"),
+    ],
+)
+def test_a_damaged_conversion_table_fails_closed(
+    tmp_path: Path, damage: dict[str, Any]
+) -> None:
+    """A table this release cannot honour is refused, not half-applied."""
+    family, entry = _shipped_entry()
+    entry.update(damage)
+    with pytest.raises(RegistryInvalid):
+        load_conversions(
+            _write_table(tmp_path / "conversions.json", family, entry)
+        )
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        pytest.param({"sha256": "0" * 63}, id="short_digest"),
+        pytest.param({"size": 0}, id="empty_file"),
+        pytest.param({"name": ""}, id="unnamed_file"),
+    ],
+)
+def test_a_damaged_conversion_input_fails_closed(
+    tmp_path: Path, damage: dict[str, Any]
+) -> None:
+    """An input that is not fully pinned is refused before it is read."""
+    family, entry = _shipped_entry()
+    entry["inputs"][0].update(damage)
+    with pytest.raises(RegistryInvalid):
+        load_conversions(
+            _write_table(tmp_path / "conversions.json", family, entry)
+        )
+
+
+def test_a_conversion_table_naming_one_file_twice_fails_closed(
+    tmp_path: Path,
+) -> None:
+    """Two pins for one upstream file is a contradiction, not a merge."""
+    family, entry = _shipped_entry()
+    entry["inputs"].append(dict(entry["inputs"][0]))
+    with pytest.raises(RegistryInvalid):
+        load_conversions(
+            _write_table(tmp_path / "conversions.json", family, entry)
+        )
+
+
+def test_an_unreadable_conversion_table_fails_closed(tmp_path: Path) -> None:
+    """A missing or unparsable table is a closed failure, not an empty set."""
+    with pytest.raises(RegistryInvalid):
+        load_conversions(tmp_path / "absent.json")
+    broken = tmp_path / "broken.json"
+    broken.write_text("{", encoding="utf-8")
+    with pytest.raises(RegistryInvalid):
+        load_conversions(broken)

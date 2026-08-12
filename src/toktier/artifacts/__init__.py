@@ -18,6 +18,7 @@ from .conversion import (
     ConversionRecipe,
     ConvertingSource,
     conversion_report,
+    load_conversions,
     recipe_for,
 )
 from .manifest import ArtifactEntry, ArtifactFile, ArtifactManifest
@@ -61,6 +62,7 @@ __all__ = [
     "export_bundle",
     "import_bundle",
     "kernel_cache_dir",
+    "load_conversions",
     "load_sibling_aliases",
     "recipe_for",
     "sha256_file",

@@ -21,6 +21,11 @@ The upstream inputs are read from a private temporary directory and are
 never installed into the cache: this package distributes no upstream
 file, only the recipe that reproduces the certified artifact.
 
+Which families are derived, and from which pinned inputs, is shipped
+data (``tables/artifact_conversions.v1.json``): this module implements
+the transformations that table selects from and names no family itself,
+so the routing data stays the only place a family is named.
+
 This module is dependency-free (standard library only) and imports no
 tokenizer runtime: the conversion is a data transformation.
 """
@@ -40,6 +45,7 @@ from typing import Any
 from ..errors import ArtifactNotFound, RegistryInvalid
 from .manifest import ArtifactEntry, ArtifactFile
 from .sources import ArtifactSource
+from .tables import ARTIFACT_CONVERSIONS
 
 __all__ = [
     "CONVERSIONS",
@@ -47,6 +53,7 @@ __all__ = [
     "ConvertingSource",
     "conversion_report",
     "convert_kimi_tiktoken",
+    "load_conversions",
     "recipe_for",
 ]
 
@@ -330,41 +337,124 @@ def convert_kimi_tiktoken(sources: Mapping[str, bytes]) -> bytes:
 _CONVERTERS = {"kimi_tiktoken_v1": convert_kimi_tiktoken}
 
 
-#: Recipes by family. One entry today; the shape admits more without a
-#: second mechanism.
-CONVERSIONS: dict[str, ConversionRecipe] = {
-    "kimi_k3": ConversionRecipe(
-        family="kimi_k3",
-        inputs=(
-            ArtifactFile(
-                name="tiktoken.model",
-                sha256=(
-                    "b6c497a7469b33ced9c38afb1ad6e47f03f5e5dc05f159307"
-                    "99210ec050c5103"
-                ),
-                size=2795286,
-            ),
-            ArtifactFile(
-                name="tokenization_kimi.py",
-                sha256=(
-                    "f28ea66e2d862a2a5814970b2ce40c2f7d8296ff09aed90a7e"
-                    "7def689b906944"
-                ),
-                size=16145,
-            ),
-            ArtifactFile(
-                name="tokenizer_config.json",
-                sha256=(
-                    "5d0803c94db9cd78763499e0956c95fd5a225c14a727e5a6cf"
-                    "5db3f96f010a6e"
-                ),
-                size=3478,
-            ),
-        ),
-        converter="kimi_tiktoken_v1",
-        upstream_license="LICENSE",
-    ),
-}
+def _parse_input(family: str, raw: Any, *, position: int) -> ArtifactFile:
+    """One upstream input of a shipped recipe, or a closed failure."""
+    if not isinstance(raw, Mapping):
+        raise RegistryInvalid(
+            "a conversion input must be a table",
+            details={"family": family, "position": position},
+        )
+    name, digest, size = raw.get("name"), raw.get("sha256"), raw.get("size")
+    if not isinstance(name, str) or not name:
+        raise RegistryInvalid(
+            "a conversion input must name the upstream file it reads",
+            details={"family": family, "position": position},
+        )
+    if not isinstance(digest, str) or len(digest) != 64:
+        raise RegistryInvalid(
+            "a conversion input must pin a sha256 of its upstream file",
+            details={"family": family, "file": name},
+        )
+    if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
+        raise RegistryInvalid(
+            "a conversion input must pin the byte length of its upstream file",
+            details={"family": family, "file": name},
+        )
+    return ArtifactFile(name=name, sha256=digest, size=size)
+
+
+def _parse_recipes(document: Any, *, source: Path) -> dict[str, ConversionRecipe]:
+    """Validate the shipped conversion table (fail closed)."""
+    if not isinstance(document, Mapping):
+        raise RegistryInvalid(
+            "the conversion table must be a JSON object",
+            details={"source": str(source)},
+        )
+    raw_conversions = document.get("conversions")
+    if not isinstance(raw_conversions, Mapping):
+        raise RegistryInvalid(
+            "the conversion table must carry a 'conversions' object",
+            details={"source": str(source)},
+        )
+    recipes: dict[str, ConversionRecipe] = {}
+    for family, raw in raw_conversions.items():
+        if not isinstance(family, str) or not family:
+            raise RegistryInvalid(
+                "family ids must be non-empty strings",
+                details={"source": str(source)},
+            )
+        if not isinstance(raw, Mapping):
+            raise RegistryInvalid(
+                "a conversion entry must be a table",
+                details={"family": family, "source": str(source)},
+            )
+        converter = raw.get("converter")
+        if converter not in _CONVERTERS:
+            raise RegistryInvalid(
+                "a conversion entry must name a transformation this "
+                "release implements",
+                details={
+                    "family": family,
+                    "converter": converter,
+                    "implemented": sorted(_CONVERTERS),
+                },
+            )
+        licence = raw.get("upstream_license")
+        if not isinstance(licence, str) or not licence:
+            raise RegistryInvalid(
+                "a conversion entry must name the upstream licence file",
+                details={"family": family},
+            )
+        raw_inputs = raw.get("inputs")
+        if not isinstance(raw_inputs, list) or not raw_inputs:
+            raise RegistryInvalid(
+                "a conversion entry must list the upstream inputs it reads",
+                details={"family": family},
+            )
+        inputs = tuple(
+            _parse_input(family, item, position=position)
+            for position, item in enumerate(raw_inputs)
+        )
+        if len({item.name for item in inputs}) != len(inputs):
+            raise RegistryInvalid(
+                "a conversion entry must not list an upstream file twice",
+                details={"family": family},
+            )
+        recipes[family] = ConversionRecipe(
+            family=family,
+            inputs=inputs,
+            converter=str(converter),
+            upstream_license=licence,
+        )
+    return recipes
+
+
+def load_conversions(path: str | Path = ARTIFACT_CONVERSIONS) -> dict[
+    str, ConversionRecipe
+]:
+    """Read and validate a conversion table from disk."""
+    table_path = Path(path)
+    try:
+        raw_text = table_path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RegistryInvalid(
+            f"cannot read the conversion table: {error}",
+            details={"source": str(table_path)},
+        ) from error
+    try:
+        document = json.loads(raw_text)
+    except json.JSONDecodeError as error:
+        raise RegistryInvalid(
+            f"cannot parse the conversion table: {error}",
+            details={"source": str(table_path)},
+        ) from error
+    return _parse_recipes(document, source=table_path)
+
+
+#: Recipes by family, read from the shipped table. The table is the only
+#: place a converted family is named; this module implements the
+#: transformations that table selects from.
+CONVERSIONS: dict[str, ConversionRecipe] = load_conversions()
 
 
 def recipe_for(family: str) -> ConversionRecipe | None:

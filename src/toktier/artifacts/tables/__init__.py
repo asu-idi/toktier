@@ -16,13 +16,23 @@ from __future__ import annotations
 
 from pathlib import Path
 
-__all__ = ["ARTIFACT_MANIFEST", "SIBLING_ALIASES", "TABLE_DIR"]
+__all__ = [
+    "ARTIFACT_CONVERSIONS",
+    "ARTIFACT_MANIFEST",
+    "SIBLING_ALIASES",
+    "TABLE_DIR",
+]
 
 #: Directory of the shipped data files.
 TABLE_DIR = Path(__file__).resolve().parent
 
 #: The artifact manifest shipped with the package.
 ARTIFACT_MANIFEST = TABLE_DIR / "artifact_manifest.v1.json"
+
+#: Recipes for families whose artifact is derived from pinned upstream
+#: inputs instead of downloaded whole. Kept as data because a family id
+#: belongs in the routing tables, never in a module.
+ARTIFACT_CONVERSIONS = TABLE_DIR / "artifact_conversions.v1.json"
 
 #: Digest-protected mappings from audited model repositories to canonical
 #: tokenizer artifacts.  Repository names are lookup hints; runtime admission

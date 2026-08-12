@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "note": "Families whose executable artifact is derived locally from pinned upstream inputs rather than downloaded whole. The repository and revision are not repeated here: they come from the artifact manifest entry being fetched. Family ids appear only in data, never as literals in the package's modules.",
+  "conversions": {
+    "kimi_k3": {
+      "converter": "kimi_tiktoken_v1",
+      "upstream_license": "LICENSE",
+      "inputs": [
+        {
+          "name": "tiktoken.model",
+          "sha256": "b6c497a7469b33ced9c38afb1ad6e47f03f5e5dc05f15930799210ec050c5103",
+          "size": 2795286
+        },
+        {
+          "name": "tokenization_kimi.py",
+          "sha256": "f28ea66e2d862a2a5814970b2ce40c2f7d8296ff09aed90a7e7def689b906944",
+          "size": 16145
+        },
+        {
+          "name": "tokenizer_config.json",
+          "sha256": "5d0803c94db9cd78763499e0956c95fd5a225c14a727e5a6cf5db3f96f010a6e",
+          "size": 3478
+        }
+      ]
+    }
+  }
+}

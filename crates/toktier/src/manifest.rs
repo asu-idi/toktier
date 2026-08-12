@@ -375,11 +375,21 @@ impl Registry {
 
     pub(crate) fn artifact(&self, family: &str) -> Result<&ArtifactRow> {
         self.artifacts.get(family).ok_or_else(|| {
-            Error::new(
-                ErrorCode::ArtifactNotFound,
-                format!("unknown tokenizer family {family:?}"),
-            )
-            .with_family(family)
+            let mut message = format!("unknown tokenizer family {family:?}");
+            // The same closest-id hint the Python facade gives, from the
+            // same ranking, so a typo is answered identically on either
+            // surface. Nothing is suggested when nothing is close.
+            let suggestions =
+                crate::suggest::close_matches(family, self.artifacts.keys().map(String::as_str));
+            if !suggestions.is_empty() {
+                let rendered = suggestions
+                    .iter()
+                    .map(|candidate| format!("{candidate:?}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                message.push_str(&format!("; closest valid family IDs: {rendered}"));
+            }
+            Error::new(ErrorCode::ArtifactNotFound, message).with_family(family)
         })
     }
 

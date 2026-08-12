@@ -24,6 +24,7 @@ mod runtime;
 #[cfg(feature = "serving")]
 mod serving;
 mod session;
+mod suggest;
 
 pub use artifact::{
     ArtifactInspection, ArtifactManager, ArtifactManagerBuilder, ArtifactSource, BearerToken,

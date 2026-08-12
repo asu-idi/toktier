@@ -40,6 +40,25 @@ fn builder_validates_before_engine_construction() {
 }
 
 #[test]
+fn a_misspelled_family_is_answered_with_the_closest_ids() {
+    let runtime = Runtime::builder().device(Device::Cpu).build().unwrap();
+    let error = runtime.load("qwen3-8b").unwrap_err();
+    assert_eq!(error.code(), ErrorCode::ArtifactNotFound);
+    assert_eq!(error.family(), Some("qwen3-8b"));
+    assert_eq!(
+        error.message(),
+        "unknown tokenizer family \"qwen3-8b\"; \
+         closest valid family IDs: \"qwen3_8b\", \"qwen3_5_08b\""
+    );
+
+    // Nothing close means no hint at all, rather than a list of the
+    // roster's first entries.
+    let error = runtime.load("zzzz").unwrap_err();
+    assert_eq!(error.code(), ErrorCode::ArtifactNotFound);
+    assert_eq!(error.message(), "unknown tokenizer family \"zzzz\"");
+}
+
+#[test]
 fn doctor_is_typed_and_python_free() {
     let facts = Runtime::builder()
         .device(Device::Cpu)

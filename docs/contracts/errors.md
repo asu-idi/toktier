@@ -63,20 +63,17 @@ and `UncertifiedTokenizer` under `REQUIRE_ACCELERATED`.
 A failed command exits `2` and writes its report to standard error.
 Without `--json` that report is the single line `error <CODE>: <message>`.
 
-`--json` is a per-command option, not a root option. The commands that
-accept it in 0.2.1 are:
+Since 0.2.3 `--json` is accepted by every command, and equally before or
+after it: `toktier --json artifacts verify FAMILY` and
+`toktier artifacts verify --json FAMILY` are the same request. (Through
+0.2.1 it was a per-command option carried by `doctor`, `inspect`,
+`artifacts check-conversion` and `gpu compile` only; the others rejected
+it with exit `64`.)
 
-| Command | `--json` |
-|---|---|
-| `toktier doctor` | yes |
-| `toktier inspect [FAMILY]` | yes |
-| `toktier gpu compile FAMILY` | yes |
-| `toktier artifacts fetch/verify/export/import` | no (argparse rejects it, exit `64`) |
-| `toktier version` | no |
-
-Where the option exists, it describes the whole command rather than only
-its success path: a failure writes the report as one JSON object on
-standard error and still exits `2`.
+It describes the whole command rather than only its success path: a
+failure writes the report as one JSON object on standard error and still
+exits `2`. On success each command prints one object; the prose line each
+one printed before is unchanged when the flag is absent.
 
 ```json
 {"error": {"code": "BACKEND_UNAVAILABLE",
@@ -90,14 +87,12 @@ process. `details` is open, so a value of a type JSON cannot express is
 rendered as its `repr` rather than dropped or allowed to break the
 envelope.
 
-The envelope shape is frozen; the set of commands offering `--json` is
-not, and is append-only in the same sense as the code table. A shared
-root-level `--json` that wraps every command failure is a 0.3 candidate;
-until then a script that wants machine-readable failures from the
-artifact commands should switch on the exit status (`2` for a
-library-domain condition, `64` for a usage error) or drive the
-`toktier.artifacts` API directly, where the same `.code` and `.details`
-are available in process.
+The envelope shape is frozen. The success payloads are per command and
+their keys may grow; unknown keys must be tolerated. Exit status remains
+the coarse signal a script can use without reading anything: `0` for
+success, `2` for a library-domain condition, `64` for a usage error. The
+same `.code` and `.details` are available in process through the
+`toktier.artifacts` API.
 
 ## 5. Extension policy (frozen)
 

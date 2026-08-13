@@ -398,8 +398,34 @@ def _artifact_store(config: Config, *, source: ArtifactSource | None) -> Artifac
     return ArtifactStore(_artifact_manifest(), config=config, source=source)
 
 
-def _print_artifact(action: str, artifact: VerifiedArtifact) -> None:
-    print(f"{action} {artifact.family}: {artifact.directory}")
+def _emit(payload: Mapping[str, object], *, as_json: bool, line: str) -> None:
+    """Report one command's result in the requested shape.
+
+    The prose line is unchanged from earlier releases; ``--json`` prints
+    the same facts as an object, so a script never has to parse it.
+    """
+    if as_json:
+        print(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+    else:
+        print(line)
+
+
+def _artifact_payload(action: str, artifact: VerifiedArtifact) -> dict[str, object]:
+    return {
+        "action": action,
+        "family": artifact.family,
+        "directory": str(artifact.directory),
+    }
+
+
+def _print_artifact(
+    action: str, artifact: VerifiedArtifact, *, as_json: bool = False
+) -> None:
+    _emit(
+        _artifact_payload(action, artifact),
+        as_json=as_json,
+        line=f"{action} {artifact.family}: {artifact.directory}",
+    )
 
 
 def _fetch_source() -> ArtifactSource:
@@ -488,14 +514,14 @@ def _artifacts_fetch(arguments: argparse.Namespace) -> int:
         artifact = store.verify(arguments.family)
     else:
         artifact = store.ensure(arguments.family)
-    _print_artifact("fetched", artifact)
+    _print_artifact("fetched", artifact, as_json=arguments.json)
     return 0
 
 
 def _artifacts_verify(arguments: argparse.Namespace) -> int:
     store = _artifact_store(Config.resolve(), source=None)
     artifact = store.verify(arguments.family)
-    _print_artifact("verified", artifact)
+    _print_artifact("verified", artifact, as_json=arguments.json)
     return 0
 
 
@@ -512,7 +538,11 @@ def _artifacts_export(arguments: argparse.Namespace) -> int:
         entry.directory_name,
         {item.name: artifact.path(item.name) for item in entry.files},
     )
-    print(f"exported {artifact.family}: {bundle}")
+    _emit(
+        {"action": "exported", "family": artifact.family, "bundle": str(bundle)},
+        as_json=arguments.json,
+        line=f"exported {artifact.family}: {bundle}",
+    )
     return 0
 
 
@@ -521,7 +551,11 @@ def _artifacts_import(arguments: argparse.Namespace) -> int:
     # atomic install; `artifacts verify FAMILY` afterwards binds the
     # installed bytes to the digests the shipped manifest pins.
     target = import_bundle(arguments.bundle, artifact_cache_dir(Config.resolve()))
-    print(f"imported {target.name}: {target}")
+    _emit(
+        {"action": "imported", "entry": target.name, "directory": str(target)},
+        as_json=arguments.json,
+        line=f"imported {target.name}: {target}",
+    )
     return 0
 
 
@@ -572,8 +606,8 @@ def _inspect(arguments: argparse.Namespace) -> int:
 
 
 def _version(arguments: argparse.Namespace) -> int:
-    del arguments
-    print(_toktier_version())
+    version = _toktier_version()
+    _emit({"version": version}, as_json=arguments.json, line=version)
     return 0
 
 
@@ -691,29 +725,59 @@ def _is_jit_toolchain_waiver(value: object) -> bool:
     )
 
 
+def _json_option() -> _ArgumentParser:
+    """The shared ``--json`` flag, accepted before or after the command.
+
+    Every subparser inherits it, and the root parser carries it too, so
+    ``toktier --json doctor`` and ``toktier doctor --json`` are the same
+    request. The default is suppressed rather than ``False``: argparse
+    parses a subcommand into a fresh namespace and copies every name it
+    holds back over the outer one, so a default here would erase a flag
+    the root parser had already recorded. :func:`main` reads the absence
+    as ``False`` once, for all commands.
+    """
+    shared = _ArgumentParser(add_help=False)
+    shared.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="emit JSON",
+    )
+    return shared
+
+
 def _build_parser() -> argparse.ArgumentParser:
-    parser = _ArgumentParser(prog="toktier")
+    shared = _json_option()
+    parser = _ArgumentParser(prog="toktier", parents=[shared])
     commands = parser.add_subparsers(dest="command", required=True)
 
-    doctor = commands.add_parser("doctor", help="show environment diagnostics")
-    doctor.add_argument("--json", action="store_true", help="emit JSON")
+    doctor = commands.add_parser(
+        "doctor", help="show environment diagnostics", parents=[shared]
+    )
     doctor.set_defaults(handler=_doctor)
 
-    artifacts = commands.add_parser("artifacts", help="manage artifacts")
+    artifacts = commands.add_parser(
+        "artifacts", help="manage artifacts", parents=[shared]
+    )
     artifact_commands = artifacts.add_subparsers(dest="artifact_command", required=True)
 
-    fetch = artifact_commands.add_parser("fetch", help="fetch an artifact")
+    fetch = artifact_commands.add_parser(
+        "fetch", help="fetch an artifact", parents=[shared]
+    )
     fetch.add_argument("family", metavar="FAMILY")
     fetch.add_argument("--force", action="store_true", help="re-hash cached files")
     fetch.set_defaults(handler=_artifacts_fetch)
 
-    verify = artifact_commands.add_parser("verify", help="verify an artifact")
+    verify = artifact_commands.add_parser(
+        "verify", help="verify an artifact", parents=[shared]
+    )
     verify.add_argument("family", metavar="FAMILY")
     verify.set_defaults(handler=_artifacts_verify)
 
     check_conversion = artifact_commands.add_parser(
         "check-conversion",
         help="re-run the conversion gate of a locally derived artifact",
+        parents=[shared],
     )
     check_conversion.add_argument("family", metavar="FAMILY")
     check_conversion.add_argument(
@@ -723,11 +787,12 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="independent conversions to compare (default 2)",
     )
-    check_conversion.add_argument("--json", action="store_true", help="emit JSON")
     check_conversion.set_defaults(handler=_artifacts_check_conversion)
 
     export = artifact_commands.add_parser(
-        "export", help="write a verified artifact as an air-gap bundle"
+        "export",
+        help="write a verified artifact as an air-gap bundle",
+        parents=[shared],
     )
     export.add_argument("family", metavar="FAMILY")
     export.add_argument(
@@ -739,22 +804,29 @@ def _build_parser() -> argparse.ArgumentParser:
     export.set_defaults(handler=_artifacts_export)
 
     import_ = artifact_commands.add_parser(
-        "import", help="verify a bundle and install it into the cache"
+        "import",
+        help="verify a bundle and install it into the cache",
+        parents=[shared],
     )
     import_.add_argument("bundle", metavar="BUNDLE")
     import_.set_defaults(handler=_artifacts_import)
 
     inspect = commands.add_parser(
-        "inspect", help="show the artifact identity the package pins"
+        "inspect",
+        help="show the artifact identity the package pins",
+        parents=[shared],
     )
     inspect.add_argument("family", metavar="FAMILY", nargs="?")
-    inspect.add_argument("--json", action="store_true", help="emit JSON")
     inspect.set_defaults(handler=_inspect)
 
-    gpu = commands.add_parser("gpu", help="prepare and diagnose GPU delivery")
+    gpu = commands.add_parser(
+        "gpu", help="prepare and diagnose GPU delivery", parents=[shared]
+    )
     gpu_commands = gpu.add_subparsers(dest="gpu_command", required=True)
     compile_jit = gpu_commands.add_parser(
-        "compile", help="build or reuse the JIT kernel for one family"
+        "compile",
+        help="build or reuse the JIT kernel for one family",
+        parents=[shared],
     )
     compile_jit.add_argument("family", metavar="FAMILY")
     compile_jit.add_argument(
@@ -765,10 +837,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "toolchain is outside the certified set"
         ),
     )
-    compile_jit.add_argument("--json", action="store_true", help="emit JSON")
     compile_jit.set_defaults(handler=_gpu_compile)
 
-    version = commands.add_parser("version", help="show the toktier version")
+    version = commands.add_parser(
+        "version", help="show the toktier version", parents=[shared]
+    )
     version.set_defaults(handler=_version)
     return parser
 
@@ -816,6 +889,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         arguments = parser.parse_args(argv)
     except _UsageError:
         return _USAGE_ERROR
+    # The flag is suppressed rather than defaulted where it is declared;
+    # its absence means it was not asked for.
+    if not hasattr(arguments, "json"):
+        arguments.json = False
 
     handler = cast(Callable[[argparse.Namespace], int], arguments.handler)
     try:
@@ -824,7 +901,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # ``--json`` is a promise about the whole command, not only its
         # success path: a caller that asked for machine-readable output
         # must not have to parse prose to learn why it failed.
-        if getattr(arguments, "json", False):
+        if arguments.json:
             print(
                 json.dumps(
                     _error_payload(error), sort_keys=True, separators=(",", ":")

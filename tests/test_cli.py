@@ -1108,3 +1108,80 @@ def test_plain_failure_keeps_the_human_error_line(
     captured = capsys.readouterr()
     assert exit_code == 2
     assert captured.err == "error BACKEND_UNAVAILABLE: closed\n"
+
+
+def test_the_json_flag_is_accepted_before_or_after_every_command(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """One flag, one meaning, wherever a caller puts it."""
+    monkeypatch.setattr(cli, "_toktier_version", lambda: "9.9.9")
+
+    for argv in (["--json", "version"], ["version", "--json"]):
+        assert cli.main(argv) == 0
+        assert json.loads(capsys.readouterr().out) == {"version": "9.9.9"}
+
+    assert cli.main(["version"]) == 0
+    assert capsys.readouterr().out == "9.9.9\n"
+
+
+def test_the_artifact_commands_report_machine_readably(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The commands that used to reject ``--json`` now answer with it."""
+    exit_code = cli.main(["--json", "artifacts", "verify", "no_such_family"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    error = json.loads(captured.err)["error"]
+    assert error["code"] == "ARTIFACT_NOT_FOUND"
+    assert error["details"]["family"] == "no_such_family"
+
+    exit_code = cli.main(["inspect", "no_such_family", "--json"])
+    assert exit_code == 2
+    assert json.loads(capsys.readouterr().err)["error"]["code"] == (
+        "ARTIFACT_NOT_FOUND"
+    )
+
+
+def test_the_artifact_lifecycle_reports_the_same_facts_as_json(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Each command's object carries what its prose line carried."""
+    home = tmp_path / "home"
+    bundle = tmp_path / "demo.tar"
+    monkeypatch.setenv("TOKTIER_HOME", str(home))
+    _set_artifact_source(monkeypatch, StaticSource(GOOD))
+    alias = f"{FAMILY}-{REVISION[:12]}"
+    directory = home / "cache" / "artifacts" / alias
+
+    assert cli.main(["artifacts", "fetch", FAMILY, "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "action": "fetched",
+        "family": FAMILY,
+        "directory": str(directory),
+    }
+
+    export = ["--json", "artifacts", "export", FAMILY, "--out", str(bundle)]
+    assert cli.main(export) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "action": "exported",
+        "family": FAMILY,
+        "bundle": str(bundle),
+    }
+
+    assert cli.main(["artifacts", "verify", "--json", FAMILY]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "action": "verified",
+        "family": FAMILY,
+        "directory": str(directory),
+    }
+
+    offline = tmp_path / "offline"
+    monkeypatch.setenv("TOKTIER_HOME", str(offline))
+    assert cli.main(["artifacts", "import", str(bundle), "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "action": "imported",
+        "entry": alias,
+        "directory": str(offline / "cache" / "artifacts" / alias),
+    }

@@ -197,8 +197,14 @@ contract.
 companion, normatively shaped by `schemas/sibling_aliases.schema.json`. Each
 row records a model repository, full audit revision, source file name/length/
 sha256, comparison basis, canonical family/anchor sha256, and whether that
-anchor is present in the wheel. Its public source projection contains exactly
-the 210 rows enumerated in `docs/support-matrix.md`.
+anchor is present in the wheel. Its public source projection contains the 210
+sibling rows enumerated in `docs/support-matrix.md`, plus one canonical
+self-row per family whose upstream source file is not `tokenizer.json` --
+211 rows in this release. A self-row names the family's own repository, so
+resolving that repository reports itself as the evidence repository rather
+than a byte-identical sibling; the generator checks each self-row's
+repository and revision against the shipped artifact manifest, and the audit
+accounting in `docs/support-matrix.md` counts the 210 siblings only.
 
 The repository and revision only choose bytes to inspect. Runtime admission
 requires the sha256 of the bytes actually resolved to match a table row (or an

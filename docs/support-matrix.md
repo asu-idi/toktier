@@ -192,7 +192,12 @@ everything below rests on it:
 | equivalent (serialisation) | loads to the same tokenizer; byte difference is legacy serialisation form | 38 |
 
 **210 repositories** are verified on these bases, spread over 15 of the 18
-artifacts in the family matrix. Nine of them are cross-vendor: three
+artifacts in the family matrix. The shipped registry carries one further row
+that is not a sibling: `moonshotai/Kimi-K3`, the canonical repository of the
+`kimi_k3` family itself, so that resolving it by name reports itself as the
+evidence repository instead of a byte-identical sibling. The file therefore
+holds 211 rows; every count in this section, and the audit accounting at the
+end of the page, counts the 210 siblings. Nine of them are cross-vendor: three
 `nvidia/Nemotron-Terminal-*` repositories ship the `qwen3_8b` artifact
 verbatim, and six `nvidia/Llama-3.x-Nemotron-*` repositories carry the
 `llama_3_1_8b` tokenizer in a different serialisation. They are listed under

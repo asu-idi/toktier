@@ -71,6 +71,19 @@ def _load_source(path: Path) -> dict[str, Any]:
     return value
 
 
+def _manifest_repositories() -> dict[str, tuple[str, str]]:
+    """Return the pinned ``(repo_id, revision)`` of each shipped family."""
+    if str(ROOT / "src") not in sys.path:
+        sys.path.insert(0, str(ROOT / "src"))
+    from toktier.artifacts import ArtifactManifest
+
+    manifest = ArtifactManifest.load(ARTIFACT_MANIFEST)
+    return {
+        family: (entry.repo_id, entry.revision)
+        for family, entry in manifest.entries.items()
+    }
+
+
 def _manifest_anchors() -> dict[str, str]:
     """Return the tokenizer digest of each family the wheel can load."""
     if str(ROOT / "src") not in sys.path:
@@ -93,6 +106,7 @@ def build_document(
 ) -> dict[str, Any]:
     source = _load_source(source_path)
     anchors = _manifest_anchors()
+    repositories = _manifest_repositories()
     raw_aliases = source["aliases"]
     if not isinstance(raw_aliases, list):  # already schema-checked; narrows type
         raise GenerationError(f"{source_path}: aliases must be an array")
@@ -129,6 +143,22 @@ def build_document(
         aliases.append(row)
 
     aliases.sort(key=lambda row: str(row["repo_id"]).casefold())
+    # A canonical self-row names the family's own repository rather than a
+    # sibling of it. It exists so that resolving the canonical repository
+    # reports itself as the evidence repository instead of a
+    # byte-identical sibling, and it is the one row shape that does not
+    # come from the sibling audit -- so it is counted apart and checked
+    # against the shipped manifest rather than taken on trust.
+    for row in aliases:
+        pinned = repositories.get(str(row["canonical_family"]))
+        if pinned is None or pinned[0] != str(row["repo_id"]):
+            continue
+        if pinned[1] != str(row["revision"]):
+            raise GenerationError(
+                f"{row['repo_id']}: canonical self-row revision "
+                f"{row['revision']} disagrees with the shipped manifest "
+                f"revision {pinned[1]}"
+            )
     basis_counts = Counter(str(row["basis"]) for row in aliases)
     packaged_count = sum(bool(row["canonical_packaged"]) for row in aliases)
     equivalent = [

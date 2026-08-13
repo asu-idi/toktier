@@ -5,14 +5,14 @@
     "audit_rows": 470,
     "audit_sha256": "f3cc273898e7604a7d3b947be95bbf24dc6fa1df082aa55cf777c0c83d6a3fd2",
     "support_matrix_sha256": "c17c3091b3c0ced929383b7d4c5507a09ed5dee3fde690496aa85da39a25cb9a",
-    "selection": "verified repositories enumerated in docs/support-matrix.md"
+    "selection": "verified repositories enumerated in docs/support-matrix.md, plus the canonical repository of each family whose upstream source file is not tokenizer.json"
   },
   "counts": {
     "identical": 150,
-    "identical_source": 12,
+    "identical_source": 13,
     "equivalent_canonicalisation": 10,
     "equivalent_serialisation": 38,
-    "total": 210
+    "total": 211
   },
   "aliases": [
     {
@@ -418,6 +418,16 @@
     {
       "repo_id": "moonshotai/Kimi-K2.7-Code",
       "revision": "74797c9c62378b951a1f6fcf5c4631024e9b8bef",
+      "source_file": "tiktoken.model",
+      "source_sha256": "b6c497a7469b33ced9c38afb1ad6e47f03f5e5dc05f15930799210ec050c5103",
+      "source_size": 2795286,
+      "canonical_family": "kimi_k3",
+      "canonical_anchor_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
+      "basis": "identical_source"
+    },
+    {
+      "repo_id": "moonshotai/Kimi-K3",
+      "revision": "9f62e4e9fffbd0a83ddd60e1c209d828994b3569",
       "source_file": "tiktoken.model",
       "source_sha256": "b6c497a7469b33ced9c38afb1ad6e47f03f5e5dc05f15930799210ec050c5103",
       "source_size": 2795286,

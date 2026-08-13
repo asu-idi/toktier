@@ -90,7 +90,8 @@ tok = toktier.from_pretrained("Qwen/Qwen3-0.6B")
 
 `from_pretrained()` downloads the audited immutable revision for a recorded
 sibling or canonical repository, hashes the exact file, and consults the
-210-repository sibling registry, which is itself covered by a root digest.
+sibling registry -- 210 audited repositories plus one canonical self-row --
+which is itself covered by a root digest.
 For an unknown repository, `from_pretrained()` resolves `main` unless
 `revision=` is passed.
 Byte-identical, canonicalization-equivalent, and serialization-equivalent
@@ -528,10 +529,13 @@ content, not repository naming. `toktier.from_pretrained(repo_id)` enforces
 that rule at runtime: it hashes the resolved file, maps registered content to
 the canonical artifact, and otherwise remains on HF.
 
-Of the 210 sibling rows, 203 map to canonical artifacts present in this wheel.
+The shipped registry holds 211 rows: those 210 siblings plus
+`moonshotai/Kimi-K3` itself, so resolving the canonical repository by name
+reports itself as the evidence repository rather than a byte-identical
+sibling. 204 of the rows map to canonical artifacts present in this wheel.
 The other 7 are WordPiece rows, whose canonical artifacts are not packaged and
-which therefore run through HF. The 12 source-level `kimi_k3` rows are among
-the 203: their canonical artifact is derived on your machine from pinned
+which therefore run through HF. The 13 source-level `kimi_k3` rows are among
+the 204: their canonical artifact is derived on your machine from pinned
 upstream bytes, so the comparison stays at `tiktoken.model` level while the
 loaded object is the certified conversion. `toktier inspect` is the
 authoritative packaged-family list.

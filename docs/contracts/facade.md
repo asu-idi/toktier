@@ -51,7 +51,8 @@ tok.explain()                                # full plan, reasons, counters
   repair_backend="auto", gpu_delivery="auto", gpu_min_bytes=65536) ->
   Tokenizer` is the model-repository entry point. The repository id is a
   lookup hint, never a certification identity. For one of the 210 audited
-  sibling repositories, omitted `revision` selects the full audit revision;
+  sibling repositories, or for a canonical self-row, omitted `revision`
+  selects the recorded revision;
   for a canonical repository it selects the artifact-manifest revision; for
   an unknown repository it selects `main`. An explicit revision overrides the
   lookup choice, but the bytes resolved at that revision still decide routing.

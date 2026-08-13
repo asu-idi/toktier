@@ -50,11 +50,11 @@ _REPO = re.compile(r"\A[^\s/]+/[^\s/]+\Z")
 _FILES = frozenset({"tokenizer.json", "tiktoken.model"})
 _EXPECTED_COUNTS = {
     "identical": 150,
-    "identical_source": 12,
+    "identical_source": 13,
     "equivalent_canonicalisation": 10,
     "equivalent_serialisation": 38,
-    "total": 210,
-    "packaged": 203,
+    "total": 211,
+    "packaged": 204,
     "reference_only": 7,
 }
 _TOP_LEVEL_KEYS = {

@@ -17,6 +17,7 @@ from toktier.errors import (
     SessionStateMismatch,
     StoreCorrupt,
     StoreFormatUnsupported,
+    UnsupportedConfig,
 )
 from toktier.facade import store as store_module
 from toktier.facade.recovery import RecoveryBinding
@@ -357,3 +358,85 @@ def test_atomic_write_syncs_payload_before_rename_and_directory_after(
     assert payload_sync[1].endswith(".tmp")
     assert publish[1] == str(target)
     assert directory_sync[1] == str(tmp_path)
+
+
+# ------------------------------------------------- session context manager --
+
+
+def test_session_context_manager_reports_exact_updates(
+    rig: Rig, reference: Callable[[str], list[int]]
+) -> None:
+    """The frozen shape of api.md Section 5, over the shipped facade."""
+    tokenizer = rig.tokenizer(store=rig.store_path())
+    turns = [_text(300), " and then " + _text(120), " " + _text(40)]
+
+    with tokenizer.session(session_id="conversation") as session:
+        assert session.session_id == "conversation"
+        assert list(session.ids) == []
+        accumulated = ""
+        previous: list[int] = []
+        for turn in turns:
+            update = session.append(turn)
+            accumulated += turn
+            # The splice invariant, and the correctness invariant under it.
+            assert list(update.all_ids) == (
+                previous[: update.replace_from] + list(update.replacement_ids)
+            )
+            assert list(update.all_ids) == reference(accumulated)
+            assert list(session.ids) == reference(accumulated)
+            assert session.text == accumulated
+            previous = list(update.all_ids)
+
+        # An append is a write, and the durable store owns the count.
+        assert session.revision >= len(turns)
+        assert session.final_ids(add_special_tokens=False) == list(session.ids)
+
+
+def test_session_context_manager_serves_a_reopened_conversation(
+    rig: Rig, reference: Callable[[str], list[int]]
+) -> None:
+    """State outlives the block: leaving it is not a delete."""
+    store = rig.store_path()
+    first = rig.tokenizer(store=store)
+    opening = _text(300)
+    with first.session(session_id="kept") as session:
+        session.append(opening)
+    first.close()
+
+    second = rig.tokenizer(store=store)
+    with second.session(session_id="kept", text=opening) as session:
+        assert list(session.ids) == reference(opening)
+        update = session.append(" continued")
+    assert list(update.all_ids) == reference(opening + " continued")
+    # Resuming kept the prefix: the append spliced rather than re-encoded.
+    assert update.replace_from > 0
+    second.close()
+
+
+def test_session_context_manager_refuses_a_second_store(rig: Rig) -> None:
+    """The store is bound at load; a different one is refused, not ignored."""
+    tokenizer = rig.tokenizer(store=rig.store_path())
+
+    with (
+        pytest.raises(UnsupportedConfig) as raised,
+        tokenizer.session(store=rig.store_path("elsewhere")),
+    ):
+        pass  # pragma: no cover - the manager refuses before yielding
+
+    assert raised.value.code == "UNSUPPORTED_CONFIG"
+    assert raised.value.details["option"] == "store"
+
+    # Repeating the bound directory is accepted.
+    with tokenizer.session(store=rig.store_path()) as session:
+        assert session.append("hello").replace_from == 0
+
+
+def test_an_unnamed_session_names_itself(rig: Rig) -> None:
+    """Without a store the session is in-memory, and still identifiable."""
+    tokenizer = rig.tokenizer()
+
+    with tokenizer.session() as first, tokenizer.session() as second:
+        assert first.session_id != second.session_id
+        first.append("one")
+        # Nothing durable holds it, so the revision is this object's count.
+        assert first.revision == 1

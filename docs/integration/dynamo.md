@@ -94,23 +94,25 @@ rather than serving a stream it cannot prove.
 This path is where we would start a demo: it exercises the interesting part
 (session state and verified reuse) without asking anyone to merge anything.
 
-### A 1.0 sketch, for contrast
+### The same thing as a session block
 
-The frozen 1.0 API (`docs/contracts/api.md` Section 5) also describes a
-context-manager session that returns a delta object. It is **not** part of
-the 0.x facade (`docs/contracts/facade.md` Section 7 records the deviation),
-so the following does not run against 0.2.x and is included only to show
-where the surface is heading:
+Since 0.2.3 the context-manager session of `docs/contracts/api.md`
+Section 5 ships, and returns the delta object directly:
 
 ```python
-# Target sketch for 1.0 — not available in 0.2.x.
-with tok.session(store="./toktier-store", session_id=conversation_id) as s:
+tok = toktier.load(family, store="./toktier-store")
+with tok.session(session_id=conversation_id, text=transcript_so_far) as s:
     update = s.append(new_turn)      # SessionUpdate: replace_from, replacement_ids
-    ids = list(update.all_ids)
+    ids = list(update.all_ids)       # equals a from-scratch reference encode
 ```
 
-Until then, the complete-transcript call above is the supported Python
-surface, and the Rust `TokenPatch` is the supported delta surface.
+`text=` is the transcript the conversation already holds; the store
+recognizes it and serves it rather than re-encoding. Leaving it out on a
+resumed conversation would replace the stored one with the new turn, so
+a frontend that keeps the transcript should pass it. Everything else is
+the complete-transcript path above, with the splice reported instead of
+having to be derived. The Rust `TokenPatch` remains the zero-copy delta
+surface.
 
 ## Surface B — a persistent layer next to the in-process cache
 

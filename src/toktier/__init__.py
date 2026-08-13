@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from .config import Config
 from .errors import ToktierError
-from .facade import Encoding, Tokenizer, from_pretrained, load
+from .facade import Encoding, Session, Tokenizer, from_pretrained, load
 from .policy import ReasonCode, RoutePlan, RoutingPolicy
 from .session import SessionUpdate
 
@@ -26,6 +26,7 @@ __all__ = [
     "ReasonCode",
     "RoutePlan",
     "RoutingPolicy",
+    "Session",
     "SessionUpdate",
     "Tokenizer",
     "ToktierError",

@@ -624,6 +624,15 @@ class EntryStore:
 
     # -- public paths --------------------------------------------------
 
+    def session_revision(self, session_id: str) -> int | None:
+        """This store's revision for one named session, if it holds it.
+
+        ``None`` means the store has no entry under that name -- the
+        session has not been written here, or its entry was evicted.
+        """
+        entry = self._entries.get(_entry_name("session", session_id))
+        return None if entry is None else entry.revision
+
     def encode_session(self, session_id: str, text: str) -> list[int] | None:
         """Serve one named-session encode; ``None`` asks the caller to
         run the plain routed path instead (never a wrong answer)."""

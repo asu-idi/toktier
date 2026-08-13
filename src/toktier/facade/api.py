@@ -24,11 +24,13 @@ import json
 import os
 import threading
 import warnings
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib.util import find_spec
 from pathlib import Path
 from typing import Any, Protocol, cast
+from uuid import uuid4
 
 from .._oracle import ORACLE_PACKAGE, import_oracle, oracle_version
 from ..artifacts import (
@@ -73,9 +75,10 @@ from ..routing.plan import plan as build_plan
 from ..routing.probe import probe
 from ..routing.registry_load import shipped_registry
 from ..routing.registry_view import ArtifactRecord
+from ..session import SessionUpdate
 from .store import DEFAULT_CACHE_BUDGET_BYTES, EntryStore
 
-__all__ = ["Encoding", "Tokenizer", "from_pretrained", "load"]
+__all__ = ["Encoding", "Session", "Tokenizer", "from_pretrained", "load"]
 
 #: Engine identity bound into the semantic fingerprint. Changes when the
 #: session-path engine semantics change; stored sessions then miss and
@@ -246,6 +249,106 @@ class Encoding:
 
     def __len__(self) -> int:
         return len(self.ids)
+
+
+class Session:
+    """A live session over one tokenizer (``api.md`` Section 5).
+
+    Every field speaks about the pre-postprocessor core token stream, the
+    stream the store holds; special tokens are applied at read time by
+    :meth:`final_ids`. The object is a view over the tokenizer's own
+    session path -- it holds no encoder of its own -- so the ids it
+    reports are the ids that path returns, equal to a from-scratch
+    reference encode of the accumulated text.
+
+    A session has one owner: it is not safe to share across threads.
+    """
+
+    def __init__(self, tokenizer: Tokenizer, session_id: str) -> None:
+        self._tokenizer = tokenizer
+        self._session_id = session_id
+        self._text = ""
+        self._ids: tuple[int, ...] = ()
+        self._writes = 0
+
+    @property
+    def session_id(self) -> str:
+        """The name this session's state is stored under."""
+        return self._session_id
+
+    @property
+    def ids(self) -> Sequence[int]:
+        """The current core token stream."""
+        return self._ids
+
+    @property
+    def text(self) -> str:
+        """The text accumulated so far."""
+        return self._text
+
+    @property
+    def revision(self) -> int:
+        """Monotone write counter.
+
+        When the durable store holds this session, this is the store's
+        own revision -- the value an optimistic write is checked
+        against. Before the first write, or while the session lives
+        somewhere the store does not track it, it counts the writes made
+        through this object, which is monotone but not a store fact.
+        """
+        stored = self._tokenizer.store_session_revision(self._session_id)
+        return self._writes if stored is None else stored
+
+    def _adopt(self, text: str) -> None:
+        """Take ``text`` as the transcript this session already holds.
+
+        Opening is not a write: when the stored record recognizes this
+        text the store serves it, and the revision stays the store's.
+        """
+        self._ids = tuple(
+            self._tokenizer.encode(text, session=self._session_id).ids
+        )
+        self._text = text
+
+    def append(self, text: str) -> SessionUpdate:
+        """Extend the session and report the effect on the core stream.
+
+        The returned update satisfies the frozen invariant
+        ``all_ids == old_ids[:replace_from] + replacement_ids``, and
+        ``replace_from`` is the longest prefix that survived -- at least
+        as tight as any cut the engine made internally, and ``0`` when
+        the whole stream was re-encoded.
+        """
+        previous = self._ids
+        combined = self._text + text
+        current = tuple(
+            self._tokenizer.encode(combined, session=self._session_id).ids
+        )
+        shared = min(len(previous), len(current))
+        cut = next(
+            (
+                index
+                for index in range(shared)
+                if previous[index] != current[index]
+            ),
+            shared,
+        )
+        self._text = combined
+        self._ids = current
+        self._writes += 1
+        return SessionUpdate(
+            replace_from=cut,
+            replacement_ids=current[cut:],
+            all_ids=current,
+        )
+
+    def final_ids(self, add_special_tokens: bool = True) -> list[int]:
+        """The read-time view: postprocessor applied over the core stream."""
+        if not add_special_tokens:
+            return list(self._ids)
+        return list(
+            self._tokenizer.encode(self._text, add_special_tokens=True).ids
+        )
 
 
 class Tokenizer:
@@ -756,6 +859,72 @@ class Tokenizer:
         if self._native_request_guard is not None:
             report["native_request_guard"] = dict(self._native_request_guard)
         return _explanation_summary(report) if summary else report
+
+    @contextmanager
+    def session(
+        self,
+        store: str | os.PathLike[str] | None = None,
+        *,
+        session_id: str | None = None,
+        text: str = "",
+    ) -> Iterator[Session]:
+        """Open a session over this tokenizer (``api.md`` Section 5).
+
+        The yielded :class:`Session` accumulates text and reports each
+        append as a :class:`~toktier.SessionUpdate`. Where the state
+        lives was decided when the tokenizer was loaded: ``load(store=)``
+        makes it persistent, and without it the session is in-memory for
+        this process. ``store`` here may therefore be omitted, or repeat
+        that same directory; naming a different one is refused rather
+        than silently ignored.
+
+        ``session_id`` names the state. An unnamed session gets a fresh
+        name, readable as :attr:`Session.session_id` -- necessary for a
+        persistent one, which is otherwise written where nothing can
+        find it again. Leaving the block does not delete state: a
+        persistent session is meant to outlive the process.
+
+        ``text`` is the transcript this session already holds, and is how
+        a stored conversation is resumed. It is not optional bookkeeping:
+        a session object starts empty, and appending one new turn to an
+        empty object would replace the stored conversation with that
+        turn rather than continue it. The store recognizes a transcript
+        it already holds and serves it instead of re-encoding, so
+        resuming costs a lookup. (``api.md`` Section 5 does not carry
+        this argument; the deviation is recorded in ``facade.md``
+        Section 7, which is also where the store binding lives.)
+        """
+        self._require_open()
+        if store is not None:
+            requested = Path(os.fspath(store)).expanduser()
+            if requested != self._store_directory:
+                raise UnsupportedConfig(
+                    "the session store is bound when the tokenizer is loaded",
+                    details={
+                        "option": "store",
+                        "value": str(requested),
+                        "reason": (
+                            "pass the directory to load(store=...); this "
+                            "tokenizer holds "
+                            + (
+                                f"{self._store_directory}"
+                                if self._store_directory is not None
+                                else "no store directory"
+                            )
+                        ),
+                    },
+                )
+        name = session_id or f"session-{uuid4().hex}"
+        session = Session(self, name)
+        if text:
+            session._adopt(text)
+        yield session
+
+    def store_session_revision(self, session_id: str) -> int | None:
+        """The store's revision for one session, when it holds it."""
+        if self._entry_store is None:
+            return None
+        return self._entry_store.session_revision(session_id)
 
     def close(self) -> None:
         """Release the loaded backend. Idempotent."""

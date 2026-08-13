@@ -8,6 +8,6 @@ the native store and GPU engine remain lazy until their first relevant use.
 
 from __future__ import annotations
 
-from .api import Encoding, Tokenizer, from_pretrained, load
+from .api import Encoding, Session, Tokenizer, from_pretrained, load
 
-__all__ = ["Encoding", "Tokenizer", "from_pretrained", "load"]
+__all__ = ["Encoding", "Session", "Tokenizer", "from_pretrained", "load"]

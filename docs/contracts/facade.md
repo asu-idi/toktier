@@ -399,7 +399,22 @@ well-formed-but-newer records, in the contract's explicit-verify split.
   defaults will be reconciled before the API version axis moves.
 - `decode` exists here; `api.md` Section 7 lists it as out of scope for
   the frozen v1 set.
-- The `session()` context-manager surface of `api.md` Section 5 is not
-  part of the facade; the facade's `session=` keyword covers the
-  store-backed use. `SessionUpdate` (Section 5.1) ships as a value
-  object with its splice invariant enforced at construction.
+- The `session()` context manager of `api.md` Section 5 ships since
+  0.2.3, over the same store path the `session=` keyword uses, with two
+  deviations. Its `store` argument may be omitted or repeat the
+  directory given to `load(store=...)`, and naming a different one
+  raises `UNSUPPORTED_CONFIG`: the store is bound when the tokenizer is
+  loaded, so accepting a second one here would have to be ignored, and
+  ignoring it silently is worse than refusing it. It also accepts
+  `text=`, the transcript the session already holds, which is how a
+  stored conversation is resumed -- a session object starts empty, and
+  appending one turn to an empty object would replace the stored
+  conversation rather than continue it. `Session` additionally exposes
+  `session_id`, so an unnamed session can be found again.
+  `SessionUpdate` (Section 5.1) ships as a value object with its splice
+  invariant enforced at construction; `Session.append` reports the
+  longest surviving prefix as `replace_from`, which is at least as tight
+  as the cut the engine made internally.
+- `Session.revision` is the durable store's revision while the store
+  holds the session, and otherwise counts the writes made through that
+  object. Both are monotone; only the first is a store fact.

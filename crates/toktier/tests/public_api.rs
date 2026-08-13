@@ -40,6 +40,24 @@ fn builder_validates_before_engine_construction() {
 }
 
 #[test]
+fn persistent_sessions_resolve_a_home_from_the_environment() {
+    // The state root comes from TOKTIER_HOME, XDG_STATE_HOME, or HOME,
+    // in that order; this host has at least the last one. Building only
+    // resolves the path -- nothing is created until a session opens.
+    if std::env::var_os("TOKTIER_HOME").is_none()
+        && std::env::var_os("XDG_STATE_HOME").is_none()
+        && std::env::var_os("HOME").is_none()
+    {
+        return;
+    }
+    Runtime::builder()
+        .device(Device::Cpu)
+        .persistent_sessions(true)
+        .build()
+        .unwrap();
+}
+
+#[test]
 fn a_misspelled_family_is_answered_with_the_closest_ids() {
     let runtime = Runtime::builder().device(Device::Cpu).build().unwrap();
     let error = runtime.load("qwen3-8b").unwrap_err();

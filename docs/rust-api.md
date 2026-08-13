@@ -41,14 +41,16 @@ through the recorded digest and size before an atomic cache publication. An
 explicit verified directory remains available through `artifact_directory()`
 or `load_local()`. See [Rust lifecycle and distribution](rust-lifecycle.md).
 
-Without `artifact_cache()`, the cache root comes from `TOKTIER_ARTIFACT_CACHE`
-and otherwise defaults to `$HOME/.cache/toktier/artifacts`. In 0.2.1 the crate
-does not read `TOKTIER_HOME` or the XDG variables -- those govern the Python
-product -- and `home()` above sets the session-state directory only, not the
-artifact cache. The complete table, including the `jit` feature's
-`TOKTIER_JIT_CACHE`, is in
-[Rust lifecycle and distribution](rust-lifecycle.md); aligning the two layers
-is intended for 0.3.
+Without `artifact_cache()`, the cache root comes from `TOKTIER_ARTIFACT_CACHE`,
+then `$TOKTIER_HOME/cache`, `$XDG_CACHE_HOME/toktier`, or
+`$HOME/.cache/toktier` -- the same precedence the Python product uses, so one
+environment places both layers. Persistent sessions with no `home()` resolve
+`$TOKTIER_HOME/state`, `$XDG_STATE_HOME/toktier`, or
+`$HOME/.local/state/toktier`, and are refused outright when none of the three
+is set: session state is not rebuildable, so it is not placed by guesswork.
+`home()` still governs session state only, not the artifact cache. The
+complete table, including the `jit` feature's `TOKTIER_JIT_CACHE`, is in
+[Rust lifecycle and distribution](rust-lifecycle.md).
 
 `Runtime::doctor()` returns typed build and CUDA-probe facts. Device probing
 does not load a kernel. `Tokenizer::plan()` is the immutable admitted route;

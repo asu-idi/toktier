@@ -173,15 +173,130 @@ pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-/// Resolve a cache directory: explicit environment override, then the
-/// user cache home, then a relative in-tree fallback.
+/// The application directory name shared with the Python product.
+const APPLICATION: &str = "toktier";
+
+/// Read an environment variable, treating an empty value as unset --
+/// the rule the XDG specification states and the Python product
+/// follows.
+fn present(name: &str) -> Option<PathBuf> {
+    std::env::var_os(name)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+
+/// The user cache root for this application, by the same precedence the
+/// Python product uses: `TOKTIER_HOME/cache`, then `XDG_CACHE_HOME`,
+/// then `$HOME/.cache` (the layout platformdirs resolves to on Linux).
+fn cache_root_from(lookup: impl Fn(&str) -> Option<PathBuf>) -> Option<PathBuf> {
+    lookup("TOKTIER_HOME")
+        .map(|home| home.join("cache"))
+        .or_else(|| lookup("XDG_CACHE_HOME").map(|base| base.join(APPLICATION)))
+        .or_else(|| lookup("HOME").map(|home| home.join(".cache").join(APPLICATION)))
+}
+
+/// The user state root for this application: `TOKTIER_HOME/state`, then
+/// `XDG_STATE_HOME`, then `$HOME/.local/state`.
+fn state_root_from(lookup: impl Fn(&str) -> Option<PathBuf>) -> Option<PathBuf> {
+    lookup("TOKTIER_HOME")
+        .map(|home| home.join("state"))
+        .or_else(|| lookup("XDG_STATE_HOME").map(|base| base.join(APPLICATION)))
+        .or_else(|| lookup("HOME").map(|home| home.join(".local").join("state").join(APPLICATION)))
+}
+
+/// Where session state goes when the caller did not name a home.
+///
+/// State is not a cache -- deleting it loses sessions -- so there is no
+/// in-tree fallback: a host with none of these variables set gets no
+/// implicit state directory, and persistent sessions there stay a
+/// configuration error rather than a surprise directory.
+pub(crate) fn default_state_directory() -> Option<PathBuf> {
+    state_root_from(present)
+}
+
+/// Resolve a cache directory: the surface's own environment override
+/// first (it names one directory exactly), then the user cache root,
+/// then a relative in-tree fallback.
 pub(crate) fn default_cache_directory(env_var: &str, subdirectory: &str) -> PathBuf {
     std::env::var_os(env_var)
         .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .map(|home| home.join(".cache/toktier").join(subdirectory))
-        })
+        .or_else(|| cache_root_from(present).map(|root| root.join(subdirectory)))
         .unwrap_or_else(|| PathBuf::from(".toktier").join(subdirectory))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{cache_root_from, state_root_from};
+    use std::path::PathBuf;
+
+    /// The resolution rules are tested through their lookup, not by
+    /// setting variables in this process: other tests read the same
+    /// environment while these run.
+    fn environment(pairs: &[(&'static str, &'static str)]) -> impl Fn(&str) -> Option<PathBuf> {
+        let pairs = pairs.to_vec();
+        move |name: &str| {
+            pairs
+                .iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| *value)
+                // An empty value is unset, as the XDG specification says
+                // and the Python product treats it.
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from)
+        }
+    }
+
+    /// One case: the variables in force, the cache root they resolve,
+    /// and the state root they resolve.
+    type Case = (
+        &'static [(&'static str, &'static str)],
+        Option<&'static str>,
+        Option<&'static str>,
+    );
+
+    #[test]
+    fn the_roots_follow_the_python_precedence() {
+        let cases: [Case; 5] = [
+            (
+                &[
+                    ("TOKTIER_HOME", "/tmp/home"),
+                    ("XDG_CACHE_HOME", "/tmp/xdg"),
+                    ("XDG_STATE_HOME", "/tmp/xdg-state"),
+                    ("HOME", "/tmp/user"),
+                ],
+                Some("/tmp/home/cache"),
+                Some("/tmp/home/state"),
+            ),
+            (
+                &[
+                    ("XDG_CACHE_HOME", "/tmp/xdg"),
+                    ("XDG_STATE_HOME", "/tmp/xdg-state"),
+                    ("HOME", "/tmp/user"),
+                ],
+                Some("/tmp/xdg/toktier"),
+                Some("/tmp/xdg-state/toktier"),
+            ),
+            (
+                &[
+                    ("TOKTIER_HOME", ""),
+                    ("XDG_CACHE_HOME", ""),
+                    ("XDG_STATE_HOME", ""),
+                    ("HOME", "/tmp/user"),
+                ],
+                Some("/tmp/user/.cache/toktier"),
+                Some("/tmp/user/.local/state/toktier"),
+            ),
+            (
+                &[("HOME", "/tmp/user")],
+                Some("/tmp/user/.cache/toktier"),
+                Some("/tmp/user/.local/state/toktier"),
+            ),
+            (&[], None, None),
+        ];
+        for (pairs, cache, state) in cases {
+            let lookup = environment(pairs);
+            assert_eq!(cache_root_from(&lookup), cache.map(PathBuf::from));
+            assert_eq!(state_root_from(&lookup), state.map(PathBuf::from));
+        }
+    }
 }

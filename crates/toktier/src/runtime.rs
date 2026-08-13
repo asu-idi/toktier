@@ -94,10 +94,13 @@ impl Default for RuntimeBuilder {
 }
 
 impl RuntimeBuilder {
-    /// Set the runtime home directory.
+    /// Set the runtime home directory: session state lives under
+    /// `<home>/sessions`.
     ///
     /// This implicitly enables persistent sessions; see
-    /// [`Self::persistent_sessions`].
+    /// [`Self::persistent_sessions`]. Left unset, persistent sessions
+    /// resolve a home from `TOKTIER_HOME`, `XDG_STATE_HOME`, or `HOME`,
+    /// the way the Python product resolves its state directory.
     pub fn home(mut self, path: impl Into<PathBuf>) -> Self {
         self.config.home = Some(path.into());
         self.config.persistent_sessions = true;
@@ -191,7 +194,7 @@ impl RuntimeBuilder {
         Ok(self)
     }
 
-    pub fn build(self) -> Result<Runtime> {
+    pub fn build(mut self) -> Result<Runtime> {
         if self.config.artifact_cache.as_os_str().is_empty() {
             return Err(Error::new(
                 ErrorCode::ConfigInvalid,
@@ -199,10 +202,18 @@ impl RuntimeBuilder {
             ));
         }
         if self.config.persistent_sessions && self.config.home.is_none() {
-            return Err(Error::new(
-                ErrorCode::ConfigInvalid,
-                "persistent sessions require RuntimeBuilder::home",
-            ));
+            // An unnamed home falls back to the same state root the
+            // Python product uses. A host with none of those variables
+            // set gets no implicit location: session state is not
+            // rebuildable, so it is not placed by guesswork.
+            self.config.home = crate::fsutil::default_state_directory();
+            if self.config.home.is_none() {
+                return Err(Error::new(
+                    ErrorCode::ConfigInvalid,
+                    "persistent sessions require RuntimeBuilder::home, TOKTIER_HOME, \
+                     XDG_STATE_HOME, or HOME",
+                ));
+            }
         }
         if matches!(self.config.device, Device::Cpu)
             && !matches!(

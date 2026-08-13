@@ -56,33 +56,31 @@ the named variable when constructing a request. Token values are redacted from
 Use `ArtifactSource::None` as an additional explicit statement that only the
 verified cache or an imported bundle is allowed.
 
-### Where the crate puts its directories (0.2.1)
+### Where the crate puts its directories
 
-The Rust crate resolves its own directories and, in 0.2.1, does **not** read
-`TOKTIER_HOME`, `XDG_CACHE_HOME`, or `XDG_STATE_HOME`. Those variables are the
-Python product's contract (`docs/contracts/config.md` Sections 4-5); the crate
-has a separate one:
+Since 0.2.3 the crate reads `TOKTIER_HOME` and the XDG variables with the
+same precedence as the Python product (`docs/contracts/config.md`
+Sections 4-5), so one environment places both layers:
 
-| Directory | Explicit setting | Environment default | Final fallback |
-|---|---|---|---|
-| Artifact cache | `RuntimeBuilder::artifact_cache()` / `ArtifactManager::builder().cache()` | `TOKTIER_ARTIFACT_CACHE` | `$HOME/.cache/toktier/artifacts`, else `./.toktier/artifacts` |
-| Direct-JIT cache (`jit` feature) | the JIT builder's cache setting | `TOKTIER_JIT_CACHE` | `$HOME/.cache/toktier/jit-rust`, else `./.toktier/jit-rust` |
-| Session state | `RuntimeBuilder::home()` | none | in-memory sessions when `home()` is unset |
+| Directory | Explicit setting | Most specific variable | Roots, in order | Final fallback |
+|---|---|---|---|---|
+| Artifact cache | `RuntimeBuilder::artifact_cache()` / `ArtifactManager::builder().cache()` | `TOKTIER_ARTIFACT_CACHE` | `$TOKTIER_HOME/cache`, `$XDG_CACHE_HOME/toktier`, `$HOME/.cache/toktier` | `./.toktier/artifacts` |
+| Direct-JIT cache (`jit` feature) | the JIT builder's cache setting | `TOKTIER_JIT_CACHE` | the same three roots | `./.toktier/jit-rust` |
+| Session state | `RuntimeBuilder::home()` | none | `$TOKTIER_HOME/state`, `$XDG_STATE_HOME/toktier`, `$HOME/.local/state/toktier` | none: persistent sessions with no resolvable home are refused |
 
-Two consequences worth stating plainly, because the shipped examples run with
-the defaults:
+Notes that matter when running the shipped examples:
 
-- Setting `TOKTIER_HOME` before `cargo run --release -p toktier --example cpu`
-  relocates nothing on the Rust side; the example reads and writes
-  `$HOME/.cache/toktier/artifacts` unless `TOKTIER_ARTIFACT_CACHE` is set.
-  Point that variable at a scratch directory to run an example against
-  workspace-local state only.
-- `RuntimeBuilder::home()` governs persistent session state, not the artifact
-  cache. The two are set independently.
-
-Aligning the crate's defaults with the Python `TOKTIER_HOME`/XDG contract is
-intended for 0.3. Until then this table, rather than the Python one, is the
-crate's directory contract.
+- An empty variable counts as unset, which is what the XDG specification
+  says and what the Python product does.
+- The leaf names stay the crate's own: artifacts land in `artifacts` (the
+  same leaf the Python product uses) and JIT products in `jit-rust`, which
+  is deliberately distinct from the Python `kernels` directory because the
+  two hold different products.
+- Session state is not a cache. When no home can be resolved from any of
+  the three roots, persistent sessions are a configuration error rather
+  than a directory placed by guesswork; in-memory sessions are unaffected.
+- `RuntimeBuilder::home()` governs session state, not the artifact cache.
+  The two are still set independently.
 
 ## Mirrors and air-gap bundles
 

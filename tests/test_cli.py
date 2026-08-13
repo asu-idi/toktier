@@ -242,6 +242,7 @@ def test_doctor_human(
     assert captured.out == (
         f"python_version: {platform.python_version()}\n"
         "toktier_version: 1.2.3\n"
+        "family: none\n"
         f"artifact_cache_dir: {home / 'cache' / 'artifacts'}\n"
         f"kernel_cache_dir: {home / 'cache' / 'kernels'}\n"
         f"store_state_dir: {home / 'state' / 'store'}\n"
@@ -312,6 +313,7 @@ def test_doctor_json(
     expected = {
         "python_version": platform.python_version(),
         "toktier_version": "2.0.0",
+        "family": None,
         "artifact_cache_dir": str(home / "cache" / "artifacts"),
         "kernel_cache_dir": str(home / "cache" / "kernels"),
         "store_state_dir": str(home / "state" / "store"),
@@ -1185,3 +1187,58 @@ def test_the_artifact_lifecycle_reports_the_same_facts_as_json(
         "entry": alias,
         "directory": str(offline / "cache" / "artifacts" / alias),
     }
+
+
+def test_doctor_answers_for_one_family_when_asked(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A named family gets the exact answer the generic report cannot give.
+
+    ``kimi_k3`` routes its CPU work to the reference engine by design.
+    The installation-level report says a certified CPU fast path is
+    ready here, which is true of the installation and not of that
+    family: below the GPU threshold its inputs run on the reference
+    engine.
+    """
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    # The certified CPU profile needs the frozen oracle versions; with
+    # them present the installation-level answer below the GPU threshold
+    # is "fast_cpu", which is what the family answer has to contradict.
+    certified = {"tokenizers": "0.22.2", "transformers": "4.57.6"}
+    monkeypatch.setattr(
+        importlib.metadata, "version", lambda name: certified.get(name, "1.2.3")
+    )
+    _set_doctor_probes(monkeypatch)
+
+    assert cli.main(["doctor", "--json", "--family", "kimi_k3"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    family = report["family"]
+
+    assert report["automatic_effective_backend"] == "gpu"
+    assert family["family"] == "kimi_k3"
+    assert family["fast_cpu_status"] == "unsupported"
+    assert family["certification_identity"] == "exact"
+    assert family["automatic_effective_backend"] == "gpu"
+    assert family["automatic_effective_backend_below_gpu_threshold"] == "hf"
+
+    assert cli.main(["doctor", "--json", "--family", "qwen3_8b"]) == 0
+    family = json.loads(capsys.readouterr().out)["family"]
+    assert family["fast_cpu_status"] == "certified_source"
+    assert family["automatic_effective_backend"] == "gpu"
+    assert family["automatic_effective_backend_below_gpu_threshold"] == "fast_cpu"
+
+
+def test_doctor_refuses_a_family_the_package_does_not_ship(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    _set_doctor_probes(monkeypatch)
+
+    exit_code = cli.main(["doctor", "--json", "--family", "qwen3-8b"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    error = json.loads(captured.err)["error"]
+    assert error["code"] == "ARTIFACT_NOT_FOUND"
+    assert error["details"]["suggestions"][0] == "qwen3_8b"

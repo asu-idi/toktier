@@ -179,8 +179,76 @@ def _prebuilt_facts() -> tuple[bool, str | None]:
     return shipped_prebuilt_facts()
 
 
+def _family_report(
+    family: str,
+    *,
+    automatic_delivery: str,
+    observed_architectures: Sequence[str],
+    gpu_eligible: bool,
+    cpu_profile_ready: bool,
+) -> dict[str, object]:
+    """What this machine would do with one named family.
+
+    The report without a family answers for the installation: it can say
+    a certified CPU fast path exists here, not that it exists for the
+    family a caller is about to load. Families differ -- some route
+    their CPU work to the reference engine by design -- so the effective
+    backend is only exact once the family is named.
+    """
+    from .routing.registry_load import shipped_registry
+    from .routing.registry_view import STATUS_CERTIFIED, STATUS_CERTIFIED_SOURCE
+
+    entry = _artifact_manifest().get(family)
+    artifact_sha256 = next(
+        (item.sha256 for item in entry.files if item.name == "tokenizer.json"),
+        None,
+    )
+    match = shipped_registry().certification(artifact_sha256=artifact_sha256)
+    certified = {STATUS_CERTIFIED, STATUS_CERTIFIED_SOURCE}
+    fast_cpu_status: str | None = None
+    gpu_status: str | None = None
+    architecture_certification: dict[str, str] = {}
+    if match is not None:
+        fast_cpu = match.record.backends.get("fast_cpu")
+        gpu = match.record.backends.get("gpu")
+        fast_cpu_status = None if fast_cpu is None else fast_cpu.status
+        if gpu is not None:
+            delivery = gpu.for_delivery(automatic_delivery)
+            gpu_status = delivery.status
+            statuses = delivery.architecture_statuses()
+            architecture_certification = {
+                architecture: statuses.get(architecture, "uncertified")
+                for architecture in observed_architectures
+            }
+    family_gpu_eligible = gpu_eligible and any(
+        status in certified for status in architecture_certification.values()
+    )
+    family_cpu_ready = cpu_profile_ready and fast_cpu_status in certified
+    return {
+        "family": entry.family,
+        "artifact_sha256": artifact_sha256,
+        "certification_identity": None if match is None else match.identity,
+        "evidence_id": None if match is None else match.record.evidence_id,
+        "fast_cpu_status": fast_cpu_status,
+        "gpu_status": gpu_status,
+        "gpu_delivery_certification": architecture_certification,
+        "automatic_gpu_eligible": family_gpu_eligible,
+        # The automatic route decides by input size, so the honest answer
+        # is two answers: what runs at or above the GPU threshold, and
+        # what runs below it. The second is where families differ most --
+        # one whose CPU lane is the reference engine reads "hf" here
+        # while the installation-level report reads "fast_cpu".
+        "automatic_effective_backend": (
+            "gpu" if family_gpu_eligible else "fast_cpu" if family_cpu_ready else "hf"
+        ),
+        "automatic_effective_backend_below_gpu_threshold": (
+            "fast_cpu" if family_cpu_ready else "hf"
+        ),
+    }
+
+
 def _doctor_report(
-    config: Config, *, source: ArtifactSource | None
+    config: Config, *, source: ArtifactSource | None, family: str | None = None
 ) -> dict[str, object]:
     # Fetch availability is reported field by field. A single "offline"
     # line would answer three different questions with one word, and the
@@ -292,6 +360,21 @@ def _doctor_report(
     return {
         "python_version": platform.python_version(),
         "toktier_version": _toktier_version(),
+        # Present in every report; populated only when a family is named,
+        # because the answer is only exact then.
+        "family": (
+            None
+            if family is None
+            else _family_report(
+                family,
+                automatic_delivery=automatic_delivery,
+                observed_architectures=list(observed_architectures),
+                gpu_eligible=automatic_gpu_eligible,
+                cpu_profile_ready=(
+                    certified_cpu_profile_ready and gigatoken_runtime_ready
+                ),
+            )
+        ),
         "artifact_cache_dir": str(artifact_cache_dir(config)),
         "kernel_cache_dir": str(kernel_cache_dir(config)),
         "store_state_dir": str(store_state_dir(config)),
@@ -361,6 +444,22 @@ def _doctor_report(
 
 def _print_doctor_human(report: dict[str, object]) -> None:
     for name, value in report.items():
+        if name == "family" and isinstance(value, Mapping):
+            # The one nested section: printed as its own indented block
+            # rather than crushed onto a single line.
+            print("family:")
+            for key, item in value.items():
+                if isinstance(item, Mapping):
+                    nested = "; ".join(
+                        f"{architecture}={status}"
+                        for architecture, status in item.items()
+                    )
+                    print(f"  {key}: {nested or 'none'}")
+                elif isinstance(item, bool):
+                    print(f"  {key}: {str(item).lower()}")
+                else:
+                    print(f"  {key}: {'none' if item is None else item}")
+            continue
         if name == "devices" and isinstance(value, list):
             rendered = "; ".join(
                 f"{item['index']}: {item['name']} ({item['architecture']})"
@@ -443,7 +542,9 @@ def _doctor(arguments: argparse.Namespace) -> int:
     # The same source ``artifacts fetch`` would use, constructed the same
     # way. It reads its environment and imports no hub client, so the
     # report describes the fetch path this machine would actually take.
-    report = _doctor_report(Config.resolve(), source=_fetch_source())
+    report = _doctor_report(
+        Config.resolve(), source=_fetch_source(), family=arguments.family
+    )
     if arguments.json:
         print(json.dumps(report, sort_keys=True, separators=(",", ":")))
     else:
@@ -753,6 +854,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     doctor = commands.add_parser(
         "doctor", help="show environment diagnostics", parents=[shared]
+    )
+    doctor.add_argument(
+        "--family",
+        metavar="FAMILY",
+        help="also report what this machine would do with one family",
     )
     doctor.set_defaults(handler=_doctor)
 

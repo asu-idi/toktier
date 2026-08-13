@@ -59,6 +59,16 @@ crossover automatic request would then use. `automatic_gpu_candidate` remains
 the installation-level fact -- torch importable, GPU not disabled -- and is
 not an eligibility answer.
 
+Those fields describe the installation. `toktier doctor --family FAMILY`
+adds a `family` section that describes one family on it: its certification
+identity and evidence id, its `fast_cpu` and GPU statuses, the selected
+delivery's status on each observed architecture, and two effective-backend
+answers -- one at or above the GPU threshold and one below it. The second is
+where families differ: a family whose CPU lane is the reference engine reads
+`hf` below the threshold while the installation-level field, correctly, reads
+`fast_cpu`. Without the option the section is `null`, and every other field is
+unchanged.
+
 Because a JIT build product is machine-local, it is not bit-identical
 to the build the certification runs judged. The registry therefore
 records the JIT delivery as `certified_source` rather than `certified`,

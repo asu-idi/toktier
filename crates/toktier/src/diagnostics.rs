@@ -134,6 +134,11 @@ pub struct RuntimeBuildFacts {
     pub native_host_source_digest: String,
     pub toolchain: String,
     pub build_flags: Vec<String>,
+    /// How the resolved dependency graph of this build compares with the
+    /// judged one (see [`crate::DEPENDENCY_CLOSURE`]). Anything other
+    /// than `"verified"` holds `certified` below at `false`, and says
+    /// which package differs.
+    pub dependency_closure: String,
     pub certified: bool,
 }
 

@@ -12,9 +12,10 @@ use sha2::{Digest, Sha256};
 mod source_identity;
 
 use source_identity::{
-    fast_cpu_source_paths, hex, identity_sentinel_enabled, native_host_source_paths,
-    rust_api_source_paths, source_digest, FAST_CPU_DOMAIN, IDENTITY_SENTINEL_ENV,
-    IDENTITY_SENTINEL_HEX, NATIVE_HOST_DOMAIN, RUST_API_DOMAIN,
+    dependency_closure_status, fast_cpu_source_paths, hex, identity_sentinel_enabled,
+    locate_governing_lock, native_host_source_paths, rust_api_source_paths, source_digest,
+    CARGO_LOCK_ENV, FAST_CPU_DOMAIN, IDENTITY_SENTINEL_ENV, IDENTITY_SENTINEL_HEX,
+    JUDGED_LOCK_RELATIVE, NATIVE_HOST_DOMAIN, RUST_API_DOMAIN,
 };
 
 const PACKAGE_IDENTITY_SCHEMA: &str = "toktier.rust_package_source_identity.v1";
@@ -74,6 +75,27 @@ fn main() {
             field("native_host_source_sha256"),
         )
     };
+    // How this build's resolved dependency graph compares with the one
+    // the certification evidence was taken on. In workspace mode the
+    // lockfile is already hashed into the identities above; the check
+    // runs there too, because a checkout used as a path dependency of a
+    // larger workspace is governed by that workspace's lockfile rather
+    // than by the one sitting next to these sources.
+    let judged_lock = if workspace_mode {
+        root.join("Cargo.lock")
+    } else {
+        manifest.join(JUDGED_LOCK_RELATIVE)
+    };
+    println!("cargo:rerun-if-changed={}", judged_lock.display());
+    println!("cargo:rerun-if-env-changed={CARGO_LOCK_ENV}");
+    let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("out dir"));
+    let governing = locate_governing_lock(&out_dir, workspace_mode.then_some(manifest.as_path()));
+    if let Some(path) = &governing {
+        println!("cargo:rerun-if-changed={}", path.display());
+    }
+    let closure_status = dependency_closure_status(&judged_lock, governing.as_deref());
+    println!("cargo:rustc-env=TOKTIER_RUST_API_DEPENDENCY_CLOSURE={closure_status}");
+
     println!("cargo:rerun-if-env-changed={IDENTITY_SENTINEL_ENV}");
     let (rust_api_source, fast_cpu_source, native_host_source) = if identity_sentinel_enabled() {
         let sentinel = IDENTITY_SENTINEL_HEX.to_owned();

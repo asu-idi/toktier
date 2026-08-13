@@ -76,6 +76,11 @@ fn doctor_is_typed_and_python_free() {
         // until fresh matrix evidence updates the shipped registry.
         assert!(facts.runtime_build.certified);
     }
+    // A build inside this workspace resolves the judged graph, so the
+    // closure check must pass here whatever the profile decides about
+    // certification.
+    assert_eq!(facts.runtime_build.dependency_closure, "verified");
+    assert_eq!(toktier::DEPENDENCY_CLOSURE, "verified");
     assert_eq!(facts.runtime_build.source_digest.len(), 64);
     assert_eq!(facts.runtime_build.fast_cpu_source_digest.len(), 64);
     assert_eq!(facts.runtime_build.native_host_source_digest.len(), 64);

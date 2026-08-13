@@ -55,18 +55,35 @@ does not load a kernel. `Tokenizer::plan()` is the immutable admitted route;
 every result carries `ExecutionFacts` naming the backend that actually ran.
 Accelerated admission also requires the exact Rust facade source, rustc,
 features, target, and release-profile facts to appear in the shipped
-`runtime_builds` registry. The registered identity snapshots the workspace
-`Cargo.lock`, but the certification check compares those compile-time facts
-only: when the crate is built as an ordinary dependency, Cargo resolves
-transitive crate versions from the consumer's own lockfile, and those
-resolved versions are outside the judgement. A build that must match the
-judged dependency graph exactly should build inside the source workspace
-with `--locked`; the shipped wheel is always produced that way. A
-development or otherwise unregistered build falls
-to HF under `Policy::Certified`; an explicit CUDA request returns
-`UNCERTIFIED_RUNTIME`. Only `Policy::Experimental` can opt an unregistered
-build into an accelerated candidate, and every result remains labelled
-experimental.
+`runtime_builds` registry, **and** the resolved dependency graph of this
+build to be the judged one. Since 0.2.3 the second half is checked rather
+than assumed: the crate archive carries the judged `Cargo.lock`, the build
+script finds the lockfile governing the consumer's build, and every package
+reachable from `toktier` there must be the judged name, version, and content
+hash. `Runtime::doctor()` reports the answer as
+`runtime_build.dependency_closure` (`toktier::DEPENDENCY_CLOSURE`):
+`verified`, `unlocated` when no governing lockfile could be named, or
+`mismatched: <package>` naming the first package that differs. Anything but
+`verified` is not certified.
+
+The governing lockfile is the first `Cargo.lock` above `OUT_DIR` -- the
+consumer's own workspace root in the usual layout -- and above the manifest
+directory when this crate is built from its own workspace. Unusual layouts
+can name it with `TOKTIER_CARGO_LOCK`; the named file still has to match.
+The comparison is one-directional: every package this build resolves must be
+judged, while judged packages this build does not resolve (the crate's own
+dev-dependencies) are not required. Lockfile dependency lists are the union
+over features and targets, so the compared set is a superset of what is
+actually linked. The mechanism addresses accidental drift, not a hostile
+build host: anyone able to edit the sources or the lockfile on their own
+machine can make any self-report say anything.
+
+The shipped wheel is always produced inside the source workspace with
+`--locked`, so it carries the judged graph by construction. A development or
+otherwise unregistered build falls to HF under `Policy::Certified`; an
+explicit CUDA request returns `UNCERTIFIED_RUNTIME`. Only
+`Policy::Experimental` can opt an unregistered build into an accelerated
+candidate, and every result remains labelled experimental.
 
 ## Buffers, batches, and decode
 

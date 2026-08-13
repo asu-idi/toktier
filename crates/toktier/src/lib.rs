@@ -26,6 +26,14 @@ mod serving;
 mod session;
 mod suggest;
 
+// The build script's dependency-closure comparison is compiled into the
+// test build so its unit tests run with the rest of the suite; the path
+// lists it also carries are unused here.
+#[cfg(test)]
+#[allow(dead_code)]
+#[path = "../build_support/source_identity.rs"]
+mod build_support;
+
 pub use artifact::{
     ArtifactInspection, ArtifactManager, ArtifactManagerBuilder, ArtifactSource, BearerToken,
     EnvironmentToken, Revision, SecretProvider,
@@ -50,3 +58,17 @@ pub use session::{Session, SessionStats};
 
 /// Version of the frozen native Hugging Face oracle.
 pub const ORACLE: &str = "tokenizers==0.22.2";
+
+/// How this build's resolved dependency graph compares with the graph
+/// the certification evidence was taken on: `"verified"`, `"unlocated"`
+/// when no governing lockfile could be named, or `"mismatched: ..."`
+/// naming the first package that is not the judged one.
+///
+/// Reported by [`Runtime::doctor`] and required for an accelerated
+/// route: this crate's own sources are judged by digest, and the
+/// versions Cargo resolved around them are judged here.
+pub const DEPENDENCY_CLOSURE: &str = env!("TOKTIER_RUST_API_DEPENDENCY_CLOSURE");
+
+pub(crate) fn dependency_closure_verified() -> bool {
+    DEPENDENCY_CLOSURE == "verified"
+}

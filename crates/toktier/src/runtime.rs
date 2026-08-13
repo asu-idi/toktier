@@ -267,6 +267,7 @@ impl Runtime {
                 .split('\x1f')
                 .map(str::to_owned)
                 .collect(),
+            dependency_closure: crate::DEPENDENCY_CLOSURE.to_owned(),
             certified: self.inner.registry.rust_api_build_certified(),
         };
         let ordinal = match self.inner.config.device {

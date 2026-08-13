@@ -40,6 +40,14 @@ FILES = (
     "src/toktier/repair/tables/repair_pclass.v1.zlib",
     "src/toktier/routing/tables/support_registry.v1.json",
 )
+#: Sources copied under a different packaged name. The lockfile is the
+#: judged dependency graph: an unpacked registry copy cannot see the
+#: workspace, so it carries this byte-identical copy and the build
+#: script compares the graph that governs the consumer's build against
+#: it. Keeping the raw lockfile (rather than a parsed summary) leaves
+#: exactly one closure implementation in the tree, in
+#: crates/toktier/build_support/source_identity.rs.
+RENAMED = (("Cargo.lock", "build/judged_dependencies.lock"),)
 GENERATED = (
     "build/source_identity.json",
     "licenses/RUST_DEPENDENCY_LICENSES.txt",
@@ -52,14 +60,17 @@ def target(relative: str) -> Path:
 
 
 def problems() -> list[str]:
-    source_backed = {Path(value) for value in FILES}
-    expected = source_backed | {Path(value) for value in GENERATED}
+    source_backed = {Path(value): Path(value) for value in FILES}
+    source_backed.update(
+        {Path(packaged): Path(source) for source, packaged in RENAMED}
+    )
+    expected = set(source_backed) | {Path(value) for value in GENERATED}
     issues: list[str] = []
     for relative in sorted(source_backed):
-        source = ROOT / relative
+        source = ROOT / source_backed[relative]
         packaged = target(relative.as_posix())
         if not source.is_file():
-            issues.append(f"source is missing: {relative}")
+            issues.append(f"source is missing: {source_backed[relative]}")
         elif not packaged.is_file():
             issues.append(f"packaged copy is missing: {relative}")
         elif packaged.read_bytes() != source.read_bytes():
@@ -79,9 +90,10 @@ def problems() -> list[str]:
 
 
 def sync() -> None:
-    for relative in FILES:
-        source = ROOT / relative
-        packaged = target(relative)
+    pairs = [(value, value) for value in FILES] + list(RENAMED)
+    for source_relative, packaged_relative in pairs:
+        source = ROOT / source_relative
+        packaged = target(packaged_relative)
         packaged.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, packaged)
         packaged.chmod(0o644)

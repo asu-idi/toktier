@@ -9,8 +9,8 @@ TokTier 是面向智能体 LLM 服务的有状态分词系统。它保留每个�
 认证 GPU 路径。两条快速路径返回的 token ID 序列，都与 Hugging Face（HF）
 `tokenizers` 从头完整编码得到的 token ID 序列**完全一致（bit-identical）**。
 
-- **大规模精确验证。** 发布验证覆盖 14 个 tokenizer 工件、38 亿篇真实文档，
-  共记录 **532 亿次检查**（12.33 万亿字符），未观察到任何不一致。
+- **大规模精确验证。** 发布验证覆盖 15 个 tokenizer 工件、38 亿篇真实文档，
+  共记录 **570 亿次检查**（12.33 万亿字符），未观察到任何不一致。
 - **CPU 与 GPU 均有快速路径。** 在已记录的整套基准测试中，GPU 路径处理一个
   全新的 400 万字符请求（约 78.6 万 token）用时 **3.88 ms**；对 419 万字符
   会话追加 256 个字符时，有界 CPU repair 为 **1.68 ms**。
@@ -139,6 +139,12 @@ tok = toktier.load("qwen3_8b", policy=RoutingPolicy.CERTIFIED)
 | 安装项为 `toktier[gpu]`，且冷请求/普通请求的输入大小达到或超过 GPU crossover（默认 64 KiB） | 随包预编译 GPU 路径；随后按固定 fallback 链依次使用修正版 Gigatoken 和 HF |
 | 已存在的会话收到严格追加 | 覆盖范围内的 12 个 family 使用修正版 Gigatoken CPU repair，不受完整对话总长度影响 |
 | Added-token 或 repair guard 无法证明前提 | 该输入使用 HF 参考路径 |
+
+表中两行 GPU 描述的是 GPU 路由被准入之后的行为，而准入条件比"机器上有 GPU"
+更窄：认证策略只放行随包证据覆盖到的架构——预编译交付为 `sm_89` 与
+`sm_120`——因此在其他架构上，这两行会落到上一行，`explain()` 会记录原因。
+逐架构的证据规模见
+[`docs/support-matrix.md`](docs/support-matrix.md#status-vocabulary)。
 
 `explain(summary=True)` 报告：
 
@@ -321,6 +327,13 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 | `automatic_gpu_eligible` | 以下条件的合取结果：候选条件成立；至少检测到一台设备，且其架构已通过所选交付方式的评审；该交付方式自身的材料齐备；工具链前提成立 |
 | `automatic_effective_backend` | 对具备 CPU 快路径认证的 family，达到或超过 crossover 的自动请求实际使用的后端：`gpu`、`fast_cpu` 或 `hf` |
 
+上述字段描述的是这套安装。`toktier doctor --family FAMILY` 会另加一个
+`family` 段，回答某一个 family 在这台机器上的情况：它的认证身份、
+`fast_cpu` 与 GPU 状态，以及两个实际后端——一个对应达到或超过 crossover
+的请求，一个对应低于 crossover 的请求。差别正体现在后者：CPU 车道走参考
+实现的 family 在低于 crossover 时读作 `hf`，而安装层面的字段（同样属实）
+读作 `fast_cpu`。
+
 因此，在未经评审的编译器上安装 `toktier[gpu-jit]`，会同时报告
 `automatic_gpu_candidate: true`、`jit_toolchain_satisfied: false`、
 `automatic_gpu_eligible: false` 与 `automatic_effective_backend: fast_cpu`
@@ -334,20 +347,18 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 如需统一指定所有目录的位置，可使用 `TOKTIER_HOME`（见
 `docs/contracts/config.md` 第 5 节）。
 
-上述目录规则针对 Python 产品。在 0.2.1 中，Rust crate 自行解析目录，
-**不会**读取 `TOKTIER_HOME` 或 XDG 变量：
+自 0.2.3 起，Rust crate 以相同的优先级读取同一组变量，一套环境即可同时
+安置两层：
 
 | 层 | 工件缓存 | 已编译 kernel 缓存 | 会话状态 |
 |---|---|---|---|
 | Python（`toktier`） | `TOKTIER_HOME` / `XDG_CACHE_HOME` | `TOKTIER_HOME` / `XDG_CACHE_HOME` | `TOKTIER_HOME` / `XDG_STATE_HOME` |
-| Rust（`toktier` crate） | `TOKTIER_ARTIFACT_CACHE`，否则 `$HOME/.cache/toktier/artifacts` | `TOKTIER_JIT_CACHE`，否则 `$HOME/.cache/toktier/jit-rust`（`jit` feature） | `RuntimeBuilder::home()`；未设置时仅存于内存 |
+| Rust（`toktier` crate） | `TOKTIER_ARTIFACT_CACHE`，否则同一组根目录 | `TOKTIER_JIT_CACHE`，否则同一组根目录（`jit` feature） | `RuntimeBuilder::home()`，否则 `TOKTIER_HOME` / `XDG_STATE_HOME` |
 
-因此 `TOKTIER_HOME=/somewhere cargo run --release -p toktier --example cpu`
-不会改变该 Rust 示例的工件缓存位置——需要改用 `TOKTIER_ARTIFACT_CACHE`
-（或调用 `RuntimeBuilder::artifact_cache()`）。计划在 0.3 将 Rust 默认目录
-与 Python 的 `TOKTIER_HOME`/XDG 约定对齐；在此之前，文档会分别说明两层的
-行为，不应假定二者一致。参见
-[`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)。
+末级目录名仍是 crate 自己的：工件与 Python 产品同名并列，JIT 产物放在
+`jit-rust`，与 Python 的 `kernels` 目录有意区分，因为两者存放的东西不同。
+若三个根目录都没有设置，持久化会话会直接报错而不是凭猜测选一个位置——
+状态不是缓存。参见 [`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)。
 
 ### 实验性：Fastokens 对照
 
@@ -368,6 +379,13 @@ tok = toktier.load(
 认证参考实现是默认配置下的 Hugging Face `tokenizers` 0.22.2。认证绑定
 精确的工件字节和参考版本。如果本机 HF 版本不在认证集合内，加速路由会被
 关闭，请求继续使用本机安装的参考路径。
+
+本文档中出现了四类计数，各自回答不同的问题：**15 个随包工件**（`toktier
+inspect` 列出的那些）、**15+3 个 model family**（byte-level BPE 加
+WordPiece；不同 family 可以共用同一工件）、**11 个具备 CPU 快路径认证的
+工件**（按精确工件继承覆盖 12 个 family），以及**注册表 211 条**（210 个
+已审计 sibling 仓库加 1 个 canonical 自指条目）。某个数字看起来与另一个
+对不上时，通常是因为它们属于不同的计数轴。
 
 | 验证活动 | 规模 | 观测到的不一致 |
 |---|---:|---:|

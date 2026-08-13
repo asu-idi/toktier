@@ -212,6 +212,28 @@ context. At small contexts (~4K chars) a fast full re-encode
 (gigatoken) is the better tool; the crossover is in the tens of
 kilobytes of context.
 
+## Which lane is which route
+
+The lane names in F1-F4 are measurement lanes, not routing-table rows,
+and one row of the README routing table can be measured by more than one
+lane. The mapping, once, so a reading can be traced to the route it
+describes:
+
+| Lane in this document | Route in the README routing table |
+|---|---|
+| `toktier GPU` / `toktier GPU (fused)` | the prebuilt GPU path taken at or above the 64 KiB crossover |
+| `gigatoken` (warm/full) | the corrected-Gigatoken full CPU encode taken below the crossover |
+| `repair (HF tokenizers win.)` | the certified session repair with the HF-window configuration |
+| `repair (gigatoken win.)` | the certified session repair with the corrected-Gigatoken window, which the shipped facade wires by default |
+| `HF tokenizers` / `reference backend` | the frozen reference route at the end of every fallback chain |
+| `fastokens` | no row: an explicit experimental comparison, outside the exact-ID guarantee |
+
+The README's two headline repair numbers come from this grid: **1.68 ms**
+is the `repair (HF tokenizers win.)` cell at a 4M-character context with a
+256-character append, and **2.39 ms** is the `repair (gigatoken win.)`
+cell at the same context with a 65,536-character append. The figure data
+file names the lane of every bar.
+
 ## Bulk throughput (README headline pair)
 
 Released GPU batched path vs the released reference CPU path, same
@@ -224,6 +246,23 @@ bytes / wall clock:
 | 2.2 GB web documents (avg 4.4 KB) | reference backend, 1 core | 0.005 | 0.9 |
 | 1.07 GB larger documents (avg 180 KB) | toktier GPU batched (1 card) | 0.490 | 143.7 |
 | 1.07 GB larger documents (avg 180 KB) | reference backend, 1 core | 0.003 | 0.9 |
+
+### The consumer-GPU sweep the README mentions
+
+The primary study above ran on an RTX PRO 6000 Blackwell. A same-protocol
+sweep on a consumer RTX 5090 was 11-17% faster, 4.24-5.50 GB/s across the
+families it covered; those readings passed the 0.2.0 gate reviews, and the
+5090 box re-took the `llama_3_1_8b` cell on 2026-07-16, reading 5.49 GB/s.
+
+Two things about that sweep are worth stating rather than leaving to the
+reader. It measures the kernel's batched throughput, not the end-to-end
+figure in the table above -- the two numbers answer different questions and
+should not be compared cell by cell. And its per-family cells live with the
+kernel study that produced them, not in this document, which carries the
+release battery; the range and the re-check above are what this document
+asserts. Consumer hardware is a practical target rather than a reduced
+mode -- the RTX 4090 also passes the `sm_89` correctness battery -- but no
+sweep promises the same margin on an untested GPU.
 
 ## Session seed and append latency (0.2.0 recertified tree)
 
@@ -256,6 +295,21 @@ the retained pre-0.2.0 breakdown study is
 [`rust-session-seed-breakdown.md`](rust-session-seed-breakdown.md). The
 optional `seed_digest_overlap` runtime switch and its measured effect are
 described in the [0.2.0 release notes](releases/v0.2.0.md).
+
+## Certification scale behind the GPU numbers
+
+The GPU lanes are measured on `sm_120`, and the certification evidence
+behind them is taken under the `gpu-cert-sm120-primary-v1` protocol: the
+full per-family campaign runs on `sm_120` (fifteen families, 1,102,675
+documents each), while `sm_89` is held by a bounded spot check on the same
+protocol and roster (100,000 documents per family). Both report zero
+mismatches, and both bind the same host identity, because the sm_89 host
+rebuilds the extension from the same sources and reports the same digest.
+What lets the spot check stand for the full run is the accumulated
+cross-architecture record: 2,481 of 2,481 whole-corpus verdict groups
+concordant across the two architectures, 16.5M documents of per-family
+parity taken on each of them in the previous wave with identical fallback
+distributions, and 169 GPU digest vectors equal on both sides.
 
 ## Correctness gates behind these numbers
 

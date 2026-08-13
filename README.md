@@ -9,8 +9,8 @@ per-session token state, repairs appended text with a certified CPU path, and
 offers a certified GPU path for fresh or large requests. Both fast paths return token IDs
 **bit-identical to a full Hugging Face (HF) `tokenizers` encode from scratch**.
 
-- **Exact, at scale.** The release campaign records **53.2 billion checks**
-  across 14 tokenizer artifacts and 3.8 billion real documents
+- **Exact, at scale.** The release campaign records **57.0 billion checks**
+  across 15 tokenizer artifacts and 3.8 billion real documents
   (12.33 trillion characters), with zero observed divergence.
 - **Fast on both paths.** On the recorded benchmark battery, the GPU path
   encodes a fresh 4-million-character request (~786K tokens) in **3.88 ms**,
@@ -154,6 +154,14 @@ The install profile and input shape then determine the automatic route:
 | `toktier[gpu]`, cold/plain input at or above the GPU crossover (64 KiB default) | Shipped prebuilt GPU path; then corrected Gigatoken and HF in the frozen fallback chain |
 | Existing session receives a strict append | Corrected Gigatoken CPU repair for the 12 covered model families, independent of total transcript size |
 | Added-token or repair guard cannot prove its premise | HF reference path for that input |
+
+The two GPU rows describe what happens when the GPU route is admitted, and
+admission is narrower than "a GPU is present": the certified policy opens
+only the architectures the shipped evidence covers -- `sm_89` and `sm_120`
+for the prebuilt delivery -- so on any other architecture those rows fall to
+the row above them and `explain()` records the reason. The evidence scale
+per architecture is in
+[`docs/support-matrix.md`](docs/support-matrix.md#status-vocabulary).
 
 `explain(summary=True)` reports:
 
@@ -358,6 +366,14 @@ tokenizer or compiling anything:
 | `automatic_gpu_eligible` | the conjunction: candidate, an observed device whose architecture the selected delivery judges, that delivery's own materials, and the toolchain premise |
 | `automatic_effective_backend` | what an at-or-above-crossover automatic request would use for a CPU-fast-certified family: `gpu`, `fast_cpu`, or `hf` |
 
+Those fields describe the installation. `toktier doctor --family FAMILY`
+adds a `family` section that answers for one family on it — its
+certification identity, its `fast_cpu` and GPU statuses, and two effective
+backends, one at or above the crossover and one below it. The second is
+where families differ: one whose CPU lane is the reference engine reads
+`hf` below the crossover while the installation-level field, correctly,
+reads `fast_cpu`.
+
 So a `toktier[gpu-jit]` install on an unjudged compiler reports
 `automatic_gpu_candidate: true` beside `jit_toolchain_satisfied: false`,
 `automatic_gpu_eligible: false`, and `automatic_effective_backend: fast_cpu` —
@@ -372,21 +388,20 @@ and persistent session state use separate directories: the two caches follow
 is not a cache. Relocating everything at once is what `TOKTIER_HOME` is for
 (`docs/contracts/config.md` Section 5).
 
-Those directory rules apply to the Python product. In 0.2.1, the Rust crate
-resolves its own directories and does **not** consult `TOKTIER_HOME` or the XDG
-variables:
+Since 0.2.3 the Rust crate reads the same variables with the same
+precedence, so one environment places both layers:
 
 | Layer | Artifact cache | Compiled-kernel cache | Session state |
 |---|---|---|---|
 | Python (`toktier`) | `TOKTIER_HOME` / `XDG_CACHE_HOME` | `TOKTIER_HOME` / `XDG_CACHE_HOME` | `TOKTIER_HOME` / `XDG_STATE_HOME` |
-| Rust (`toktier` crate) | `TOKTIER_ARTIFACT_CACHE`, else `$HOME/.cache/toktier/artifacts` | `TOKTIER_JIT_CACHE`, else `$HOME/.cache/toktier/jit-rust` (`jit` feature) | `RuntimeBuilder::home()`; in-memory when unset |
+| Rust (`toktier` crate) | `TOKTIER_ARTIFACT_CACHE`, else the same roots | `TOKTIER_JIT_CACHE`, else the same roots (`jit` feature) | `RuntimeBuilder::home()`, else `TOKTIER_HOME` / `XDG_STATE_HOME` |
 
-So `TOKTIER_HOME=/somewhere cargo run --release -p toktier --example cpu` does
-not relocate the Rust example's artifact cache — set `TOKTIER_ARTIFACT_CACHE`
-(or call `RuntimeBuilder::artifact_cache()`) for that. Aligning the Rust
-defaults with the Python `TOKTIER_HOME`/XDG contract is intended for 0.3;
-until then the two layers are documented separately rather than assumed
-equal. See [`docs/rust-lifecycle.md`](docs/rust-lifecycle.md).
+The leaf names stay the crate's own — artifacts land beside the Python
+product's, JIT products in `jit-rust`, deliberately apart from the Python
+`kernels` directory, because the two hold different things. Persistent
+sessions with no resolvable home are refused rather than placed by
+guesswork: state is not a cache. See
+[`docs/rust-lifecycle.md`](docs/rust-lifecycle.md).
 
 ### Experimental: Fastokens comparison
 
@@ -409,6 +424,14 @@ The certified reference is Hugging Face `tokenizers` 0.22.2 with default
 settings. Certification is bound to exact artifact bytes and that oracle
 version. If the installed HF version is outside the certified set, accelerated
 routing is disabled and the request remains on the installed reference path.
+
+Four different counts appear in this document and each answers a different
+question: **15 packaged artifacts** (what `toktier inspect` lists), **15+3
+model families** (byte-level BPE plus WordPiece, since families can share an
+artifact), **11 artifacts with a certified CPU fast path** (12 families by
+exact-artifact inheritance), and **211 registry rows** (210 audited sibling
+repositories plus one canonical self-row). A number that looks inconsistent
+with another usually belongs to a different one of those axes.
 
 | Campaign | Scale | Recorded divergence |
 |---|---:|---:|

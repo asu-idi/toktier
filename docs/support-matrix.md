@@ -28,6 +28,28 @@ Statuses are recorded per artifact **and** per backend: a family can be
 `certified` on the CPU reference path and `reference-only` on GPU, and the
 registry keeps both.
 
+Two axes meet in this table and are easy to read as one. `certified`,
+`certified_source` and `reference-only` say **what evidence exists** for a
+route. `experimental` says **what a policy may admit without it**: it is not
+a fourth evidence grade but the label an explicitly opted-in route carries,
+and every result taken that way is labelled too. `unsupported` is the
+statement that no route is planned at all. So a row reading `certified` on
+one architecture and `experimental` on another is not a contradiction: the
+first names evidence, the second names an opt-in.
+
+The evidence behind the GPU rows follows the `gpu-cert-sm120-primary-v1`
+protocol from 0.2.3 on. The full per-family campaign runs on `sm_120`
+(1,102,675 documents per family); `sm_89` is maintained by a bounded spot
+check on the same protocol and roster (100,000 documents per family), and
+rests on the cross-architecture record already on file rather than repeating
+the full run: 2,481 of 2,481 whole-corpus verdict groups concordant across
+the two architectures, per-family parity of 16.5M documents taken on each of
+them with identical fallback distributions, and 169 GPU digest vectors equal
+on both sides. Both architectures report zero mismatches, and both bind the
+same host build identity. `sm_89` remains a certified row; what changed is
+the scale at which each wave re-takes it, and the readings say which is
+which.
+
 ## Certified CPU fast repair
 
 The default CPU full-encode and repair-window engine is the corrected

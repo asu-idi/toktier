@@ -65,15 +65,17 @@ Variables outside this set that may exist during development are not
 contract and can disappear without notice.
 
 Layer scope: this table is the Python product's configuration surface. The
-`toktier` Rust crate is configured through `RuntimeBuilder`, and in 0.2.1 its
-directory defaults come from `TOKTIER_ARTIFACT_CACHE` and (with the `jit`
-feature) `TOKTIER_JIT_CACHE` rather than from `TOKTIER_HOME` or XDG; its
-session state is set by `RuntimeBuilder::home()` and is in-memory when that is
-unset. Those two variables are the crate's own defaults, documented in
+`toktier` Rust crate is configured through `RuntimeBuilder`, and since 0.2.3
+it resolves its directories from the same variables with the same precedence:
+`TOKTIER_ARTIFACT_CACHE` and (with the `jit` feature) `TOKTIER_JIT_CACHE`
+name one directory each and win where they are set, and otherwise the crate
+falls back to `TOKTIER_HOME`, the XDG variables, and `$HOME`, exactly as this
+table does. Persistent session state follows `RuntimeBuilder::home()` and
+otherwise the same state root; with none of the roots set it is refused
+rather than placed. The crate's own two variables are documented in
 `docs/rust-lifecycle.md`; they are not part of this frozen Python set, and
 they set directory locations only -- the "no switch may change output
-correctness" rule above covers both layers. Aligning the crate with this
-table's `TOKTIER_HOME` behaviour is intended for 0.3.
+correctness" rule above covers both layers.
 
 ## 5. Directory layout: cache vs state (frozen distinction)
 

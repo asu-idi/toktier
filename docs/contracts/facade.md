@@ -427,19 +427,23 @@ well-formed-but-newer records, in the contract's explicit-verify split.
   invariant enforced at construction; `Session.append` reports the
   longest surviving prefix as `replace_from`, which is at least as tight
   as the cut the engine made internally.
-- `Session.revision` is monotone within one process and is not durable,
-  where `api.md` Section 5.2 describes it as the store revision. While
-  the durable store holds the session it is that entry's revision, and
-  otherwise it counts the writes made through the object; only the
-  first is a store fact. Neither survives a restart: an entry re-read
-  from disk in a later process begins its count again at zero, so a
-  resumed conversation whose revision was `4` reports `0` and then `1`
-  after its next append. What the store does carry across processes is
-  the conversation itself -- the text and the exact ids the session
-  resumes with. Callers that need a durable counter should keep their
-  own for now; making this one durable is on the roadmap rather than
-  made here. It is not a change to the stored record: the record has
-  carried `session_revision` at offset 56 since format v1
-  (`store-format-v1.md` Section 2.1), the Rust `Session::revision()`
-  already reports it across a restart, and what is missing is a path
-  from that field to this property on the Python face.
+- `Session.revision` is the store revision `api.md` Section 5.2
+  describes, whenever a durable store holds the session, and it is
+  durable from 0.2.5 on: a conversation resumed in a later process
+  reports the revision its record carries and continues from there.
+  The record has carried `session_revision` at offset 56 since format
+  v1 (`store-format-v1.md` Section 2.1); nothing about the stored
+  format changed to make this true, and no stored session is affected.
+  A session no durable store holds -- an in-memory one -- still counts
+  the writes made through the object, which is not a store fact and is
+  not durable; that is unchanged.
+
+  Two things a caller may notice when upgrading, both of them this
+  property beginning to mean what it always said. The number is the
+  store's own revision rather than a count of appends made through one
+  object, and the store's genesis write is revision `0`, so a session
+  written with three turns reads `2` where it used to read `3`.
+  And `Tokenizer.store_session_revision()` returns a number where it
+  returned `None`: on the certified configurations sessions are served
+  by the native request runtime, which that lookup did not consult, so
+  it answered `None` for every session the product actually stores.

@@ -1222,6 +1222,17 @@ impl PyNativeRuntime {
         .map_err(reference_err)
     }
 
+    /// The store's revision for one named session, or `None` when this
+    /// store does not hold it. Reads; never opens or writes a session.
+    fn session_revision(&self, py: Python<'_>, session: &str) -> Option<u64> {
+        py.allow_threads(|| {
+            self.store
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .session_revision(session)
+        })
+    }
+
     fn runtime_stats<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let stats = self.router.stats();
         let output = PyDict::new(py);

@@ -25,7 +25,14 @@ from toktier.facade.store import EntryStore
 from toktier.paths import FILE_MODE
 from toktier.policy import BACKEND_REFERENCE
 
-from .conftest import TEST_FINGERPRINT, Rig, SpanEncode, build_rig, byte_level_document
+from .conftest import (
+    REVISION,
+    TEST_FINGERPRINT,
+    Rig,
+    SpanEncode,
+    build_rig,
+    byte_level_document,
+)
 
 _rng = random.Random(0xD1CE)
 
@@ -387,8 +394,13 @@ def test_session_context_manager_reports_exact_updates(
             assert session.text == accumulated
             previous = list(update.all_ids)
 
-        # An append is a write, and the durable store owns the count.
-        assert session.revision >= len(turns)
+        # An append is a write, and the durable store owns the count --
+        # exactly, not at least. Its genesis write is revision 0, so the
+        # three turns above leave the entry at 2. The loose bound here
+        # used to pass on the fallback write counter, which reported 3;
+        # the property now reports the store's own revision, which is
+        # what `api.md` Section 5.2 always said it was.
+        assert session.revision == len(turns) - 1
         assert session.final_ids(add_special_tokens=False) == list(session.ids)
 
 
@@ -493,3 +505,130 @@ def test_the_prefix_search_answers_exactly_what_its_definition_says() -> None:
         assert _first_difference(previous, current) == defined(
             previous, current
         ), (len(previous), len(current))
+
+
+#: What a second interpreter runs against the same store directory. It
+#: rebuilds the rig's offline manifest from values passed in rather than
+#: importing the test tier, so the child depends on the installed
+#: package only -- which is the point of asking a separate process.
+_REOPEN_CHILD = '''
+import json, sys
+from toktier import Config, load
+from toktier.artifacts.manifest import ArtifactManifest
+
+spec = json.loads(sys.argv[1])
+manifest = ArtifactManifest.from_mapping(
+    {
+        spec["family"]: {
+            "repo_id": spec["repo_id"],
+            "revision": spec["revision"],
+            "files": {
+                "tokenizer.json": {
+                    "sha256": spec["sha256"],
+                    "size": spec["size"],
+                }
+            },
+        }
+    },
+    source="tests/facade/child",
+)
+tokenizer = load(
+    spec["family"],
+    config=Config(home=spec["home"], offline=True),
+    manifest=manifest,
+    store=spec["store"],
+)
+answers = {"before_open": tokenizer.store_session_revision(spec["session"])}
+with tokenizer.session(session_id=spec["session"], text=spec["text"]) as session:
+    answers["reopened"] = session.revision
+    answers["store"] = tokenizer.store_session_revision(spec["session"])
+    answers["ids"] = list(session.ids)
+    session.append(spec["delta"])
+    answers["after_append"] = session.revision
+tokenizer.close()
+print(json.dumps(answers))
+'''
+
+
+def test_session_revision_survives_a_separate_process(
+    rig: Rig, reference: Callable[[str], list[int]]
+) -> None:
+    """The revision a later process reads is the one on disk.
+
+    ``Session.revision`` is documented as the store's revision for a
+    session the durable store holds. The store has carried
+    ``session_revision`` in every record since format v1, but the facade
+    could not reach it: the certified configurations serve sessions from
+    the native request runtime and never build the Python entry store,
+    so the lookup answered ``None`` and the property fell back to
+    counting writes made through one object. A resumed conversation
+    whose revision was 2 therefore read 0, then 1 after its next append.
+
+    This is the exact shape of that failure, asked of a real second
+    interpreter over the same directory rather than of a second object
+    in this one, because a second object could share state this test is
+    trying to rule out.
+    """
+    import subprocess
+    import sys
+
+    store = rig.store_path()
+    turns = [_text(80), " and then " + _text(40), " " + _text(20)]
+    accumulated = ""
+
+    first = rig.tokenizer(store=store)
+    with first.session(session_id="crossing") as session:
+        for turn in turns:
+            session.append(turn)
+            accumulated += turn
+        written = session.revision
+        # The written value is the store's, not a count of appends made
+        # through this object: the genesis write is revision 0.
+        assert written == first.store_session_revision("crossing")
+        assert written == len(turns) - 1
+    first.close()
+
+    # What the record itself says, read by the shipped record reader.
+    on_disk = [
+        records.decode_record(path.read_bytes()).session_revision
+        for path in sorted((store / "entries").glob("s-*.rec"))
+    ]
+    assert on_disk == [written]
+
+    delta = " one more"
+    spec = {
+        "family": rig.family,
+        "repo_id": f"toktier-tests/{rig.family}",
+        "revision": REVISION,
+        "sha256": rig.artifact_sha256,
+        "size": rig.artifact_path.stat().st_size,
+        "home": str(rig.config.home),
+        "store": str(store),
+        "session": "crossing",
+        "text": accumulated,
+        "delta": delta,
+    }
+    completed = subprocess.run(
+        [sys.executable, "-c", _REOPEN_CHILD, json.dumps(spec)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    answers = json.loads(completed.stdout.strip().splitlines()[-1])
+
+    # Before anything is opened, while the session is open but before any
+    # encode, and through the session object: one answer, the stored one.
+    assert answers["before_open"] == written
+    assert answers["store"] == written
+    assert answers["reopened"] == written
+    # The conversation crossed with it, and the next append continues the
+    # count instead of restarting it.
+    assert answers["ids"] == reference(accumulated)
+    assert answers["after_append"] == written + 1
+
+    # And the record the second process left behind agrees.
+    assert [
+        records.decode_record(path.read_bytes()).session_revision
+        for path in sorted((store / "entries").glob("s-*.rec"))
+    ] == [written + 1]

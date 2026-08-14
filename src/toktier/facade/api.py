@@ -947,7 +947,36 @@ class Tokenizer:
         yield session
 
     def store_session_revision(self, session_id: str) -> int | None:
-        """The store's revision for one session, when it holds it."""
+        """The store's revision for one session, when it holds it.
+
+        A tokenizer bound to a store directory asks whichever store it
+        routes sessions to. Which one that is depends on the plan: the
+        certified configurations serve sessions from the native request
+        runtime and never build the Python entry store at all, so
+        consulting only the latter answered ``None`` for every session
+        the product actually stores. Both now read the revision out of
+        the record when the entry is not resident, so the answer
+        survives a restart -- the record has carried it since format v1.
+        The store is opened to answer, through the same latched decision
+        an encode makes, because a store that has not been opened yet
+        cannot truthfully say ``None`` about a session it holds.
+
+        A tokenizer with no store directory is unchanged: it holds
+        nothing durable, opens nothing, and ``None`` means what it always
+        meant.
+        """
+        if self._store_directory is not None and not self._closed:
+            native = self._native_request if self._native_request_initialised else None
+            if native is None:
+                native = self._native_request_runtime()
+            if native is not None:
+                revision = cast("int | None", native.session_revision(session_id))
+                if revision is not None:
+                    return revision
+            store = self._entry_store
+            if store is None:
+                store = self._store()
+            return store.session_revision(session_id)
         if self._entry_store is None:
             return None
         return self._entry_store.session_revision(session_id)

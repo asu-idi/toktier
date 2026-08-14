@@ -79,19 +79,16 @@ that speaks the same record format and keeps the same two invariants — a wrong
 key misses, and a hit is verified — so that a client cannot be given a prefix
 it did not ask for.
 
-A related item on the same path: the Python `Session.revision` is monotone
-within one process only, and a session re-read in a later process begins its
-count again at zero (`docs/contracts/facade.md` Section 7). The conversation
-itself is durable; that counter is not.
-
-Earlier releases said carrying it across processes would be a stored-format
-change. That was wrong, and the correction is worth stating plainly: the
-record has carried `session_revision` at offset 56 since format v1, the value
-is written and read on the Python face as well, and the Rust
-`Session::revision()` already reports it after a restart. What is missing is
-a path from that field to the Python property, which on the default request
-path does not consult the store at all. No format version moves, so no stored
-session is invalidated. The work is still deliberately not part of 0.2.5.
+A related item on the same path is closed in 0.2.5: the Python
+`Session.revision` is now the store's revision across processes, as
+`docs/contracts/facade.md` Section 7 describes. Earlier releases said carrying
+it across processes would be a stored-format change; that was wrong, and it is
+worth recording why the correction mattered. The record has carried
+`session_revision` at offset 56 since format v1, and the Rust
+`Session::revision()` already reported it after a restart. What was missing
+was a path from that field to the Python property, whose lookup did not
+consult the store the certified configurations actually use. No format version
+moved and no stored session was affected.
 
 ## Platforms
 

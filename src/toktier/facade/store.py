@@ -629,9 +629,24 @@ class EntryStore:
 
         ``None`` means the store has no entry under that name -- the
         session has not been written here, or its entry was evicted.
+
+        An entry the index knows but has not made resident answers from
+        its own record, which has carried the revision since format v1.
+        Without that, a session reopened in a later process read zero
+        until its first encode, which is a restarted count rather than
+        the store's fact. The record is read through the same verifying
+        reader residency uses, and nothing is written or made resident.
         """
         entry = self._entries.get(_entry_name("session", session_id))
-        return None if entry is None else entry.revision
+        if entry is None:
+            return None
+        if entry.handle is not None or self._directory is None:
+            return entry.revision
+        try:
+            view = records.decode_record(self._record_path(entry.name).read_bytes())
+        except _MISS_ERRORS:
+            return None
+        return view.session_revision
 
     def encode_session(self, session_id: str, text: str) -> list[int] | None:
         """Serve one named-session encode; ``None`` asks the caller to

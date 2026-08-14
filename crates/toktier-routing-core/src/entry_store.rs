@@ -635,6 +635,29 @@ impl NativeEntryStore {
         Some(outcome.all_ids)
     }
 
+    /// The store's revision for one named session, when it holds it.
+    ///
+    /// A resident entry answers from the value the live handle carries.
+    /// A session this store knows but has not made resident answers from
+    /// its own record, which has carried `session_revision` since format
+    /// v1 -- reading it there is what makes the answer survive a restart,
+    /// and it is read through the same verifying reader residency uses,
+    /// so no integrity gate is skipped and no record is rewritten.
+    ///
+    /// `None` means this store does not hold the session, or holds it in
+    /// a form it cannot read; a revision is never invented for one.
+    pub fn session_revision(&self, session_id: &str) -> Option<u64> {
+        let name = entry_name(EntryKind::Session, session_id);
+        let entry = self.entries.get(&name)?;
+        if entry.handle.is_some() || self.directory.is_none() {
+            return Some(entry.revision);
+        }
+        let raw = fs::read(self.record_path(&name)).ok()?;
+        SessionRecordV1::from_bytes(&raw)
+            .ok()
+            .map(|record| record.revision)
+    }
+
     pub fn encode_session(&mut self, session_id: &str, text: &str) -> Option<Vec<u32>> {
         let name = entry_name(EntryKind::Session, session_id);
         if self.entries.contains_key(&name) && !self.resident(&name, Some(text)) {
@@ -1042,6 +1065,41 @@ mod tests {
         assert_eq!(reopened.encode_session("chat", "aaaaaa"), Some(vec![0; 6]));
         assert_eq!(reopened.stats().session_hits, 1);
         assert_eq!(reopened.resident_bytes(), 0);
+    }
+
+    /// A revision read is a fact about the store, not about how much of
+    /// it happens to be resident. The record has carried
+    /// `session_revision` since format v1, so a store that has only read
+    /// its index answers from there; the zero budget below keeps every
+    /// entry evicted, which is the state a freshly reopened store is in
+    /// before its first encode.
+    #[test]
+    fn a_revision_is_read_before_an_entry_is_made_resident() {
+        let directory = tempfile::tempdir().unwrap();
+        let open = || {
+            NativeEntryStore::open([7; 32], router(), Some(directory.path().to_owned()), 0, 0)
+                .unwrap()
+        };
+
+        let mut store = open();
+        assert_eq!(store.session_revision("chat"), None, "nothing written yet");
+        assert_eq!(store.encode_session("chat", "aaaa"), Some(vec![0; 4]));
+        assert_eq!(store.session_revision("chat"), Some(0), "the genesis write");
+        assert_eq!(store.encode_session("chat", "aaaaaa"), Some(vec![0; 6]));
+        assert_eq!(store.session_revision("chat"), Some(1));
+        assert_eq!(store.resident_bytes(), 0, "evicted, and still answered");
+        drop(store);
+
+        // A second store over the same directory, before any encode.
+        let mut reopened = open();
+        assert_eq!(reopened.session_revision("chat"), Some(1));
+        assert_eq!(reopened.session_revision("never-written"), None);
+        // And it keeps counting from there rather than starting again.
+        assert_eq!(
+            reopened.encode_session("chat", "aaaaaaaa"),
+            Some(vec![0; 8])
+        );
+        assert_eq!(reopened.session_revision("chat"), Some(2));
     }
 
     #[test]

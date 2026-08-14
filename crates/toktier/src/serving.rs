@@ -51,6 +51,7 @@ impl Default for ServingLimits {
 
 /// Separately-accounted queue and engine timings for one response.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ServingTimings {
     pub queue: Duration,
     pub engine: Duration,

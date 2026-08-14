@@ -47,8 +47,10 @@ the two architectures, per-family parity of 16.5M documents taken on each of
 them with identical fallback distributions, and 169 GPU digest vectors equal
 on both sides. Both architectures report zero mismatches, and both bind the
 same host build identity. `sm_89` remains a certified row; what changed is
-the scale at which each wave re-takes it, and the readings say which is
-which.
+the scale at which each wave re-takes it. Since 0.2.5 each reading says
+which it is in band, as `scale: full` or `scale: spot`; the registry
+check requires the field, and before it existed the only difference was
+an unlabelled document count.
 
 ## Certified CPU fast repair
 
@@ -225,6 +227,17 @@ verbatim, and six `nvidia/Llama-3.x-Nemotron-*` repositories carry the
 `llama_3_1_8b` tokenizer in a different serialisation. They are listed under
 the artifact that covers them, not under the organisation that published them,
 which is the same rule the loader applies.
+
+The shipped file's own `counts` object counts rows, not siblings, so it
+reads one higher on two of them and is not a second opinion about the
+table above: `identical_source` is **13** there against 12 here, and
+`total` is 211 against 210, both because the canonical `kimi_k3` row is
+an `identical_source` row that is not a sibling. The per-artifact table
+further down totals `identical` at **162** rather than 150 for a
+different reason: it folds the 12 `identical (source file)` rows into
+that column, as its footnote says. The three numbers are consistent --
+150 + 12 = 162 siblings compared on a hash, plus the one canonical row
+the shipped counts also carry.
 
 The executable counterpart is `toktier.from_pretrained(repo_id)`. It resolves
 and hashes the repository's tokenizer file, then selects the canonical anchor

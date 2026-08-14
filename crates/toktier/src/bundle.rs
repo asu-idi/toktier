@@ -36,6 +36,7 @@ struct BundleManifest {
 
 /// Facts authenticated by a bundle's domain-separated root digest.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[non_exhaustive]
 pub struct BundleInspection {
     pub alias: String,
     pub files: Vec<BundleFileInspection>,
@@ -45,6 +46,7 @@ pub struct BundleInspection {
 
 /// One regular file declared by an air-gap bundle.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[non_exhaustive]
 pub struct BundleFileInspection {
     pub path: String,
     pub sha256: String,

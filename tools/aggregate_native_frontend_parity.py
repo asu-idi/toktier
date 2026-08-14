@@ -116,7 +116,17 @@ def aggregate_cpu(directory: Path) -> dict[str, Any]:
     }
 
 
-def aggregate_gpu(directory: Path, architecture: str) -> dict[str, Any]:
+#: What a GPU parity reading covers. ``full`` is the whole per-family
+#: campaign of the certification protocol; ``spot`` is the bounded
+#: re-take that rests on the cross-architecture record already on file.
+#: Both are certified readings with zero mismatches; they differ in
+#: scale, and a reader cannot tell which from a document count alone.
+GPU_SCALES = ("full", "spot")
+
+
+def aggregate_gpu(
+    directory: Path, architecture: str, scale: str
+) -> dict[str, Any]:
     from toktier.kernels.bindings import bare_sha256
     from toktier.kernels.prebuilt import (
         fatbin_digest,
@@ -168,6 +178,7 @@ def aggregate_gpu(directory: Path, architecture: str) -> dict[str, Any]:
     return {
         "schema": "toktier.gpu.native_frontend_parity.v1",
         "architecture": architecture,
+        "scale": scale,
         "fatbin_digest": bare_sha256(fatbin_digest(fatbin_path().read_bytes())),
         "architecture_digest": bare_sha256(str(architecture_facts["digest"])),
         "toolchain": manifest["toolchain"],
@@ -189,18 +200,33 @@ def main() -> int:
     parser.add_argument("--backend", choices=("cpu", "gpu"), required=True)
     parser.add_argument("--input-dir", type=Path, required=True)
     parser.add_argument("--architecture")
+    parser.add_argument(
+        "--scale",
+        choices=GPU_SCALES,
+        help="what this GPU reading covers; required for GPU aggregation",
+    )
     parser.add_argument("--out", type=Path, required=True)
     arguments = parser.parse_args()
     if arguments.backend == "cpu":
         if arguments.architecture is not None:
             raise GenerationError("--architecture is only valid for GPU readings")
+        if arguments.scale is not None:
+            raise GenerationError("--scale is only valid for GPU readings")
         document = aggregate_cpu(arguments.input_dir)
     else:
         if arguments.architecture not in {"sm_89", "sm_120"}:
             raise GenerationError(
                 "GPU aggregation requires --architecture sm_89 or sm_120"
             )
-        document = aggregate_gpu(arguments.input_dir, arguments.architecture)
+        if arguments.scale is None:
+            raise GenerationError(
+                "GPU aggregation requires --scale full or --scale spot: the "
+                "reading has to say what it covers, and no document count "
+                "says it on its own"
+            )
+        document = aggregate_gpu(
+            arguments.input_dir, arguments.architecture, arguments.scale
+        )
     _write(arguments.out, document)
     print(f"wrote {arguments.out}: {len(document['rows'])} rows, zero divergence")
     return 0

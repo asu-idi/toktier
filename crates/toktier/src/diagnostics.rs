@@ -123,6 +123,7 @@ pub enum Certification {
 /// Immutable route selected at tokenizer construction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub struct RoutePlan {
     pub family: String,
     pub artifact_sha256: String,
@@ -135,6 +136,7 @@ pub struct RoutePlan {
 /// Facts for one completed encode or append operation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub struct ExecutionFacts {
     pub backend: Backend,
     pub path: String,
@@ -153,6 +155,7 @@ pub struct ExecutionFacts {
 /// parsing human-readable output.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub struct DoctorFacts {
     pub crate_version: String,
     pub oracle: String,
@@ -172,6 +175,7 @@ pub struct DoctorFacts {
 /// Exact build identity embedded by the Python-free Rust facade.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub struct RuntimeBuildFacts {
     pub source_digest: String,
     pub fast_cpu_source_digest: String,
@@ -193,6 +197,7 @@ pub struct RuntimeBuildFacts {
 /// Non-invasive CUDA probe result. Probe failure is data, not a panic.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub struct CudaFacts {
     pub device_ordinal: u32,
     pub available: bool,
@@ -204,6 +209,7 @@ pub struct CudaFacts {
 /// Public snapshot of the native state-store counters.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub struct StoreStats {
     pub format: String,
     pub session_count: u64,

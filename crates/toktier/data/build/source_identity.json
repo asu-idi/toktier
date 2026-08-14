@@ -1,10 +1,10 @@
 {
-  "fast_cpu_source_sha256": "2553d49b01373cf4893115c0668d2fae2a79388ca3de8d7986f9387bee18c0c4",
-  "fast_cpu_source_sha256_v2": "0113e4b2d63f3066851f55525584bd2ec53d83e3ebb693ba8dcbe082e7d78afa",
+  "fast_cpu_source_sha256": "fa8feab8d98b832194b0b0aba0b9e318514707cec959265af4d41b871fba026d",
+  "fast_cpu_source_sha256_v2": "4ce9ae808dc3e7ae7bc7087fab3b53865d46d3774820818a43f4f7fe8170f14c",
   "identity_rule": "content-addressed source sets; independent of repository history",
-  "native_host_source_sha256": "874acdf3b5d238b682abf206f56068180c341a0fd2d7f2487023ba502be2282a",
-  "native_host_source_sha256_v2": "3a1a0c6c8246aafacac9431a9500f1d49eb29ee8a95953e0f641e1d981e29883",
-  "rust_api_source_sha256": "aec97e39493e83cbdb99f11aaf50a65e318362560bcc58a319f699aff0e77168",
-  "rust_api_source_sha256_v2": "a3822523059381be7793302be7ade96459635d4bc9a841132a0ae0de4c5126f4",
+  "native_host_source_sha256": "6ce3ac7e91c12195fb76749e6403439f8ea791e5d6ef16551bee0acb9dba6c24",
+  "native_host_source_sha256_v2": "d2caa5b9b0f37e28952a72192aaa7c467c4a3bed8c440890345d2d8d7910a3cf",
+  "rust_api_source_sha256": "beaeb406e3a7e82a311396f2eaed58984442879270c3a4ad21f921d898034f7b",
+  "rust_api_source_sha256_v2": "5aa6eb8381de8646aa9efd634c6fc4d9f6c8ed00be0d6d352b48c3366da395be",
   "schema": "toktier.rust_package_source_identity.v1"
 }

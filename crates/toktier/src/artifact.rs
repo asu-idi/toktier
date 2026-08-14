@@ -326,6 +326,7 @@ impl fmt::Debug for ArtifactManager {
 
 /// Verified cache facts for diagnostics and control planes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[non_exhaustive]
 pub struct ArtifactInspection {
     pub family: String,
     pub repo_id: String,

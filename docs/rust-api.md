@@ -137,6 +137,11 @@ The governing lockfile is the first `Cargo.lock` above `OUT_DIR` -- the
 consumer's own workspace root in the usual layout -- and above the manifest
 directory when this crate is built from its own workspace. Unusual layouts
 can name it with `TOKTIER_CARGO_LOCK`; the named file still has to match.
+A shared `CARGO_TARGET_DIR` outside the project tree is the common such
+layout, and a benign one: `OUT_DIR` then has no lockfile above it, so the
+answer is `unlocated` even though the workspace resolved the judged
+graph. Point `TOKTIER_CARGO_LOCK` at that workspace's own `Cargo.lock`
+and the comparison runs as usual.
 Content hashes and origins come from the judged `Cargo.lock`, which travels
 with the crate as well, so the two shipped records cannot hold different
 opinions about one package; a compiled closure naming something that lockfile

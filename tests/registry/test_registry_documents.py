@@ -368,3 +368,35 @@ def test_shipped_documents_verify(
     if not path.is_file():
         pytest.skip(f"{relative} has not been generated in this tree")
     assert verify_file(path, schema, tag) == []
+
+
+def test_every_gpu_parity_reading_says_what_it_covers() -> None:
+    """Scale is in the reading, not only in the prose around it.
+
+    Both GPU architectures report zero mismatches and both are certified
+    rows. They differ in how much each wave re-takes: `sm_120` runs the
+    full per-family campaign and `sm_89` a bounded spot check that rests
+    on the cross-architecture record already on file. Before the field
+    existed the only thing separating them was an unlabelled document
+    count, which says nothing on its own about the protocol a campaign
+    followed.
+    """
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    expected = {"sm_120": "full", "sm_89": "spot"}
+    per_family: dict[str, int] = {}
+    for architecture, scale in expected.items():
+        suffix = architecture.replace("sm_", "sm")
+        path = root / f"readings/gpu_native_frontend_{suffix}_parity.json"
+        reading = json.loads(path.read_text(encoding="utf-8"))
+        assert reading["architecture"] == architecture
+        assert reading["scale"] == scale, path
+        rows = reading["rows"]
+        counts = {int(row["documents"]) for row in rows}
+        assert len(counts) == 1, f"{path}: rows disagree on documents per family"
+        per_family[scale] = counts.pop()
+
+    # The label and the numbers have to agree: a spot check is smaller.
+    assert per_family["spot"] < per_family["full"]

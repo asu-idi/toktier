@@ -513,6 +513,12 @@ def prebuilt_hardware_evidence_problems(registry_path: Path) -> list[str]:
         if (
             reading.get("schema") != "toktier.gpu.native_frontend_parity.v1"
             or reading.get("architecture") != architecture
+            # What the reading covers has to be in the reading. Both
+            # scales are certified and both report zero mismatches, so
+            # the only thing that distinguished them was an unlabelled
+            # document count -- which says nothing on its own about the
+            # protocol the campaign followed.
+            or reading.get("scale") not in {"full", "spot"}
             or reading.get("fatbin_digest") != shipped_digest
             or reading.get("architecture_digest")
             != architecture_digests.get(architecture)

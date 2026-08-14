@@ -176,6 +176,7 @@
       "one_python_to_rust_call_per_batch": true
     }
   ],
+  "scale": "full",
   "schema": "toktier.gpu.native_frontend_parity.v1",
   "toolchain": "cuda 13.2 (V13.2.78)"
 }

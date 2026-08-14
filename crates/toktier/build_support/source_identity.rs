@@ -79,11 +79,52 @@ fn quoted_value(line: &str, key: &str) -> Option<String> {
     rest.strip_suffix('"').map(str::to_owned)
 }
 
+/// Cargo lockfile format versions this reader understands.
+///
+/// The reader accepts the shape Cargo writes for these versions, in
+/// which a package's `dependencies` is a multi-line array. A format
+/// that wrote that array inline would parse into packages with no
+/// dependencies at all, and an empty dependency list is exactly what a
+/// leaf package looks like -- so the closure would quietly shrink to
+/// the root, and a small enough judged side could still answer
+/// `verified`. Naming the formats keeps that failure loud.
+pub const SUPPORTED_LOCK_VERSIONS: &[u32] = &[3, 4];
+
+/// The `version` key a Cargo lockfile declares before its first
+/// `[[package]]` block, when it declares one.
+pub fn lock_format_version(text: &str) -> Option<u32> {
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            break;
+        }
+        if let Some(rest) = trimmed.strip_prefix("version") {
+            let rest = rest.trim_start().strip_prefix('=')?.trim();
+            return rest.trim_matches('"').parse().ok();
+        }
+    }
+    None
+}
+
+/// Refuse a lockfile this reader cannot claim to have read.
+pub fn check_lock_format(label: &str, text: &str) -> Result<(), String> {
+    match lock_format_version(text) {
+        Some(version) if SUPPORTED_LOCK_VERSIONS.contains(&version) => Ok(()),
+        Some(version) => Err(format!(
+            "{label} declares lockfile format {version}; this build reads \
+             {SUPPORTED_LOCK_VERSIONS:?}"
+        )),
+        None => Err(format!("{label} declares no lockfile format version")),
+    }
+}
+
 /// Parse the `[[package]]` blocks of a Cargo lockfile.
 ///
 /// Cargo writes this file, so the accepted shape is deliberately narrow:
 /// only blocks introduced by `[[package]]` are read, which leaves
-/// `[[patch.unused]]` and `[metadata]` out by construction.
+/// `[[patch.unused]]` and `[metadata]` out by construction. The shape is
+/// tied to a declared format version by [`check_lock_format`], which
+/// callers run first.
 pub fn parse_lock(text: &str) -> Vec<LockPackage> {
     let mut packages = Vec::new();
     let mut current: Option<LockPackage> = None;
@@ -331,6 +372,19 @@ pub fn closure_divergences<'a>(
             "no {CLOSURE_ROOT} package in the governing lockfile"
         ));
     }
+    // This crate has dependencies in every configuration, so a root
+    // with no edges is not a leaf -- it is what a lockfile shape this
+    // reader cannot follow looks like from here. Answering from it
+    // would compare the judged closure against the root alone.
+    if found_closure
+        .iter()
+        .filter(|package| package.name == CLOSURE_ROOT)
+        .all(|package| package.dependencies.is_empty())
+    {
+        return Err(format!(
+            "the governing lockfile's {CLOSURE_ROOT} entry lists no dependencies"
+        ));
+    }
     if judged_closure.is_empty() {
         return Err("the judged compiled closure names no package".to_owned());
     }
@@ -365,9 +419,13 @@ pub fn closure_divergences<'a>(
             Some(checksum) => package.checksum.as_deref() == Some(checksum.as_str()),
             // The judged graph holds this crate's own siblings as
             // workspace members, which carry no checksum. Their exact
-            // versions are pinned by this crate's manifest; requiring a
-            // registry origin keeps a `[patch]` to some other source
-            // from passing as the judged crate.
+            // versions are pinned by this crate's manifest, so the
+            // origin is what is left to look at, and a git, alternate
+            // registry, or replaced source is refused. A local path
+            // copy carries no `source` key at all and is accepted:
+            // that is also how a consumer building this workspace from
+            // a checkout appears, so this rules out a relocated
+            // origin rather than every `[patch]`.
             None => package
                 .source
                 .as_deref()
@@ -691,11 +749,17 @@ pub fn dependency_closure_status(
         GoverningLock::Missing => return unlocated_status(),
     };
     let judged = match fs::read_to_string(judged_lock) {
-        Ok(text) => parse_lock(&text),
+        Ok(text) => match check_lock_format("the judged lockfile", &text) {
+            Ok(()) => parse_lock(&text),
+            Err(reason) => return format!("mismatched: {reason}"),
+        },
         Err(error) => return format!("mismatched: judged lockfile is unreadable: {error}"),
     };
     let found = match fs::read_to_string(governing) {
-        Ok(text) => parse_lock(&text),
+        Ok(text) => match check_lock_format("the governing lockfile", &text) {
+            Ok(()) => parse_lock(&text),
+            Err(reason) => return format!("mismatched: {reason}"),
+        },
         Err(error) => return format!("mismatched: governing lockfile is unreadable: {error}"),
     };
     match compare_closures(&judged, judged_closure, &found) {
@@ -834,9 +898,10 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        closure, compare_closures, dependency_closure_status, locate_governing_lock_from,
-        parse_lock, Consumption, GoverningLock, JudgedPackage, CARGO_LOCK_ENV,
-        JUDGED_CLOSURE_RELATIVE, JUDGED_LOCK_RELATIVE,
+        check_lock_format, closure, compare_closures, dependency_closure_status,
+        locate_governing_lock_from, lock_format_version, parse_lock, Consumption, GoverningLock,
+        JudgedPackage, CARGO_LOCK_ENV, JUDGED_CLOSURE_RELATIVE, JUDGED_LOCK_RELATIVE,
+        SUPPORTED_LOCK_VERSIONS,
     };
 
     const JUDGED: &str = r#"
@@ -1429,6 +1494,54 @@ checksum = "9999"
         );
         assert!(status.contains("build inside a workspace"), "{status}");
         assert!(!status.starts_with("verified"), "{status}");
+    }
+
+    /// The reader accepts one lockfile shape. If Cargo ever writes a
+    /// package's dependency array inline, every package parses as a
+    /// leaf, the closure shrinks to the root, and the comparison could
+    /// answer `verified` about a graph it never read. The declared
+    /// format version is what says whether that has happened, so an
+    /// unknown or missing one is refused rather than parsed.
+    #[test]
+    fn a_lockfile_format_this_reader_does_not_know_is_refused() {
+        assert_eq!(lock_format_version(JUDGED), Some(4));
+        assert!(SUPPORTED_LOCK_VERSIONS.contains(&4));
+        assert!(check_lock_format("fixture", JUDGED).is_ok());
+
+        let unknown = JUDGED.replace("version = 4", "version = 99");
+        let refusal = check_lock_format("the governing lockfile", &unknown).unwrap_err();
+        assert!(
+            refusal.contains("format 99") && refusal.contains("the governing lockfile"),
+            "{refusal}"
+        );
+
+        let undeclared = JUDGED.replace("version = 4\n", "");
+        assert_eq!(lock_format_version(&undeclared), None);
+        assert!(check_lock_format("fixture", &undeclared).is_err());
+
+        // The workspace's own lockfile is one this reader knows.
+        let workspace = std::fs::read_to_string(workspace_root().join("Cargo.lock")).unwrap();
+        assert!(check_lock_format("the workspace lockfile", &workspace).is_ok());
+    }
+
+    /// The other half of the same failure: a root that parsed with no
+    /// edges at all. This crate has dependencies in every
+    /// configuration, so that is a shape the reader could not follow,
+    /// not a leaf, and comparing from it would judge the root alone.
+    #[test]
+    fn a_root_with_no_dependency_edges_is_refused() {
+        let flattened = CONSUMER.replace(
+            "dependencies = [\n \"serde\",\n \"toktier-routing-core\",\n]",
+            "dependencies = [\"serde\", \"toktier-routing-core\"]",
+        );
+        assert!(
+            flattened != CONSUMER,
+            "the fixture's root dependency block was not rewritten"
+        );
+        assert_eq!(
+            compare(JUDGED, &flattened),
+            Err("the governing lockfile's toktier entry lists no dependencies".to_owned())
+        );
     }
 
     #[test]

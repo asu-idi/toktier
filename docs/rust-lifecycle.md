@@ -108,6 +108,12 @@ Notes that matter when running the shipped examples:
 
 - An empty variable counts as unset, which is what the XDG specification
   says and what the Python product does.
+- The crate's own tests are not configured by this table. They locate a
+  host's existing artifacts through `TOKTIER_TEST_ARTIFACTS`, falling
+  back to `$HOME/.cache/toktier/artifacts`, because they are looking for
+  where the artifacts actually are rather than where this crate would
+  place them. `TOKTIER_HOME` therefore does not move that fixture path,
+  which is deliberate; `TOKTIER_TEST_ARTIFACTS` does.
 - The leaf names stay the crate's own: artifacts land in `artifacts` (the
   same leaf the Python product uses) and JIT products in `jit-rust`, which
   is deliberately distinct from the Python `kernels` directory because the

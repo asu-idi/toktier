@@ -251,6 +251,40 @@ class Encoding:
         return len(self.ids)
 
 
+#: Elements compared per block while looking for the first difference
+#: between two token streams. Tuple slice equality compares in C, so
+#: locating the differing block costs a fraction of an element-by-element
+#: Python loop. 4096 was the fastest of 256 through 262,144 on sessions
+#: from 500 to 500,000 tokens, and is within noise of its neighbours.
+_PREFIX_BLOCK = 4096
+
+
+def _first_difference(
+    previous: tuple[int, ...], current: tuple[int, ...]
+) -> int:
+    """The first index the two streams disagree on, or their shared length.
+
+    This is exactly ``next(i for i in range(shared) if previous[i] !=
+    current[i])`` with ``shared`` as the default -- the same index, from
+    the same definition. It is written as a block search because an
+    append otherwise pays an element-by-element Python loop over the
+    whole accumulated stream, which grows without bound as a session
+    does while the append itself stays small.
+    """
+    shared = min(len(previous), len(current))
+    start = 0
+    while start < shared:
+        stop = min(start + _PREFIX_BLOCK, shared)
+        if previous[start:stop] != current[start:stop]:
+            return next(
+                index
+                for index in range(start, stop)
+                if previous[index] != current[index]
+            )
+        start = stop
+    return shared
+
+
 class Session:
     """A live session over one tokenizer (``api.md`` Section 5).
 
@@ -324,15 +358,7 @@ class Session:
         current = tuple(
             self._tokenizer.encode(combined, session=self._session_id).ids
         )
-        shared = min(len(previous), len(current))
-        cut = next(
-            (
-                index
-                for index in range(shared)
-                if previous[index] != current[index]
-            ),
-            shared,
-        )
+        cut = _first_difference(previous, current)
         self._text = combined
         self._ids = current
         self._writes += 1

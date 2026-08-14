@@ -440,3 +440,56 @@ def test_an_unnamed_session_names_itself(rig: Rig) -> None:
         first.append("one")
         # Nothing durable holds it, so the revision is this object's count.
         assert first.revision == 1
+
+
+def test_the_prefix_search_answers_exactly_what_its_definition_says() -> None:
+    """The block search returns the plain definition's index, always.
+
+    ``Session.append`` reports ``replace_from`` as the first index the
+    old and new streams disagree on. That search runs over the whole
+    accumulated stream on every append, so it compares blocks in C and
+    walks only the block that differs; this pins it to the definition it
+    replaced, including the block boundaries and the empty cases.
+    """
+    from toktier.facade.api import _PREFIX_BLOCK, _first_difference
+
+    def defined(previous: tuple[int, ...], current: tuple[int, ...]) -> int:
+        shared = min(len(previous), len(current))
+        return next(
+            (i for i in range(shared) if previous[i] != current[i]), shared
+        )
+
+    rng = random.Random(20260814)
+    base = tuple(rng.randrange(1000, 150_000) for _ in range(3 * _PREFIX_BLOCK))
+    cases: list[tuple[tuple[int, ...], tuple[int, ...]]] = [
+        ((), ()),
+        ((), base[:5]),
+        (base[:5], ()),
+        (base, base),
+        (base, base + base[:9]),
+        (base + base[:9], base),
+    ]
+    # Every boundary the block walk can land on, and a few interiors.
+    for cut in (
+        0,
+        1,
+        _PREFIX_BLOCK - 1,
+        _PREFIX_BLOCK,
+        _PREFIX_BLOCK + 1,
+        2 * _PREFIX_BLOCK,
+        len(base) - 1,
+    ):
+        changed = list(base)
+        changed[cut] += 1
+        cases.append((base, tuple(changed)))
+        cases.append((base, tuple(changed[: cut + 1])))
+    for _ in range(50):
+        length = rng.randrange(0, 2 * _PREFIX_BLOCK)
+        left = tuple(rng.randrange(0, 4) for _ in range(length))
+        right = tuple(rng.randrange(0, 4) for _ in range(length))
+        cases.append((left, right))
+
+    for previous, current in cases:
+        assert _first_difference(previous, current) == defined(
+            previous, current
+        ), (len(previous), len(current))

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the exact, single-wheel artifact set allowed for release 0.2.4."""
+"""Verify the exact, single-wheel artifact set allowed for release 0.2.5."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import NoReturn
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_WHEEL = "toktier-0.2.4-cp310-abi3-manylinux_2_34_x86_64.whl"
+EXPECTED_WHEEL = "toktier-0.2.5-cp310-abi3-manylinux_2_34_x86_64.whl"
 IDENTITY_SENTINEL_HEX = "73656e74696e656c" * 4
 IDENTITY_SENTINEL_BYTES = bytes.fromhex(IDENTITY_SENTINEL_HEX)
 
@@ -145,7 +145,7 @@ def verify(wheel: Path) -> None:
 
         metadata_name = _one(names, ".dist-info/METADATA")
         metadata = BytesParser(policy=default).parsebytes(archive.read(metadata_name))
-        if metadata["Name"] != "toktier" or metadata["Version"] != "0.2.4":
+        if metadata["Name"] != "toktier" or metadata["Version"] != "0.2.5":
             _fail("wheel metadata has the wrong distribution identity")
         requirements = metadata.get_all("Requires-Dist", failobj=[])
         if any(re.match(r"(?i)^gigatoken(?:\s|\[|;|$)", item) for item in requirements):

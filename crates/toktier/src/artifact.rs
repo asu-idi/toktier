@@ -748,7 +748,10 @@ impl ArtifactManager {
         Err(Error::new(
             ErrorCode::NetworkDisabled,
             format!(
-                "network acquisition for {repo_id}@{raw_revision} requires the `network` feature"
+                "network acquisition for {repo_id}@{raw_revision} requires the `network` \
+                 feature, which is not in this crate's default set; rebuild with \
+                 `--features network`, or supply the artifact from a verified cache, \
+                 a local directory, or an air-gap bundle"
             ),
         ))
     }

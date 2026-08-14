@@ -347,7 +347,7 @@ enum is `#[non_exhaustive]`, so a `match` on it needs a catch-all arm.
 | `BundleInvalid` / `BUNDLE_INVALID` | An air-gap bundle violates the frozen archive format: unsafe or duplicate members, link members, a member set that disagrees with its manifest, resource-limit violations. |
 | `CacheBusy` / `CACHE_BUSY` | A bounded wait for a cache lock expired, or a staging name could not be allocated. Retryable by construction. |
 | `Network` / `NETWORK_ERROR` | An HTTPS request failed or exhausted its retry budget. Only with the `network` feature. |
-| `NetworkDisabled` / `NETWORK_DISABLED` | Acquisition was requested with the `network` feature off. Offline mode is the row above: nothing was attempted, so the answer is that the cache does not hold it. |
+| `NetworkDisabled` / `NETWORK_DISABLED` | Acquisition was requested with the `network` feature off, which from 0.2.5 is the default build. The message names the feature and the offline ways to supply the bytes. Explicit offline mode is the row above: nothing was attempted, so the answer is that the cache does not hold it. |
 | `RegistryInvalid` / `REGISTRY_INVALID` | Shipped registry, manifest, or table bytes fail their embedded digest, schema, or cross-reference checks. This is a package-integrity failure, not a caller error. |
 | `UncertifiedRuntime` / `UNCERTIFIED_RUNTIME` | An accelerated route was demanded from a build whose identity is not in the shipped `runtime_builds` register. |
 | `UncertifiedTokenizer` / `UNCERTIFIED_TOKENIZER` | The artifact itself has no certification row for the demanded route, or a repository/revision is outside the shipped equivalence table. |
@@ -378,10 +378,20 @@ The current feature surface is:
 |---|---:|---|
 | `sqlite` | yes | durable named sessions and restart recovery |
 | `prebuilt-gpu` | yes | embedded, digest-bound CUDA fatbin delivery |
-| `network` | yes | TLS artifact acquisition with pinned revisions |
 | `serving` | yes | bounded executor-neutral queue, batching, and device policy |
+| `network` | no | TLS artifact acquisition with pinned revisions |
 | `jit` | no | direct shell-free NVCC compilation into the Rust CUDA host |
 | `serde` | no | serialization for public diagnostic records |
+
+`network` was a default feature through 0.2.4. It is opt-in from 0.2.5,
+because it is the only feature that pulls a TLS stack -- sixteen packages,
+9.7% of the default compiled closure -- into builds that may never fetch.
+A build without it keeps every offline lifecycle surface and answers
+`NETWORK_DISABLED` when acquisition is actually required;
+`Runtime::doctor()` reports it as `network_compiled`. Because the judged
+build recipe records this crate's feature list, the certified default build
+for 0.2.5 is the one without `network`, and a build that enables it
+diverges from that recipe on the `features` key.
 
 The normal dependency graph contains no PyO3, Python, PyTorch, or mandatory
 async executor. The prebuilt GPU host dynamically uses the CUDA Driver API and

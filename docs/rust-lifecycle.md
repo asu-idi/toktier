@@ -51,7 +51,26 @@ air-gap bundle, and this crate verifies and runs those bytes like any other
 -- an artifact cache holding them is used as it stands, `import_bundle`
 installs one, and `Runtime::load_local` opens an explicit directory.
 
-The first network implementation uses this explicit policy:
+### Acquisition is behind an opt-in feature
+
+Network acquisition lives behind the `network` feature, which is **not** in
+the default set from 0.2.5 on. Add it when a build has to fetch:
+
+```toml
+toktier = { version = "0.2.5", features = ["network"] }
+```
+
+Everything else in this document works without it: a verified artifact
+cache, `ArtifactSource::LocalDirectory`, `verify`, `inspect`, air-gap
+`import_bundle` and export over cached bytes, and `Runtime::load_local`.
+A build without the feature that reaches an uncached remote object answers
+`NETWORK_DISABLED` and names the feature; `Runtime::doctor()` reports
+`network_compiled` so a control plane can see the answer in advance. The
+feature pulls sixteen packages, including the TLS stack, into the compiled
+closure, so builds that never fetch do not carry them.
+
+The network implementation itself is unchanged, and uses this explicit
+policy:
 
 | Axis | Contract |
 |---|---|
@@ -187,12 +206,18 @@ handles never raises it implicitly.
 - Supported release target: Linux x86-64, glibc 2.34 or newer. CPU-only feature
   builds do not require a CUDA installation; GPU features open `libcuda` at
   runtime.
-- Default features: `sqlite`, `prebuilt-gpu`, `network`, and `serving`.
-- Optional features: `jit` and `serde`; all supported feature combinations are
-  compiled in the release matrix.
+- Default features: `sqlite`, `prebuilt-gpu`, and `serving`. Through 0.2.4
+  `network` was in this list; from 0.2.5 it is opt-in.
+- Optional features: `network`, `jit`, and `serde`; all supported feature
+  combinations are compiled in the release matrix.
 - The crate ships one binary, `toktier-rust`, the Python-free lifecycle CLI
-  used throughout this document. Installing it with `cargo install --locked
-  toktier` gives a working CLI on the reference engine: an installed package
+  used throughout this document. It is built with the crate's default
+  features, so `cargo install --locked toktier` installs a CLI that cannot
+  fetch: `artifacts fetch` on an uncached family prints `NETWORK_DISABLED`
+  and exits 2, while `verify`, `inspect`, `import`, `export`, `doctor`, and
+  encoding over a verified cache all work. Use `cargo install --locked
+  --features network toktier` for a CLI that acquires artifacts. Either way
+  the install gives a working CLI on the reference engine: an installed package
   is built in a temporary directory with no lockfile above it, so the
   dependency-closure check answers `unlocated` and the build is not certified
   for an accelerated route. Certification for a Rust consumer is earned in a

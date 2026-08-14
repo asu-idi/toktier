@@ -121,6 +121,10 @@ pub struct DoctorFacts {
     pub sqlite_compiled: bool,
     pub prebuilt_gpu_compiled: bool,
     pub jit_compiled: bool,
+    /// Whether this build can acquire an artifact over the network. The
+    /// `network` feature is not in the default set, so a build that has
+    /// to fetch and does not carry it answers `NETWORK_DISABLED`.
+    pub network_compiled: bool,
     pub runtime_build: RuntimeBuildFacts,
     pub cuda: Option<CudaFacts>,
 }

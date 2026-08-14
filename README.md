@@ -45,6 +45,15 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
 
 ## News
 
+- **2026.08.TBD** 🚀 **toktier 0.2.5** released — the Rust crate's `network`
+  feature is now opt-in, which takes sixteen packages and the whole TLS
+  stack out of a default build that may never fetch; add
+  `features = ["network"]` to keep acquiring artifacts over the network,
+  and `cargo install --locked --features network toktier` for a CLI that
+  fetches. The Python package is not affected in any way. Diagnostics gain
+  an execution `reason` and a `network_compiled` build fact. Served IDs,
+  the store format, and the kernel ABI are unchanged. See the
+  [v0.2.5 release notes](docs/releases/v0.2.5.md).
 - **2026.08.14** 🚀 **toktier 0.2.4** released — the Han family (`kimi_k3`)
   joins the certified roster with the product's own end-to-end GPU engine;
   Rust certification now judges the packages a build actually compiles, not
@@ -232,7 +241,13 @@ pip install toktier                 # complete certified CPU product
 pip install "toktier[gpu]"          # CPU product + automatic prebuilt GPU route
 pip install "toktier[gpu-jit]"      # same routing, with local JIT delivery
 cargo add toktier                   # Python-free Rust serving API
+cargo add toktier --features network # ... plus artifact acquisition over TLS
 ```
+
+The Python package is unaffected by the Rust crate's features: it fetches
+artifacts through `huggingface-hub` as it always has. On the Rust side,
+`network` is opt-in from 0.2.5; without it the crate still verifies,
+mirrors, imports, exports, and runs from a verified cache.
 
 | Install | Delivery | Requirements |
 |---|---|---|

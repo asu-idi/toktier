@@ -41,6 +41,13 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 
 ## 最新动态
 
+- **2026.08.TBD** 🚀 **toktier 0.2.5** 发布——Rust crate 的 `network` feature
+  改为按需开启，这让可能从不联网取件的默认构建少带 16 个包和整套 TLS 栈；
+  仍需通过网络获取工件时加上 `features = ["network"]`，命令行则用
+  `cargo install --locked --features network toktier`。Python 包不受任何
+  影响。诊断面新增执行 `reason` 与 `network_compiled` 构建事实。对外返回的
+  ID、store 格式与 kernel ABI 都没有变化。详见
+  [v0.2.5 发布说明](docs/releases/v0.2.5.md)（英文）。
 - **2026.08.14** 🚀 **toktier 0.2.4** 发布——Han family（`kimi_k3`）以产品
   自带的端到端 GPU 引擎正式进入认证名单；Rust 侧认证开始判定"这次构建真正
   编译的那些包"，而不只是源码，build flags 也只声称 build script 观测得到的
@@ -209,7 +216,12 @@ pip install toktier                 # 完整的认证 CPU 产品
 pip install "toktier[gpu]"          # CPU 产品 + 自动预编译 GPU 路由
 pip install "toktier[gpu-jit]"      # 相同路由，本机 JIT 交付
 cargo add toktier                   # 无 Python 依赖的 Rust serving API
+cargo add toktier --features network # 同上，并加上通过 TLS 获取工件的能力
 ```
+
+Python 包不受 Rust crate feature 的影响：它一如既往通过 `huggingface-hub`
+获取工件。Rust 侧自 0.2.5 起 `network` 改为按需开启；不开启时，crate 仍可
+校验、镜像、导入导出工件，并基于已校验缓存运行。
 
 | 安装项 | 交付内容 | 要求 |
 |---|---|---|

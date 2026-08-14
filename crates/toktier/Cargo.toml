@@ -19,7 +19,7 @@ include = ["src/**", "data/**", "examples/**", "tests/**", "build.rs", "build_su
 path = "src/lib.rs"
 
 [features]
-default = ["sqlite", "prebuilt-gpu", "network", "serving"]
+default = ["sqlite", "prebuilt-gpu", "serving"]
 sqlite = ["dep:toktier-store-sqlite"]
 prebuilt-gpu = ["dep:toktier-cuda-driver"]
 jit = ["prebuilt-gpu"]

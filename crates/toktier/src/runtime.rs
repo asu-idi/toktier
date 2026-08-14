@@ -294,6 +294,7 @@ impl Runtime {
                     sqlite_compiled: cfg!(feature = "sqlite"),
                     prebuilt_gpu_compiled: cfg!(feature = "prebuilt-gpu"),
                     jit_compiled: cfg!(feature = "jit"),
+                    network_compiled: cfg!(feature = "network"),
                     runtime_build,
                     cuda: None,
                 };
@@ -308,6 +309,7 @@ impl Runtime {
             sqlite_compiled: cfg!(feature = "sqlite"),
             prebuilt_gpu_compiled: cfg!(feature = "prebuilt-gpu"),
             jit_compiled: cfg!(feature = "jit"),
+            network_compiled: cfg!(feature = "network"),
             runtime_build,
             cuda: Some(cuda),
         }

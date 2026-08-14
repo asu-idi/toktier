@@ -35,9 +35,17 @@ fn main() -> toktier::Result<()> {
 
 The crate is published on crates.io from 0.2.0 onward and tracks the package
 version, so `cargo add toktier` resolves it from the registry; a local
-checkout can also be consumed as a workspace/path dependency. Rust can fetch
-an immutable revision, verify and mirror it, export/import the Python-v1
-air-gap format, or operate with network access disabled. The optional `jit`
+checkout can also be consumed as a workspace/path dependency. Rust can
+verify and mirror an artifact, export/import the Python-v1 air-gap format,
+and operate with network access disabled. Fetching an immutable revision
+over TLS is the optional `network` feature, which is not enabled by
+default from 0.2.5 on:
+
+```toml
+toktier = { version = "0.2.5", features = ["network"] }
+```
+
+The optional `jit`
 feature invokes an exact `nvcc` directly and loads its authenticated product
 through the same Rust CUDA Driver host as prebuilt delivery; no shell, Python,
 PyTorch, or Ninja participates.

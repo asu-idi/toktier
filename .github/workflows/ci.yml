@@ -139,11 +139,32 @@ jobs:
       - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
         run: cargo test
       - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
+        # `network` left the default set in 0.2.5, so the step above no
+        # longer compiles or runs the acquisition code or its loopback
+        # tests -- the clippy step type-checks them but does not run
+        # them. This step runs them. The default step keeps covering the
+        # feature-off stub, which no earlier configuration compiled.
+        run: cargo test -p toktier --features network
+      - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
+        # The smallest supported configuration. It carries no test body
+        # of its own -- the suites above need `sqlite` and `serving` --
+        # so this guards compilation rather than behaviour, which is
+        # what actually breaks when a feature gate is misplaced.
+        run: cargo build -p toktier --no-default-features
+      - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
         # The legal closure reads `cargo metadata --offline --locked` across
         # every target, so the local cache must hold the full dependency
         # set; the build steps above only download what the host build
         # actually compiles.
         run: cargo fetch --locked
+      - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
+        # The judged compiled closure is data the crate ships and the
+        # build script reads, and it is a function of the feature set
+        # the registry records. Nothing else in CI compared it with the
+        # tree, so a default-feature change could leave it describing
+        # the previous build. It needs the fetch above for the same
+        # reason the two records below do.
+        run: python3 tools/generate_judged_closure.py --check
       - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
         run: python3 tools/generate_native_legal.py --check
       - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}

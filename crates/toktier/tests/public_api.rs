@@ -103,6 +103,43 @@ fn doctor_is_typed_and_python_free() {
     assert_eq!(facts.runtime_build.fast_cpu_source_digest.len(), 64);
     assert_eq!(facts.runtime_build.native_host_source_digest.len(), 64);
     assert_eq!(facts.oracle, toktier::ORACLE);
+    // Acquisition is the one capability a default build does not carry,
+    // so a control plane can read whether this binary can fetch at all
+    // instead of discovering it from a failed fetch.
+    assert_eq!(facts.network_compiled, cfg!(feature = "network"));
+    assert_eq!(facts.sqlite_compiled, cfg!(feature = "sqlite"));
+    assert_eq!(facts.prebuilt_gpu_compiled, cfg!(feature = "prebuilt-gpu"));
+}
+
+/// The default feature set has no `network` from 0.2.5 on. A build that
+/// then has to acquire bytes says so inside the error contract, names
+/// the feature, and names the offline ways to supply the artifact --
+/// rather than failing as a transport error or reaching a socket.
+#[test]
+#[cfg(not(feature = "network"))]
+fn a_default_build_refuses_acquisition_and_says_what_to_do() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let manager = toktier::ArtifactManager::builder()
+        .cache(temporary.path().join("cache"))
+        .build()
+        .expect("manager");
+    let registry_families = ["qwen3_8b"];
+    for family in registry_families {
+        let error = manager
+            .fetch(family)
+            .expect_err("an empty cache cannot answer without acquisition");
+        assert_eq!(error.code(), ErrorCode::NetworkDisabled);
+        assert_eq!(error.code().as_str(), "NETWORK_DISABLED");
+        let message = error.message();
+        assert!(
+            message.contains("`network`") && message.contains("--features network"),
+            "the refusal must name the feature and how to enable it: {message}"
+        );
+        assert!(
+            message.contains("verified cache") && message.contains("bundle"),
+            "the refusal must name the offline ways to supply the bytes: {message}"
+        );
+    }
 }
 
 /// The verified local qwen3 artifact, when this host has one.

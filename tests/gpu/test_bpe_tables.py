@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import stat
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -76,6 +78,32 @@ def _verified(
         manifest, config=_store_config(tmp_path), source=LocalDirectorySource()
     )
     return verified_handle(store, family)
+
+
+@pytest.mark.parametrize("mask", [0o022, 0o000, 0o077])
+def test_every_kernel_cache_directory_is_owner_only(
+    tmp_path: Path, mask: int
+) -> None:
+    """``config.md`` section 5, on the kernel-table half of the cache.
+
+    The export used to reach its cache with a plain
+    ``mkdir(parents=True)``, so a fresh deep cache root arrived at the
+    process umask.
+    """
+    handle = _verified(
+        tmp_path, "fam", {"model": {"vocab": {"a": 0}, "merges": []}}
+    )
+    cache_dir = tmp_path / "new" / "levels" / "kernels"
+    store = bpe_tables.BpeTableStore({"fam": handle}, cache_dir)
+
+    previous = os.umask(mask)
+    try:
+        store.export("fam")
+    finally:
+        os.umask(previous)
+
+    for created in (cache_dir, cache_dir.parent, cache_dir.parent.parent):
+        assert stat.S_IMODE(created.stat().st_mode) == 0o700, created
 
 
 def test_export_module_does_not_import_torch() -> None:

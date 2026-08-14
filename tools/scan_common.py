@@ -1,10 +1,43 @@
-# Shared helpers for repository hygiene scanners.
+# Shared helpers for the repository-side tools.
+import json
 import os
 from collections.abc import Iterator
 from fnmatch import fnmatchcase
 from pathlib import Path
 
 SKIPPED_NAMES = {".git", ".venv", "build", "dist", "target"}
+
+#: Exit status a tool uses when it has nothing to check in this tree.
+#: Distinct from 0, which would read as "the check passed", and from the
+#: failure codes, which would read as "the check found something".
+DECLINED = 3
+
+#: Written at the root of a published source archive, and only there.
+ARCHIVE_MANIFEST_NAME = "SOURCE-MANIFEST.json"
+ARCHIVE_MANIFEST_SCHEMA = "toktier.rust_source_archive.v1"
+
+
+def vendored_source_archive(root: Path) -> bool:
+    """Whether ``root`` is an unpacked published source archive.
+
+    ``tools/build_rust_source_archive.py`` writes ``SOURCE-MANIFEST.json``
+    at the root of what it builds and nowhere else, so a file of that
+    name carrying the archive's own schema tag is what tells the two
+    trees apart. Tools that verify the repository against itself ask
+    this before running, so that "not applicable here" is something they
+    say rather than something a reader infers from a failure.
+    """
+    manifest = root / ARCHIVE_MANIFEST_NAME
+    if not manifest.is_file():
+        return False
+    try:
+        document = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return (
+        isinstance(document, dict)
+        and document.get("schema") == ARCHIVE_MANIFEST_SCHEMA
+    )
 
 
 def load_allowlist(path: Path) -> tuple[str, ...]:

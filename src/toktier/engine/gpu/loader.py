@@ -53,6 +53,7 @@ from typing import TYPE_CHECKING, Any
 from ...errors import BackendUnavailable, KernelIncompatible
 from ...kernels import kernel_source_digest, kernel_source_paths
 from ...kernels.bindings import CertifiedSourceBindings, bare_sha256
+from ...paths import ensure_private_dir
 from .toolchain import (
     NvccFacts,
     jit_toolchain_satisfied,
@@ -533,7 +534,7 @@ class KernelLoader:
             build_dir = _resolve_build_dir(
                 cache_dir, config, flags, toolchain=toolchain
             )
-            build_dir.mkdir(parents=True, exist_ok=True)
+            ensure_private_dir(build_dir)
             module = _compile(torch, build_dir, flags)
             state.module = module
             state.flags = flags

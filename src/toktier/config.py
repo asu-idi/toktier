@@ -172,9 +172,48 @@ def _coerce_policy(
     return policy
 
 
+def _require_user_home(variable: str) -> None:
+    """Refuse to guess when this process has no home directory.
+
+    Without ``TOKTIER_HOME`` every convention in ``config.md`` section 5
+    hangs off the user's home directory. When that cannot be determined
+    -- an empty ``HOME`` in a container, a login without a passwd entry
+    -- ``~`` expands to nothing and the conventions land at the
+    filesystem root (``/.cache/toktier``). Reporting such a path as the
+    layout, and then failing to create it with a bare ``PermissionError``
+    somewhere further in, states something about this machine that is not
+    true. Say so here instead, while there is still a remedy to name.
+
+    ``variable`` is the XDG override that would have made a home
+    unnecessary; a set one has already been taken, so this is only
+    reached when there is nothing else to fall back on.
+    """
+    home = os.path.expanduser("~")
+    if home and home != "~" and Path(home).is_absolute() and Path(home).parts[1:]:
+        return
+    raise ConfigInvalid(
+        "no home directory could be determined for this user, so the "
+        "platform-conventional cache and state directories cannot be "
+        "resolved",
+        details={
+            "field": "home",
+            "value": home,
+            "source": "environment",
+            "remedy": (
+                f"set {ENV_HOME} to a directory this user can write "
+                f"(or {variable} for the platform convention alone)"
+            ),
+        },
+    )
+
+
 def _platform_dir(kind: str) -> Path:
     """Platform-conventional user directory for ``kind`` (cache/state)."""
     module: ModuleType | None
+    if not os.environ.get("XDG_CACHE_HOME" if kind == "cache" else "XDG_STATE_HOME"):
+        _require_user_home(
+            "XDG_CACHE_HOME" if kind == "cache" else "XDG_STATE_HOME"
+        )
     try:
         module = importlib.import_module("platformdirs")
     except ModuleNotFoundError:
@@ -378,7 +417,12 @@ class Config:
 
         # Layer 5: environment (read once).
         env_values: dict[str, Any] = {}
-        if ENV_HOME in env:
+        # An empty value counts as unset, which is what the XDG variables
+        # below already do (`or` in :func:`_platform_dir`) and what the
+        # directory contract states. Reading it as "set to the empty
+        # path" would place the whole footprint on a relative path under
+        # the working directory.
+        if env.get(ENV_HOME):
             env_values["home"] = Path(env[ENV_HOME])
         if ENV_OFFLINE in env:
             env_values["offline"] = _parse_bool(

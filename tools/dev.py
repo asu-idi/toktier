@@ -6,6 +6,13 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Sequence
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from scan_common import DECLINED, vendored_source_archive
+
+ROOT = Path(__file__).resolve().parents[1]
 
 Command = tuple[str, ...]
 
@@ -88,6 +95,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
     command = str(arguments.command)
     if command == "test-packaging":
+        if vendored_source_archive(ROOT):
+            # The published source archive carries the sources, the
+            # evidence and the vendored dependencies, and deliberately
+            # not `tests/`. Handing the missing directory to pytest gets
+            # "collected 0 items" and pytest's usage exit, which reads
+            # like a broken checkout rather than a suite that was never
+            # shipped here.
+            print(
+                "declined: the packaging suite lives in tests/, which the "
+                "published source archive does not carry. Nothing was run. "
+                "This check runs from a repository checkout.",
+                file=sys.stderr,
+            )
+            return DECLINED
         return run_commands(TEST_PACKAGING_COMMANDS)
     if command == "check":
         return run_commands(CHECK_COMMANDS)

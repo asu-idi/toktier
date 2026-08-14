@@ -65,7 +65,7 @@ Variables outside this set that may exist during development are not
 contract and can disappear without notice.
 
 Layer scope: this table is the Python product's configuration surface. The
-`toktier` Rust crate is configured through `RuntimeBuilder`, and since 0.2.3
+`toktier` Rust crate is configured through `RuntimeBuilder`, and since 0.2.4
 it resolves its directories from the same variables with the same precedence:
 `TOKTIER_ARTIFACT_CACHE` and (with the `jit` feature) `TOKTIER_JIT_CACHE`
 name one directory each and win where they are set, and otherwise the crate
@@ -95,9 +95,15 @@ correctness" rule above covers both layers.
   `docs/rust-lifecycle.md`.
 - The Python facade and Rust SQLite session path create owner-only store state
   (0700 directories, 0600 files). These modes apply to paths each layer
-  creates; pre-existing user directories retain their modes. The 0700 Rust
+  creates -- the intermediate directories made on the way to a leaf
+  included, and independently of the process umask; pre-existing user
+  directories retain their modes. The 0700 Rust
   store directory is the primary protection across SQLite-managed WAL/SHM
   sidecar lifecycles.
+- Without `TOKTIER_HOME`, the platform conventions hang off this user's home
+  directory. When no home can be determined and no XDG override is set, the
+  layout is refused with `CONFIG_INVALID` rather than resolved against an
+  empty `~` (which lands at the filesystem root).
 
 ## 6. Configuration file (frozen slot; minimal v1 scope)
 

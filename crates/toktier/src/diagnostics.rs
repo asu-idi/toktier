@@ -137,8 +137,12 @@ pub struct RuntimeBuildFacts {
     /// How the resolved dependency graph of this build compares with the
     /// judged one (see [`crate::DEPENDENCY_CLOSURE`]). Anything other
     /// than `"verified"` holds `certified` below at `false`, and says
-    /// which package differs.
+    /// both which packages differ and what aligns them.
     pub dependency_closure: String,
+    /// Why the build flags of this build are not the judged ones, when a
+    /// judged entry agrees with it on every other axis. `None` when the
+    /// flags match, or when something else is the disagreement.
+    pub build_flag_divergence: Option<String>,
     pub certified: bool,
 }
 

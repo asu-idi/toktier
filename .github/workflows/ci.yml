@@ -53,7 +53,7 @@ jobs:
       - name: Install the frozen Rust toolchain
         if: ${{ steps.python_phase.outputs.enabled == 'true' }}
         run: rustup toolchain install 1.93.1 --profile minimal --component clippy,rustfmt
-      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         if: ${{ steps.python_phase.outputs.enabled == 'true' }}
       - if: ${{ steps.python_phase.outputs.enabled == 'true' }}
         # The facade tier drives the native store, so the extension is
@@ -93,7 +93,7 @@ jobs:
           python-version: "3.10"
       - name: Install the frozen Rust toolchain
         run: rustup toolchain install 1.93.1 --profile minimal --component clippy,rustfmt
-      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: |
           python -m pip install maturin==1.14.1 jsonschema==4.26.0
           maturin build --locked --release --out dist
@@ -146,6 +146,12 @@ jobs:
         run: cargo fetch --locked
       - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
         run: python3 tools/generate_native_legal.py --check
+      - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
+        # Same closure, other consumer: the SBOM and license list that the
+        # published crate carries in its own data payload. It reads the
+        # workspace versions too, so it goes stale in exactly the same
+        # way and belongs behind the same fetch.
+        run: python3 tools/generate_rust_distribution_metadata.py --check
 
   wheel:
     runs-on: ubuntu-24.04
@@ -175,7 +181,7 @@ jobs:
             twine==7.0.0 \
             check-wheel-contents==0.6.3 \
             auditwheel==6.7.0
-          python tools/verify_release_identity.py --tag v0.2.1
+          python tools/verify_release_identity.py --tag v0.2.4
           python tools/verify_carryover.py --check
           python tools/generate_sibling_aliases.py --check
           maturin build --locked --release --out dist

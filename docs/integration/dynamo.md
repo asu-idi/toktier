@@ -96,7 +96,7 @@ This path is where we would start a demo: it exercises the interesting part
 
 ### The same thing as a session block
 
-Since 0.2.3 the context-manager session of `docs/contracts/api.md`
+Since 0.2.4 the context-manager session of `docs/contracts/api.md`
 Section 5 ships, and returns the delta object directly:
 
 ```python

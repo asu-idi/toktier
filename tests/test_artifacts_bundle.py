@@ -166,6 +166,10 @@ def test_import_reports_an_unreadable_archive_with_its_cause(
     assert caught.value.details["failure"] == "cannot read tar archive"
     assert caught.value.details["path"] == str(bundle)
     assert caught.value.details["cause"]
+    # The reader's per-method report is several lines; the message that
+    # becomes the prose command-line report is one.
+    assert "\n" in str(caught.value.details["cause"])
+    assert "\n" not in str(caught.value)
     _assert_no_trace(cache)
 
 

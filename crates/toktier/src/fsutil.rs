@@ -66,6 +66,49 @@ pub(crate) fn reject_symlink_components(path: &Path, label: &str) -> Result<()> 
     Ok(())
 }
 
+/// Create `path` and every missing directory on the way to it, each with
+/// owner-only permissions.
+///
+/// `create_dir_all` leaves the intermediate directories at the process
+/// umask and only the caller's final `set_permissions` makes the last one
+/// private, so a fresh cache root used to arrive as `0775/0775/0700`.
+/// `config.md` section 5 offers 0700 for every directory this layer
+/// creates, so the components are created one at a time. Directories that
+/// were already there are left exactly as the operator has them.
+pub(crate) fn create_private_dir_all(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+
+        let mut current = PathBuf::new();
+        for component in path.components() {
+            current.push(component.as_os_str());
+            let mut builder = fs::DirBuilder::new();
+            builder.mode(0o700);
+            match builder.create(&current) {
+                // The mode is set again explicitly: `DirBuilder::mode`
+                // still goes through the umask.
+                Ok(()) => fs::set_permissions(&current, fs::Permissions::from_mode(0o700))
+                    .map_err(|error| {
+                        Error::new(ErrorCode::Io, error.to_string()).with_path(&current)
+                    })?,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(error) => {
+                    return Err(Error::new(ErrorCode::Io, error.to_string()).with_path(&current));
+                }
+            }
+        }
+        // Keep `create_dir_all`'s judgement of a pre-existing final path
+        // without touching any directory this call did not create.
+        fs::create_dir_all(path)
+            .map_err(|error| Error::new(ErrorCode::Io, error.to_string()).with_path(path))?;
+    }
+    #[cfg(not(unix))]
+    fs::create_dir_all(path)
+        .map_err(|error| Error::new(ErrorCode::Io, error.to_string()).with_path(path))?;
+    Ok(())
+}
+
 /// Create `path` as a private (0o700) directory, re-checking the component
 /// chain after creation (TOCTOU mitigation). `not_directory` is the exact
 /// message reported when the final path is not a regular directory.
@@ -75,8 +118,17 @@ pub(crate) fn ensure_private_directory(
     not_directory: &str,
 ) -> Result<()> {
     reject_symlink_components(path, label)?;
-    fs::create_dir_all(path)
-        .map_err(|error| Error::new(ErrorCode::Io, error.to_string()).with_path(path))?;
+    // Judge an existing final path before trying to create it. Creation
+    // over a regular file fails with "already exists", which is a true
+    // statement about the syscall and a misleading one about the
+    // configuration: the location cannot be a private directory, and
+    // that is the answer to give.
+    if let Ok(metadata) = fs::symlink_metadata(path) {
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(Error::new(ErrorCode::ConfigInvalid, not_directory).with_path(path));
+        }
+    }
+    create_private_dir_all(path)?;
     reject_symlink_components(path, label)?;
     let metadata = fs::symlink_metadata(path)
         .map_err(|error| Error::new(ErrorCode::Io, error.to_string()).with_path(path))?;
@@ -217,17 +269,62 @@ pub(crate) fn default_state_directory() -> Option<PathBuf> {
 /// Resolve a cache directory: the surface's own environment override
 /// first (it names one directory exactly), then the user cache root,
 /// then a relative in-tree fallback.
+///
+/// The override is read through [`present`] like every other variable
+/// here, so an empty value counts as unset for all of them rather than
+/// naming a relative directory under the working directory.
 pub(crate) fn default_cache_directory(env_var: &str, subdirectory: &str) -> PathBuf {
-    std::env::var_os(env_var)
-        .map(PathBuf::from)
-        .or_else(|| cache_root_from(present).map(|root| root.join(subdirectory)))
+    cache_directory_from(present, env_var, subdirectory)
+}
+
+fn cache_directory_from(
+    lookup: impl Fn(&str) -> Option<PathBuf> + Copy,
+    env_var: &str,
+    subdirectory: &str,
+) -> PathBuf {
+    lookup(env_var)
+        .or_else(|| cache_root_from(lookup).map(|root| root.join(subdirectory)))
         .unwrap_or_else(|| PathBuf::from(".toktier").join(subdirectory))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{cache_root_from, state_root_from};
+    use super::{cache_directory_from, cache_root_from, ensure_private_directory, state_root_from};
     use std::path::PathBuf;
+
+    /// Every directory this layer creates is owner-only, the ones on the
+    /// way included: `create_dir_all` leaves those at the process umask,
+    /// which `config.md` section 5 does not offer.
+    #[cfg(unix)]
+    #[test]
+    fn intermediate_directories_are_created_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!(
+            "toktier-private-dirs-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let leaf = root.join("cache").join("artifacts").join(".locks");
+        ensure_private_directory(&leaf, "cache", "cache path is not a directory")
+            .expect("private directory");
+
+        let mut current = leaf.as_path();
+        loop {
+            let mode = std::fs::metadata(current)
+                .expect("created directory")
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o700, "{}", current.display());
+            if current == root {
+                break;
+            }
+            current = current.parent().expect("parent inside the root");
+        }
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
 
     /// The resolution rules are tested through their lookup, not by
     /// setting variables in this process: other tests read the same
@@ -253,6 +350,36 @@ mod tests {
         Option<&'static str>,
         Option<&'static str>,
     );
+
+    #[test]
+    fn the_surface_variable_counts_as_unset_when_empty() {
+        // Three states of one variable: unset and empty must resolve
+        // the same directory, and a named one must still win. The
+        // interesting pair is the one that looks alike from outside.
+        let unset = environment(&[("HOME", "/tmp/user")]);
+        let empty = environment(&[("TOKTIER_ARTIFACT_CACHE", ""), ("HOME", "/tmp/user")]);
+        let named = environment(&[
+            ("TOKTIER_ARTIFACT_CACHE", "/tmp/explicit"),
+            ("HOME", "/tmp/user"),
+        ]);
+        let resolve = |lookup: &dyn Fn(&str) -> Option<PathBuf>| {
+            cache_directory_from(lookup, "TOKTIER_ARTIFACT_CACHE", "artifacts")
+        };
+        assert_eq!(
+            resolve(&unset),
+            PathBuf::from("/tmp/user/.cache/toktier/artifacts")
+        );
+        assert_eq!(resolve(&empty), resolve(&unset));
+        assert_eq!(resolve(&named), PathBuf::from("/tmp/explicit"));
+
+        // The same rule for the JIT cache, and the in-tree fallback when
+        // nothing at all resolves.
+        let nothing = environment(&[("TOKTIER_JIT_CACHE", "")]);
+        assert_eq!(
+            cache_directory_from(&nothing, "TOKTIER_JIT_CACHE", "jit-rust"),
+            PathBuf::from(".toktier/jit-rust")
+        );
+    }
 
     #[test]
     fn the_roots_follow_the_python_precedence() {

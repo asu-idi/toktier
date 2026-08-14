@@ -52,18 +52,19 @@ fn main() {
     let profile = env::var("PROFILE").expect("Cargo profile");
     let target = env::var("TARGET").expect("Cargo target");
     let opt_level = env::var("OPT_LEVEL").expect("Cargo opt level");
-    let (lto, codegen_units) = if profile == "release" {
-        ("fat", "1")
-    } else {
-        ("off", "default")
-    };
+    // Only observable facts, for the reason the sibling build script
+    // records at length: `lto`, `codegen-units` and `panic` cannot be
+    // read from a build script, and the values inferred from the profile
+    // name here were stated rather than measured. RUSTFLAGS can be read,
+    // and is where a `-C` codegen switch shows up.
+    let rustflags = env::var("CARGO_ENCODED_RUSTFLAGS")
+        .unwrap_or_default()
+        .replace('\x1f', " ");
     let flags = [
         format!("profile={profile}"),
         format!("opt-level={opt_level}"),
-        format!("lto={lto}"),
-        format!("codegen-units={codegen_units}"),
-        "panic=unwind".to_owned(),
         format!("target={target}"),
+        format!("rustflags={rustflags}"),
         "pyo3=abi3-py310+extension-module".to_owned(),
     ]
     .join("\x1f");

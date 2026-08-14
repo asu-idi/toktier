@@ -494,6 +494,39 @@ impl ArtifactManager {
         if verify_directory(&directory, row).is_ok() {
             return Ok(directory);
         }
+        // A family whose artifact is derived locally has nothing to
+        // download, so this answer does not depend on whether anything
+        // could be downloaded: the pinned upstream revision does not
+        // publish the file the manifest names, and asking for it returns
+        // a 404 and a `NETWORK_ERROR` that tells the reader nothing they
+        // can act on. It is asked before the offline gate because that
+        // gate is the general "these bytes did not arrive" answer, and
+        // an air-gapped reader of a derived family is exactly the one
+        // who most needs to be told which two routes carry the bytes.
+        if let Some(conversion) = registry.conversion(family) {
+            let inputs = conversion
+                .inputs
+                .iter()
+                .map(|input| input.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(Error::new(
+                ErrorCode::ArtifactNotFound,
+                format!(
+                    "artifact {family:?} is derived locally by the {:?} conversion, not published: \
+                     upstream {} at the pinned revision carries {inputs}, not the file this \
+                     manifest names, so there is nothing for this crate to download. This crate \
+                     runs the conversion for no family. Produce the artifact once with the Python \
+                     package (`toktier artifacts fetch {family}`, which converts and verifies it \
+                     against the same pinned digest) or receive it as an air-gap bundle, then \
+                     point this crate at those bytes: an artifact cache holding them is used as \
+                     it stands, and `Runtime::load_local` opens one explicit directory",
+                    conversion.converter, row.repo_id,
+                ),
+            )
+            .with_family(family));
+        }
+
         if self.inner.offline || matches!(self.inner.source, ArtifactSource::None) {
             return Err(Error::new(
                 ErrorCode::ArtifactNotFound,
@@ -1157,6 +1190,47 @@ mod tests {
         }
     }
 
+    /// A family whose artifact is produced locally answers with what it
+    /// is, before opening a socket. It used to ask the hub for a file
+    /// the pinned revision does not publish and report the 404 as
+    /// `NETWORK_ERROR`, which a Python-free consumer could neither act
+    /// on nor route around.
+    #[test]
+    fn a_derived_family_says_so_instead_of_asking_the_hub() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        let address = listener.local_addr().expect("listener address");
+        // Nothing ever accepts on this listener: reaching it would hang
+        // the test rather than pass it.
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let manager = ArtifactManager::builder()
+            .cache(temporary.path().join("cache"))
+            .source(ArtifactSource::Mirror {
+                base_url: format!("http://{address}"),
+            })
+            .allow_insecure_loopback(true)
+            .build()
+            .expect("manager");
+        let registry = crate::manifest::Registry::load().expect("registry");
+        let derived = registry
+            .conversion("kimi_k3")
+            .expect("the shipped table names this family");
+
+        let error = manager
+            .ensure("kimi_k3", &registry)
+            .expect_err("a derived artifact cannot be downloaded");
+
+        assert_eq!(error.code(), ErrorCode::ArtifactNotFound);
+        let message = error.message();
+        assert!(message.contains(&derived.converter), "{message}");
+        assert!(message.contains("derived locally"), "{message}");
+        assert!(message.contains("toktier artifacts fetch"), "{message}");
+        assert!(message.contains("load_local"), "{message}");
+        for input in &derived.inputs {
+            assert!(message.contains(&input.name), "{message}");
+        }
+        drop(listener);
+    }
+
     #[cfg(feature = "network")]
     #[test]
     fn network_retries_transport_failures_and_auth_is_redacted() {
@@ -1197,6 +1271,36 @@ mod tests {
         assert_eq!(fs::read(destination).expect("read object"), b"exact bytes");
     }
 
+    /// A derived family has nothing to download, so being offline is not
+    /// what stands in the way -- and an air-gapped reader is exactly the
+    /// one who needs to be told which two routes carry the bytes. The
+    /// offline gate used to answer first and leave them with the general
+    /// "acquisition is offline" line.
+    #[test]
+    fn an_offline_derived_family_still_gets_the_conversion_answer() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let manager = ArtifactManager::builder()
+            .cache(temporary.path().join("cache"))
+            .source(ArtifactSource::None)
+            .offline(true)
+            .build()
+            .expect("manager");
+
+        let refusal = manager.fetch("kimi_k3").expect_err("derived family");
+
+        assert_eq!(refusal.code(), ErrorCode::ArtifactNotFound);
+        let message = refusal.to_string();
+        assert!(message.contains("derived locally by the"), "{message}");
+        assert!(
+            message.contains("nothing for this crate to download"),
+            "{message}"
+        );
+        // Both routes that put the bytes on an air-gapped machine.
+        assert!(message.contains("air-gap bundle"), "{message}");
+        assert!(message.contains("load_local"), "{message}");
+        assert!(!message.contains("acquisition is offline"), "{message}");
+    }
+
     #[test]
     fn offline_gate_opens_no_socket_and_stale_parts_are_reclaimed() {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
@@ -1213,9 +1317,12 @@ mod tests {
             .offline(true)
             .build()
             .expect("manager");
-        assert_eq!(
-            manager.fetch("qwen3_8b").expect_err("offline miss").code(),
-            ErrorCode::ArtifactNotFound
+        let refusal = manager.fetch("qwen3_8b").expect_err("offline miss");
+        assert_eq!(refusal.code(), ErrorCode::ArtifactNotFound);
+        // A family published whole: offline is the whole of the answer.
+        assert!(
+            refusal.to_string().contains("acquisition is offline"),
+            "{refusal}"
         );
         assert_eq!(
             listener.accept().expect_err("no request").kind(),

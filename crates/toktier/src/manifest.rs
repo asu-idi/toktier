@@ -14,6 +14,10 @@ pub(crate) const ARTIFACT_MANIFEST_BYTES: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/data/src/toktier/artifacts/tables/artifact_manifest.v1.json"
 ));
+pub(crate) const ARTIFACT_CONVERSIONS_BYTES: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/data/src/toktier/artifacts/tables/artifact_conversions.v1.json"
+));
 pub(crate) const SUPPORT_REGISTRY_BYTES: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/data/src/toktier/routing/tables/support_registry.v1.json"
@@ -46,6 +50,8 @@ pub(crate) const PREBUILT_FATBIN: &[u8] = include_bytes!(concat!(
 
 const ARTIFACT_MANIFEST_SHA256: &str =
     "3850fb1c9ae3f6ff634115f68540de10c08f3f3f4939d5439750676fb264942c";
+const ARTIFACT_CONVERSIONS_SHA256: &str =
+    "8fa33251a20e12ab8e35894732e49ea93fc2599f4e3425d1730d81bb1e9f2719";
 const SUPPORT_REGISTRY_SHA256: &str = env!("TOKTIER_SUPPORT_REGISTRY_SHA256");
 const SIBLING_ALIASES_SHA256: &str =
     "6cd89722e49203428ba3f62497e6149d0e19af964440a26f81d6b753c0e3a425";
@@ -106,6 +112,28 @@ pub(crate) struct ArtifactRow {
     pub(crate) repo_id: String,
     pub(crate) revision: String,
     pub(crate) files: BTreeMap<String, ArtifactFileRow>,
+}
+
+/// One family whose certified artifact is produced from pinned upstream
+/// inputs rather than downloaded whole.
+///
+/// The shipped conversion table is the only place a converted family is
+/// named; both faces read this same file, so neither can hold an opinion
+/// the other does not.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ConversionRow {
+    pub(crate) converter: String,
+    pub(crate) inputs: Vec<ConversionInputRow>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ConversionInputRow {
+    pub(crate) name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ConversionTable {
+    conversions: BTreeMap<String, ConversionRow>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -234,6 +262,7 @@ pub(crate) struct AliasRow {
 #[cfg_attr(not(feature = "prebuilt-gpu"), allow(dead_code))]
 pub(crate) struct Registry {
     artifacts: BTreeMap<String, ArtifactRow>,
+    conversions: BTreeMap<String, ConversionRow>,
     repairs: HashMap<String, RepairRow>,
     support: HashMap<String, SupportArtifact>,
     runtime_builds: Vec<RuntimeBuildRow>,
@@ -242,6 +271,54 @@ pub(crate) struct Registry {
     pub(crate) prebuilt: PrebuiltManifest,
     pub(crate) aliases: Vec<AliasRow>,
     pclass: Vec<u8>,
+}
+
+/// The build flags of this build set beside the judged ones, as a
+/// sentence a reader can act on.
+///
+/// Per key rather than as two lists: the reader needs the one entry to
+/// change, not a diff of nine.
+fn describe_flag_divergence(observed: &[&str], judged: &[String]) -> Option<String> {
+    let key = |flag: &str| flag.split_once('=').map(|(key, _)| key.to_owned());
+    let value = |flag: &str| flag.split_once('=').map(|(_, value)| value.to_owned());
+    let mut differences = Vec::new();
+    for flag in observed {
+        let Some(name) = key(flag) else { continue };
+        match judged
+            .iter()
+            .find(|other| key(other).as_deref() == Some(name.as_str()))
+        {
+            Some(other) if other == flag => {}
+            Some(other) => differences.push(format!(
+                "{name} is {:?} here and {:?} in the judged build",
+                value(flag).unwrap_or_default(),
+                value(other).unwrap_or_default(),
+            )),
+            None => differences.push(format!("{name} is not a judged build flag")),
+        }
+    }
+    for other in judged {
+        let Some(name) = key(other) else { continue };
+        if !observed
+            .iter()
+            .any(|flag| key(flag).as_deref() == Some(name.as_str()))
+        {
+            differences.push(format!(
+                "{name} is judged but this build does not report it"
+            ));
+        }
+    }
+    if differences.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "the build flags of this build are not the judged ones: {}. Building with the judged \
+         flags brings it back -- `rustflags` is the one a caller usually sets, through RUSTFLAGS \
+         or a Cargo configuration file, and the judged builds set none. A build that means to \
+         keep them can still take the accelerated route by selecting Policy::Experimental, which \
+         labels the result experimental rather than certified",
+        differences.join("; ")
+    ))
 }
 
 impl Registry {
@@ -296,8 +373,16 @@ impl Registry {
             PREBUILT_MANIFEST_SHA256,
         )?;
 
+        verify_embedded(
+            "artifact conversion table",
+            ARTIFACT_CONVERSIONS_BYTES,
+            ARTIFACT_CONVERSIONS_SHA256,
+        )?;
+
         let artifacts: BTreeMap<String, ArtifactRow> =
             parse_json("artifact manifest", ARTIFACT_MANIFEST_BYTES)?;
+        let conversions: ConversionTable =
+            parse_json("artifact conversion table", ARTIFACT_CONVERSIONS_BYTES)?;
         let repair: RepairManifest = parse_json("repair manifest", REPAIR_MANIFEST_BYTES)?;
         if repair.schema != "toktier.fast_repair_families.v1" {
             return Err(registry_error("unexpected repair manifest schema"));
@@ -362,6 +447,7 @@ impl Registry {
             .collect();
         Ok(Self {
             artifacts,
+            conversions: conversions.conversions,
             repairs,
             support,
             runtime_builds,
@@ -393,6 +479,12 @@ impl Registry {
         })
     }
 
+    /// The conversion recipe of `family`, when its artifact is derived
+    /// locally rather than published.
+    pub(crate) fn conversion(&self, family: &str) -> Option<&ConversionRow> {
+        self.conversions.get(family)
+    }
+
     pub(crate) fn artifacts(&self) -> impl Iterator<Item = (&str, &ArtifactRow)> {
         self.artifacts
             .iter()
@@ -405,6 +497,52 @@ impl Registry {
 
     pub(crate) fn support(&self, family: &str) -> Option<&SupportArtifact> {
         self.support.get(family)
+    }
+
+    /// Why the build flags of this build are not the judged ones, when
+    /// that is what stands between it and certification.
+    ///
+    /// `certified = false` should never be a verdict without a reason a
+    /// reader can act on, and the flags are the axis most likely to be
+    /// the reader's own doing. Reported only when a judged row agrees
+    /// with this build on every other axis: when the sources or the
+    /// toolchain differ, the flags are not the thing to change.
+    pub(crate) fn rust_api_build_flag_divergence(&self) -> Option<String> {
+        let observed = env!("TOKTIER_RUST_API_BUILD_FLAGS")
+            .split('\x1f')
+            .collect::<Vec<_>>();
+        let candidates = self
+            .runtime_builds
+            .iter()
+            .filter(|row| {
+                row.runtime == "rust_api"
+                    && row.source_digest == env!("TOKTIER_RUST_API_SOURCE_SHA256")
+                    && row.fast_cpu_source_digest == env!("TOKTIER_RUST_API_FAST_CPU_SOURCE_SHA256")
+                    && row.native_host_source_digest
+                        == env!("TOKTIER_RUST_API_NATIVE_HOST_SOURCE_SHA256")
+                    && row.toolchain == env!("TOKTIER_RUST_API_TOOLCHAIN")
+            })
+            .collect::<Vec<_>>();
+        if candidates.is_empty()
+            || candidates
+                .iter()
+                .any(|row| row.build_flags.iter().eq(observed.iter().copied()))
+        {
+            return None;
+        }
+        // The row that agrees with this build on the most axes: naming
+        // every difference against every row would bury the one the
+        // reader has to change.
+        let closest = candidates
+            .iter()
+            .max_by_key(|row| {
+                row.build_flags
+                    .iter()
+                    .filter(|flag| observed.contains(&flag.as_str()))
+                    .count()
+            })
+            .expect("a candidate row");
+        describe_flag_divergence(&observed, &closest.build_flags)
     }
 
     pub(crate) fn rust_api_build_certified(&self) -> bool {
@@ -598,4 +736,83 @@ pub(crate) fn domain_sha256_hex(domain: &[u8], bytes: &[u8]) -> String {
 
 fn registry_error(message: impl Into<String>) -> Error {
     Error::new(ErrorCode::RegistryInvalid, message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::describe_flag_divergence;
+
+    fn judged() -> Vec<String> {
+        [
+            "profile=release",
+            "opt-level=3",
+            "target=x86_64-unknown-linux-gnu",
+            "debug=false",
+            "target-features=fxsr,sse,sse2",
+            "rustflags=",
+            "features=default,network,prebuilt-gpu,serving,sqlite",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+    }
+
+    #[test]
+    fn matching_flags_have_nothing_to_report() {
+        let judged = judged();
+        let observed = judged.iter().map(String::as_str).collect::<Vec<_>>();
+        assert_eq!(describe_flag_divergence(&observed, &judged), None);
+    }
+
+    /// The one a caller sets themselves, and the reason this key is
+    /// admitted at all: it is the codegen switch a build script can
+    /// actually observe.
+    #[test]
+    fn a_caller_s_rustflags_are_named_with_both_ways_out() {
+        let judged = judged();
+        let mut observed = judged.clone();
+        observed[5] = "rustflags=-C target-cpu=native".to_owned();
+        let observed = observed.iter().map(String::as_str).collect::<Vec<_>>();
+
+        let reported = describe_flag_divergence(&observed, &judged).expect("a divergence");
+
+        assert!(
+            reported.contains(
+                "rustflags is \"-C target-cpu=native\" here and \"\" in the judged build"
+            ),
+            "{reported}"
+        );
+        assert!(reported.contains("RUSTFLAGS"), "{reported}");
+        assert!(reported.contains("Policy::Experimental"), "{reported}");
+        assert!(!reported.contains('\n'), "{reported}");
+    }
+
+    #[test]
+    fn only_the_keys_that_differ_are_named() {
+        let judged = judged();
+        let mut observed = judged.clone();
+        observed[1] = "opt-level=2".to_owned();
+        let observed = observed.iter().map(String::as_str).collect::<Vec<_>>();
+
+        let reported = describe_flag_divergence(&observed, &judged).expect("a divergence");
+
+        assert!(reported.contains("opt-level is \"2\""), "{reported}");
+        assert!(!reported.contains("profile is"), "{reported}");
+        assert!(!reported.contains("rustflags is"), "{reported}");
+    }
+
+    #[test]
+    fn a_key_on_only_one_side_is_named_as_such() {
+        let judged = judged();
+        let observed = ["profile=release", "lto=fat"];
+        let reported = describe_flag_divergence(&observed, &judged).expect("a divergence");
+        assert!(
+            reported.contains("lto is not a judged build flag"),
+            "{reported}"
+        );
+        assert!(
+            reported.contains("rustflags is judged but this build does not report it"),
+            "{reported}"
+        );
+    }
 }

@@ -6,16 +6,14 @@
   "engine_distribution": "toktier",
   "engine_module": "toktier._native",
   "engine_delivery": "integrated",
-  "source_digest": "fea6e606c8633d75431ad59b11494822ea7599c5c1ba1607a76f44866a37c36b",
-  "source_digest_v2": "b6b08f3e5252554a4dbfdeed93396aa013b8c9e47a33331baad297e00fac9b12",
+  "source_digest": "0e1f453bb157a5cf7370104c56e880936ad89ec4be64ecbb3e0a741af8fe2bbd",
+  "source_digest_v2": "b921b9f10f6e20d4d90568521b347570fd17f9c7da4dd0a1c0de7243d7389ac5",
   "source_digest_of": "domain-separated, path-bound source/build set enumerated identically by tools/fast_cpu_source_identity.py and crates/toktier-py/build.rs",
   "build_flags": [
     "profile=release",
     "opt-level=3",
-    "lto=fat",
-    "codegen-units=1",
-    "panic=unwind",
     "target=x86_64-unknown-linux-gnu",
+    "rustflags=",
     "pyo3=abi3-py310+extension-module"
   ],
   "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
@@ -30,9 +28,9 @@
   "legal": {
     "sbom_path": "packaging/fast_cpu/gigatoken.cyclonedx.json",
     "sbom_distribution_path": ".dist-info/sboms/gigatoken.cyclonedx.json",
-    "sbom_sha256": "b91bc22bca5f5fbf888d481618c971e95170fa28154abd8cf736854277a2e0f4",
+    "sbom_sha256": "fd812bac30a5a75ade252449a2068572b0eb59dc4946dc7a3cf6294fb55958f6",
     "license_bundle_path": "packaging/fast_cpu/THIRD_PARTY_LICENSES-gigatoken.txt",
-    "license_bundle_sha256": "72ecabb3908e301d6121c6181422707e21560afb2529789d1088c5820b3c9693"
+    "license_bundle_sha256": "2a1bbcc29668dacbf2bceb3ab19cfc729afdc15b99b2c06a3a7a910600c6ce1c"
   },
   "lineage": {
     "campaign_id": "gigatoken-pinned-differential-v1",

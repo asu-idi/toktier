@@ -386,6 +386,31 @@ class RoutedExecutor:
             path=path,
         )
 
+    def record_repair_reference_result(
+        self, *, input_bytes: int, path: str
+    ) -> None:
+        """Record a repair window the exact reference engine re-ran.
+
+        When the bounded repair cannot find a safe cut it re-encodes the
+        whole grown text on the reference engine. That is an execution,
+        and until it was recorded here the ledger's answer to "what ran
+        most recently" stayed on the seed encode -- so a session whose
+        latest work went down the reference path still headlined the
+        accelerated one.
+
+        Only the execution ledger is touched. Which repair paths were
+        taken, and why, is the repair layer's own account
+        (``session_repair.counts`` / ``.last``); this is not a routing
+        fallback and is not counted as one.
+        """
+        self._record_execution(
+            BACKEND_REFERENCE,
+            input_bytes=input_bytes,
+            selected_start=self._plan.fallback_chain.index(BACKEND_REFERENCE),
+            source="gigatoken",
+            path=path,
+        )
+
     def _encode_batch_from(
         self,
         index: int,

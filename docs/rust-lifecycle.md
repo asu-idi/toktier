@@ -34,6 +34,23 @@ it while holding a family/revision inter-process lock. Cache directories are
 mode 0700. Existing corrupt members are quarantined; a verified handle is not
 published from a partial directory.
 
+### Families this crate cannot download
+
+One family's certified artifact is not published anywhere: `kimi_k3` is a
+conversion of the `tiktoken.model` its upstream repository does carry
+(`docs/support-matrix.md`), produced on the installing machine. This crate
+runs no conversion, so asking it to acquire such a family is refused with
+`ARTIFACT_NOT_FOUND` naming the conversion, its pinned upstream inputs, and
+where the bytes do come from -- before any request is made, rather than as a
+404 from the hub. The shipped conversion table is the single place a derived
+family is named, and both faces read the same bytes of it.
+
+Everything after acquisition is unaffected: produce the artifact once with
+the Python package (`toktier artifacts fetch kimi_k3`) or receive it as an
+air-gap bundle, and this crate verifies and runs those bytes like any other
+-- an artifact cache holding them is used as it stands, `import_bundle`
+installs one, and `Runtime::load_local` opens an explicit directory.
+
 The first network implementation uses this explicit policy:
 
 | Axis | Contract |
@@ -58,7 +75,7 @@ verified cache or an imported bundle is allowed.
 
 ### Where the crate puts its directories
 
-Since 0.2.3 the crate reads `TOKTIER_HOME` and the XDG variables with the
+Since 0.2.4 the crate reads `TOKTIER_HOME` and the XDG variables with the
 same precedence as the Python product (`docs/contracts/config.md`
 Sections 4-5), so one environment places both layers:
 
@@ -173,6 +190,15 @@ handles never raises it implicitly.
 - Default features: `sqlite`, `prebuilt-gpu`, `network`, and `serving`.
 - Optional features: `jit` and `serde`; all supported feature combinations are
   compiled in the release matrix.
+- The crate ships one binary, `toktier-rust`, the Python-free lifecycle CLI
+  used throughout this document. Installing it with `cargo install --locked
+  toktier` gives a working CLI on the reference engine: an installed package
+  is built in a temporary directory with no lockfile above it, so the
+  dependency-closure check answers `unlocated` and the build is not certified
+  for an accelerated route. Certification for a Rust consumer is earned in a
+  workspace whose own lockfile resolves the judged graph; `doctor` prints the
+  commands that take a workspace there, and `docs/rust-api.md` describes the
+  check in full.
 - The crate is published on crates.io from 0.2.0 onward and carries the
   package version (axis 1 of `docs/contracts/versioning.md`); the earlier
   `0.0.1` number was a source/workspace preview. Patch versions preserve the

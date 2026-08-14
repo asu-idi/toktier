@@ -128,6 +128,9 @@ fn bundle_rejects_symlink_sources_and_cache_roots() {
         "{error}"
     );
 
+    // Three refusals about the path leading to the destination, and one
+    // about the destination itself. All four are decisions about a
+    // configured location, so all four report the same code.
     let occupied = temporary.path().join("occupied");
     std::fs::write(&occupied, b"not a directory").unwrap();
     assert_eq!(
@@ -135,6 +138,17 @@ fn bundle_rejects_symlink_sources_and_cache_roots() {
             .unwrap_err()
             .code(),
         ErrorCode::ConfigInvalid
+    );
+
+    let final_is_a_file = temporary.path().join("cache-is-a-file");
+    std::fs::write(&final_is_a_file, b"not a directory").unwrap();
+    let error = import_bundle(&bundle, &final_is_a_file).unwrap_err();
+    assert_eq!(error.code(), ErrorCode::ConfigInvalid);
+    assert!(error.message().contains("directory"), "{error}");
+    // The file is left exactly as it was; refusing is not repairing.
+    assert_eq!(
+        std::fs::read(&final_is_a_file).unwrap(),
+        b"not a directory".to_vec()
     );
 }
 

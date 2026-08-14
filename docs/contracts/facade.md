@@ -349,6 +349,17 @@ guard), ``runtime_policy.last_execution`` reports `executed_backend="hf"` plus
 count and canonical runtime fallback counter are updated exactly once; the
 static plan remains unchanged.
 
+Session repair answers the same way. A bounded window that finds a safe cut
+reports `executed_backend` = the corrected CPU engine with `source="gigatoken"`;
+a window that cannot (`session_repair.last.path` beginning `hf_full_`) re-runs
+the whole grown text on the reference engine, and `last_execution` reports that
+re-run -- same `source`, the repair path as `path`. Since 0.2.4: before, the
+ledger kept reporting the seed encode, so a short session whose latest answer
+came from the reference path still headlined the accelerated one. Which repair
+paths were taken and why stays the repair layer's own account
+(`session_repair.counts` / `.last`); a repair falling back to the reference
+engine is not a routing fallback and is not counted as one.
+
 Successful accelerated state seeding distinguishes its payload form in
 ``state_encode.counts`` and ``state_encode.last.path``. The native session-seed
 payload, which adopts closure-verified ids with sparse span checkpoints, reports
@@ -400,8 +411,8 @@ well-formed-but-newer records, in the contract's explicit-verify split.
   defaults will be reconciled before the API version axis moves.
 - `decode` exists here; `api.md` Section 7 lists it as out of scope for
   the frozen v1 set.
-- The `session()` context manager of `api.md` Section 5 ships since
-  0.2.3, over the same store path the `session=` keyword uses, with two
+- The `session()` context manager of `api.md` Section 5 ships in
+  0.2.4, over the same store path the `session=` keyword uses, with two
   deviations. Its `store` argument may be omitted or repeat the
   directory given to `load(store=...)`, and naming a different one
   raises `UNSUPPORTED_CONFIG`: the store is bound when the tokenizer is
@@ -416,6 +427,15 @@ well-formed-but-newer records, in the contract's explicit-verify split.
   invariant enforced at construction; `Session.append` reports the
   longest surviving prefix as `replace_from`, which is at least as tight
   as the cut the engine made internally.
-- `Session.revision` is the durable store's revision while the store
-  holds the session, and otherwise counts the writes made through that
-  object. Both are monotone; only the first is a store fact.
+- `Session.revision` is monotone within one process and is not durable,
+  where `api.md` Section 5.2 describes it as the store revision. While
+  the durable store holds the session it is that entry's revision, and
+  otherwise it counts the writes made through the object; only the
+  first is a store fact. Neither survives a restart: an entry re-read
+  from disk in a later process begins its count again at zero, so a
+  resumed conversation whose revision was `4` reports `0` and then `1`
+  after its next append. What the store does carry across processes is
+  the conversation itself -- the text and the exact ids the session
+  resumes with. Callers that need a durable counter should keep their
+  own; making this one durable is a change to the stored record and is
+  listed on the roadmap rather than made here.

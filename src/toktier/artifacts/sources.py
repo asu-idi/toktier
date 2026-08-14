@@ -30,7 +30,7 @@ import tempfile
 from pathlib import Path
 from typing import Protocol, cast
 
-from ..errors import ArtifactNotFound
+from ..errors import ArtifactNotFound, ToktierError, one_line
 from .bundle import AirgapBundleSource
 from .manifest import ArtifactEntry, ArtifactFile
 from .mirror import MirrorSource
@@ -81,7 +81,10 @@ class ArtifactSource(Protocol):
 
         ``destination`` is a private temporary path chosen by the
         caller; the source must not touch the final location. Failure
-        to produce the file raises :class:`ArtifactNotFound`.
+        to produce the file raises :class:`ArtifactNotFound`, including
+        a failure raised inside a client this package does not own: it
+        is classified here, at the boundary, rather than left to escape
+        as whatever type that client happens to use.
         """
 
 
@@ -144,12 +147,44 @@ class HuggingFaceSource:
         with tempfile.TemporaryDirectory(
             prefix=".toktier-hub-", dir=str(destination.parent)
         ) as staging:
-            downloaded = fetcher(
-                repo_id=entry.repo_id,
-                filename=artifact_file.name,
-                revision=entry.revision,
-                local_dir=staging,
-            )
+            # The hub client is a third party, and everything it can
+            # raise -- a gated or private repository, an expired token,
+            # a name that moved, a socket that failed -- means the same
+            # thing here: these bytes did not arrive. The protocol above
+            # says a source reports that as ``ArtifactNotFound``, so the
+            # client's own exception type is carried in ``details``
+            # rather than escaping as a traceback and taking the exit
+            # code and the ``--json`` envelope with it.
+            try:
+                downloaded = fetcher(
+                    repo_id=entry.repo_id,
+                    filename=artifact_file.name,
+                    revision=entry.revision,
+                    local_dir=staging,
+                )
+            except ToktierError:
+                # Already one of ours, with its own code; passing it
+                # through keeps that code instead of overwriting it.
+                raise
+            except Exception as error:
+                raise ArtifactNotFound(
+                    f"the hub did not deliver {artifact_file.name!r} of "
+                    f"{entry.family!r} from {entry.repo_id}@{entry.revision}: "
+                    f"{type(error).__name__}: {one_line(str(error))}",
+                    details={
+                        "family": entry.family,
+                        "searched": [f"{entry.repo_id}@{entry.revision}"],
+                        "offline": False,
+                        "cause": type(error).__name__,
+                        "cause_message": str(error),
+                        "remedy": (
+                            "make the repository reachable from this machine "
+                            "(credentials for a gated one, or network access), "
+                            "or supply the file from a local directory, a "
+                            "mirror, or an air-gap bundle"
+                        ),
+                    },
+                ) from error
             source_path = Path(downloaded)
             if not source_path.is_file():
                 raise ArtifactNotFound(

@@ -20,6 +20,7 @@ FILES = (
     "schemas/sibling_alias_source.schema.json",
     "schemas/sibling_aliases.schema.json",
     "schemas/support_registry.schema.json",
+    "src/toktier/artifacts/tables/artifact_conversions.v1.json",
     "src/toktier/artifacts/tables/artifact_manifest.v1.json",
     "src/toktier/artifacts/tables/sibling_aliases.v1.json",
     "src/toktier/kernels/prebuilt/build_manifest.json",
@@ -48,7 +49,11 @@ FILES = (
 #: exactly one closure implementation in the tree, in
 #: crates/toktier/build_support/source_identity.rs.
 RENAMED = (("Cargo.lock", "build/judged_dependencies.lock"),)
+#: Written by other maintainer tools into the same payload; this one
+#: checks that they are present, and each of those tools has its own
+#: `--check` for what they contain.
 GENERATED = (
+    "build/judged_compiled_closure.json",
     "build/source_identity.json",
     "licenses/RUST_DEPENDENCY_LICENSES.txt",
     "sbom/toktier.cyclonedx.json",

@@ -1,19 +1,17 @@
 {
   "schema": "toktier.rust_api.matrix.v1",
   "requested_device": "cpu",
-  "runtime_source_digest": "5c1e0c5663d6a3deb8f410c0a9e99dac1472f655ea5259287563c8896b9dc404",
-  "fast_cpu_source_digest": "fea6e606c8633d75431ad59b11494822ea7599c5c1ba1607a76f44866a37c36b",
-  "native_host_source_digest": "5989201943204c6e613bd19f4af796d7ce8a01473b81030c914aa35c465cf652",
+  "runtime_source_digest": "5b5b8fb7a59b9432bab8b320f9b1009a17d218aa3730cb22962fa57f2620f88e",
+  "fast_cpu_source_digest": "0e1f453bb157a5cf7370104c56e880936ad89ec4be64ecbb3e0a741af8fe2bbd",
+  "native_host_source_digest": "16928f29f3f6da356af0e20b847b0b1cb115ede4615bf0c8986ecc8e510e11c8",
   "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
   "build_flags": [
     "profile=release",
     "opt-level=3",
-    "lto=fat",
-    "codegen-units=1",
-    "panic=unwind",
     "target=x86_64-unknown-linux-gnu",
     "debug=false",
     "target-features=fxsr,sse,sse2",
+    "rustflags=",
     "features=default,network,prebuilt-gpu,serving,sqlite"
   ],
   "runtime_build_certified": true,

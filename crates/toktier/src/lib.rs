@@ -60,9 +60,15 @@ pub use session::{Session, SessionStats};
 pub const ORACLE: &str = "tokenizers==0.22.2";
 
 /// How this build's resolved dependency graph compares with the graph
-/// the certification evidence was taken on: `"verified"`, `"unlocated"`
-/// when no governing lockfile could be named, or `"mismatched: ..."`
-/// naming the first package that is not the judged one.
+/// the certification evidence was taken on: `"verified"`, or a line
+/// beginning `"unlocated: "` when no governing lockfile could be named,
+/// or one beginning `"mismatched: "` naming every package that is not
+/// the judged one.
+///
+/// Anything other than `"verified"` also says what closes the gap: a
+/// `mismatched` line carries the `cargo update --precise` command for
+/// each package it names, and an `unlocated` line says where the judged
+/// graph travels and how to name the governing lockfile.
 ///
 /// Reported by [`Runtime::doctor`] and required for an accelerated
 /// route: this crate's own sources are judged by digest, and the

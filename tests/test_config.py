@@ -321,3 +321,70 @@ def test_unknown_field_is_rejected() -> None:
         Config.resolve(cache_size=17)
 
     assert caught.value.details["field"] == "config"
+
+
+def test_home_treats_an_empty_value_as_unset(
+    monkeypatch: pytest.MonkeyPatch, isolated_home: Path, tmp_path: Path
+) -> None:
+    """Three states of one variable, because two of them look alike.
+
+    An empty value is unset, the way the XDG variables already read it
+    and the way the directory contract states it. Reading it as "set to
+    the empty path" would put the whole footprint on a relative path
+    under whatever the working directory happened to be.
+    """
+    unset = Config.resolve()
+    assert unset.home is None
+    assert unset.cache_dir.is_absolute()
+
+    monkeypatch.setenv(ENV_HOME, "")
+    empty = Config.resolve()
+    assert empty.home is None
+    assert empty.cache_dir == unset.cache_dir
+    assert empty.state_dir == unset.state_dir
+    assert empty.cache_dir.is_absolute()
+
+    named = tmp_path / "named-home"
+    monkeypatch.setenv(ENV_HOME, str(named))
+    home = Config.resolve()
+    assert home.home == named
+    assert home.cache_dir == named / "cache"
+    assert home.state_dir == named / "state"
+
+
+def test_an_undeterminable_home_is_refused_rather_than_guessed(
+    monkeypatch: pytest.MonkeyPatch, isolated_home: Path
+) -> None:
+    """No home, no guess.
+
+    With ``HOME`` empty and no XDG override, ``~`` expands to nothing and
+    the platform conventions land at the filesystem root
+    (``/.cache/toktier``). Reporting that as this machine's layout, and
+    then meeting a bare ``PermissionError`` on the way to creating it,
+    describes a machine that does not exist. The remedy is named while
+    naming it still helps.
+    """
+    monkeypatch.setenv("HOME", "")
+    monkeypatch.setenv("USERPROFILE", "")
+
+    with pytest.raises(ConfigInvalid) as caught:
+        Config.resolve()
+
+    assert caught.value.details["field"] == "home"
+    assert ENV_HOME in str(caught.value.details["remedy"])
+
+
+def test_an_xdg_override_needs_no_home(
+    monkeypatch: pytest.MonkeyPatch, isolated_home: Path, tmp_path: Path
+) -> None:
+    """The refusal is about having nowhere to hang the layout, not about
+    ``HOME`` itself: an explicit XDG root answers the question."""
+    monkeypatch.setenv("HOME", "")
+    monkeypatch.setenv("USERPROFILE", "")
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg-state"))
+
+    config = Config.resolve()
+
+    assert config.cache_dir == tmp_path / "xdg-cache" / "toktier"
+    assert config.state_dir == tmp_path / "xdg-state" / "toktier"

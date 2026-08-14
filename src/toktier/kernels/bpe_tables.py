@@ -51,6 +51,7 @@ import numpy as np
 
 from ..backends.protocol import TOKENIZER_FILE
 from ..errors import ArtifactHashMismatch
+from ..paths import ensure_private_dir
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..backends.protocol import ArtifactHandle
@@ -367,7 +368,7 @@ class BpeTableStore:
             blob.extend(raw)
         vocab_keys, vocab_vals = _build_hash(vocab_key_list, vocab_val_list)
 
-        self._cache_dir.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(self._cache_dir)
         arrays = {
             "pair_keys": pair_keys,
             "pair_vals": pair_vals,
@@ -495,6 +496,6 @@ class BpeTableStore:
             bits = np.zeros((n_merges + 31) // 32, dtype=np.uint32)
             for rank in flagged:
                 bits[rank >> 5] |= np.uint32(1 << (rank & 31))
-            self._cache_dir.mkdir(parents=True, exist_ok=True)
+            ensure_private_dir(self._cache_dir)
             self._write_atomic(out, lambda path: np.save(path, bits))
         return bits if bool(bits.any()) else None

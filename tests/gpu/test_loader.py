@@ -10,6 +10,8 @@ divergent build at runtime.
 from __future__ import annotations
 
 import ast
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -179,6 +181,63 @@ def test_producer_bindings_round_trip_through_the_registry_shape() -> None:
     )
     parsed = CertifiedSourceBindings.from_mapping(produced.as_mapping())
     assert parsed == produced
+
+
+def _toolchain(release: str = "13.0") -> ToolchainFacts:
+    return ToolchainFacts(
+        torch_version="2.13.0+cu130",
+        cuda_version="13.0",
+        nvcc_path="/usr/local/cuda/bin/nvcc",
+        nvcc_resolved_path=f"/usr/local/cuda-{release}/bin/nvcc",
+        nvcc_release=release,
+        nvcc_build="V13.0.88",
+        nvcc_error=None,
+        jit_toolchain_satisfied=True,
+        device_name="test",
+        device_capability="sm_120",
+        driver_version="595.84",
+    )
+
+
+@pytest.mark.parametrize("mask", [0o022, 0o000, 0o077])
+def test_every_jit_build_directory_is_owner_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mask: int
+) -> None:
+    """``config.md`` section 5, on the JIT half of the cache.
+
+    The build directory used to be made with a plain
+    ``mkdir(parents=True)``, so the kernel cache root and the per-build
+    directory under it arrived at the process umask. The compiler itself
+    is stubbed out here: what is under test is the directory this layer
+    makes before handing the path over.
+    """
+    from types import ModuleType
+
+    from toktier.engine.gpu import loader as loader_module
+
+    built: dict[str, Path] = {}
+
+    def compile_stub(_torch: object, build_dir: Path, _flags: object) -> ModuleType:
+        built["build_dir"] = build_dir
+        return ModuleType("toktier_pretok_cuda_stub")
+
+    monkeypatch.setattr(loader_module, "_import_torch", lambda: object())
+    monkeypatch.setattr(
+        loader_module, "_toolchain_facts", lambda *_args, **_kwargs: _toolchain()
+    )
+    monkeypatch.setattr(loader_module, "_compile", compile_stub)
+
+    cache_dir = tmp_path / "new" / "levels"
+    previous = os.umask(mask)
+    try:
+        KernelLoader.get(cache_dir=cache_dir, delivery="jit")
+    finally:
+        os.umask(previous)
+
+    build_dir = built["build_dir"]
+    assert build_dir.parent == cache_dir / "kernels"
+    for created in (build_dir, build_dir.parent, cache_dir, cache_dir.parent):
+        assert stat.S_IMODE(created.stat().st_mode) == 0o700, created
 
 
 def test_build_directory_separates_flag_sets(tmp_path: Path) -> None:

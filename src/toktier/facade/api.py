@@ -1112,6 +1112,15 @@ class Tokenizer:
                 input_bytes=len(window_text.encode("utf-8")),
                 path=path,
             )
+        elif path.startswith("hf_full_"):
+            # The bounded window did not hold, so the whole grown text was
+            # re-encoded on the reference engine. That ran; the ledger says
+            # so. (``gigatoken_repair_noop`` is the third case: an empty
+            # delta executes nothing, so there is nothing to record.)
+            self._executor.record_repair_reference_result(
+                input_bytes=len((tail_text + delta).encode("utf-8")),
+                path=path,
+            )
         return result
 
     def _store(self) -> EntryStore:

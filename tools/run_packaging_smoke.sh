@@ -41,15 +41,15 @@ from toktier.backends.fast_cpu import (
 repository = Path(os.environ["TOKTIER_REPOSITORY_ROOT"]).resolve()
 installed = Path(toktier.__file__).resolve()
 assert repository not in installed.parents, installed
-assert toktier.__version__ == "0.2.1"
+assert toktier.__version__ == "0.2.4"
 assert tokenizers.__version__ == "0.22.2"
 assert transformers.__version__ == "4.57.6"
 assert importlib.util.find_spec("gigatoken") is None
 assert ENGINE_MODULE not in sys.modules
 assert callable(toktier.from_pretrained)
 aliases = shipped_sibling_aliases()
-assert len(aliases.records) == 210
-assert sum(record.canonical_packaged for record in aliases.records) == 191
+assert len(aliases.records) == 211
+assert sum(record.canonical_packaged for record in aliases.records) == 204
 
 facts = fast_cpu_engine_facts()
 binding = json.loads(

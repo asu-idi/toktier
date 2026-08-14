@@ -56,6 +56,17 @@ native delivery must preserve two rules:
 - the list of shipped architectures is therefore short by construction: it
   contains the devices on which verdicts were actually run.
 
+One question the legacy host leaves open. A process that has loaded one
+kernel delivery and is then asked for the other is refused, and the GPU lane
+records that refusal as a fallback and answers exactly on the CPU lane, with
+the certificate still describing the delivery that is loaded and that ran
+(`docs/gpu-jit.md` Section 2). The alternative -- letting the refusal reach
+the caller as a raised `KernelIncompatible` and voiding the process
+certificate outright -- is louder, and would tell a caller that asked for a
+specific delivery that it did not get one. Which of the two a serving process
+wants is not obvious, and the answer belongs with the move onto the native
+delivery rather than ahead of it.
+
 Related: an optional adapter for PyTorch tensors across a stable ABI.
 Free-threaded CPython remains out of scope while the package ships abi3 wheels.
 
@@ -67,6 +78,13 @@ and will not be: the direction for multi-machine deployments is a store server
 that speaks the same record format and keeps the same two invariants — a wrong
 key misses, and a hit is verified — so that a client cannot be given a prefix
 it did not ask for.
+
+A related item on the same path: `Session.revision` is monotone within one
+process only, and a session re-read in a later process begins its count again
+at zero (`docs/contracts/facade.md` Section 7). The conversation itself is
+durable; the counter is not. Carrying it across processes means writing it
+into the record, which is a stored-format change and is deliberately not part
+of 0.2.4.
 
 ## Platforms
 
@@ -106,6 +124,36 @@ one, repair the boundary on the CPU lane, and keep the result byte-for-byte
 identical to the serial path. The admission rules apply unchanged — without
 certification evidence for the accelerated backend, the delta stays on the
 CPU lane.
+
+## Dependency-graph judgement: narrowed to the compiled closure (done in 0.2.4)
+
+Since 0.2.4 an accelerated route also asks that the dependency graph of the
+build be the graph the certification campaign judged (`docs/rust-api.md`).
+Taking the whole lockfile closure as the judged side would have been the
+easier reading and the wrong one: a lockfile's dependency lists are the union
+over features and targets, so a consumer who resolved a graph would be refused
+over transitive versions that never entered the compiled artifact -- a
+WebAssembly binding on a Linux build, a Windows shim, an optional dependency
+no feature enabled. Such refusals are safe and exact and ask the reader to
+align packages that have no bearing on what ran.
+
+0.2.4 judges the set Cargo compiled for the certified build, taken from
+Cargo's own account of that build and shipped with the crate. On this
+workspace that is 165 packages where the reachable set is 227, and a fresh
+consumer resolution diverges in six packages rather than fourteen -- each of
+which really is compiled, so each command that aligns it changes the bytes
+that run.
+
+Two things this did not do, both written up where the answers are read
+(`docs/rust-api.md`). It does not make a fresh resolution certified: six
+packages still drift, because exact versions age. And it gives up one
+incidental check -- a consumer whose own feature unification pulls an extra
+package into a judged dependency is no longer reported -- which is structural
+rather than pending, since a consumer's build script cannot compute its own
+feature resolution. An earlier draft of this section offered "a build-script
+helper for another target" as an example of what falls outside; measurement
+says otherwise, since `cc` declares `find-msvc-tools` unconditionally and
+Cargo compiles it on Linux too. It stays inside the judgement.
 
 ## Certification suite (second wave)
 

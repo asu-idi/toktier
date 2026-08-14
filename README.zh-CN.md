@@ -41,6 +41,14 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 
 ## 最新动态
 
+- **2026.08.14** 🚀 **toktier 0.2.4** 发布——Han family（`kimi_k3`）以产品
+  自带的端到端 GPU 引擎正式进入认证名单；Rust 侧认证开始判定"这次构建真正
+  编译的那些包"，而不只是源码，build flags 也只声称 build script 观测得到的
+  项；Rust crate 开始遵循 `TOKTIER_HOME`/XDG；Python facade 新增 `session()`
+  上下文管理器、全命令 `--json` 与 `doctor --family`；无法承载私有状态的
+  目录根、`artifacts check-conversion`、以及 last-execution 诊断，都在各自的
+  契约内作答。对外返回的 ID、store 格式与 kernel ABI 都没有变化。详见
+  [v0.2.4 发布说明](docs/releases/v0.2.4.md)（英文）。
 - **2026.08.11** 🚀 **toktier 0.2.1** 发布——维护版本：诊断信息更完整
   （`doctor` 会报告 JIT 工具链是否合格，`explain()` 摘要逐项标明所指的时间
   范围），并修正了文档；对外返回的 ID、store 格式与 kernel ABI 都没有变化。
@@ -326,6 +334,7 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 | `jit_toolchain_observed` / `jit_toolchain_constraint` | 本机检测到的三元组，以及用于对照的已评审集合 |
 | `automatic_gpu_eligible` | 以下条件的合取结果：候选条件成立；至少检测到一台设备，且其架构已通过所选交付方式的评审；该交付方式自身的材料齐备；工具链前提成立 |
 | `automatic_effective_backend` | 对具备 CPU 快路径认证的 family，达到或超过 crossover 的自动请求实际使用的后端：`gpu`、`fast_cpu` 或 `hf` |
+| `directory_roots_usable` / `directory_roots_problem` | 上述三个已解析目录根能否承载其用途，以及无法承载时的原因——与下一条命令会以 `CONFIG_INVALID` 作答的判断相同，且只读取、不创建任何目录 |
 
 上述字段描述的是这套安装。`toktier doctor --family FAMILY` 会另加一个
 `family` 段，回答某一个 family 在这台机器上的情况：它的认证身份、
@@ -347,7 +356,7 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 如需统一指定所有目录的位置，可使用 `TOKTIER_HOME`（见
 `docs/contracts/config.md` 第 5 节）。
 
-自 0.2.3 起，Rust crate 以相同的优先级读取同一组变量，一套环境即可同时
+自 0.2.4 起，Rust crate 以相同的优先级读取同一组变量，一套环境即可同时
 安置两层：
 
 | 层 | 工件缓存 | 已编译 kernel 缓存 | 会话状态 |
@@ -431,6 +440,22 @@ python tools/generate_sibling_aliases.py --check
 python tools/dev.py test-packaging
 ```
 
+其中五条同样可以在发布的 Rust 源码归档里跑通——该归档随源码带上了
+`evidence/`、`data/` 以及本 README 的译本。另外两条只在仓库内可用；在归档里
+它们会明确声明不适用，而不是给出一次莫名的失败：各自打印一行以 `declined:`
+开头的说明，指出未检查任何内容，并以 `3` 退出——既不是通过，也不是发现问题。
+`generate_registry.py --release-check` 读取仓库自身的源码树与其已构建扩展，
+而归档两者皆无；归档所携带的注册表副本由 `validate_registry.py` 验证，那一条
+在归档里确实可跑。`dev.py test-packaging` 运行测试套件，而归档有意不携带它。
+两棵树的区分依据是归档构建器写在其根目录（且仅写在那里）的
+`SOURCE-MANIFEST.json`，因此仓库内的检出仍与此前完全一样地跑满七条。
+
+| 退出码 | 该工具在说什么 |
+|---|---|
+| `0` | 已运行，且所检查的内容成立 |
+| `3` | 已声明不适用：这不是它能检查的树，未检查也未运行任何内容 |
+| 其他 | 已运行并发现了问题，或无法运行——具体由消息说明 |
+
 这里写明前置条件，是为了让一次失败确实代表问题本身，而不是缺少工具。
 schema 检查需要 `jsonschema`（`pyproject.toml` 的 `test` 依赖组）；缺少时
 它会明确拒绝并提示 `error: the jsonschema package is required ...`。最后一条
@@ -445,7 +470,8 @@ schema 检查需要 `jsonschema`（`pyproject.toml` 的 `test` 依赖组）；�
 `generate_registry.py` 从已编译扩展中读取 native host 的编译期身份：如果本仓库的
 `src/toktier/_native` 已构建，就使用该扩展，否则使用已安装 `toktier` wheel 中的
 扩展，并在 stderr 说明读取了哪一个；无论哪种情况，该身份都必须与当前源码集合
-完全一致。`pytest tests/gpu` 遵循同一规则：断言该身份的两项测试会读取可用的
+完全一致。第二种读取仅是仓库内的便利做法——在发布的源码归档里该命令会直接
+声明不适用，而不是去回答一个属于本机上其他安装的扩展。`pytest tests/gpu` 遵循同一规则：断言该身份的两项测试会读取可用的
 扩展，只有两者都不可用时才会注明原因并跳过。
 
 ## 性能
@@ -526,7 +552,7 @@ span，涵盖 normalization、pre-tokenization、merge 和 added-token 处理；
 
 ## 文档
 
-- [`docs/releases/v0.2.1.md`](docs/releases/v0.2.1.md) — 本版本发布说明（英文）。
+- [`docs/releases/v0.2.4.md`](docs/releases/v0.2.4.md) — 本版本发布说明（英文）。
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — 分层、路由与 store 格式。
 - [`ROADMAP.md`](ROADMAP.md) — 发布范围与后续集成。
 - [`docs/support-matrix.md`](docs/support-matrix.md) — 工件与覆盖仓库。

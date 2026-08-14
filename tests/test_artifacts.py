@@ -591,6 +591,73 @@ def test_hub_source_uses_the_injected_fetcher(tmp_path: Path) -> None:
     assert calls == [("demo/demo", "tokenizer.json", REVISION)]
 
 
+def test_hub_source_classifies_a_client_failure(tmp_path: Path) -> None:
+    """A gated repository is a fetch that failed, not a loose exception.
+
+    The download client is a third party and raises its own types. The
+    stand-in below is shaped like the one a gated repository produces: a
+    long, multi-line message from a class this package does not know.
+    """
+
+    class GatedRepoError(Exception):
+        """Stand-in for the client's own exception type."""
+
+    calls: list[str] = []
+
+    def fetcher(
+        *, repo_id: str, filename: str, revision: str, local_dir: str
+    ) -> str:
+        calls.append(filename)
+        raise GatedRepoError(
+            "401 Client Error.\n\nCannot access gated repo for url "
+            f"https://example.invalid/{repo_id}/resolve/{revision}/{filename}.\n"
+            "Access is restricted. You must be authenticated to access it. "
+            "Please log in." + " padding" * 40
+        )
+
+    manifest = make_manifest({"tokenizer.json": GOOD})
+    store = make_store(tmp_path, manifest, HuggingFaceSource(fetcher=fetcher))
+
+    with pytest.raises(ArtifactNotFound) as caught:
+        store.ensure(FAMILY)
+
+    error = caught.value
+    assert error.code == "ARTIFACT_NOT_FOUND"
+    assert error.details["family"] == FAMILY
+    assert error.details["searched"] == [f"demo/demo@{REVISION}"]
+    assert error.details["offline"] is False
+    # The client's type is a fact about the failure, kept in details.
+    assert error.details["cause"] == "GatedRepoError"
+    assert "gated repo" in str(error.details["cause_message"])
+    assert "air-gap bundle" in str(error.details["remedy"])
+    # The prose report is one line, so the message is one line.
+    message = str(error)
+    assert "\n" not in message and len(message) < 400
+    assert "GatedRepoError" in message and FAMILY in message
+    # The client's exception is the cause, not swallowed.
+    assert isinstance(error.__cause__, GatedRepoError)
+    # A failure to deliver is final: it is not retried as a mismatch is.
+    assert calls == ["tokenizer.json"]
+    # Nothing was installed on the way out.
+    assert list(tmp_path.rglob("tokenizer.json")) == []
+
+
+def test_hub_source_passes_its_own_errors_through(tmp_path: Path) -> None:
+    """A product error keeps its own code instead of being re-labelled."""
+
+    def fetcher(
+        *, repo_id: str, filename: str, revision: str, local_dir: str
+    ) -> str:
+        del repo_id, filename, revision, local_dir
+        raise RegistryInvalid("shipped table failed its digest")
+
+    manifest = make_manifest({"tokenizer.json": GOOD})
+    store = make_store(tmp_path, manifest, HuggingFaceSource(fetcher=fetcher))
+
+    with pytest.raises(RegistryInvalid):
+        store.ensure(FAMILY)
+
+
 def test_local_directory_source_copies_from_disk(tmp_path: Path) -> None:
     upstream = tmp_path / "frozen" / f"{FAMILY}-{REVISION[:12]}"
     upstream.mkdir(parents=True)

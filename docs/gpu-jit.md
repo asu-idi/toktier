@@ -113,9 +113,24 @@ after that compiler selection drifts to NVCC 13.2.
 Nothing sets `TORCH_EXTENSIONS_DIR`, and no path is hardcoded.
 
 The same one-per-process rule applies to the delivery: the first load
-fixes it, and an explicit request for the other delivery afterwards
-raises and voids the process certificate rather than serving two kernel
-identities under one report.
+fixes it, and a later request for the other delivery is refused rather
+than served, so two kernel identities never appear under one report.
+
+What a caller sees depends on who asked. The loader raises
+`KernelIncompatible` (`R_KERNEL_DIGEST_MISMATCH`) to whoever called it.
+A routed request reaches the loader through the GPU lane, which treats a
+delivery that will not load the way it treats any other backend that
+cannot serve: the refusal is recorded as a fallback -- `R_EXEC_FAULT` in
+`fallback_counts`, with the loader's own sentence in `explain()`'s
+`gpu_backend.load_error` -- and the request is answered on the exact CPU
+lane. The ids are the ones the request would have had either way.
+
+The certificate goes on describing the delivery that is loaded, because
+that is the delivery that ran; the refused request contributed no
+accelerated execution for it to describe. Whether such a refusal should
+instead reach the caller as a raised `KernelIncompatible` and void the
+process certificate outright is an open question (`ROADMAP.md`, "Kernel
+distribution"); this section describes what the release does.
 
 ## 3. Generated lookup tables are artifacts
 

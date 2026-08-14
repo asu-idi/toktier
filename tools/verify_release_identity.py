@@ -14,6 +14,12 @@ VERSION_PATTERN = re.compile(
     r"(?ms)^\[workspace\.package]\s*.*?^version\s*=\s*\"([^\"]+)\""
 )
 
+#: The release date this tree is cut for. It is checked against
+#: CITATION.cff rather than derived from it, so a release cannot go out
+#: carrying the previous release's date by omission. Moving the release
+#: day means moving both, together.
+RELEASE_DATE = "2026-08-14"
+
 
 def project_version() -> str:
     cargo = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
@@ -32,8 +38,10 @@ def verify(tag: str) -> None:
     citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
     if f'version: "{version}"' not in citation:
         raise ValueError("CITATION.cff version differs from Cargo.toml")
-    if 'date-released: "2026-08-09"' not in citation:
-        raise ValueError("CITATION.cff does not carry the frozen release date")
+    if f'date-released: "{RELEASE_DATE}"' not in citation:
+        raise ValueError(
+            f"CITATION.cff does not carry the frozen release date {RELEASE_DATE}"
+        )
 
     generator = (ROOT / "tools" / "generate_pypi_readme.py").read_text(
         encoding="utf-8"

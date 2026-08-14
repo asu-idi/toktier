@@ -34,10 +34,10 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 tar.workspace = true
-toktier-routing-core = { path = "../toktier-routing-core", version = "=0.2.1" }
-toktier-cuda-driver = { path = "../toktier-cuda-driver", version = "=0.2.1", optional = true }
-toktier-store-core = { path = "../toktier-store-core", version = "=0.2.1" }
-toktier-store-sqlite = { path = "../toktier-store-sqlite", version = "=0.2.1", optional = true }
+toktier-routing-core = { path = "../toktier-routing-core", version = "=0.2.4" }
+toktier-cuda-driver = { path = "../toktier-cuda-driver", version = "=0.2.4", optional = true }
+toktier-store-core = { path = "../toktier-store-core", version = "=0.2.4" }
+toktier-store-sqlite = { path = "../toktier-store-sqlite", version = "=0.2.4", optional = true }
 ureq = { workspace = true, optional = true }
 
 [dev-dependencies]

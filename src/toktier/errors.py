@@ -35,7 +35,24 @@ __all__ = [
     "ToktierError",
     "UncertifiedTokenizer",
     "UnsupportedConfig",
+    "one_line",
 ]
+
+
+def one_line(text: str, *, limit: int = 200) -> str:
+    """Fold a message from elsewhere into one bounded line.
+
+    The prose command-line report is the single line
+    ``error <CODE>: <message>`` (``docs/contracts/errors.md`` Section 4),
+    so text that arrives from a library below -- a hub client, the tar
+    reader -- is collapsed before it becomes a message. Nothing is lost:
+    the caller keeps the text whole in ``details``, where a reader that
+    wants it can ask for ``--json``.
+    """
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= limit:
+        return collapsed
+    return collapsed[: limit - 3].rstrip() + "..."
 
 
 class ToktierError(Exception):
@@ -81,8 +98,13 @@ class ToktierError(Exception):
 class ArtifactNotFound(ToktierError):
     """The tokenizer artifact cannot be resolved.
 
-    Unknown family, missing local file, or offline mode with an empty
-    cache. Typical details: ``family``, ``searched``, ``offline``.
+    Unknown family, missing local file, offline mode with an empty
+    cache, or a configured source that could not deliver the bytes --
+    including a failure inside a download client this package does not
+    own, which is classified at the fetch boundary so that a caller sees
+    a code rather than that client's own exception. Typical details:
+    ``family``, ``searched``, ``offline``; for a source that failed,
+    also ``cause``, ``cause_message`` and ``remedy``.
     """
 
     CODE = "ARTIFACT_NOT_FOUND"

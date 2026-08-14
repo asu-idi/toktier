@@ -49,7 +49,7 @@ from typing import Any
 
 from ..config import Config
 from ..errors import ArtifactHashMismatch, ArtifactNotFound
-from ..paths import DIRECTORY_MODE, FILE_MODE, artifact_cache_dir, ensure_private_dir
+from ..paths import FILE_MODE, artifact_cache_dir, ensure_private_dir
 from .manifest import ArtifactEntry, ArtifactFile, ArtifactManifest
 from .sources import ArtifactSource
 
@@ -327,7 +327,12 @@ class ArtifactStore:
                     "offline_reasons": [REASON_NO_SOURCE],
                 },
             )
-        target.parent.mkdir(parents=True, exist_ok=True, mode=DIRECTORY_MODE)
+        # `mkdir(parents=True, mode=...)` reaches only the last component
+        # and leaves the rest at the umask, which is the shape section 5
+        # of `config.md` does not offer. Nested artifact files are rare,
+        # so this has never been seen in the wild; it is the same call as
+        # the ones that were.
+        ensure_private_dir(target.parent)
         last_sha: str | None = None
         last_size: int | None = None
         for attempt in range(FETCH_ATTEMPTS):

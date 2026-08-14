@@ -874,13 +874,38 @@ fn byte_offset_at_char(value: &str, chars: usize) -> usize {
         .map_or(value.len(), |(offset, _)| offset)
 }
 
+/// Create `path` and every missing directory on the way to it, each one
+/// owner-only.
+///
+/// `create_dir_all` leaves the directories it makes at the process umask,
+/// and a single `set_permissions` afterwards reaches only the last of
+/// them -- so a store opened at a fresh deep path arrived as
+/// `0755/0755/0700` under the usual umask, where `config.md` section 5
+/// offers 0700 for every directory this layer creates. The components are
+/// therefore created one at a time, with the mode set again explicitly
+/// because `DirBuilder::mode` still goes through the umask. Directories
+/// that were already there are left exactly as their operator has them,
+/// which is the same rule the artifact and Rust-store faces follow.
 fn ensure_private_dir(path: &Path) -> std::io::Result<()> {
-    fs::create_dir_all(path)?;
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+
+        let mut current = PathBuf::new();
+        for component in path.components() {
+            current.push(component.as_os_str());
+            let mut builder = fs::DirBuilder::new();
+            builder.mode(0o700);
+            match builder.create(&current) {
+                Ok(()) => fs::set_permissions(&current, fs::Permissions::from_mode(0o700))?,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(error),
+            }
+        }
     }
+    // Keeps `create_dir_all`'s judgement of a path that is already there
+    // and is not a directory, without touching one this call did not make.
+    fs::create_dir_all(path)?;
     Ok(())
 }
 
@@ -965,6 +990,36 @@ mod tests {
             )
             .unwrap(),
         )
+    }
+
+    /// `config.md` section 5: every directory this layer creates is
+    /// owner-only, the intermediate ones on the way to a leaf included and
+    /// independently of the process umask, while directories that were
+    /// already there keep the mode their operator gave them.
+    #[cfg(unix)]
+    #[test]
+    fn a_store_opened_at_a_fresh_deep_path_makes_every_directory_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temporary = tempfile::tempdir().unwrap();
+        let caller_owned = temporary.path().join("caller-owned");
+        fs::create_dir(&caller_owned).unwrap();
+        fs::set_permissions(&caller_owned, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let directory = caller_owned.join("new/levels/store");
+        let _store =
+            NativeEntryStore::open([7; 32], router(), Some(directory.clone()), 0, 0).unwrap();
+
+        let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&caller_owned), 0o755, "already there, so left alone");
+        for made in [
+            caller_owned.join("new"),
+            caller_owned.join("new/levels"),
+            directory.clone(),
+            directory.join(ENTRIES_DIR),
+        ] {
+            assert_eq!(mode(&made), 0o700, "{}", made.display());
+        }
     }
 
     #[test]

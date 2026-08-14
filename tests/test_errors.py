@@ -76,3 +76,15 @@ def test_catching_the_base_class_and_switching_on_the_code() -> None:
     except ToktierError as error:
         assert error.code == "CONFIG_INVALID"
         assert error.details.get("field") == "offline"
+
+
+def test_one_line_folds_and_bounds_a_message_from_elsewhere() -> None:
+    """``errors.md`` Section 4: the prose report is a single line."""
+    from toktier.errors import one_line
+
+    assert one_line("already one line") == "already one line"
+    assert one_line("first\nsecond\n- third") == "first second - third"
+    long = one_line("word " * 200)
+    assert "\n" not in long
+    assert len(long) == 200
+    assert long.endswith("...")

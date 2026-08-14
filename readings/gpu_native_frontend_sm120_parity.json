@@ -15,14 +15,12 @@
     "host_build_flags": [
       "profile=release",
       "opt-level=3",
-      "lto=fat",
-      "codegen-units=1",
-      "panic=unwind",
       "target=x86_64-unknown-linux-gnu",
+      "rustflags=",
       "pyo3=abi3-py310+extension-module"
     ],
-    "host_source_digest": "5989201943204c6e613bd19f4af796d7ce8a01473b81030c914aa35c465cf652",
-    "host_source_digest_v2": "219f6872fe2e80e965415e865d4073639f762a91dc26da60cc9e826f3192fe0e",
+    "host_source_digest": "16928f29f3f6da356af0e20b847b0b1cb115ede4615bf0c8986ecc8e510e11c8",
+    "host_source_digest_v2": "94301a65fb034309472b4bfbff51e4c36e1a2719f7eceb150c6cbb271f6aee27",
     "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
   },
   "one_python_to_rust_call_per_batch": true,

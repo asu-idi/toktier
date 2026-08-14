@@ -18,6 +18,7 @@ import hashlib
 import importlib.metadata
 import importlib.util
 import json
+import os
 import platform
 import shutil
 import subprocess
@@ -31,6 +32,7 @@ from toktier.artifacts import (
     ArtifactEntry,
     ArtifactFile,
     ArtifactManifest,
+    HuggingFaceSource,
 )
 from toktier.engine.gpu.toolchain import JIT_TOOLCHAIN_CONSTRAINT, NvccFacts
 from toktier.errors import BackendUnavailable
@@ -246,6 +248,8 @@ def test_doctor_human(
         f"artifact_cache_dir: {home / 'cache' / 'artifacts'}\n"
         f"kernel_cache_dir: {home / 'cache' / 'kernels'}\n"
         f"store_state_dir: {home / 'state' / 'store'}\n"
+        "directory_roots_usable: true\n"
+        "directory_roots_problem: none\n"
         "configured_offline: true\n"
         "artifact_source: huggingface\n"
         "source_offline: false\n"
@@ -302,6 +306,53 @@ def test_doctor_human(
     assert captured.err == ""
 
 
+def test_doctor_names_a_root_that_cannot_hold_private_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A probe that answers "what will actually run here" has to say so.
+
+    The operation contract already refuses such a root with
+    ``CONFIG_INVALID``; the diagnostic used to print the paths beneath it
+    and say nothing.
+    """
+    occupied = tmp_path / "not-a-directory"
+    occupied.write_text("taken", encoding="utf-8")
+    monkeypatch.setenv("TOKTIER_HOME", str(occupied))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    _set_doctor_probes(monkeypatch)
+
+    assert cli.main(["doctor", "--json"]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert report["directory_roots_usable"] is False
+    problem = report["directory_roots_problem"]
+    assert str(occupied) in problem
+    assert "is not a directory" in problem
+    for name in ("artifact_cache_dir", "kernel_cache_dir", "store_state_dir"):
+        assert name in problem
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root may write anywhere")
+def test_doctor_names_a_root_this_user_cannot_write(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    closed = tmp_path / "closed"
+    closed.mkdir(mode=0o500)
+    os.chmod(closed, 0o500)
+    monkeypatch.setenv("TOKTIER_HOME", str(closed))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    _set_doctor_probes(monkeypatch)
+
+    assert cli.main(["doctor"]) == 0
+
+    captured = capsys.readouterr()
+    assert "directory_roots_usable: false\n" in captured.out
+    assert "cannot be written by this user" in captured.out
+    assert captured.err == ""
+
+
 def test_doctor_json(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -317,6 +368,8 @@ def test_doctor_json(
         "artifact_cache_dir": str(home / "cache" / "artifacts"),
         "kernel_cache_dir": str(home / "cache" / "kernels"),
         "store_state_dir": str(home / "state" / "store"),
+        "directory_roots_usable": True,
+        "directory_roots_problem": None,
         "configured_offline": False,
         "artifact_source": "huggingface",
         "source_offline": False,
@@ -741,6 +794,64 @@ def test_artifacts_fetch_hash_mismatch(
     assert source.calls == ["tokenizer.json", "tokenizer.json"]
 
 
+def test_artifacts_fetch_reports_a_gated_repository_as_a_command_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The contract holds when the download client raises.
+
+    This is the real fetch path -- the hub source inside the converting
+    source the command builds -- with only the client call replaced, so
+    no test reaches a network. A repository that needs credentials is
+    the ordinary case: it must exit ``2`` with one report, in prose and
+    in JSON alike, rather than print a traceback and exit ``1``.
+    """
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+
+    class GatedRepoError(Exception):
+        """Stand-in for the client's own exception type."""
+
+    def fetcher(
+        *, repo_id: str, filename: str, revision: str, local_dir: str
+    ) -> NoReturn:
+        del local_dir
+        raise GatedRepoError(
+            "401 Client Error.\n\nCannot access gated repo for url "
+            f"https://example.invalid/{repo_id}/resolve/{revision}/{filename}.\n"
+            "Access is restricted. Please log in."
+        )
+
+    manifest = _manifest()
+    monkeypatch.setattr(cli, "_artifact_manifest", lambda: manifest)
+    monkeypatch.setattr(
+        cli, "HuggingFaceSource", lambda: HuggingFaceSource(fetcher=fetcher)
+    )
+
+    exit_code = cli.main(["artifacts", "fetch", FAMILY])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    # One line, the frozen prose shape, naming the family and the client.
+    assert captured.err.count("\n") == 1
+    assert captured.err.startswith("error ARTIFACT_NOT_FOUND: ")
+    assert "GatedRepoError" in captured.err
+    assert "Traceback" not in captured.err
+
+    exit_code = cli.main(["--json", "artifacts", "fetch", FAMILY])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    error = json.loads(captured.err)["error"]
+    assert error["code"] == "ARTIFACT_NOT_FOUND"
+    assert error["details"]["family"] == FAMILY
+    assert error["details"]["cause"] == "GatedRepoError"
+    assert error["details"]["remedy"]
+    # The flag is a promise about the command, wherever it is written.
+    assert cli.main(["artifacts", "fetch", FAMILY, "--json"]) == 2
+    assert json.loads(capsys.readouterr().err) == {"error": error}
+
+
 def test_artifacts_export_then_import_roundtrip(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -810,10 +921,34 @@ def test_artifacts_import_rejects_a_file_that_is_not_a_bundle(
     assert exit_code == 2
     assert captured.out == ""
     assert captured.err.startswith("error BUNDLE_INVALID: ")
+    # ``errors.md`` Section 4: without --json the report is one line. The
+    # tar reader says what it tried one method per line; that belongs in
+    # the envelope, not on standard error.
+    assert captured.err.splitlines() == [captured.err.rstrip("\n")]
     cache = home / "cache" / "artifacts"
     assert not cache.exists() or not any(
         path for path in cache.iterdir() if not path.name.startswith(".")
     )
+
+
+def test_artifacts_import_json_carries_what_the_tar_reader_tried(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The detail folded out of the prose line is still delivered."""
+    home = tmp_path / "toktier-home"
+    monkeypatch.setenv("TOKTIER_HOME", str(home))
+    bundle = tmp_path / "not-a-bundle.tar"
+    bundle.write_bytes(b"these bytes are not a tar archive\n")
+
+    exit_code = cli.main(["artifacts", "import", "--json", str(bundle)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    envelope = json.loads(captured.err)
+    assert envelope["error"]["code"] == "BUNDLE_INVALID"
+    assert "\n" not in envelope["error"]["message"]
+    cause = envelope["error"]["details"]["cause"]
+    assert "method gz" in cause and "method tar" in cause
 
 
 def test_inspect_prints_one_family(
@@ -1242,3 +1377,116 @@ def test_doctor_refuses_a_family_the_package_does_not_ship(
     error = json.loads(captured.err)["error"]
     assert error["code"] == "ARTIFACT_NOT_FOUND"
     assert error["details"]["suggestions"][0] == "qwen3_8b"
+
+
+def test_an_unusable_root_reports_a_code_not_a_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``TOKTIER_HOME`` pointing at a regular file used to end the command
+    with a ``NotADirectoryError`` traceback and no envelope at all."""
+    occupied = tmp_path / "not-a-directory"
+    occupied.write_text("taken", encoding="utf-8")
+    monkeypatch.setenv("TOKTIER_HOME", str(occupied))
+
+    exit_code = cli.main(["--json", "artifacts", "verify", "qwen3_8b"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    payload = json.loads(captured.err)
+    assert payload["error"]["code"] == "CONFIG_INVALID"
+    assert payload["error"]["details"]["cause"] == "NotADirectoryError"
+
+
+def test_an_undeterminable_home_reports_a_code_not_a_guess(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_home: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``doctor`` used to answer ``0`` and report ``/.cache/toktier``."""
+    monkeypatch.setenv("HOME", "")
+    monkeypatch.setenv("USERPROFILE", "")
+
+    exit_code = cli.main(["--json", "doctor"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    payload = json.loads(captured.err)
+    assert payload["error"]["code"] == "CONFIG_INVALID"
+    assert payload["error"]["details"]["field"] == "home"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--json", "artifacts", "check-conversion", "qwen3_8b"],
+        ["artifacts", "check-conversion", "--json", "qwen3_8b"],
+    ],
+)
+def test_check_conversion_refuses_inside_the_envelope(
+    argv: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A family with no conversion recipe used to answer with one line of
+    prose on either side of the flag: right exit code, no code, no
+    envelope."""
+    exit_code = cli.main(argv)
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    payload = json.loads(captured.err)
+    assert payload["error"]["code"] == "UNSUPPORTED_CONFIG"
+    assert payload["error"]["details"]["value"] == "qwen3_8b"
+    assert "artifacts verify" in payload["error"]["details"]["remedy"]
+
+
+def test_check_conversion_without_json_still_names_the_code(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = cli.main(["artifacts", "check-conversion", "qwen3_8b"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err.splitlines() == [
+        "error UNSUPPORTED_CONFIG: qwen3_8b: this family is downloaded "
+        "whole, not converted"
+    ]
+
+
+def test_a_failed_conversion_gate_reports_a_code(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The gate's own failure line carried no code either."""
+    report = {
+        "family": "kimi_k3",
+        "converter": "kimi_tiktoken_v1",
+        "upstream_repo": "moonshotai/Kimi-K3",
+        "upstream_revision": "0" * 40,
+        "upstream_inputs": [],
+        "runs": 2,
+        "deterministic": True,
+        "observed_sha256": "a" * 64,
+        "expected_sha256": "b" * 64,
+        "added_tokens": 0,
+        "added_tokens_special": 0,
+        "added_tokens_first_id": 0,
+        "identity_matches": False,
+        "added_tokens_contiguous": True,
+        "added_tokens_fully_described": True,
+    }
+    monkeypatch.setattr(cli, "recipe_for", lambda family: object())
+    monkeypatch.setattr(
+        cli, "conversion_report", lambda *args, **kwargs: report
+    )
+
+    exit_code = cli.main(["--json", "artifacts", "check-conversion", "kimi_k3"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    payload = json.loads(captured.err)
+    assert payload["error"]["code"] == "ARTIFACT_HASH_MISMATCH"
+    assert payload["error"]["details"]["failures"] == ["identity_matches"]
+    assert payload["error"]["details"]["expected_sha256"] == "b" * 64

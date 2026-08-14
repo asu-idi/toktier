@@ -279,6 +279,7 @@ impl Runtime {
                 .map(str::to_owned)
                 .collect(),
             dependency_closure: crate::DEPENDENCY_CLOSURE.to_owned(),
+            build_flag_divergence: self.inner.registry.rust_api_build_flag_divergence(),
             certified: self.inner.registry.rust_api_build_certified(),
         };
         let ordinal = match self.inner.config.device {

@@ -30,8 +30,18 @@ from .artifacts.conversion import (
 from .artifacts.store import fetch_availability
 from .artifacts.tables import ARTIFACT_MANIFEST
 from .config import Config
-from .errors import BackendUnavailable, ToktierError
-from .paths import artifact_cache_dir, kernel_cache_dir, store_state_dir
+from .errors import (
+    ArtifactHashMismatch,
+    BackendUnavailable,
+    ToktierError,
+    UnsupportedConfig,
+)
+from .paths import (
+    artifact_cache_dir,
+    kernel_cache_dir,
+    private_dir_problem,
+    store_state_dir,
+)
 
 if TYPE_CHECKING:
     from .engine.gpu.toolchain import NvccFacts
@@ -247,6 +257,35 @@ def _family_report(
     }
 
 
+def _directory_roots_problem(config: Config) -> str | None:
+    """Why this machine's resolved roots cannot hold what they are for.
+
+    ``None`` when all three are fine. The three usually share a home, so
+    one unusable location is one problem named once, with the fields it
+    stands behind listed in front of it.
+
+    Read-only, like every other probe of this command: the roots are not
+    created here, because creating them to find out whether they can be
+    created would make the probe an operation.
+    """
+    problems: dict[str, list[str]] = {}
+    for name, path in (
+        ("artifact_cache_dir", artifact_cache_dir(config)),
+        ("kernel_cache_dir", kernel_cache_dir(config)),
+        ("store_state_dir", store_state_dir(config)),
+    ):
+        problem = private_dir_problem(path)
+        if problem is not None:
+            problems.setdefault(problem, []).append(name)
+    return (
+        "; ".join(
+            f"{', '.join(names)}: {problem}"
+            for problem, names in problems.items()
+        )
+        or None
+    )
+
+
 def _doctor_report(
     config: Config, *, source: ArtifactSource | None, family: str | None = None
 ) -> dict[str, object]:
@@ -350,6 +389,7 @@ def _doctor_report(
         and delivery_ready
         and jit_satisfied is not False
     )
+    directory_roots_problem = _directory_roots_problem(config)
     automatic_effective_backend = (
         "gpu"
         if automatic_gpu_eligible
@@ -378,6 +418,12 @@ def _doctor_report(
         "artifact_cache_dir": str(artifact_cache_dir(config)),
         "kernel_cache_dir": str(kernel_cache_dir(config)),
         "store_state_dir": str(store_state_dir(config)),
+        # Whether the three paths above can actually hold what they are
+        # for. Printing a layout that the next command will refuse with
+        # CONFIG_INVALID would answer "what will actually run here" with
+        # something that will not.
+        "directory_roots_usable": directory_roots_problem is None,
+        "directory_roots_problem": directory_roots_problem,
         "configured_offline": availability.configured_offline,
         "artifact_source": availability.source_name or "none",
         "source_offline": availability.source_offline,
@@ -564,12 +610,15 @@ def _artifacts_check_conversion(arguments: argparse.Namespace) -> int:
     entry = manifest.get(arguments.family)
     recipe = recipe_for(entry.family)
     if recipe is None:
-        print(
-            f"{entry.family}: this family is downloaded whole, not converted; "
-            f"use 'toktier artifacts verify {entry.family}'",
-            file=sys.stderr,
+        raise UnsupportedConfig(
+            f"{entry.family}: this family is downloaded whole, not converted",
+            details={
+                "option": "family",
+                "value": entry.family,
+                "reason": "no conversion recipe is registered for this family",
+                "remedy": f"toktier artifacts verify {entry.family}",
+            },
         )
-        return _TOKTIER_ERROR
     report = conversion_report(
         entry, recipe, HuggingFaceSource(), repeats=arguments.repeats
     )
@@ -600,11 +649,19 @@ def _artifacts_check_conversion(arguments: argparse.Namespace) -> int:
         if not report[name]
     ]
     if failures:
-        print(
-            f"error: conversion gate failed: {', '.join(failures)}",
-            file=sys.stderr,
+        raise ArtifactHashMismatch(
+            f"conversion gate failed: {', '.join(failures)}",
+            details={
+                "family": report["family"],
+                "expected_sha256": report["expected_sha256"],
+                "observed_sha256": report["observed_sha256"],
+                "failures": failures,
+                "remedy": (
+                    "re-run with the pinned upstream revision; the derived "
+                    "artifact is not the one the shipped manifest pins"
+                ),
+            },
         )
-        return _TOKTIER_ERROR
     return 0
 
 

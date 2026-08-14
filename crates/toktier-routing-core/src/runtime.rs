@@ -1268,12 +1268,28 @@ impl SessionEncoder for NativeRouter {
         }
         match (&self.fast_cpu, self.repair_fast_cpu) {
             (Some(engine), true) => {
+                let grown_bytes = tail.text_bytes() as u64 + delta.len() as u64;
                 let (report, repair_input_bytes) = engine.append_with_repair_input(tail, delta)?;
                 if let Some(input_bytes) = repair_input_bytes {
                     self.record_execution_from(
                         BACKEND_FAST_CPU,
                         input_bytes,
                         BACKEND_FAST_CPU,
+                        Some("gigatoken"),
+                        Some(&report.path),
+                    );
+                } else if report.path.starts_with("hf_full_") {
+                    // The bounded window could not find a safe cut, so the
+                    // whole grown text was re-encoded on the reference
+                    // engine. That ran, and the ledger says so: without
+                    // this the answer to "what ran most recently" stayed
+                    // on the seed encode while the reference path was the
+                    // one that produced what was returned. A no-op append
+                    // records nothing, because nothing ran.
+                    self.record_execution_from(
+                        BACKEND_REFERENCE,
+                        grown_bytes,
+                        BACKEND_REFERENCE,
                         Some("gigatoken"),
                         Some(&report.path),
                     );
@@ -1608,6 +1624,48 @@ mod tests {
         let after_noop = router.stats();
         assert_eq!(after_noop.execution_counts, stats.execution_counts);
         assert_eq!(after_noop.last_execution, stats.last_execution);
+    }
+
+    /// A session short enough that the repair window covers the whole
+    /// text has no safe cut to find, so the grown text is re-encoded on
+    /// the reference engine. That is the execution the ledger must
+    /// report: it used to keep reporting the seed encode, so a session
+    /// whose latest answer came from the reference path headlined the
+    /// accelerated one.
+    #[test]
+    fn a_repair_that_falls_back_headlines_the_reference_execution() {
+        let router = repair_router(Arc::new(ByteGpu));
+        let mut store = toktier_store_core::SessionStore::with_defaults();
+        let key = store.register_fingerprint([9u8; 32], 0).unwrap();
+        let base = "alpha 123 beta";
+        let delta = " gamma 456";
+        assert!(base.len() + delta.len() < 64, "inside the repair window");
+        let put = store.put(key, base, &router).unwrap();
+        let seeded = router.stats().last_execution.unwrap();
+
+        let appended = store
+            .append_patch(put.handle, delta, put.revision, &router)
+            .unwrap();
+
+        assert_eq!(appended.path, "hf_full_window_covers_all");
+        let stats = router.stats();
+        assert_ne!(stats.last_execution.as_ref().unwrap(), &seeded);
+        assert_eq!(
+            stats.last_execution,
+            Some(json!({
+                "input_bytes": (base.len() + delta.len()) as u64,
+                "selected_start": BACKEND_REFERENCE,
+                "executed_backend": BACKEND_REFERENCE,
+                "source": "gigatoken",
+                "path": "hf_full_window_covers_all",
+            }))
+        );
+
+        let noop = store
+            .append_patch(put.handle, "", appended.revision, &router)
+            .unwrap();
+        assert_eq!(noop.path, "noop");
+        assert_eq!(router.stats().last_execution, stats.last_execution);
     }
 
     #[test]

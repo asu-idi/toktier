@@ -1392,3 +1392,62 @@ def test_fastokens_version_changes_the_persistent_fingerprint(
     first = tokenizer._semantic_fingerprint(Repair("0.3.1"))  # type: ignore[arg-type]
     second = tokenizer._semantic_fingerprint(Repair("0.3.2"))  # type: ignore[arg-type]
     assert first != second
+
+
+def test_a_repair_that_falls_back_headlines_the_reference_execution(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A short session appends inside the window, so the bounded repair
+    has nothing to cut and re-runs the whole text on the reference engine.
+
+    That re-run is the most recent execution. ``runtime_policy`` used to
+    keep reporting the seed encode -- the accelerated one -- long after
+    the reference path had produced the answer that was returned, which
+    is the one thing ``facade.md`` says the ``last_execution`` scope is
+    for. The ids were always right; the diagnosis was not.
+    """
+    import tokenizers
+
+    live = tokenizers.Tokenizer.from_file(str(rig.artifact_path))
+    engine = _CountingEngine(live)
+    backend = _FakeFastBackend(rig.family, engine, live)
+    registry = _registry(rig)
+    _install_certified_probe(monkeypatch, rig, registry)
+    monkeypatch.setattr(facade_api, "family_spec", lambda *_args: _spec(rig))
+    monkeypatch.setattr(
+        FastCpuBackend,
+        "open",
+        classmethod(lambda _cls, _artifact: backend),
+    )
+
+    tokenizer = rig.tokenizer(store=rig.store_path())
+    base = "alpha 123 beta"
+    grown = base + " gamma 456"
+    assert len(grown) < _spec(rig).window_chars
+
+    tokenizer.encode(base, session="short")
+    actual = tokenizer.encode(grown, session="short")
+
+    assert list(actual.ids) == list(
+        live.encode(grown, add_special_tokens=False).ids
+    )
+    report = tokenizer.explain()
+    repair = report["session_repair"]
+    assert isinstance(repair, dict)
+    last_repair = repair["last"]
+    assert isinstance(last_repair, dict)
+    assert last_repair["path"] == "hf_full_window_covers_all"
+
+    runtime = report["runtime_policy"]
+    assert isinstance(runtime, dict)
+    last = runtime["last_execution"]
+    assert isinstance(last, dict)
+    assert last["executed_backend"] == BACKEND_REFERENCE
+    assert last["path"] == "hf_full_window_covers_all"
+    assert last["source"] == "gigatoken"
+    assert last["input_bytes"] == len(grown.encode("utf-8"))
+    assert report["backend"] == BACKEND_REFERENCE
+    assert report["backend_basis"] == "last_execution"
+    summary = tokenizer.explain(summary=True)
+    assert summary["last_execution_backend"] == BACKEND_REFERENCE
+    assert summary["last_execution_path"] == "hf_full_window_covers_all"

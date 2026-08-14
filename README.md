@@ -45,6 +45,17 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
 
 ## News
 
+- **2026.08.14** 🚀 **toktier 0.2.4** released — the Han family (`kimi_k3`)
+  joins the certified roster with the product's own end-to-end GPU engine;
+  Rust certification now judges the packages a build actually compiles, not
+  only its sources, and its build flags claim only what a build script can
+  observe; the Rust crate follows `TOKTIER_HOME`/XDG; the Python facade gains
+  the `session()` context manager, `--json` on every command, and
+  `doctor --family`; a directory root that cannot hold private state,
+  `artifacts check-conversion`, and the last-execution diagnostic all answer
+  inside their contracts. Served IDs, the store format, and the kernel ABI
+  are unchanged. See the
+  [v0.2.4 release notes](docs/releases/v0.2.4.md).
 - **2026.08.11** 🚀 **toktier 0.2.1** released — a maintenance update: richer
   diagnostics (`doctor` now reports JIT toolchain eligibility, and `explain()`
   summaries state the time window each field covers) plus documentation fixes.
@@ -365,6 +376,7 @@ tokenizer or compiling anything:
 | `jit_toolchain_observed` / `jit_toolchain_constraint` | the triple this machine presents, and the judged set it is compared against |
 | `automatic_gpu_eligible` | the conjunction: candidate, an observed device whose architecture the selected delivery judges, that delivery's own materials, and the toolchain premise |
 | `automatic_effective_backend` | what an at-or-above-crossover automatic request would use for a CPU-fast-certified family: `gpu`, `fast_cpu`, or `hf` |
+| `directory_roots_usable` / `directory_roots_problem` | whether the three resolved roots above can hold what they are for, and what stands in the way when they cannot — the same judgement the next command would answer with `CONFIG_INVALID`, read without creating anything |
 
 Those fields describe the installation. `toktier doctor --family FAMILY`
 adds a `family` section that answers for one family on it — its
@@ -388,7 +400,7 @@ and persistent session state use separate directories: the two caches follow
 is not a cache. Relocating everything at once is what `TOKTIER_HOME` is for
 (`docs/contracts/config.md` Section 5).
 
-Since 0.2.3 the Rust crate reads the same variables with the same
+Since 0.2.4 the Rust crate reads the same variables with the same
 precedence, so one environment places both layers:
 
 | Layer | Artifact cache | Compiled-kernel cache | Session state |
@@ -478,6 +490,25 @@ python tools/generate_sibling_aliases.py --check
 python tools/dev.py test-packaging
 ```
 
+Five of these run from the published Rust source archive as well, which
+carries `evidence/`, `data/`, and this README's translation alongside the
+sources. Two are repository-only. There they decline rather than fail
+mysteriously: each prints a line beginning `declined:`, says that nothing
+was checked, and exits `3` — neither a pass nor a finding.
+`generate_registry.py --release-check` reads the repository's own sources
+and its built extension, and the archive has neither; the copy of the
+registry it carries is verified by `validate_registry.py`, which does run
+there. `dev.py test-packaging` runs the test suite, which the archive
+deliberately does not carry. The two trees are told apart by the
+`SOURCE-MANIFEST.json` the archive builder writes at its root and nowhere
+else, so a repository checkout runs all seven exactly as before.
+
+| Exit | What the tool is saying |
+|---|---|
+| `0` | it ran, and what it checks holds |
+| `3` | it declined: this is not a tree it can check, and nothing was checked or run |
+| anything else | it ran and found something, or could not run — the message says which |
+
 The prerequisites are stated here so that a failure means a real problem
 rather than a missing tool. The schema checks need `jsonschema` (the `test`
 dependency group in `pyproject.toml`); without it they refuse with
@@ -497,7 +528,10 @@ itself then runs offline.
 of the built extension: it uses this tree's `src/toktier/_native` when
 one has been built, and otherwise the extension of an installed
 `toktier` wheel, saying on stderr which it read; the identity must equal
-the current source set either way. `pytest tests/gpu` follows the same
+the current source set either way. That second reading is a convenience
+of a repository checkout only — in the published source archive the
+command declines instead, rather than answering about an extension that
+belongs to some other installation on the machine. `pytest tests/gpu` follows the same
 rule: the two tests that assert on that identity read whichever
 extension is available and skip with a stated reason only when neither
 is.
@@ -586,7 +620,7 @@ layers together.
 
 ## Documentation
 
-- [`docs/releases/v0.2.1.md`](docs/releases/v0.2.1.md) — release notes for this version.
+- [`docs/releases/v0.2.4.md`](docs/releases/v0.2.4.md) — release notes for this version.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — layers, routing, and store format.
 - [`ROADMAP.md`](ROADMAP.md) — release scope and planned integration.
 - [`docs/support-matrix.md`](docs/support-matrix.md) — artifacts and covered repositories.

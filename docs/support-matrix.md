@@ -38,7 +38,7 @@ one architecture and `experimental` on another is not a contradiction: the
 first names evidence, the second names an opt-in.
 
 The evidence behind the GPU rows follows the `gpu-cert-sm120-primary-v1`
-protocol from 0.2.3 on. The full per-family campaign runs on `sm_120`
+protocol from 0.2.4 on. The full per-family campaign runs on `sm_120`
 (1,102,675 documents per family); `sm_89` is maintained by a bounded spot
 check on the same protocol and roster (100,000 documents per family), and
 rests on the cross-architecture record already on file rather than repeating

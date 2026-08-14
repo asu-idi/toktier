@@ -45,7 +45,12 @@ from pathlib import Path, PurePosixPath
 from typing import BinaryIO, cast
 
 from .._jcs import canonical_json
-from ..errors import ArtifactHashMismatch, ArtifactNotFound, BundleInvalid
+from ..errors import (
+    ArtifactHashMismatch,
+    ArtifactNotFound,
+    BundleInvalid,
+    one_line,
+)
 from ..paths import FILE_MODE, ensure_private_dir
 from .manifest import ArtifactEntry, ArtifactFile
 
@@ -639,5 +644,9 @@ def _invalid(
         details["cause"] = cause
     message = f"invalid air-gap bundle: {failure}"
     if cause is not None:
-        message = f"{message}: {cause}"
+        # The tar reader reports what it tried as several lines, one per
+        # compression method. The prose report is one line
+        # (``errors.md`` Section 4), so it is folded here and kept whole
+        # in ``details["cause"]`` for ``--json`` to carry.
+        message = f"{message}: {one_line(cause)}"
     return BundleInvalid(message, details=details)

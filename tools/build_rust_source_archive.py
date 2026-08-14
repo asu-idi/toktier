@@ -8,6 +8,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tarfile
@@ -16,9 +17,28 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-# Names the archive after the crate it carries; the crate inherits the
-# workspace version, so this follows `crates/toktier/Cargo.toml`.
-VERSION = "0.2.1"
+
+_WORKSPACE_VERSION = re.compile(
+    r"(?ms)^\[workspace\.package]\s*.*?^version\s*=\s*\"([^\"]+)\""
+)
+
+
+def _workspace_version() -> str:
+    """The version this archive is named after.
+
+    The crate inherits the workspace version, so the name is read from
+    the manifest rather than restated here: a constant would have to be
+    remembered at every release, and forgetting it names the archive
+    after the previous one.
+    """
+    manifest = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
+    match = _WORKSPACE_VERSION.search(manifest)
+    if match is None:
+        raise SystemExit("Cargo.toml has no [workspace.package] version")
+    return match.group(1)
+
+
+VERSION = _workspace_version()
 DEFAULT_OUTPUT = ROOT / f"dist/rust/toktier-rust-source-{VERSION}.tar.gz"
 TOP = f"toktier-rust-source-{VERSION}"
 
@@ -31,6 +51,7 @@ ROOT_FILES = (
     "NOTICE",
     "THIRD_PARTY_NOTICES",
     "README.md",
+    "README.zh-CN.md",
     "ARCHITECTURE.md",
     "ROADMAP.md",
     "CITATION.cff",
@@ -38,6 +59,8 @@ ROOT_FILES = (
 TREES = (
     "crates",
     "src/toktier",
+    "data",
+    "evidence",
     "schemas",
     "tables",
     "readings",

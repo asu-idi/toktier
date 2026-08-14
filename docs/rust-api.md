@@ -56,36 +56,149 @@ complete table, including the `jit` feature's `TOKTIER_JIT_CACHE`, is in
 does not load a kernel. `Tokenizer::plan()` is the immutable admitted route;
 every result carries `ExecutionFacts` naming the backend that actually ran.
 Accelerated admission also requires the exact Rust facade source, rustc,
-features, target, and release-profile facts to appear in the shipped
-`runtime_builds` registry, **and** the resolved dependency graph of this
-build to be the judged one. Since 0.2.3 the second half is checked rather
-than assumed: the crate archive carries the judged `Cargo.lock`, the build
-script finds the lockfile governing the consumer's build, and every package
-reachable from `toktier` there must be the judged name, version, and content
-hash. `Runtime::doctor()` reports the answer as
+features, target, and profile facts to appear in the shipped
+`runtime_builds` registry, **and** the dependency graph this build compiles
+to be the judged one. `Runtime::doctor()` reports the second answer as
 `runtime_build.dependency_closure` (`toktier::DEPENDENCY_CLOSURE`):
-`verified`, `unlocated` when no governing lockfile could be named, or
-`mismatched: <package>` naming the first package that differs. Anything but
-`verified` is not certified.
+`verified`, a line starting `unlocated:` when no governing lockfile could be
+named, or one starting `mismatched:` naming every package that differs.
+Anything but `verified` is not certified. When the flags are what stands in
+the way, `runtime_build.build_flag_divergence` names which key differs and
+what to do about it.
+
+### What the dependency judgement is, and is not
+
+The judged side is **the set of packages Cargo compiled for the certified
+build**, taken from Cargo's own account of that build and shipped with the
+crate as `data/build/judged_compiled_closure.json`.
+
+Judging every package reachable in the judged `Cargo.lock` instead would read
+more thorough and would not be. A lockfile's dependency lists are the union
+over every feature and every target, so a Linux consumer would be refused
+over a WebAssembly binding, a Windows shim, or an optional dependency no
+feature enabled -- none of which enters the artifact. Such refusals are safe
+and exact, and they are also about the wrong thing.
+
+**What is judged.** Every package the certified build compiled must appear in
+this build's resolved graph at the same version, with the same content hash
+for a registry package, and with no semver-compatible sibling that Cargo would
+have unified onto instead. That covers the linked crates, the proc macros
+whose expansion becomes source, and the build dependencies whose output is
+linked -- `cc` and what it pulls in. The line is *does Cargo compile it*, not
+*is the compiled code ever called*: the first is one command anyone can
+re-run, the second would need a cross-language call graph and could not be
+re-checked in a gate. `find-msvc-tools` illustrates the cost of drawing it
+there. `cc` declares it unconditionally, so Cargo compiles it on Linux even
+though only a Windows build would call it, and it stays inside the judgement.
+
+**What is deliberately not judged.** Packages this build compiles that the
+certified build did not. Concretely: a consumer's own feature unification can
+activate an optional dependency of a judged package and so add a package to
+the graph, and this comparison does not report that. Asking the question in
+the other direction -- every package this build resolves must have been
+judged -- would catch it, but only incidentally: feature activation that adds
+no package would still be invisible, and features are not recorded in a
+lockfile at all. The gap is named here rather than left to be discovered.
+It is a structural boundary, not a to-do: a consumer's build
+script cannot compute its own feature resolution (it would have to run Cargo
+inside a Cargo build, against a workspace an unpacked registry copy cannot
+see), so no later release is promised to close it. This crate's *own*
+features are judged, in the `features` key of the build flags; it is the
+features of transitive packages that are not observable.
+
+Also outside: development dependencies, dependencies of a target this build is
+not for, and cross-compilation, where the build dependencies compiled for the
+host are not the set recorded for the judged target.
+
+**What each answer is worth.** `verified` says the third-party code linked
+into this build is the code the certification campaigns ran. `mismatched`
+says at least one package that really does enter the artifact is not the
+judged one, and carries what aligns it. `unlocated` says the comparison could
+not be made, so nothing is claimed. The mechanism addresses accidental drift,
+not a hostile build host: anyone able to edit the sources, the lockfile, or
+the shipped records on their own machine can make any self-report say
+anything. A crate's checksum is verified when the package is downloaded and
+unpacked, not on the builds that follow, so it does not stand behind the
+unpacked copies of either record.
 
 The governing lockfile is the first `Cargo.lock` above `OUT_DIR` -- the
 consumer's own workspace root in the usual layout -- and above the manifest
 directory when this crate is built from its own workspace. Unusual layouts
 can name it with `TOKTIER_CARGO_LOCK`; the named file still has to match.
-The comparison is one-directional: every package this build resolves must be
-judged, while judged packages this build does not resolve (the crate's own
-dev-dependencies) are not required. Lockfile dependency lists are the union
-over features and targets, so the compared set is a superset of what is
-actually linked. The mechanism addresses accidental drift, not a hostile
-build host: anyone able to edit the sources or the lockfile on their own
-machine can make any self-report say anything.
+Content hashes and origins come from the judged `Cargo.lock`, which travels
+with the crate as well, so the two shipped records cannot hold different
+opinions about one package; a compiled closure naming something that lockfile
+does not hold is refused rather than answered.
 
-The shipped wheel is always produced inside the source workspace with
-`--locked`, so it carries the judged graph by construction. A development or
-otherwise unregistered build falls to HF under `Policy::Certified`; an
-explicit CUDA request returns `UNCERTIFIED_RUNTIME`. Only
-`Policy::Experimental` can opt an unregistered build into an accelerated
-candidate, and every result remains labelled experimental.
+### What the build flags claim
+
+The `build_flags` key of a `runtime_builds` entry records what the build
+script can observe: `profile`, `opt-level`, `target`, `debug`,
+`target-features`, `rustflags`, and this crate's own `features`. Through
+0.2.1 it also carried `lto`, `codegen-units`, and `panic`. Cargo does not
+expose any of the three to a build script, and those entries were inferred
+from the profile name -- so a build with `lto = false` reported `lto=fat` and
+matched the judged key on it. Reading `CARGO_CFG_PANIC` is not a fix either:
+it reports the panic strategy of the build script, which Cargo always
+compiles for the host with unwinding, and it still reads `unwind` under a
+`panic = "abort"` profile. Since 0.2.4 the three are not claimed at all,
+which is the honest form of not knowing them, and `rustflags`
+(`CARGO_ENCODED_RUSTFLAGS`) is claimed instead, because it can be observed and
+is where a `-C` codegen switch appears when a caller sets one. A build that
+sets RUSTFLAGS is therefore not the judged build; `Policy::Experimental` is
+the way to take the accelerated route knowingly anyway.
+
+### What a fresh resolution answers, and how to align it
+
+A consumer who adds the crate today and lets Cargo resolve the graph should
+expect `mismatched`, not `verified`. TokTier's own edges are pinned exactly,
+but the transitive versions underneath third-party dependencies are not, and
+they move as those crates publish. A resolution taken on a later day than the
+certification campaign is therefore the normal case, and the closure check is
+built to refuse it rather than to assume it away: an unjudged graph produces
+no certificate.
+
+A refused build is not a broken one. `Policy::Certified` routes it to the
+frozen Hugging Face reference engine, which is the same implementation the
+certification campaigns compare against, so the IDs are exactly the ones the
+accelerated route would have produced -- what is lost is the acceleration, not
+the answer. An explicit `Device::Cuda` request says so with
+`UNCERTIFIED_RUNTIME` rather than running uncertified. `Policy::Experimental`
+can opt such a build into an accelerated candidate, and every result stays
+labelled experimental.
+
+Two paths lead back to `verified`, and `doctor()` prints the first one:
+
+- **Align the consumer's own lockfile.** A `mismatched` line carries a
+  `cargo update --precise <judged version> <package>` command for every
+  package it names, ordered so the commands can be run one after another in
+  the workspace that owns the governing lockfile. Rebuild afterwards and the
+  same field reads `verified`. Packages that differ by origin rather than by
+  version -- a `[patch]`, a vendored copy, a mirror -- are named with that
+  reason instead, since no version change moves them. Since 0.2.4 the list
+  holds only packages that really are compiled, so it is both shorter and
+  worth acting on: every command on it changes the bytes that run.
+- **Build inside a workspace that already holds the judged graph.** The
+  shipped wheel is always produced inside the source workspace with
+  `--locked`, so it carries the judged graph by construction and is never
+  affected by any of this. The judged `Cargo.lock` also travels inside the
+  crate archive as `data/build/judged_dependencies.lock` and can be read
+  there. Note that pointing `TOKTIER_CARGO_LOCK` at that packaged copy -- or
+  at a copy of its bytes kept elsewhere -- is refused rather than compared,
+  since the file is this crate's record of the judged build and not an
+  account of the build now running, so it is not a way to earn a
+  certificate. The answer is an `unlocated` line naming both routes above.
+
+`cargo install --locked toktier` is a third case worth naming, because
+`--locked` does make Cargo resolve the judged versions. It still answers
+`unlocated`: `cargo install` unpacks the package under `CARGO_HOME` and builds
+it in a temporary directory, so no lockfile stands above `OUT_DIR`, and a
+registry build deliberately does not read the copy sitting beside its own
+manifest -- comparing a packaged file against itself would answer nothing.
+The installed `toktier-rust` binary is fully usable; it runs the reference
+engine. (`cargo install --locked --path <unpacked crate>` does report
+`verified`, because Cargo then builds under the package's own directory and
+the lockfile it finds there is the one `--locked` actually used.)
 
 ## Buffers, batches, and decode
 
@@ -227,14 +340,14 @@ enum is `#[non_exhaustive]`, so a `match` on it needs a catch-all arm.
 | Variant / string | Raised when |
 |---|---|
 | `InvalidArgument` / `INVALID_ARGUMENT` | Caller misuse the type system cannot refuse: a batch row out of range, an offset request on the ID-only batch API, a revision that is not an immutable 40-hex commit, a value that does not fit the platform. |
-| `ConfigInvalid` / `CONFIG_INVALID` | A configuration value is impossible or self-contradictory: a CPU device with GPU delivery, an empty or zero bound, a URL carrying credentials or control characters, and (since 0.2.3) a **path this crate refuses by policy** -- a parent-directory component, a symbolic-link component, a non-directory component, or a final path that is not a regular directory. Wider than the Python row, which covers configuration values only. |
+| `ConfigInvalid` / `CONFIG_INVALID` | A configuration value is impossible or self-contradictory: a CPU device with GPU delivery, an empty or zero bound, a URL carrying credentials or control characters, and (since 0.2.4) a **path this crate refuses by policy** -- a parent-directory component, a symbolic-link component, a non-directory component, or a final path that is not a regular directory. Wider than the Python row, which covers configuration values only. |
 | `ArtifactNotFound` / `ARTIFACT_NOT_FOUND` | An artifact cannot be resolved: an unknown family (the message carries the closest valid ids), a missing or non-regular `tokenizer.json`, a missing bundle or bundle member, an empty cache under offline mode. |
 | `ArtifactHashMismatch` / `ARTIFACT_HASH_MISMATCH` | Verified bytes do not match the manifest digest. Content-hash failures only. |
 | `ArtifactSizeMismatch` / `ARTIFACT_SIZE_MISMATCH` | A file's byte count differs from the manifest, including a stream that stops early or overruns. Reported before the digest so the cheaper fact is not hidden behind the expensive one. |
 | `BundleInvalid` / `BUNDLE_INVALID` | An air-gap bundle violates the frozen archive format: unsafe or duplicate members, link members, a member set that disagrees with its manifest, resource-limit violations. |
 | `CacheBusy` / `CACHE_BUSY` | A bounded wait for a cache lock expired, or a staging name could not be allocated. Retryable by construction. |
 | `Network` / `NETWORK_ERROR` | An HTTPS request failed or exhausted its retry budget. Only with the `network` feature. |
-| `NetworkDisabled` / `NETWORK_DISABLED` | Acquisition was requested with the `network` feature off, or in offline mode. |
+| `NetworkDisabled` / `NETWORK_DISABLED` | Acquisition was requested with the `network` feature off. Offline mode is the row above: nothing was attempted, so the answer is that the cache does not hold it. |
 | `RegistryInvalid` / `REGISTRY_INVALID` | Shipped registry, manifest, or table bytes fail their embedded digest, schema, or cross-reference checks. This is a package-integrity failure, not a caller error. |
 | `UncertifiedRuntime` / `UNCERTIFIED_RUNTIME` | An accelerated route was demanded from a build whose identity is not in the shipped `runtime_builds` register. |
 | `UncertifiedTokenizer` / `UNCERTIFIED_TOKENIZER` | The artifact itself has no certification row for the demanded route, or a repository/revision is outside the shipped equivalence table. |
@@ -253,7 +366,7 @@ enum is `#[non_exhaustive]`, so a `match` on it needs a catch-all arm.
 | `Io` / `IO_ERROR` | A filesystem or process operation failed as attempted -- the underlying `std::io::Error` text is carried. Policy refusals about a path are `ConfigInvalid`, not this. |
 | `Internal` / `INTERNAL` | An invariant of this crate was broken. Never a caller error; report it. |
 
-Before 0.2.3 the four path-policy refusals in the third row reported
+Before 0.2.4 the four path-policy refusals in the third row reported
 `IO_ERROR`. That answer was hard to act on -- a caller retrying I/O would
 retry forever -- so they were moved to `CONFIG_INVALID` and named here.
 Code matching on `Io` for a refused cache, bundle, or JIT root needs the

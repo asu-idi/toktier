@@ -6,16 +6,14 @@
     "build_flags": [
       "profile=release",
       "opt-level=3",
-      "lto=fat",
-      "codegen-units=1",
-      "panic=unwind",
       "target=x86_64-unknown-linux-gnu",
+      "rustflags=",
       "pyo3=abi3-py310+extension-module"
     ],
     "delivery": "integrated",
     "module": "toktier._native",
-    "source_digest": "fea6e606c8633d75431ad59b11494822ea7599c5c1ba1607a76f44866a37c36b",
-    "source_digest_v2": "b6b08f3e5252554a4dbfdeed93396aa013b8c9e47a33331baad297e00fac9b12",
+    "source_digest": "0e1f453bb157a5cf7370104c56e880936ad89ec4be64ecbb3e0a741af8fe2bbd",
+    "source_digest_v2": "b921b9f10f6e20d4d90568521b347570fd17f9c7da4dd0a1c0de7243d7389ac5",
     "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
     "upstream_project": "gigatoken",
     "version": "0.10.0+toktier.pinned.1"

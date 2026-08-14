@@ -44,8 +44,9 @@ immutable value (`Config`, `RoutePlan`, `SessionUpdate`) or a typed error.
   `Encoding` (carrying `.ids`); `encode_batch` returns `list[Encoding]`. The
   ragged batch output (`output="ragged"`) is the 1.0 target shape recorded in
   `docs/contracts/api.md`; the Rust API already returns ragged batches.
-- Named session state uses the `session=` keyword in 0.x; the `session()`
-  context manager of `api.md` remains a 1.0 target. A correct append may
+- Named session state is reached two ways: the `session=` keyword on
+  `encode`, and the `session()` context manager of `api.md`, which ships
+  in 0.2.4. A correct append may
   rewrite the tail of previously returned IDs, so an update describes
   `replace_from`, `replacement_ids` and `all_ids`. Writes take an
   `expected_revision`; a concurrent write is rejected rather than resolved by

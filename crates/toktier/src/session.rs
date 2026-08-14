@@ -1,9 +1,5 @@
 use std::collections::{HashMap, HashSet};
-#[cfg(all(feature = "sqlite", unix))]
-use std::fs;
 use std::path::Path;
-#[cfg(all(feature = "sqlite", unix))]
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -197,35 +193,9 @@ impl SessionStoreState {
 
 #[cfg(feature = "sqlite")]
 fn ensure_store_home(path: &Path) -> Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
-
-        let mut current = PathBuf::new();
-        for component in path.components() {
-            current.push(component.as_os_str());
-            let mut builder = fs::DirBuilder::new();
-            builder.mode(0o700);
-            match builder.create(&current) {
-                Ok(()) => fs::set_permissions(&current, fs::Permissions::from_mode(0o700))
-                    .map_err(|error| {
-                        Error::new(ErrorCode::Io, error.to_string()).with_path(&current)
-                    })?,
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => {
-                    return Err(Error::new(ErrorCode::Io, error.to_string()).with_path(&current));
-                }
-            }
-        }
-        // Preserve create_dir_all's validation of a pre-existing final path
-        // without changing any directory this call did not create.
-        fs::create_dir_all(path)
-            .map_err(|error| Error::new(ErrorCode::Io, error.to_string()).with_path(path))?;
-    }
-    #[cfg(not(unix))]
-    std::fs::create_dir_all(path)
-        .map_err(|error| Error::new(ErrorCode::Io, error.to_string()).with_path(path))?;
-    Ok(())
+    // The store home is created the way every other private directory in
+    // this crate is: one component at a time, each one owner-only.
+    crate::fsutil::create_private_dir_all(path)
 }
 
 fn new_store(persistent: bool, seed_digest_overlap: bool) -> Result<SessionStore> {
@@ -691,7 +661,9 @@ fn _assert_session_send() {
 #[cfg(all(test, feature = "sqlite", unix))]
 mod tests {
     use super::*;
+    use std::fs;
     use std::os::unix::fs::PermissionsExt;
+    use std::path::PathBuf;
     use toktier_routing_core::BACKEND_REFERENCE;
 
     const TOKENIZER_JSON: &[u8] = br#"{"version":"1.0","truncation":null,"padding":null,"added_tokens":[],"normalizer":null,"pre_tokenizer":null,"post_processor":null,"decoder":null,"model":{"type":"BPE","dropout":null,"unk_token":null,"continuing_subword_prefix":null,"end_of_word_suffix":null,"fuse_unk":false,"byte_fallback":false,"ignore_merges":false,"vocab":{"a":0},"merges":[]}}"#;

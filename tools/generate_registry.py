@@ -58,6 +58,7 @@ from registry_common import (
     verify_file,
     write_document,
 )
+from scan_common import DECLINED, vendored_source_archive
 from source_identity_common import coverage_problems as source_coverage_problems
 from update_fast_cpu_registry import augmented_document
 
@@ -779,6 +780,22 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
+    if vendored_source_archive(REPOSITORY_ROOT):
+        # This tool compares the repository's generated registry with the
+        # repository's own sources and its built extension. A published
+        # source archive is neither: it carries no extension, and the one
+        # an installed wheel provides belongs to whatever else is on this
+        # machine. Borrowing it would answer a question about that wheel
+        # while looking like an answer about this tree.
+        print(
+            "declined: this check reads the repository's own source tree "
+            "and its built extension, and this is the published source "
+            "archive. Nothing was checked. The archive's registry copy is "
+            "verified by tools/validate_registry.py, which does run here; "
+            "this check runs from a repository checkout.",
+            file=sys.stderr,
+        )
+        return DECLINED
     if arguments.sync_jit_toolchain:
         sync_jit_toolchain_constraint(arguments.out)
     if arguments.sync_prebuilt:

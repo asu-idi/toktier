@@ -10,6 +10,7 @@ build/
 crates/toktier/data/build/*
 !crates/toktier/data/build/source_identity.json
 !crates/toktier/data/build/judged_dependencies.lock
+!crates/toktier/data/build/judged_compiled_closure.json
 .venv/
 .pytest_cache/
 .mypy_cache/

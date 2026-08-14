@@ -7,7 +7,7 @@ repository.workspace = true
 description = "SQLite persistence tier for the toktier session store. The database file is owned exclusively by this Rust layer; records travel in store format v1."
 
 [dependencies]
-toktier-store-core = { path = "../toktier-store-core", version = "=0.2.4" }
+toktier-store-core = { path = "../toktier-store-core", version = "=0.2.5" }
 rusqlite.workspace = true
 
 [dev-dependencies]

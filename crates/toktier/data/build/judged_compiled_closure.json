@@ -59,7 +59,7 @@
     },
     {
       "name": "cc",
-      "version": "1.4.0"
+      "version": "1.4.3"
     },
     {
       "name": "cfg-if",
@@ -171,7 +171,7 @@
     },
     {
       "name": "find-msvc-tools",
-      "version": "0.1.9"
+      "version": "0.1.11"
     },
     {
       "name": "flate2",
@@ -223,7 +223,7 @@
     },
     {
       "name": "icu_locale_core",
-      "version": "2.2.0"
+      "version": "2.3.0"
     },
     {
       "name": "icu_properties",
@@ -235,7 +235,7 @@
     },
     {
       "name": "icu_provider",
-      "version": "2.2.0"
+      "version": "2.3.0"
     },
     {
       "name": "ident_case",
@@ -267,7 +267,7 @@
     },
     {
       "name": "litemap",
-      "version": "0.8.2"
+      "version": "0.8.3"
     },
     {
       "name": "log",
@@ -331,15 +331,15 @@
     },
     {
       "name": "pkg-config",
-      "version": "0.3.33"
+      "version": "0.3.34"
     },
     {
       "name": "portable-atomic",
-      "version": "1.14.0"
+      "version": "1.15.0"
     },
     {
       "name": "potential_utf",
-      "version": "0.1.5"
+      "version": "0.1.6"
     },
     {
       "name": "ppv-lite86",
@@ -419,7 +419,7 @@
     },
     {
       "name": "rustls-webpki",
-      "version": "0.103.13"
+      "version": "0.103.14"
     },
     {
       "name": "rustversion",
@@ -515,15 +515,15 @@
     },
     {
       "name": "thiserror",
-      "version": "2.0.19"
+      "version": "2.0.20"
     },
     {
       "name": "thiserror-impl",
-      "version": "2.0.19"
+      "version": "2.0.20"
     },
     {
       "name": "tinystr",
-      "version": "0.8.3"
+      "version": "0.8.4"
     },
     {
       "name": "tokenizers",
@@ -619,7 +619,7 @@
     },
     {
       "name": "writeable",
-      "version": "0.6.3"
+      "version": "0.6.4"
     },
     {
       "name": "yoke",
@@ -647,15 +647,15 @@
     },
     {
       "name": "zerotrie",
-      "version": "0.2.4"
+      "version": "0.2.5"
     },
     {
       "name": "zerovec",
-      "version": "0.11.6"
+      "version": "0.11.7"
     },
     {
       "name": "zerovec-derive",
-      "version": "0.11.3"
+      "version": "0.11.4"
     },
     {
       "name": "zmij",

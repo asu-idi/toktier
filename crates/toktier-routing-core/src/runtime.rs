@@ -270,6 +270,12 @@ pub struct RoutedIds {
     pub backend: String,
     pub source: Option<String>,
     pub path: Option<String>,
+    /// The routing decision that put this input on this backend, as the
+    /// `R_*` code the ledger recorded for it, or `None` when the first
+    /// admitted backend ran it and there was nothing to record. This is
+    /// the recorded code itself rather than a second reading of `path`,
+    /// so the two cannot come to disagree.
+    pub reason: Option<&'static str>,
 }
 
 /// State-route payload: the session state either adopts materialized
@@ -546,7 +552,9 @@ impl NativeRouter {
             .map_err(|error| EngineError(error.to_string()))
     }
 
-    fn below_gpu_threshold_event(&self, input_bytes: u64, start: usize) {
+    /// Records the crossover decision and returns the code it recorded,
+    /// so a caller can carry it as this input's routing reason.
+    fn below_gpu_threshold_event(&self, input_bytes: u64, start: usize) -> Option<&'static str> {
         if self.chain.first() == Some(&BackendKind::Gpu) && start > 0 {
             self.record_event(
                 R_INPUT_BELOW_GPU_THRESHOLD,
@@ -557,7 +565,9 @@ impl NativeRouter {
                     "threshold_bytes": self.thresholds[0],
                 }),
             );
+            return Some(R_INPUT_BELOW_GPU_THRESHOLD);
         }
+        None
     }
 
     fn gpu_fault_event(&self, index: usize, error: &NativeRuntimeError) {
@@ -605,7 +615,7 @@ impl NativeRouter {
 
     /// The routed-to-reference ledger facts for a fast-CPU outcome that the
     /// reference engine actually produced.
-    fn fast_cpu_reference_path(&self, source: FastEncodeSource) -> &'static str {
+    fn fast_cpu_reference_path(&self, source: FastEncodeSource) -> (&'static str, &'static str) {
         let (code, path, detail) = match source {
             FastEncodeSource::ReferenceAddedToken => {
                 (R_INPUT_ADDED_TOKEN, "hf_added_token", json!({}))
@@ -618,7 +628,7 @@ impl NativeRouter {
             FastEncodeSource::Gigatoken => unreachable!(),
         };
         self.record_event(code, BACKEND_FAST_CPU, BACKEND_REFERENCE, detail);
-        path
+        (path, code)
     }
 
     /// Stateless ID route: no span array, byte-to-character map, or pair
@@ -628,7 +638,7 @@ impl NativeRouter {
     fn route_ids_internal(&self, text: &str) -> Result<RoutedIds, EngineError> {
         let input_bytes = text.len() as u64;
         let start = self.start_index(input_bytes);
-        self.below_gpu_threshold_event(input_bytes, start);
+        let mut reason = self.below_gpu_threshold_event(input_bytes, start);
         if self.chain[start] != BackendKind::Reference {
             if let Some(ids) = self.exact_added_reference_ids(text)? {
                 self.record_event(
@@ -649,6 +659,7 @@ impl NativeRouter {
                     backend: BACKEND_REFERENCE.to_owned(),
                     source: None,
                     path: Some("hf_added_token".to_owned()),
+                    reason: Some(R_INPUT_ADDED_TOKEN),
                 });
             }
         }
@@ -657,7 +668,10 @@ impl NativeRouter {
                 BackendKind::Gpu => {
                     let cell = self.gpu.as_ref().expect("constructor gate");
                     match cell.engine() {
-                        Err(error) => self.gpu_open_fault_event(index, &error),
+                        Err(error) => {
+                            self.gpu_open_fault_event(index, &error);
+                            reason = Some(R_EXEC_FAULT);
+                        }
                         Ok(gpu) => match gpu.encode_ids(text) {
                             Ok(ids) => {
                                 self.record_execution(
@@ -672,16 +686,23 @@ impl NativeRouter {
                                     backend: BACKEND_GPU.to_owned(),
                                     source: Some(gpu.delivery().to_owned()),
                                     path: Some("gpu_full".to_owned()),
+                                    reason,
                                 });
                             }
-                            Err(error) => self.gpu_fault_event(index, &error),
+                            Err(error) => {
+                                self.gpu_fault_event(index, &error);
+                                reason = Some(R_EXEC_FAULT);
+                            }
                         },
                     }
                 }
                 BackendKind::FastCpu => {
                     let fast = self.fast_cpu.as_ref().expect("constructor gate");
                     match fast.encode_ids_with_source(text) {
-                        Err(error) => self.fast_cpu_fault_event(index, &error),
+                        Err(error) => {
+                            self.fast_cpu_fault_event(index, &error);
+                            reason = Some(R_EXEC_FAULT);
+                        }
                         Ok((ids, FastEncodeSource::Gigatoken)) => {
                             self.record_execution(
                                 BACKEND_FAST_CPU,
@@ -695,10 +716,11 @@ impl NativeRouter {
                                 backend: BACKEND_FAST_CPU.to_owned(),
                                 source: Some("gigatoken".to_owned()),
                                 path: Some("gigatoken_full".to_owned()),
+                                reason,
                             });
                         }
                         Ok((ids, source)) => {
-                            let path = self.fast_cpu_reference_path(source);
+                            let (path, code) = self.fast_cpu_reference_path(source);
                             self.record_execution(
                                 BACKEND_REFERENCE,
                                 input_bytes,
@@ -711,6 +733,7 @@ impl NativeRouter {
                                 backend: BACKEND_REFERENCE.to_owned(),
                                 source: None,
                                 path: Some(path.to_owned()),
+                                reason: Some(code),
                             });
                         }
                     }
@@ -732,6 +755,7 @@ impl NativeRouter {
                         backend: BACKEND_REFERENCE.to_owned(),
                         source: None,
                         path: Some("hf_full".to_owned()),
+                        reason,
                     });
                 }
             }
@@ -924,7 +948,7 @@ impl NativeRouter {
                             };
                             let payload = StatePayload::Soa(encoding);
                             let state_encode_path = payload.accelerated_state_encode_path();
-                            let path = self.fast_cpu_reference_path(source);
+                            let (path, _code) = self.fast_cpu_reference_path(source);
                             self.record_execution(
                                 BACKEND_REFERENCE,
                                 input_bytes,
@@ -1005,6 +1029,7 @@ impl NativeRouter {
                 backend: BACKEND_REFERENCE.to_owned(),
                 source: None,
                 path: Some("hf_postprocessed".to_owned()),
+                reason: Some(R_INPUT_POSTPROCESS_ROUTED),
             });
         }
         self.route_ids_internal(text)
@@ -1052,6 +1077,7 @@ impl NativeRouter {
                     backend: BACKEND_REFERENCE.to_owned(),
                     source: None,
                     path: Some("hf_postprocessed".to_owned()),
+                    reason: Some(R_INPUT_POSTPROCESS_ROUTED),
                 });
             }
             return Ok(output);
@@ -1063,6 +1089,10 @@ impl NativeRouter {
             .collect::<Vec<_>>();
         let mut next = starts.clone();
         let mut output = vec![None; texts.len()];
+        // The routing decision recorded for each row, carried alongside
+        // it so the returned facts quote the ledger rather than re-read
+        // the path string.
+        let mut reasons: Vec<Option<&'static str>> = vec![None; texts.len()];
 
         // Resolve the exact added-token frontend before grouping rows.  The
         // native matcher is only a cheap candidate gate; the reference
@@ -1079,6 +1109,7 @@ impl NativeRouter {
                         "threshold_bytes": self.thresholds[0],
                     }),
                 );
+                reasons[row] = Some(R_INPUT_BELOW_GPU_THRESHOLD);
             }
             if self.chain[starts[row]] == BackendKind::Reference {
                 continue;
@@ -1090,11 +1121,13 @@ impl NativeRouter {
                     BACKEND_REFERENCE,
                     json!({}),
                 );
+                reasons[row] = Some(R_INPUT_ADDED_TOKEN);
                 output[row] = Some(RoutedIds {
                     ids,
                     backend: BACKEND_REFERENCE.to_owned(),
                     source: None,
                     path: Some("hf_added_token".to_owned()),
+                    reason: reasons[row],
                 });
             }
         }
@@ -1115,6 +1148,7 @@ impl NativeRouter {
                         Err(error) => {
                             for row in indices {
                                 self.gpu_open_fault_event(stage, &error);
+                                reasons[row] = Some(R_EXEC_FAULT);
                                 next[row] += 1;
                             }
                             continue;
@@ -1134,6 +1168,7 @@ impl NativeRouter {
                                     backend: BACKEND_GPU.to_owned(),
                                     source: Some(gpu.delivery().to_owned()),
                                     path: Some("gpu_full".to_owned()),
+                                    reason: reasons[row],
                                 });
                             }
                             Err(error) => {
@@ -1147,6 +1182,7 @@ impl NativeRouter {
                                         "scope": "input",
                                     }),
                                 );
+                                reasons[row] = Some(R_EXEC_FAULT);
                                 next[row] += 1;
                             }
                         }
@@ -1163,15 +1199,18 @@ impl NativeRouter {
                                         backend: BACKEND_FAST_CPU.to_owned(),
                                         source: Some("gigatoken".to_owned()),
                                         path: Some("gigatoken_full".to_owned()),
+                                        reason: reasons[row],
                                     },
                                     source @ (FastEncodeSource::ReferenceAddedToken
                                     | FastEncodeSource::ReferenceEngineGuard) => {
-                                        let path = self.fast_cpu_reference_path(source);
+                                        let (path, code) = self.fast_cpu_reference_path(source);
+                                        reasons[row] = Some(code);
                                         RoutedIds {
                                             ids,
                                             backend: BACKEND_REFERENCE.to_owned(),
                                             source: None,
                                             path: Some(path.to_owned()),
+                                            reason: Some(code),
                                         }
                                     }
                                 };
@@ -1190,6 +1229,7 @@ impl NativeRouter {
                                         "scope": "input",
                                     }),
                                 );
+                                reasons[row] = Some(R_EXEC_FAULT);
                                 next[row] += 1;
                             }
                         }
@@ -1206,6 +1246,7 @@ impl NativeRouter {
                             backend: BACKEND_REFERENCE.to_owned(),
                             source: None,
                             path: Some("hf_full".to_owned()),
+                            reason: reasons[row],
                         });
                     }
                 }
@@ -1491,6 +1532,11 @@ mod tests {
         assert_eq!(rows[1].ids, vec![99]);
         assert_eq!(rows[2].backend, BACKEND_REFERENCE);
         assert!(rows[2].ids.is_empty());
+        // Each row carries the decision that moved it, and the row that
+        // was not moved carries nothing.
+        assert_eq!(rows[0].reason, Some(R_INPUT_BELOW_GPU_THRESHOLD));
+        assert_eq!(rows[1].reason, None);
+        assert_eq!(rows[2].reason, Some(R_EXEC_FAULT));
         let stats = router.stats();
         assert_eq!(stats.execution_counts.get(BACKEND_GPU), Some(&1));
         assert_eq!(stats.execution_counts.get(BACKEND_REFERENCE), Some(&2));
@@ -1521,11 +1567,49 @@ mod tests {
 
         assert_eq!(
             router.fast_cpu_reference_path(FastEncodeSource::ReferenceEngineGuard),
-            "hf_engine_guard"
+            ("hf_engine_guard", R_INPUT_GUARD_ROUTED)
         );
         let stats = router.stats();
         assert_guard_events_have_stage(&stats);
         assert_eq!(stats.events[0].detail, json!({"stage": "engine_guard"}));
+    }
+
+    /// A routed result carries the same code the ledger counted for it,
+    /// and carries none when the first admitted backend ran the input.
+    #[test]
+    fn a_routed_result_quotes_the_reason_the_ledger_recorded() {
+        let router = NativeRouter::new(
+            vec![BACKEND_GPU.to_owned(), BACKEND_REFERENCE.to_owned()],
+            vec![4, 0],
+            reference(),
+            None,
+            false,
+            Some(NativeGpuSource::Open(Arc::new(MockGpu))),
+            false,
+            true,
+        )
+        .unwrap();
+
+        // Long enough for the GPU, and the mock answers it.
+        let admitted = router.encode_ids("aaaa", false).unwrap();
+        assert_eq!(admitted.backend, BACKEND_GPU);
+        assert_eq!(admitted.reason, None);
+
+        // Below the crossover: the same plan starts one backend later.
+        let below = router.encode_ids("a", false).unwrap();
+        assert_eq!(below.backend, BACKEND_REFERENCE);
+        assert_eq!(below.reason, Some(R_INPUT_BELOW_GPU_THRESHOLD));
+
+        // Long enough for the GPU, which faults on it.
+        let faulted = router.encode_ids("xxxx", false).unwrap();
+        assert_eq!(faulted.backend, BACKEND_REFERENCE);
+        assert_eq!(faulted.reason, Some(R_EXEC_FAULT));
+
+        // Every reason a result reported was also counted in the ledger.
+        let stats = router.stats();
+        for code in [R_INPUT_BELOW_GPU_THRESHOLD, R_EXEC_FAULT] {
+            assert_eq!(stats.fallback_counts.get(code), Some(&1), "for {code}");
+        }
     }
 
     #[test]
@@ -1544,10 +1628,14 @@ mod tests {
 
         let single = router.encode_ids("a", true).unwrap();
         assert_eq!(single.backend, BACKEND_REFERENCE);
+        assert_eq!(single.reason, Some(R_INPUT_POSTPROCESS_ROUTED));
         let batch = router.encode_batch_ids(&["a", "aa"], true).unwrap();
         assert!(batch
             .iter()
             .all(|outcome| outcome.backend == BACKEND_REFERENCE));
+        assert!(batch
+            .iter()
+            .all(|outcome| outcome.reason == Some(R_INPUT_POSTPROCESS_ROUTED)));
 
         let stats = router.stats();
         assert_eq!(

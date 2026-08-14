@@ -129,6 +129,19 @@ them is not offered.
   diagnostics). Machine logic should switch on the codes it knows and
   pass the rest through.
 
+### 5.5 The same codes on the Rust face
+
+Since 0.2.5 a Rust `ExecutionFacts` carries `reason`, the run-time code
+behind that one execution, as `toktier::ReasonCode`. It is the code the
+router recorded for the input, not a second reading of the path string,
+so the two cannot come to disagree. `R_INPUT_ADDED_TOKEN`,
+`R_INPUT_BELOW_GPU_THRESHOLD`, `R_INPUT_GUARD_ROUTED`, `R_EXEC_FAULT`,
+`R_INPUT_POSTPROCESS_ROUTED`, and `R_SESSION_NO_SAFE_CUT` have named
+variants; a code without one arrives as `ReasonCode::Other` carrying the
+code itself, which is how Section 5.4 asks consumers to treat it.
+`reason` is `None` when the admitted route ran the input and there was
+nothing to record; plan-time reasons stay on `RoutePlan::reasons`.
+
 ## 6. Telemetry boundary
 
 Reason codes cover routing and execution fallback. Session store

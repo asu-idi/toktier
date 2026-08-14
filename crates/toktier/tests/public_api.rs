@@ -154,6 +154,44 @@ fn artifact_root() -> Option<std::path::PathBuf> {
         .filter(|root| root.join("qwen3_8b-b968826d9c46/tokenizer.json").is_file())
 }
 
+/// Every result carries the routing decision behind it, and carries
+/// none when the admitted route ran the input. Why the admitted route
+/// is what it is stays with the plan, so the two do not restate each
+/// other; the batch surface answers the same way per row.
+#[test]
+fn execution_facts_report_the_routing_decision_or_nothing() {
+    let Some(root) = artifact_root() else {
+        return;
+    };
+    let runtime = Runtime::builder()
+        .artifact_cache(&root)
+        .device(Device::Cpu)
+        .build()
+        .unwrap();
+    let tokenizer = runtime.load("qwen3_8b").unwrap();
+
+    let encoded = tokenizer
+        .encode("routing decision check 0123456789")
+        .unwrap();
+    let facts = encoded.execution();
+    assert_eq!(facts.reason, None);
+    assert!(!facts.path.is_empty());
+
+    let batch = tokenizer.encode_batch(&["one", "two words here"]).unwrap();
+    assert_eq!(batch.executions().len(), 2);
+    for execution in batch.executions() {
+        assert_eq!(execution.reason, None);
+    }
+
+    // A session append reports through the same field.
+    let mut session = tokenizer.open_session("wp7-reason").unwrap();
+    session.seed("user: reason field check\n").unwrap();
+    let patch = session.append("assistant: acknowledged\n").unwrap();
+    let appended = patch.execution();
+    assert_eq!(appended.reason, None);
+    assert!(!appended.path.is_empty());
+}
+
 #[test]
 fn session_encodings_share_the_store_row_and_survive_mutation_and_drop() {
     let Some(root) = artifact_root() else {

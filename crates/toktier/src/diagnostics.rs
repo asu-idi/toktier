@@ -59,20 +59,54 @@ impl Backend {
 }
 
 /// Stable route/fallback reason identifier.
+///
+/// The run-time variants are this crate's spelling of the frozen `R_*`
+/// namespace in `docs/contracts/routing.md` Section 5: the router records
+/// those codes in its own ledger, and the ones reachable from a Rust
+/// execution are named here rather than in a second vocabulary. The
+/// plan-time variants describe admission decisions this crate makes for
+/// itself and are not claimed to be the same codes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum ReasonCode {
+    /// `R_INPUT_BELOW_GPU_THRESHOLD`
     InputBelowGpuThreshold,
+    /// `R_INPUT_ADDED_TOKEN`
     InputAddedToken,
+    /// `R_INPUT_GUARD_ROUTED`
     InputGuardRouted,
+    /// `R_EXEC_FAULT`
     ExecutionFault,
+    /// `R_INPUT_POSTPROCESS_ROUTED`
+    InputPostprocessRouted,
+    /// `R_SESSION_NO_SAFE_CUT`
+    SessionNoSafeCut,
     GpuUnavailable,
     GpuUncertified,
     CpuUncertified,
     RuntimeBuildUncertified,
     ReferenceRequested,
+    /// A reason the router named that this release has no frozen code
+    /// for. The string is the router's own token, passed through rather
+    /// than mapped onto a code that does not mean it.
     Other(String),
+}
+
+impl ReasonCode {
+    /// The reason behind one routed execution, from the code the router
+    /// recorded for it. Read rather than inferred, so this answer and the
+    /// ledger cannot come to disagree.
+    pub(crate) fn from_ledger_code(code: &str) -> Self {
+        match code {
+            toktier_routing_core::R_INPUT_BELOW_GPU_THRESHOLD => Self::InputBelowGpuThreshold,
+            toktier_routing_core::R_INPUT_ADDED_TOKEN => Self::InputAddedToken,
+            toktier_routing_core::R_INPUT_GUARD_ROUTED => Self::InputGuardRouted,
+            toktier_routing_core::R_EXEC_FAULT => Self::ExecutionFault,
+            toktier_routing_core::R_INPUT_POSTPROCESS_ROUTED => Self::InputPostprocessRouted,
+            other => Self::Other(other.to_owned()),
+        }
+    }
 }
 
 /// Certification status attached to one admitted route.
@@ -107,6 +141,12 @@ pub struct ExecutionFacts {
     pub source: Option<String>,
     pub input_bytes: u64,
     pub certification: Certification,
+    /// Why this execution ran where it did, when a routing decision
+    /// moved it off the first admitted backend. `None` means the
+    /// admitted route ran and there was nothing to record; why the
+    /// admitted route is what it is belongs to
+    /// [`RoutePlan::reasons`](crate::RoutePlan), not to one execution.
+    pub reason: Option<ReasonCode>,
 }
 
 /// Build/runtime facts that can be emitted by a control plane without
@@ -202,3 +242,43 @@ impl From<toktier_store_core::StatsSnapshot> for StoreStats {
     }
 }
 use std::collections::BTreeMap;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every run-time code the router can record maps onto this crate's
+    /// name for it, and an unrecognised one is passed through rather
+    /// than turned into a code that does not mean it.
+    #[test]
+    fn every_recorded_reason_maps_onto_the_frozen_namespace() {
+        for (code, expected) in [
+            (
+                toktier_routing_core::R_INPUT_BELOW_GPU_THRESHOLD,
+                ReasonCode::InputBelowGpuThreshold,
+            ),
+            (
+                toktier_routing_core::R_INPUT_ADDED_TOKEN,
+                ReasonCode::InputAddedToken,
+            ),
+            (
+                toktier_routing_core::R_INPUT_GUARD_ROUTED,
+                ReasonCode::InputGuardRouted,
+            ),
+            (
+                toktier_routing_core::R_EXEC_FAULT,
+                ReasonCode::ExecutionFault,
+            ),
+            (
+                toktier_routing_core::R_INPUT_POSTPROCESS_ROUTED,
+                ReasonCode::InputPostprocessRouted,
+            ),
+        ] {
+            assert_eq!(ReasonCode::from_ledger_code(code), expected, "for {code}");
+        }
+        assert_eq!(
+            ReasonCode::from_ledger_code("R_SOMETHING_LATER"),
+            ReasonCode::Other("R_SOMETHING_LATER".to_owned())
+        );
+    }
+}

@@ -10,8 +10,8 @@ use toktier_store_sqlite::{NamedSessionRef, RecoveredNamedSession, SingleEngine,
 
 use crate::manifest::LocalArtifact;
 use crate::{
-    Backend, Certification, Encoding, Error, ErrorCode, ExecutionFacts, Result, RoutePlan,
-    TokenBuffer, TokenPatch,
+    Backend, Certification, Encoding, Error, ErrorCode, ExecutionFacts, ReasonCode, Result,
+    RoutePlan, TokenBuffer, TokenPatch,
 };
 
 #[derive(Debug)]
@@ -381,6 +381,7 @@ impl Session {
             source: Some("native_session".to_owned()),
             input_bytes: delta.len() as u64,
             certification: self.tokenizer.plan.certification,
+            reason: reason_for_repair_path(&patch.path),
         };
         Ok((
             TokenPatch::new(
@@ -638,6 +639,28 @@ fn session_facts(tokenizer: &TokenizerInner, path: &str, input_bytes: usize) -> 
         source: Some("native_session".to_owned()),
         input_bytes: input_bytes as u64,
         certification: tokenizer.plan.certification,
+        reason: reason_for_repair_path(path),
+    }
+}
+
+/// Why a session repair ran where it did.
+///
+/// The repair engine does not carry a ledger code the way the request
+/// router does; it names its outcome in the path itself, and each name
+/// has exactly one meaning. `engine_guard` is the `R_INPUT_GUARD_ROUTED`
+/// stage of that name in `docs/contracts/routing.md` Section 5.2, and
+/// both full re-encodes that follow an unusable cut are that section's
+/// `R_SESSION_NO_SAFE_CUT`. An accelerated or repaired path took the
+/// admitted route and has nothing to record.
+fn reason_for_repair_path(path: &str) -> Option<ReasonCode> {
+    match path {
+        "hf_full_engine_guard" => Some(ReasonCode::InputGuardRouted),
+        "hf_full_no_safe_cut" | "hf_full_window_covers_all" => Some(ReasonCode::SessionNoSafeCut),
+        // Named by the repair engine, with no frozen code of its own:
+        // the stored tail did not describe itself consistently, so the
+        // accumulated text was re-encoded from the reference.
+        "hf_full_invalid_prior_state" => Some(ReasonCode::Other("invalid_prior_state".to_owned())),
+        _ => None,
     }
 }
 
@@ -713,6 +736,38 @@ mod tests {
             if sidecar.exists() {
                 assert_eq!(permission_bits(&sidecar), 0o600);
             }
+        }
+    }
+
+    /// The repair engine names its outcome in the path, so this crate's
+    /// reading of it has to stay tied to the paths the engine emits: the
+    /// two full re-encodes that follow an unusable cut, the guard route,
+    /// the one outcome with no frozen code, and the repaired paths that
+    /// have nothing to explain.
+    #[test]
+    fn a_repair_path_reads_as_the_reason_the_engine_meant() {
+        assert_eq!(
+            reason_for_repair_path("hf_full_engine_guard"),
+            Some(ReasonCode::InputGuardRouted)
+        );
+        for path in ["hf_full_no_safe_cut", "hf_full_window_covers_all"] {
+            assert_eq!(
+                reason_for_repair_path(path),
+                Some(ReasonCode::SessionNoSafeCut),
+                "for {path}"
+            );
+        }
+        assert_eq!(
+            reason_for_repair_path("hf_full_invalid_prior_state"),
+            Some(ReasonCode::Other("invalid_prior_state".to_owned()))
+        );
+        for path in [
+            "gigatoken_repair",
+            "gigatoken_repair_noop",
+            "accelerated_with_reconstructed_spans",
+            "accelerated_with_lazy_span_checkpoints",
+        ] {
+            assert_eq!(reason_for_repair_path(path), None, "for {path}");
         }
     }
 }

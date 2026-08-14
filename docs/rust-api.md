@@ -55,6 +55,18 @@ complete table, including the `jit` feature's `TOKTIER_JIT_CACHE`, is in
 `Runtime::doctor()` returns typed build and CUDA-probe facts. Device probing
 does not load a kernel. `Tokenizer::plan()` is the immutable admitted route;
 every result carries `ExecutionFacts` naming the backend that actually ran.
+
+Since 0.2.5 those facts also carry `reason: Option<ReasonCode>`: the
+routing decision that moved this input off the first admitted backend,
+as the code the router recorded for it rather than a second reading of
+`path`. It is `None` when the admitted route ran and there was nothing
+to record. Why the admitted route is what it is belongs to
+`plan().reasons`, so the two do not restate each other, and a fresh
+build with no accelerated route admitted reports `None` per execution
+while the plan explains itself once. The codes are the frozen `R_*`
+namespace of `docs/contracts/routing.md` Section 5; a code this release
+has no variant for arrives as `ReasonCode::Other` carrying the code
+itself, which is what that contract asks consumers to expect.
 Accelerated admission also requires the exact Rust facade source, rustc,
 features, target, and profile facts to appear in the shipped
 `runtime_builds` registry, **and** the dependency graph this build compiles

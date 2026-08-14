@@ -790,6 +790,7 @@ impl Tokenizer {
             routed.source,
             text.len(),
             self.inner.plan.certification,
+            routed.reason,
         );
         Ok(Encoding::new(routed.ids, offsets, facts))
     }
@@ -825,6 +826,7 @@ impl Tokenizer {
                     row.source,
                     text.len(),
                     self.inner.plan.certification,
+                    row.reason,
                 );
                 (row.ids, facts)
             })
@@ -902,6 +904,9 @@ impl Tokenizer {
             source: Some("native_store".to_owned()),
             input_bytes: text.len() as u64,
             certification: self.inner.plan.certification,
+            // The verified store answered the prefix: this is the
+            // admitted route, not a decision that moved off it.
+            reason: None,
         };
         Ok(Some(Encoding::from_buffer(
             TokenBuffer::from_shared(ids),
@@ -920,6 +925,7 @@ pub(crate) fn facts_from_routed(
     source: Option<String>,
     input_bytes: usize,
     certification: Certification,
+    reason: Option<&str>,
 ) -> ExecutionFacts {
     ExecutionFacts {
         backend: Backend::from_internal(backend),
@@ -927,6 +933,7 @@ pub(crate) fn facts_from_routed(
         source,
         input_bytes: input_bytes as u64,
         certification,
+        reason: reason.map(ReasonCode::from_ledger_code),
     }
 }
 

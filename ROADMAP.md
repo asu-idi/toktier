@@ -79,12 +79,19 @@ that speaks the same record format and keeps the same two invariants — a wrong
 key misses, and a hit is verified — so that a client cannot be given a prefix
 it did not ask for.
 
-A related item on the same path: `Session.revision` is monotone within one
-process only, and a session re-read in a later process begins its count again
-at zero (`docs/contracts/facade.md` Section 7). The conversation itself is
-durable; the counter is not. Carrying it across processes means writing it
-into the record, which is a stored-format change and is deliberately not part
-of 0.2.4.
+A related item on the same path: the Python `Session.revision` is monotone
+within one process only, and a session re-read in a later process begins its
+count again at zero (`docs/contracts/facade.md` Section 7). The conversation
+itself is durable; that counter is not.
+
+Earlier releases said carrying it across processes would be a stored-format
+change. That was wrong, and the correction is worth stating plainly: the
+record has carried `session_revision` at offset 56 since format v1, the value
+is written and read on the Python face as well, and the Rust
+`Session::revision()` already reports it after a restart. What is missing is
+a path from that field to the Python property, which on the default request
+path does not consult the store at all. No format version moves, so no stored
+session is invalidated. The work is still deliberately not part of 0.2.5.
 
 ## Platforms
 

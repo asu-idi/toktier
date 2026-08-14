@@ -437,5 +437,9 @@ well-formed-but-newer records, in the contract's explicit-verify split.
   after its next append. What the store does carry across processes is
   the conversation itself -- the text and the exact ids the session
   resumes with. Callers that need a durable counter should keep their
-  own; making this one durable is a change to the stored record and is
-  listed on the roadmap rather than made here.
+  own for now; making this one durable is on the roadmap rather than
+  made here. It is not a change to the stored record: the record has
+  carried `session_revision` at offset 56 since format v1
+  (`store-format-v1.md` Section 2.1), the Rust `Session::revision()`
+  already reports it across a restart, and what is missing is a path
+  from that field to this property on the Python face.

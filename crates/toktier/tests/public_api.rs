@@ -27,6 +27,8 @@ fn stable_error_codes_are_not_display_strings() {
         ErrorCode::SessionRevisionConflict.as_str(),
         "SESSION_REVISION_CONFLICT"
     );
+    assert_eq!(ErrorCode::RegistryInvalid.as_str(), "REGISTRY_INVALID");
+    assert_eq!(ErrorCode::NetworkDisabled.as_str(), "NETWORK_DISABLED");
 }
 
 #[test]

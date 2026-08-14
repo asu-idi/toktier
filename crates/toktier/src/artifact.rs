@@ -1171,6 +1171,77 @@ mod tests {
 
     use super::*;
 
+    fn manifest_row(repo_id: &str, files: &[&str]) -> ArtifactRow {
+        ArtifactRow {
+            repo_id: repo_id.to_owned(),
+            revision: "b968826d9c46dd6066d109eabc6255188de91218".to_owned(),
+            files: files
+                .iter()
+                .map(|name| {
+                    (
+                        (*name).to_owned(),
+                        ArtifactFileRow {
+                            sha256: "0".repeat(64),
+                            size: 1,
+                        },
+                    )
+                })
+                .collect(),
+        }
+    }
+
+    /// `REGISTRY_INVALID` is the package-integrity answer, so the shapes
+    /// that produce it cannot be reached by handing this crate a file:
+    /// the tables are compiled in, with their digests. These are the
+    /// refusals that guard what a table is allowed to say about a path,
+    /// checked at the shape the manifest reader hands them on.
+    #[test]
+    fn a_manifest_shape_that_could_escape_the_cache_is_refused() {
+        let safe = manifest_row("Qwen/Qwen3-8B", &["tokenizer.json"]);
+        validate_entry("qwen3_8b", &safe).expect("the shipped shape is accepted");
+
+        let unsafe_families = ["", "qwen3 8b", "qwen3/8b", "qwen3.8b"];
+        for family in unsafe_families {
+            let error = validate_entry(family, &safe).expect_err("unsafe family");
+            assert_eq!(error.code(), ErrorCode::RegistryInvalid, "for {family:?}");
+            assert_eq!(error.code().as_str(), "REGISTRY_INVALID");
+        }
+
+        let unsafe_repositories = [
+            "",
+            "/Qwen/Qwen3-8B",
+            "Qwen/../Qwen3-8B",
+            "Qwen\\Qwen3-8B",
+            "Qwen//Qwen3-8B",
+            "Qwen/Qwen3-8B\n",
+        ];
+        for repo_id in unsafe_repositories {
+            let row = manifest_row(repo_id, &["tokenizer.json"]);
+            let error = validate_entry("qwen3_8b", &row).expect_err("unsafe repository");
+            assert_eq!(error.code(), ErrorCode::RegistryInvalid, "for {repo_id:?}");
+        }
+
+        let empty = manifest_row("Qwen/Qwen3-8B", &[]);
+        let error = validate_entry("qwen3_8b", &empty).expect_err("no files");
+        assert_eq!(error.code(), ErrorCode::RegistryInvalid);
+        assert!(error.message().contains("no files"), "{}", error.message());
+
+        for name in [
+            "",
+            "/etc/passwd",
+            "../tokenizer.json",
+            "./tokenizer.json",
+            "sub\\tokenizer.json",
+            "tokenizer json",
+        ] {
+            let row = manifest_row("Qwen/Qwen3-8B", &[name]);
+            let error = validate_entry("qwen3_8b", &row).expect_err("unsafe member");
+            assert_eq!(error.code(), ErrorCode::RegistryInvalid, "for {name:?}");
+        }
+        checked_relative("tokenizer.json").expect("the shipped member is accepted");
+        checked_relative("sub/tokenizer.json").expect("a nested member is accepted");
+    }
+
     #[cfg(feature = "network")]
     fn serve(listener: TcpListener, payload: &'static [u8], requests: Arc<AtomicUsize>) {
         for response_index in 0..2 {

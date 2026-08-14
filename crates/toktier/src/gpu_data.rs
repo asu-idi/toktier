@@ -682,6 +682,54 @@ fn i32_bytes(values: &[i32]) -> Vec<u8> {
 mod tests {
     use super::*;
 
+    /// The class tables are compiled into this crate with their digests,
+    /// so the reader that parses them cannot be reached with a file. Its
+    /// refusals are still part of the `REGISTRY_INVALID` contract -- a
+    /// package whose own table does not decode is a package-integrity
+    /// failure -- so they are exercised at the reader.
+    #[test]
+    fn a_class_table_that_does_not_decode_is_a_package_integrity_failure() {
+        fn header(major: u8, header_len: usize) -> Vec<u8> {
+            let mut bytes = b"\x93NUMPY".to_vec();
+            bytes.push(major);
+            bytes.push(0);
+            if major == 1 {
+                bytes.extend_from_slice(&(header_len as u16).to_le_bytes());
+            } else {
+                bytes.extend_from_slice(&(header_len as u32).to_le_bytes());
+            }
+            bytes.extend(std::iter::repeat_n(b' ', header_len));
+            bytes
+        }
+
+        // A well-formed v1 document of the expected size is accepted.
+        let mut good = header(1, 8);
+        good.extend_from_slice(&[7u8; 4]);
+        assert_eq!(npy_u8_payload(&good, 4).expect("a valid table"), &[7u8; 4]);
+
+        let cases: [(&str, Vec<u8>); 5] = [
+            ("invalid NPY magic", b"not an npy file at all".to_vec()),
+            ("truncated NPY header", b"\x93NUMPY".to_vec()),
+            ("truncated NPY header", b"\x93NUMPY\x01\x00".to_vec()),
+            ("unsupported NPY version", header(4, 0)),
+            ("NPY payload has 0 bytes; expected 4", header(1, 0)),
+        ];
+        for (expected_message, bytes) in cases {
+            let error = npy_u8_payload(&bytes, 4).expect_err(expected_message);
+            assert_eq!(
+                error.code(),
+                ErrorCode::RegistryInvalid,
+                "{expected_message}"
+            );
+            assert_eq!(error.code().as_str(), "REGISTRY_INVALID");
+            assert_eq!(error.message(), expected_message);
+        }
+
+        // A header that runs past the end of the document.
+        let error = npy_u8_payload(&header(2, 0)[..11], 4).expect_err("truncated");
+        assert_eq!(error.code(), ErrorCode::RegistryInvalid);
+    }
+
     #[test]
     fn unparseable_tokenizer_json_is_a_kernel_failure_not_a_hash_mismatch() {
         // Content-hash verification happens before table construction, so

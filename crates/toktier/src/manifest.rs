@@ -740,7 +740,58 @@ fn registry_error(message: impl Into<String>) -> Error {
 
 #[cfg(test)]
 mod tests {
-    use super::describe_flag_divergence;
+    use super::{
+        describe_flag_divergence, parse_json, registry_error, verify_embedded, ArtifactRow,
+        SUPPORT_REGISTRY_BYTES, SUPPORT_REGISTRY_SHA256,
+    };
+    use crate::ErrorCode;
+
+    /// Every shipped table is admitted by its digest and then by its
+    /// shape, and both refusals are `REGISTRY_INVALID`: a package whose
+    /// own records do not hold together is not a caller error. The
+    /// product bytes stay untouched here -- these are the two gates
+    /// themselves, asked about bytes that are not the shipped ones.
+    #[test]
+    fn a_shipped_record_that_does_not_hold_together_is_refused() {
+        // The shipped bytes pass their own digest.
+        verify_embedded(
+            "support registry",
+            SUPPORT_REGISTRY_BYTES,
+            SUPPORT_REGISTRY_SHA256,
+        )
+        .expect("the shipped registry verifies");
+
+        let error = verify_embedded(
+            "support registry",
+            b"not the shipped bytes",
+            SUPPORT_REGISTRY_SHA256,
+        )
+        .expect_err("a digest mismatch");
+        assert_eq!(error.code(), ErrorCode::RegistryInvalid);
+        assert_eq!(error.code().as_str(), "REGISTRY_INVALID");
+        assert!(
+            error.message().contains("digest mismatch")
+                && error.message().contains("support registry"),
+            "{}",
+            error.message()
+        );
+
+        // A digest that verifies over the wrong shape still stops here.
+        let error = parse_json::<ArtifactRow>("artifact manifest", b"{\"repo_id\": 7}")
+            .expect_err("a shape mismatch");
+        assert_eq!(error.code(), ErrorCode::RegistryInvalid);
+        assert!(
+            error
+                .message()
+                .starts_with("cannot parse shipped artifact manifest"),
+            "{}",
+            error.message()
+        );
+
+        // And the cross-reference refusals share the code.
+        let error = registry_error("kernel family x names an unknown band");
+        assert_eq!(error.code(), ErrorCode::RegistryInvalid);
+    }
 
     fn judged() -> Vec<String> {
         [

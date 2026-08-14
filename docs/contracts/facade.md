@@ -349,6 +349,17 @@ guard), ``runtime_policy.last_execution`` reports `executed_backend="hf"` plus
 count and canonical runtime fallback counter are updated exactly once; the
 static plan remains unchanged.
 
+"Exactly once" is per document, and it counts the verdict rather than the
+work behind it: a document that ends on the reference path adds one to the
+fallback counter, whatever an accelerated backend had to do internally to
+establish that it was the document at fault. Since 0.2.5 the prebuilt GPU
+backend locates a failing row inside a failed batch by halving the batch and
+re-attempting the halves; those attempts are internal probes, below the
+reporting boundary, and a search of any depth still contributes one count for
+the one document that ends up on the reference path -- and n for n such
+documents in the same batch. How many probes it took is not published; if it
+ever is, it will be a diagnostic field of its own and not this counter.
+
 Session repair answers the same way. A bounded window that finds a safe cut
 reports `executed_backend` = the corrected CPU engine with `source="gigatoken"`;
 a window that cannot (`session_repair.last.path` beginning `hf_full_`) re-runs

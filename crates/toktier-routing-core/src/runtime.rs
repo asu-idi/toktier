@@ -1551,6 +1551,116 @@ mod tests {
         );
     }
 
+    /// The condition the bisecting replay rests on, pinned where it can
+    /// be checked without a device.
+    ///
+    /// Locating a failing row by halving a batch and adopting the halves
+    /// that succeed is only equal to redoing every row if a document's
+    /// ids do not depend on which other documents share its batch. The
+    /// batch surface is required to be row-for-row equal to encoding each
+    /// document on its own (`docs/contracts/api.md` Section 4); this asks
+    /// for that across the batch shapes a halving search actually
+    /// produces, and with neighbours changed underneath a fixed document.
+    #[test]
+    fn a_documents_ids_do_not_depend_on_its_neighbours() {
+        let router = NativeRouter::new(
+            vec![BACKEND_REFERENCE.to_owned()],
+            vec![0],
+            reference(),
+            None,
+            false,
+            None,
+            false,
+            true,
+        )
+        .unwrap();
+
+        let corpus = (0..64)
+            .map(|index| "a".repeat(index % 7 + 1))
+            .collect::<Vec<_>>();
+        let documents = corpus.iter().map(String::as_str).collect::<Vec<_>>();
+
+        let alone = documents
+            .iter()
+            .map(|text| router.encode_ids(text, false).unwrap().ids)
+            .collect::<Vec<_>>();
+
+        // Every halving a search can reach, down to batches of one.
+        for size in [64usize, 32, 16, 8, 4, 2, 1] {
+            let mut produced = Vec::new();
+            for chunk in documents.chunks(size) {
+                for row in router.encode_batch_ids(chunk, false).unwrap() {
+                    produced.push(row.ids);
+                }
+            }
+            assert_eq!(produced, alone, "batch size {size}");
+        }
+
+        // And with the neighbours reversed under each document.
+        let reversed = documents.iter().rev().copied().collect::<Vec<_>>();
+        let rows = router.encode_batch_ids(&reversed, false).unwrap();
+        for (offset, row) in rows.into_iter().enumerate() {
+            assert_eq!(row.ids, alone[documents.len() - 1 - offset], "row {offset}");
+        }
+    }
+
+    /// A fallback is counted once per document that ends on the
+    /// reference path, whatever the accelerated backend had to do
+    /// internally to work out which document that was.
+    ///
+    /// The prebuilt engine locates a failing row inside a failed batch by
+    /// halving the batch and re-attempting the halves. Those attempts are
+    /// internal probes: they are below this boundary, they record
+    /// nothing, and a tree of any depth still hands one result back per
+    /// row. This pins the arithmetic the ledger promises -- one faulting
+    /// document counts one, and n count n -- against any future change to
+    /// how the search is shaped.
+    #[test]
+    fn a_fallback_is_counted_once_per_document_not_once_per_attempt() {
+        let router = NativeRouter::new(
+            vec![BACKEND_GPU.to_owned(), BACKEND_REFERENCE.to_owned()],
+            vec![0, 0],
+            reference(),
+            None,
+            false,
+            Some(NativeGpuSource::Open(Arc::new(MockGpu))),
+            false,
+            true,
+        )
+        .unwrap();
+
+        // One faulting document among many clean ones counts exactly one.
+        let mut documents = vec!["aaaa"; 127];
+        documents.insert(70, "xxxx");
+        let rows = router.encode_batch_ids(&documents, false).unwrap();
+        assert_eq!(rows.len(), 128);
+        assert_eq!(
+            rows.iter()
+                .filter(|row| row.backend == BACKEND_REFERENCE)
+                .count(),
+            1
+        );
+        assert_eq!(rows[70].backend, BACKEND_REFERENCE);
+        assert_eq!(rows[70].reason, Some(R_EXEC_FAULT));
+        assert_eq!(router.stats().fallback_counts.get(R_EXEC_FAULT), Some(&1));
+
+        // And n faulting documents in one call count exactly n.
+        let mut documents = vec!["aaaa"; 128];
+        let faults = [0usize, 1, 63, 64, 65, 127];
+        for position in faults {
+            documents[position] = "xxxx";
+        }
+        let rows = router.encode_batch_ids(&documents, false).unwrap();
+        let reported = (0..rows.len())
+            .filter(|index| rows[*index].reason == Some(R_EXEC_FAULT))
+            .collect::<Vec<_>>();
+        assert_eq!(reported, faults.to_vec());
+        assert_eq!(
+            router.stats().fallback_counts.get(R_EXEC_FAULT),
+            Some(&(1 + faults.len() as u64))
+        );
+    }
+
     #[test]
     fn fast_cpu_guard_events_name_the_engine_guard_stage() {
         let router = NativeRouter::new(

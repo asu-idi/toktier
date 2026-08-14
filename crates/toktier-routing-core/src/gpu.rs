@@ -1525,13 +1525,11 @@ impl NativeGpuEngine for NativePrebuiltGpu {
                         output[*index] = Some(Err(error.clone()));
                     }
                 }
-                Err(_batch_error) => {
+                Err(batch_error) => {
                     // Sparse o200k guards and other document-local failures
                     // are isolated so one row cannot force unrelated rows off
                     // the accelerated path.
-                    for (index, text) in indices.iter().copied().zip(batch) {
-                        output[index] = Some(executor.encode(text));
-                    }
+                    resolve_failed_chunk(&mut *executor, indices, &batch, batch_error, &mut output);
                 }
             }
         }
@@ -1549,6 +1547,94 @@ impl NativeGpuEngine for NativePrebuiltGpu {
 
     fn delivery(&self) -> &str {
         &self.delivery
+    }
+}
+
+/// The one device call the chunk resolver makes.
+///
+/// Naming it lets the search below be exercised without a device. The
+/// search is the part that can be wrong about which row failed; the
+/// device is not, and a test that needs one cannot run everywhere.
+trait ChunkEncoder {
+    fn encode_chunk(&mut self, docs: &[&str]) -> Result<Vec<Vec<u32>>, NativeRuntimeError>;
+}
+
+impl ChunkEncoder for Executor {
+    fn encode_chunk(&mut self, docs: &[&str]) -> Result<Vec<Vec<u32>>, NativeRuntimeError> {
+        self.encode_batch(docs)
+    }
+}
+
+/// Resolve a chunk whose batched attempt failed, by halving it.
+///
+/// A batch fails when one document in it trips a guard. The answer used
+/// to be to redo every row of the chunk on its own, which pays the
+/// per-call fixed cost once per row: one failed batch of 128 became 128
+/// separate device passes, and the rows that were never in question paid
+/// for the one that was.
+///
+/// Halving keeps those rows batched. A half that succeeds is adopted
+/// whole and never split again; only a half that still fails is divided.
+/// A half of one document is the row itself, and [`Executor::encode_batch`]
+/// of a single document is [`Executor::encode`] of that document, so a row
+/// that ends up alone receives exactly the answer it received before.
+///
+/// Two properties this rests on, stated because they are conditions
+/// rather than conveniences. A document's ids do not depend on which
+/// other documents share its batch -- the batch surface is required to be
+/// row-for-row equal to encoding each document on its own
+/// (`docs/contracts/api.md` Section 4) -- and a failure is a property of
+/// the document, not of the search that found it. If either stopped
+/// holding, halving would report different ids from redoing every row,
+/// and the equivalence tests over several batch sizes exist to catch
+/// that.
+///
+/// Sub-batch attempts are internal probes and record nothing. The caller
+/// counts one fallback for each row this hands back an error for, which
+/// is one per document that ends on the reference path, whatever shape
+/// the search took to find it.
+fn resolve_failed_chunk<E: ChunkEncoder>(
+    executor: &mut E,
+    indices: &[usize],
+    batch: &[&str],
+    batch_error: NativeRuntimeError,
+    output: &mut [Option<Result<Vec<u32>, NativeRuntimeError>>],
+) {
+    if batch.len() <= 1 {
+        // Nothing left to divide: the attempt that failed was this row's.
+        if let Some(index) = indices.first().copied() {
+            output[index] = Some(Err(batch_error));
+        }
+        return;
+    }
+    let middle = batch.len() / 2;
+    // Popped from the end, so the halves are attempted left to right.
+    let mut pending = vec![(middle, batch.len()), (0, middle)];
+    while let Some((low, high)) = pending.pop() {
+        let slice = &batch[low..high];
+        match executor.encode_chunk(slice) {
+            Ok(rows) if rows.len() == slice.len() => {
+                for (index, row) in indices[low..high].iter().copied().zip(rows) {
+                    output[index] = Some(Ok(row));
+                }
+            }
+            Ok(_) => {
+                let error =
+                    NativeRuntimeError::new("native GPU batch returned the wrong row count");
+                for index in &indices[low..high] {
+                    output[*index] = Some(Err(error.clone()));
+                }
+            }
+            Err(error) => {
+                if high - low <= 1 {
+                    output[indices[low]] = Some(Err(error));
+                } else {
+                    let middle = low + (high - low) / 2;
+                    pending.push((middle, high));
+                    pending.push((low, middle));
+                }
+            }
+        }
     }
 }
 
@@ -1732,5 +1818,148 @@ mod tests {
         ] {
             assert!(tail.sparse_guard().is_some());
         }
+    }
+
+    /// A device stand-in: any batch holding a poisoned document fails as
+    /// a whole, exactly as a guard trip does, and every other batch
+    /// answers. Ids are a function of the document alone, which is the
+    /// invariant the search is allowed to rely on, so a test that saw
+    /// halving change an id would fail here rather than on a device.
+    struct PoisonEncoder {
+        poison: Vec<&'static str>,
+        attempts: Vec<usize>,
+    }
+
+    impl PoisonEncoder {
+        fn new(poison: &[&'static str]) -> Self {
+            Self {
+                poison: poison.to_vec(),
+                attempts: Vec::new(),
+            }
+        }
+
+        fn ids_of(text: &str) -> Vec<u32> {
+            text.bytes().map(u32::from).collect()
+        }
+    }
+
+    impl ChunkEncoder for PoisonEncoder {
+        fn encode_chunk(&mut self, docs: &[&str]) -> Result<Vec<Vec<u32>>, NativeRuntimeError> {
+            self.attempts.push(docs.len());
+            if docs.iter().any(|text| self.poison.contains(text)) {
+                return Err(NativeRuntimeError::new("batched sparse guard tripped"));
+            }
+            Ok(docs.iter().map(|text| Self::ids_of(text)).collect())
+        }
+    }
+
+    fn chunk(size: usize, faults: &[usize]) -> (Vec<String>, Vec<&'static str>) {
+        let texts = (0..size)
+            .map(|index| {
+                if faults.contains(&index) {
+                    "poison".to_owned()
+                } else {
+                    format!("row-{index}")
+                }
+            })
+            .collect::<Vec<_>>();
+        (texts, vec!["poison"])
+    }
+
+    fn run(
+        size: usize,
+        faults: &[usize],
+    ) -> (Vec<Result<Vec<u32>, NativeRuntimeError>>, Vec<usize>) {
+        let (texts, poison) = chunk(size, faults);
+        let batch = texts.iter().map(String::as_str).collect::<Vec<_>>();
+        let indices = (0..size).collect::<Vec<_>>();
+        let mut encoder = PoisonEncoder::new(&poison);
+        // The caller's own attempt over the whole chunk, which failed.
+        let first = encoder.encode_chunk(&batch).expect_err("the chunk fails");
+        let mut output = vec![None; size];
+        resolve_failed_chunk(&mut encoder, &indices, &batch, first, &mut output);
+        let resolved = output
+            .into_iter()
+            .map(|value| value.expect("every row is resolved"))
+            .collect::<Vec<_>>();
+        (resolved, encoder.attempts)
+    }
+
+    /// One faulting row is found, and it is the only row that fails.
+    /// Every other row keeps the ids it would have had, and the caller
+    /// therefore counts exactly one fallback for the chunk -- one per
+    /// document that ends on the reference path, not one per probe.
+    #[test]
+    fn halving_fails_exactly_the_faulting_row_wherever_it_sits() {
+        for size in [2usize, 3, 5, 8, 17, 64, 128, 512] {
+            for fault in [0usize, 1, size / 3, size / 2, size - 2, size - 1] {
+                if fault >= size {
+                    continue;
+                }
+                let (rows, _) = run(size, &[fault]);
+                let failed = (0..size).filter(|index| rows[*index].is_err()).count();
+                assert_eq!(failed, 1, "size {size}, fault {fault}");
+                assert!(rows[fault].is_err(), "size {size}, fault {fault}");
+                for (index, row) in rows.iter().enumerate() {
+                    if index == fault {
+                        continue;
+                    }
+                    assert_eq!(
+                        row.as_ref().expect("clean row"),
+                        &PoisonEncoder::ids_of(&format!("row-{index}")),
+                        "size {size}, fault {fault}, row {index}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Several faulting rows in one chunk fail, and only they do, so a
+    /// chunk with n faulting documents produces exactly n fallbacks.
+    #[test]
+    fn halving_fails_exactly_n_rows_for_n_faults() {
+        let cases: [(usize, &[usize]); 6] = [
+            (128, &[0, 127]),
+            (128, &[3, 4]),
+            (128, &[7, 63, 64, 65]),
+            (64, &[0, 1, 2, 3, 4, 5, 6, 7]),
+            (16, &[0, 2, 4, 6, 8, 10, 12, 14]),
+            (8, &[0, 1, 2, 3, 4, 5, 6, 7]),
+        ];
+        for (size, faults) in cases {
+            let (rows, _) = run(size, faults);
+            let failed = (0..size)
+                .filter(|index| rows[*index].is_err())
+                .collect::<Vec<_>>();
+            assert_eq!(failed, faults.to_vec(), "size {size}, faults {faults:?}");
+        }
+    }
+
+    /// Halving costs a number of attempts that grows with the log of the
+    /// chunk, not with the chunk -- which is the whole point of it. The
+    /// bound is stated as a bound rather than an exact count so it
+    /// describes the search rather than one arrangement of it.
+    #[test]
+    fn halving_probes_a_chunk_instead_of_redoing_it() {
+        let (_, attempts) = run(128, &[70]);
+        // The first entry is the caller's own failed attempt.
+        let probes = attempts.len() - 1;
+        assert!(probes <= 2 * 8, "128 rows, one fault: {probes} probes");
+        assert!(probes < 128, "halving must beat redoing every row");
+        // No probe is ever the whole chunk again.
+        assert!(attempts[1..].iter().all(|size| *size < 128));
+
+        // The row that ends alone is reached as a batch of one, which is
+        // the same call the row used to receive on its own.
+        assert!(attempts[1..].contains(&1));
+    }
+
+    /// A chunk of one has nothing to divide: the caller's attempt was
+    /// that row's attempt, so it is reported without a further probe.
+    #[test]
+    fn a_chunk_of_one_is_not_probed_again() {
+        let (rows, attempts) = run(1, &[0]);
+        assert!(rows[0].is_err());
+        assert_eq!(attempts.len(), 1, "only the caller's own attempt");
     }
 }

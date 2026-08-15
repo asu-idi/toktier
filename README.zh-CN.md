@@ -41,7 +41,7 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 
 ## 最新动态
 
-- **2026.08.TBD** 🚀 **toktier 0.2.5** 发布——Rust crate 的 `network` feature
+- **2026.08.15** 🚀 **toktier 0.2.5** 发布——Rust crate 的 `network` feature
   改为按需开启，这让可能从不联网取件的默认构建少带 16 个包和整套 TLS 栈；
   仍需通过网络获取工件时加上 `features = ["network"]`，命令行则用
   `cargo install --locked --features network toktier`。Python 包的取件方式

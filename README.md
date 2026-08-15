@@ -45,7 +45,7 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
 
 ## News
 
-- **2026.08.TBD** 🚀 **toktier 0.2.5** released — the Rust crate's `network`
+- **2026.08.15** 🚀 **toktier 0.2.5** released — the Rust crate's `network`
   feature is now opt-in, which takes sixteen packages and the whole TLS
   stack out of a default build that may never fetch; add
   `features = ["network"]` to keep acquiring artifacts over the network,

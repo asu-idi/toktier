@@ -278,6 +278,51 @@ pub(crate) struct Registry {
 ///
 /// Per key rather than as two lists: the reader needs the one entry to
 /// change, not a diff of nine.
+/// The judged row nearest a build, by symmetric difference of build flags.
+///
+/// Counting only the flags a row shares with the build would reward a row
+/// for being long; the distance that matters is how many flags one side
+/// has and the other does not. Where two rows are equally far -- which is
+/// what happens to a build whose feature list is neither row's, since each
+/// row then differs from it in exactly one flag on each side -- the row
+/// that adds no optional feature wins, so the reader is shown the plain
+/// recipe rather than an optional one.
+fn nearest_judged_row<'a>(
+    observed: &[&str],
+    candidates: &[&'a RuntimeBuildRow],
+) -> Option<&'a RuntimeBuildRow> {
+    candidates.iter().copied().min_by_key(|row| {
+        let missing = row
+            .build_flags
+            .iter()
+            .filter(|flag| !observed.contains(&flag.as_str()))
+            .count();
+        let extra = observed
+            .iter()
+            .filter(|flag| !row.build_flags.iter().any(|other| other == *flag))
+            .count();
+        (missing + extra, usize::from(names_optional_feature(row)))
+    })
+}
+
+/// Whether a judged row's feature list names an optional build feature.
+///
+/// The register carries one row per judged recipe, and the recipes differ
+/// from the default one by naming an extra feature. When two rows are
+/// equally far from the build asking, the one that adds nothing is the
+/// one to hold up as the recipe.
+fn names_optional_feature(row: &RuntimeBuildRow) -> bool {
+    const OPTIONAL: [&str; 2] = ["jit", "network"];
+    row.build_flags
+        .iter()
+        .filter_map(|flag| flag.strip_prefix("features="))
+        .any(|features| {
+            features
+                .split(',')
+                .any(|feature| OPTIONAL.contains(&feature.trim()))
+        })
+}
+
 fn describe_flag_divergence(observed: &[&str], judged: &[String]) -> Option<String> {
     let key = |flag: &str| flag.split_once('=').map(|(key, _)| key.to_owned());
     let value = |flag: &str| flag.split_once('=').map(|(_, value)| value.to_owned());
@@ -530,18 +575,16 @@ impl Registry {
         {
             return None;
         }
-        // The row that agrees with this build on the most axes: naming
-        // every difference against every row would bury the one the
-        // reader has to change.
-        let closest = candidates
-            .iter()
-            .max_by_key(|row| {
-                row.build_flags
-                    .iter()
-                    .filter(|flag| observed.contains(&flag.as_str()))
-                    .count()
-            })
-            .expect("a candidate row");
+        // The row nearest this build, so that naming every difference
+        // against every row does not bury the one the reader has to
+        // change. Nearest is the smallest symmetric difference: counting
+        // only the flags a row shares with this build rewards a row for
+        // being long, and the rows this register carries differ by a
+        // single feature token. Where that still ties -- it does for a
+        // build whose feature list is neither row's -- the plain row wins
+        // over an optional-feature one, because the reader building
+        // without that option should be told what the plain recipe is.
+        let closest = nearest_judged_row(&observed, &candidates).expect("a candidate row");
         describe_flag_divergence(&observed, &closest.build_flags)
     }
 
@@ -741,10 +784,91 @@ fn registry_error(message: impl Into<String>) -> Error {
 #[cfg(test)]
 mod tests {
     use super::{
-        describe_flag_divergence, parse_json, registry_error, verify_embedded, ArtifactRow,
-        SUPPORT_REGISTRY_BYTES, SUPPORT_REGISTRY_SHA256,
+        describe_flag_divergence, nearest_judged_row, parse_json, registry_error, verify_embedded,
+        ArtifactRow, RuntimeBuildRow, SUPPORT_REGISTRY_BYTES, SUPPORT_REGISTRY_SHA256,
     };
     use crate::ErrorCode;
+
+    /// A judged row carrying one feature list, with every other axis
+    /// equal to the build under test: the divergence reporter only ever
+    /// sees rows that already agree on sources and toolchain.
+    fn judged_row(features: &str) -> RuntimeBuildRow {
+        RuntimeBuildRow {
+            runtime: "rust_api".to_owned(),
+            source_digest: "s".to_owned(),
+            build_flags: vec![
+                "profile=release".to_owned(),
+                "opt-level=3".to_owned(),
+                "target=x86_64-unknown-linux-gnu".to_owned(),
+                "debug=false".to_owned(),
+                "target-features=fxsr,sse,sse2".to_owned(),
+                "rustflags=".to_owned(),
+                format!("features={features}"),
+            ],
+            toolchain: "t".to_owned(),
+            fast_cpu_source_digest: "f".to_owned(),
+            native_host_source_digest: "n".to_owned(),
+            evidence_id: "e".to_owned(),
+        }
+    }
+
+    /// The build flags a build with this feature list reports about itself,
+    /// in the shape the register records them.
+    fn observed_flags(features: &str) -> Vec<String> {
+        judged_row(features).build_flags
+    }
+
+    /// From 0.2.5 the register carries two rows whose feature lists differ
+    /// by one token, and a build with `network` matches neither. It is the
+    /// same distance from both, so the tie is what decides which recipe
+    /// the reader is shown -- and the recipe to show is the default one,
+    /// not the one that also turns on an unrelated optional feature. The
+    /// reader is being told which flag to change, and `jit` is not it.
+    #[test]
+    fn the_divergence_reference_is_the_plain_recipe_not_an_optional_one() {
+        let default_row = judged_row("default,prebuilt-gpu,serving,sqlite");
+        let jit_row = judged_row("default,jit,prebuilt-gpu,serving,sqlite");
+        let flags = observed_flags("default,network,prebuilt-gpu,serving,sqlite");
+        let observed = flags.iter().map(String::as_str).collect::<Vec<_>>();
+
+        for candidates in [vec![&default_row, &jit_row], vec![&jit_row, &default_row]] {
+            let chosen = nearest_judged_row(&observed, &candidates).expect("a candidate row");
+            assert_eq!(
+                chosen.build_flags.last().map(String::as_str),
+                Some("features=default,prebuilt-gpu,serving,sqlite"),
+                "the plain recipe is the reference whatever order the rows arrive in",
+            );
+            let message = describe_flag_divergence(&observed, &chosen.build_flags)
+                .expect("a build with network diverges from the default recipe");
+            assert!(
+                message.contains("network") && !message.contains("jit"),
+                "the reported difference names the feature the reader turned on: {message}",
+            );
+        }
+    }
+
+    /// Distance, not overlap: a row that shares more flags simply because
+    /// it carries more of them is not nearer. The exact row still wins
+    /// outright, which is the case the caller short-circuits before ever
+    /// asking.
+    #[test]
+    fn the_nearest_row_is_the_one_with_the_smallest_difference() {
+        let exact = judged_row("default,prebuilt-gpu,serving,sqlite");
+        let far = judged_row("default,jit,network,serde,serving,sqlite");
+        let flags = observed_flags("default,prebuilt-gpu,serving,sqlite");
+        let observed = flags.iter().map(String::as_str).collect::<Vec<_>>();
+        let candidates = vec![&far, &exact];
+
+        let chosen = nearest_judged_row(&observed, &candidates).expect("a candidate row");
+        assert_eq!(
+            chosen.build_flags.last().map(String::as_str),
+            Some("features=default,prebuilt-gpu,serving,sqlite"),
+        );
+        assert_eq!(
+            describe_flag_divergence(&observed, &chosen.build_flags),
+            None
+        );
+    }
 
     /// Every shipped table is admitted by its digest and then by its
     /// shape, and both refusals are `REGISTRY_INVALID`: a package whose

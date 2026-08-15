@@ -2,7 +2,7 @@
   "schema": "toktier.rust_direct_jit.matrix.v1",
   "architecture": "sm_120",
   "driver_api_version": 13030,
-  "runtime_source_digest": "8d4f3fcc2ca04602ac14e107f7ebdb623b9aa19aaddcd68588d09ab611340016",
+  "runtime_source_digest": "5d47c03f877ce377b436526a782c3a7911355b5e86d4e297fea26d9e5a44678a",
   "native_host_source_digest": "1158dbf5586056cca76d6f74ba0acbbcd188a448d094ae711027700cd3fb7dc9",
   "rust_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
   "rust_build_flags": [
@@ -47,14 +47,14 @@
       "backend": "Gpu",
       "delivery": "jit",
       "binding_digest": "57890302c6f8fb61579194b6d111cda0b188882f8b80f92aa28d494690506d6d",
-      "product_sha256": "8c4a887b83f5bf47c00b2458f8a7c27aa5a4c05a9a82e718d97cee80a050a1f0",
-      "product_domain_digest": "cbf9856de0f3d3c16d5e0a036fe29004a56b261794c69c1502d90f4afc12a73b",
+      "product_sha256": "58a9f6d3a0c1969197fa84c46c6332eae5e0c88329eff84cd6c5ed6d4404936d",
+      "product_domain_digest": "9fda18810119b1fea32bf198e77856ddde81257cbeb60727d9e355e4fe137923",
       "certified": true,
       "first_compile_cache_hit": false,
       "second_compile_cache_hit": true,
-      "cold_compile_us": 1854756,
-      "authenticated_cache_hit_us": 142450,
-      "first_gpu_request_us": 621
+      "cold_compile_us": 1962923,
+      "authenticated_cache_hit_us": 147206,
+      "first_gpu_request_us": 634
     },
     {
       "family": "deepseek_v4_flash",
@@ -69,14 +69,14 @@
       "backend": "Gpu",
       "delivery": "jit",
       "binding_digest": "b3822f40d8d5d9b18c9c8680a50b211d245e0c93adb82dd8d89ebe2257eadbc6",
-      "product_sha256": "ea766aff74ee345f2e2cec180aeae072efa3afa4704137e5863a5f0331797e8f",
-      "product_domain_digest": "2e48a0ec3ece879a11f4eec1a91893a1729a8f440cbce9614a5db0a593d1392d",
+      "product_sha256": "377abed68edaeb3765d5842c7615736d6e0a5fbd9a98169b1dab338e769ba321",
+      "product_domain_digest": "60044b4f8e7570799acb5be0023792512f28fb9f918fe06df799eb05c0101dec",
       "certified": true,
       "first_compile_cache_hit": false,
       "second_compile_cache_hit": true,
-      "cold_compile_us": 1852238,
-      "authenticated_cache_hit_us": 145441,
-      "first_gpu_request_us": 615
+      "cold_compile_us": 1818400,
+      "authenticated_cache_hit_us": 143236,
+      "first_gpu_request_us": 594
     },
     {
       "family": "glm_5_2",
@@ -91,14 +91,14 @@
       "backend": "Gpu",
       "delivery": "jit",
       "binding_digest": "14a13135a15791c1c9cc76df2b74902336b60a8c9af090053b055858e9722671",
-      "product_sha256": "8b0660e200ec75f6d33921485adf8e561fa3cc8cd43f8f8bd2ae1a56c7a6f3e3",
-      "product_domain_digest": "df022a0254e22d70ac9e3665068d268ef27a41b8edeb5bfb5aea44e213a0638b",
+      "product_sha256": "c00e62fc439ce0d84916295c59201ca1d8673d829784772898bc433d0e535813",
+      "product_domain_digest": "2974657d72f21670875d0616627a815d90a5ace875bd68cac575e6ad866868a7",
       "certified": true,
       "first_compile_cache_hit": false,
       "second_compile_cache_hit": true,
-      "cold_compile_us": 1832392,
-      "authenticated_cache_hit_us": 138423,
-      "first_gpu_request_us": 644
+      "cold_compile_us": 1829786,
+      "authenticated_cache_hit_us": 144822,
+      "first_gpu_request_us": 626
     },
     {
       "family": "gpt_oss_120b",
@@ -113,14 +113,14 @@
       "backend": "Gpu",
       "delivery": "jit",
       "binding_digest": "19829ac01b39a20f4b17cb839b1e83cf6ffeff3f81e2b6409a13a749fe7a5286",
-      "product_sha256": "6be09adbc534bee6a589cfa7066ae03f7bdd947db4063473850bd24e3e72461a",
-      "product_domain_digest": "5f201653d16aa5e3772d6451e30e93026e12068378f51a5a2dc4889230487940",
+      "product_sha256": "cdb5a2264c1d824958c9a57d3f730221eededdc8c134436ffcdc3a1b7431dfec",
+      "product_domain_digest": "54846b0b58a8ce819aff2422c64f2e49be4926fa90368ac3e75c8e366c163f24",
       "certified": true,
       "first_compile_cache_hit": false,
       "second_compile_cache_hit": true,
-      "cold_compile_us": 1834052,
-      "authenticated_cache_hit_us": 136478,
-      "first_gpu_request_us": 595
+      "cold_compile_us": 1812988,
+      "authenticated_cache_hit_us": 137936,
+      "first_gpu_request_us": 586
     },
     {
       "family": "hy3",
@@ -135,14 +135,14 @@
       "backend": "Gpu",
       "delivery": "jit",
       "binding_digest": "de3930bbe706fdd35b1cd792f407ffa7b4e89ec4cf4d3547a91cdef55c42845a",
-      "product_sha256": "7cc097272a7518ef5a215e5deb250e79e324a85f47aa10e1ecf54d800187cfc4",
-      "product_domain_digest": "47bf0dbca6d65b5086abed0a955ddfae57f93478d4627d1f177a0fd6ae24791f",
+      "product_sha256": "b6b345a7af6ff40396d7e8dbef2846d3f59a40f7cbeb5cc484a0fe82626e22d8",
+      "product_domain_digest": "9534e58b644b5e1cb64cb9b81da43cffe4e30d3c764043681e73b70ad3ba905e",
       "certified": true,
       "first_compile_cache_hit": false,
       "second_compile_cache_hit": true,
-      "cold_compile_us": 1840621,
-      "authenticated_cache_hit_us": 135472,
-      "first_gpu_request_us": 631
+      "cold_compile_us": 1847791,
+      "authenticated_cache_hit_us": 139580,
+      "first_gpu_request_us": 613
     },
     {
       "family": "kimi_k3",
@@ -157,14 +157,14 @@
       "backend": "Gpu",
       "delivery": "jit",
       "binding_digest": "addcc223cf5eaf953e03ea1ecff2625813637ad39fecdb7235cc988ee404f1d6",
-      "product_sha256": "4eefa2cce6ca305cb0f515fc7bcb46d072c0eae07ac1d8f33003c108e2566285",
-      "product_domain_digest": "a9218680656438dbcd1371c864fe7d67ccc0028e0a60e78a5ce03516d0a153e3",
+      "product_sha256": "4f782cabbdb2da2ca1c3100203504b2c574f6f4e20128049ced9bd3a49526ad7",
+      "product_domain_digest": "629e02a1c8a4c7006b21cdfb2a30a1eed3cb57bab9fe355174652b33836b9606",
       "certified": true,
       "first_compile_cache_hit": false,
       "second_compile_cache_hit": true,
-      "cold_compile_us": 1831424,
-      "authenticated_cache_hit_us": 138322,
-      "first_gpu_request_us": 620
+      "cold_compile_us": 1837570,
+      "authenticated_cache_hit_us": 141425,
+      "first_gpu_request_us": 599
     },
     {
       "family": "laguna_s_2_1",
@@ -179,14 +179,14 @@
       "backend": "Gpu",
       "delivery": "jit",
       "binding_digest": "55216312e0f2975f843a50b509e27561565644d7b683253c0329a05849b423a2",
-      "product_sha256": "05258341366dc37131ff612dad2283e8c5ea72a44f228d43d3408ede435e4459",
-      "product_domain_digest": "b153f2f0478f6a5c5bfa61c65a85f737f1e0ba7b59d2c84d76f430294e1c27d6",
+      "product_sha256": "d7cc1aeb94632dee7432e6716c457b529da97be17dc521e53646c92714cee838",
+      "product_domain_digest": "baad040830dbd6d365c75789e92e7624b781301034bf44633d69fe16f23aeb71",
       "certified": true,
       "first_compile_cache_hit": false,
       "second_compile_cache_hit": true,
-      "cold_compile_us": 1842134,
-      "authenticated_cache_hit_us": 139173,
-      "first_gpu_request_us": 728
+      "cold_compile_us": 1816111,
+      "authenticated_cache_hit_us": 135584,
+      "first_gpu_request_us": 716
     },
     {
       "family": "ling_3_0_flash",
@@ -201,14 +201,14 @@
       "backend": "Gpu",
       "delivery": "jit",
       "binding_digest": "f59ce3d4c5472e3a44ac034758e84d90ce11a4aff057e34869ce26195f45fa81",
-      "product_sha256": "fff1f23254561d1d2890c9844b94a85dfac9dfda70f115447f22e25ef76e2fc3",
-      "product_domain_digest": "bd93a941c2f05c373328ff405e8b51f2c0d40a652b712308fdd6566af15bcaa9",
+      "product_sha256": "37f493781c44181c78b245704c73849da41b836567b0e9eac0532b2836ef160f",
+      "product_domain_digest": "7dfa4ff3aacc8b00b175732fa9bcdae446f1956be217bb83b50e19d7c4921d89",
       "certified": true,
       "first_compile_cache_hit": false,
       "second_compile_cache_hit": true,
-      "cold_compile_us": 1812991,
-      "authenticated_cache_hit_us": 135768,
-      "first_gpu_request_us": 590
+      "cold_compile_us": 1840634,
+      "authenticated_cache_hit_us": 139279,
+      "first_gpu_request_us": 568
     },
     {
       "family": "llama_3_1_8b",
@@ -223,14 +223,14 @@
       "backend": "Gpu",
       "delivery": "jit",
       "binding_digest": "d049af5a5b1bc471ad05e85ccd09281d606b1879bd89727cabd186b277f9f239",
-      "product_sha256": "cf0acd1019eb7d267fa714497cc101f8ab5383ed492a6429f404e3e42225d10c",
-      "product_domain_digest": "38971ec7cb4ca7ce4fffd868a1ad5f3e1258bf1b31e91e941496a2ded1437f12",
+      "product_sha256": "f3bf4e7f93be5846166085218111c6902205ec85c5adb64e8a60b37947a1e79e",
+      "product_domain_digest": "b4bffcf9c1464b65693df7e36b04c572df7fe8532c021f6686a37f6f3883233c",
       "certified": true,
       "first_compile_cache_hit": false,
       "second_compile_cache_hit": true,
-      "cold_compile_us": 1842367,
-      "authenticated_cache_hit_us": 138210,
-      "first_gpu_request_us": 590
+      "cold_compile_us": 1844979,
+      "authenticated_cache_hit_us": 135418,
+      "first_gpu_request_us": 578
     },
     {
       "family": "minimax_m3",
@@ -245,14 +245,14 @@
       "backend": "Gpu",
       "delivery": "jit",
       "binding_digest": "ae58e2e532117b98a1c0d8b26e4839286f06b40952b3da1577bd8cb773eceab1",
-      "product_sha256": "9b6410733debf105c26c93ea4e1547bbe2cb0b0380e78956e2ff9a045e74c153",
-      "product_domain_digest": "e2cfe9445e1c3d1f5cfd8246f2ca467d4fd21aa8318e41a54dd67d1ae2ef1f39",
+      "product_sha256": "7672ba57c1980c16b446507c86ba36cecafb4178c4ea6887d2bca923ed60b8b8",
+      "product_domain_digest": "44a6e7459b87a5ee56ebe5a0d5c4b5d60ae9541c56c77472c892d938fca01ce5",
       "certified": true,
       "first_compile_cache_hit": false,
       "second_compile_cache_hit": true,
-      "cold_compile_us": 1831800,
-      "authenticated_cache_hit_us": 137513,
-      "first_gpu_request_us": 596
+      "cold_compile_us": 1858400,
+      "authenticated_cache_hit_us": 140152,
+      "first_gpu_request_us": 582
     },
     {
       "family": "ministral_3_8b",
@@ -267,14 +267,14 @@
       "backend": "Gpu",
       "delivery": "jit",
       "binding_digest": "85dc9135055733432b0099e896a3bc2c2b0ba36e58cbdc3253879e8ad9c4108c",
-      "product_sha256": "84db82dbef87581b2132aa611815df039c9f63ab2545f4a5f5cad8e77de50cfd",
-      "product_domain_digest": "bacbdfe5b908cbb070cd393b9b06f27f0301bbde060cccdc81f062cf1a37247e",
+      "product_sha256": "fe8351e5ed4aff787cd0ccc71383168c76f5c06ec46a9f826a6947babca90454",
+      "product_domain_digest": "556ca4b42d73995c050d82b2e72ff7386eccddce2c4c135349e4c57cbab675a2",
       "certified": true,
       "first_compile_cache_hit": false,
       "second_compile_cache_hit": true,
-      "cold_compile_us": 1832044,
-      "authenticated_cache_hit_us": 133449,
-      "first_gpu_request_us": 639
+      "cold_compile_us": 1816463,
+      "authenticated_cache_hit_us": 140297,
+      "first_gpu_request_us": 596
     },
     {
       "family": "nemotron_3_nano_4b",
@@ -289,14 +289,14 @@
       "backend": "Gpu",
       "delivery": "jit",
       "binding_digest": "35e1833845377b72eb9d9f426accb1683da0050652047c8e9f5ac7bd8ec09ef8",
-      "product_sha256": "7d41426b92c115357c20ce7e5c151acb122937494feafed7e18acae209eb6598",
-      "product_domain_digest": "762dcadbac35b57271ca77ff747869c551bdb9945876318bf90acc6c7a68ef83",
+      "product_sha256": "648d199f78e7f345f79f7777bba934cd1398b07766dcb564d15308db9ecf619d",
+      "product_domain_digest": "99e698617780c5e34e68646b73bd2c9dbed5526f94554dc42a03a5fca4983b79",
       "certified": true,
       "first_compile_cache_hit": false,
       "second_compile_cache_hit": true,
-      "cold_compile_us": 1834753,
-      "authenticated_cache_hit_us": 137630,
-      "first_gpu_request_us": 620
+      "cold_compile_us": 1821245,
+      "authenticated_cache_hit_us": 140877,
+      "first_gpu_request_us": 582
     },
     {
       "family": "olmo_3_7b",
@@ -311,14 +311,14 @@
       "backend": "Gpu",
       "delivery": "jit",
       "binding_digest": "5fd823ae2354eb9b375ce2aa479da6d43a77ba5a7f674b3f7868c76acdb52e35",
-      "product_sha256": "06bcb85000ce1b866cdcddf757cff4154d0607b9136de632ca17f52c29e82ac1",
-      "product_domain_digest": "9deac886b690123f9a8af2513249d9c7a3d278d246a4fdcf8899dc892a8e8903",
+      "product_sha256": "bb51b30915fd2de1c1db0f62627a1d074a867170d02e9f0e2750c69e2438c7b3",
+      "product_domain_digest": "9c6e67f7c6263ca3fa573253ca05f1668b8adb1a97bba87a42a9004d652f5d3b",
       "certified": true,
       "first_compile_cache_hit": false,
       "second_compile_cache_hit": true,
-      "cold_compile_us": 1842629,
-      "authenticated_cache_hit_us": 136385,
-      "first_gpu_request_us": 587
+      "cold_compile_us": 1813612,
+      "authenticated_cache_hit_us": 141307,
+      "first_gpu_request_us": 597
     },
     {
       "family": "qwen3_5_08b",
@@ -333,14 +333,14 @@
       "backend": "Gpu",
       "delivery": "jit",
       "binding_digest": "72d383890b665c909acc0bd37a99a33d87a5edea07e3f678e1adedf45523a307",
-      "product_sha256": "fe768d7d64915c0197c35862a7229ef1891ce626acb35e731de11d8fbdcb6640",
-      "product_domain_digest": "b33450d2402edf9997a5db7940b373c89c4de099fadd74ec361626870a185e16",
+      "product_sha256": "211140098e0f3876f429ee347e595cce28ec7149bccbdfe0582f64b3267a0045",
+      "product_domain_digest": "67cdf8cdd5b4d1606eeba1ebb50ffe93e2220c0b62d7c0e9eab8386259970c7e",
       "certified": true,
       "first_compile_cache_hit": false,
       "second_compile_cache_hit": true,
-      "cold_compile_us": 1846144,
-      "authenticated_cache_hit_us": 134915,
-      "first_gpu_request_us": 557
+      "cold_compile_us": 1818655,
+      "authenticated_cache_hit_us": 138625,
+      "first_gpu_request_us": 574
     },
     {
       "family": "qwen3_8b",
@@ -355,14 +355,14 @@
       "backend": "Gpu",
       "delivery": "jit",
       "binding_digest": "44eba732d736c12523e459184193deefb321307982daabc364c8ecde51f4cc21",
-      "product_sha256": "40c58a66fcfa37b4cf4605868d42cd2dcc8d8c515d8d6fc86e040fc234a9d32d",
-      "product_domain_digest": "43e6f82bedaa556d5ebc2d8c58be8de2ba2c842eee8d6518ab11a58bd68e7a4f",
+      "product_sha256": "f408f201d0411eb8d082be130cc402f8e5d9e1dbdd52378535b1f6167cfafcb2",
+      "product_domain_digest": "90c954b1e6595a29d6fb015d4b232c768b899d29770ada8dedb74073df6d0952",
       "certified": true,
       "first_compile_cache_hit": false,
       "second_compile_cache_hit": true,
-      "cold_compile_us": 1849234,
-      "authenticated_cache_hit_us": 139380,
-      "first_gpu_request_us": 590
+      "cold_compile_us": 1844547,
+      "authenticated_cache_hit_us": 141352,
+      "first_gpu_request_us": 592
     }
   ]
 }

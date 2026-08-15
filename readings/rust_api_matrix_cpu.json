@@ -1,7 +1,7 @@
 {
   "schema": "toktier.rust_api.matrix.v1",
   "requested_device": "cpu",
-  "runtime_source_digest": "8d4f3fcc2ca04602ac14e107f7ebdb623b9aa19aaddcd68588d09ab611340016",
+  "runtime_source_digest": "5d47c03f877ce377b436526a782c3a7911355b5e86d4e297fea26d9e5a44678a",
   "fast_cpu_source_digest": "a10687cea7e9b187a4a5b7146e350ee9eca7ff479015d61c5a4c7c35fb2205e2",
   "native_host_source_digest": "1158dbf5586056cca76d6f74ba0acbbcd188a448d094ae711027700cd3fb7dc9",
   "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",

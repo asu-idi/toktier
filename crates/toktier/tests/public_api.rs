@@ -1,4 +1,7 @@
-use toktier::{Device, ErrorCode, GpuDelivery, ReasonCode, Runtime, TokenBuffer};
+use toktier::{
+    export_bundle, inspect_bundle, BundleFileInspection, Device, ErrorCode, GpuDelivery,
+    ReasonCode, Runtime, TokenBuffer,
+};
 
 #[test]
 fn token_buffers_are_shared_and_contiguous() {
@@ -455,4 +458,32 @@ fn seed_digest_overlap_concurrent_sessions_stay_exact() {
             });
         }
     });
+}
+
+/// A public field's type is part of the public surface. `BundleInspection`
+/// hands out `Vec<BundleFileInspection>`, so a caller that reads the field
+/// has to be able to write that type's name -- in a `let`, in a signature,
+/// or in its own struct. This test names it in all three places, from the
+/// crate root, which is the only path a consumer of the published crate has.
+fn one_file_summary(file: &BundleFileInspection) -> (&str, u64) {
+    (file.path.as_str(), file.size)
+}
+
+#[test]
+fn a_bundle_file_record_is_nameable_from_the_crate_root() {
+    let scratch = tempfile::tempdir().unwrap();
+    let payload = scratch.path().join("tokenizer.json");
+    std::fs::write(&payload, b"{\"public-surface\": true}").unwrap();
+    let bundle = scratch.path().join("surface.toktier-bundle");
+    let mut files = std::collections::BTreeMap::new();
+    files.insert("tokenizer.json".to_owned(), payload);
+
+    export_bundle(&bundle, "public-surface", &files).unwrap();
+    let inspected = inspect_bundle(&bundle).unwrap();
+
+    let records: &Vec<BundleFileInspection> = &inspected.files;
+    assert_eq!(records.len(), 1);
+    let first: &BundleFileInspection = &records[0];
+    assert_eq!(one_file_summary(first), ("tokenizer.json", 24));
+    assert_eq!(first.sha256.len(), 64);
 }

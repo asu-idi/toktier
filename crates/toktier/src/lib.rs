@@ -39,7 +39,9 @@ pub use artifact::{
     EnvironmentToken, Revision, SecretProvider,
 };
 pub use buffer::{Encoding, RaggedEncoding, TokenBuffer, TokenPatch};
-pub use bundle::{export_bundle, import_bundle, inspect_bundle, BundleInspection};
+pub use bundle::{
+    export_bundle, import_bundle, inspect_bundle, BundleFileInspection, BundleInspection,
+};
 pub use diagnostics::{
     Backend, Certification, CudaFacts, Device, DoctorFacts, ExecutionFacts, GpuDelivery, Policy,
     ReasonCode, RoutePlan, RuntimeBuildFacts, StoreStats,

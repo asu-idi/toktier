@@ -50,9 +50,14 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
   stack out of a default build that may never fetch; add
   `features = ["network"]` to keep acquiring artifacts over the network,
   and `cargo install --locked --features network toktier` for a CLI that
-  fetches. The Python package is not affected in any way. Diagnostics gain
-  an execution `reason` and a `network_compiled` build fact. Served IDs,
-  the store format, and the kernel ABI are unchanged. See the
+  fetches. The Python package acquires artifacts exactly as before; the
+  feature change does not reach it. What does reach it is `Session.revision`,
+  which is durable from this release: a conversation resumed in a later
+  process reports the revision its record carries, and
+  `Tokenizer.store_session_revision()` returns that number where it
+  returned `None`. Diagnostics gain an execution `reason` and a
+  `network_compiled` build fact. Served IDs, the store format, and the
+  kernel ABI are unchanged. See the
   [v0.2.5 release notes](docs/releases/v0.2.5.md).
 - **2026.08.14** 🚀 **toktier 0.2.4** released — the Han family (`kimi_k3`)
   joins the certified roster with the product's own end-to-end GPU engine;

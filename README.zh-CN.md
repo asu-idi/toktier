@@ -44,9 +44,12 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 - **2026.08.TBD** 🚀 **toktier 0.2.5** 发布——Rust crate 的 `network` feature
   改为按需开启，这让可能从不联网取件的默认构建少带 16 个包和整套 TLS 栈；
   仍需通过网络获取工件时加上 `features = ["network"]`，命令行则用
-  `cargo install --locked --features network toktier`。Python 包不受任何
-  影响。诊断面新增执行 `reason` 与 `network_compiled` 构建事实。对外返回的
-  ID、store 格式与 kernel ABI 都没有变化。详见
+  `cargo install --locked --features network toktier`。Python 包的取件方式
+  与此前完全相同，这项 feature 变化够不到它；真正会被 Python 侧看到的是
+  `Session.revision` 自本版起可跨进程持久：在后续进程中恢复的会话报出其
+  记录携带的 revision，`Tokenizer.store_session_revision()` 也由 `None`
+  改为报出该数值。诊断面新增执行 `reason` 与 `network_compiled` 构建事实。
+  对外返回的 ID、store 格式与 kernel ABI 都没有变化。详见
   [v0.2.5 发布说明](docs/releases/v0.2.5.md)（英文）。
 - **2026.08.14** 🚀 **toktier 0.2.4** 发布——Han family（`kimi_k3`）以产品
   自带的端到端 GPU 引擎正式进入认证名单；Rust 侧认证开始判定"这次构建真正

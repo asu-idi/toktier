@@ -19,8 +19,8 @@
       "rustflags=",
       "pyo3=abi3-py310+extension-module"
     ],
-    "host_source_digest": "16928f29f3f6da356af0e20b847b0b1cb115ede4615bf0c8986ecc8e510e11c8",
-    "host_source_digest_v2": "94301a65fb034309472b4bfbff51e4c36e1a2719f7eceb150c6cbb271f6aee27",
+    "host_source_digest": "1158dbf5586056cca76d6f74ba0acbbcd188a448d094ae711027700cd3fb7dc9",
+    "host_source_digest_v2": "ffa382ec25e552abc26658c9cab797e560e561d11c0ceab346d4767752459a6b",
     "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
   },
   "one_python_to_rust_call_per_batch": true,

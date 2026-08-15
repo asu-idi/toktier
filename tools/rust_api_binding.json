@@ -1,7 +1,7 @@
 {
   "runtime": "rust_api",
-  "source_digest": "5b5b8fb7a59b9432bab8b320f9b1009a17d218aa3730cb22962fa57f2620f88e",
-  "source_digest_v2": "2f6ca6a6a32915a447896321ada19a8f422aee4541c7f8b96bc2ee9cd4f062d9",
+  "source_digest": "8d4f3fcc2ca04602ac14e107f7ebdb623b9aa19aaddcd68588d09ab611340016",
+  "source_digest_v2": "a879d4e636ac78a506fdd79a868be5064a86933f6a66d94550f697839a83c581",
   "build_flags": [
     "profile=release",
     "opt-level=3",
@@ -9,13 +9,13 @@
     "debug=false",
     "target-features=fxsr,sse,sse2",
     "rustflags=",
-    "features=default,network,prebuilt-gpu,serving,sqlite"
+    "features=default,prebuilt-gpu,serving,sqlite"
   ],
   "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-  "fast_cpu_source_digest": "0e1f453bb157a5cf7370104c56e880936ad89ec4be64ecbb3e0a741af8fe2bbd",
-  "fast_cpu_source_digest_v2": "b921b9f10f6e20d4d90568521b347570fd17f9c7da4dd0a1c0de7243d7389ac5",
-  "native_host_source_digest": "16928f29f3f6da356af0e20b847b0b1cb115ede4615bf0c8986ecc8e510e11c8",
-  "native_host_source_digest_v2": "94301a65fb034309472b4bfbff51e4c36e1a2719f7eceb150c6cbb271f6aee27",
+  "fast_cpu_source_digest": "a10687cea7e9b187a4a5b7146e350ee9eca7ff479015d61c5a4c7c35fb2205e2",
+  "fast_cpu_source_digest_v2": "3795e96c496ad277d635986c554459aa6f6d6cdaa944a188a26b692b5d9d820b",
+  "native_host_source_digest": "1158dbf5586056cca76d6f74ba0acbbcd188a448d094ae711027700cd3fb7dc9",
+  "native_host_source_digest_v2": "ffa382ec25e552abc26658c9cab797e560e561d11c0ceab346d4767752459a6b",
   "evidence_id": "ev-rust-api-plan160-default-v1",
   "additional_builds": [
     {
@@ -27,7 +27,7 @@
         "debug=false",
         "target-features=fxsr,sse,sse2",
         "rustflags=",
-        "features=default,jit,network,prebuilt-gpu,serving,sqlite"
+        "features=default,jit,prebuilt-gpu,serving,sqlite"
       ],
       "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
       "evidence_id": "ev-rust-api-plan160-jit-v1",

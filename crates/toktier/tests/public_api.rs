@@ -1,4 +1,4 @@
-use toktier::{Device, ErrorCode, GpuDelivery, Runtime, TokenBuffer};
+use toktier::{Device, ErrorCode, GpuDelivery, ReasonCode, Runtime, TokenBuffer};
 
 #[test]
 fn token_buffers_are_shared_and_contiguous() {
@@ -185,13 +185,27 @@ fn execution_facts_report_the_routing_decision_or_nothing() {
         assert_eq!(execution.reason, None);
     }
 
-    // A session append reports through the same field.
+    // A session append reports through the same field, and what it has to
+    // report depends on which engine the build is allowed to run. A build
+    // this workspace's registry does not certify is admitted to the
+    // reference engine, whose append re-encodes the whole transcript by
+    // construction: that is the admitted route doing its ordinary work and
+    // has nothing to explain. A certified build is admitted to the
+    // corrected CPU engine, whose bounded repair window here covers the
+    // whole prior text, so the append leaves the admitted route and says
+    // so. Both are the same rule; the assertion follows the build.
     let mut session = tokenizer.open_session("wp7-reason").unwrap();
     session.seed("user: reason field check\n").unwrap();
     let patch = session.append("assistant: acknowledged\n").unwrap();
     let appended = patch.execution();
-    assert_eq!(appended.reason, None);
     assert!(!appended.path.is_empty());
+    if runtime.doctor().runtime_build.certified {
+        assert_eq!(appended.path, "hf_full_window_covers_all");
+        assert_eq!(appended.reason, Some(ReasonCode::SessionNoSafeCut));
+    } else {
+        assert_eq!(appended.path, "native_hf_full_reencode");
+        assert_eq!(appended.reason, None);
+    }
 }
 
 #[test]

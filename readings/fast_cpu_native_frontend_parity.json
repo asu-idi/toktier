@@ -12,8 +12,8 @@
     ],
     "delivery": "integrated",
     "module": "toktier._native",
-    "source_digest": "0e1f453bb157a5cf7370104c56e880936ad89ec4be64ecbb3e0a741af8fe2bbd",
-    "source_digest_v2": "b921b9f10f6e20d4d90568521b347570fd17f9c7da4dd0a1c0de7243d7389ac5",
+    "source_digest": "a10687cea7e9b187a4a5b7146e350ee9eca7ff479015d61c5a4c7c35fb2205e2",
+    "source_digest_v2": "3795e96c496ad277d635986c554459aa6f6d6cdaa944a188a26b692b5d9d820b",
     "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
     "upstream_project": "gigatoken",
     "version": "0.10.0+toktier.pinned.1"

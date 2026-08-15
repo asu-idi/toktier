@@ -30,10 +30,6 @@
       "version": "0.22.1"
     },
     {
-      "name": "base64",
-      "version": "0.23.1"
-    },
-    {
       "name": "bitflags",
       "version": "2.13.1"
     },
@@ -191,10 +187,6 @@
     },
     {
       "name": "getrandom",
-      "version": "0.2.17"
-    },
-    {
-      "name": "getrandom",
       "version": "0.3.4"
     },
     {
@@ -204,14 +196,6 @@
     {
       "name": "hashlink",
       "version": "0.11.1"
-    },
-    {
-      "name": "http",
-      "version": "1.5.0"
-    },
-    {
-      "name": "httparse",
-      "version": "1.10.1"
     },
     {
       "name": "hybrid-array",
@@ -326,10 +310,6 @@
       "version": "0.2.3"
     },
     {
-      "name": "percent-encoding",
-      "version": "2.3.2"
-    },
-    {
       "name": "pkg-config",
       "version": "0.3.34"
     },
@@ -398,28 +378,12 @@
       "version": "0.8.11"
     },
     {
-      "name": "ring",
-      "version": "0.17.14"
-    },
-    {
       "name": "rusqlite",
       "version": "0.39.0"
     },
     {
       "name": "rustc-hash",
       "version": "2.1.1"
-    },
-    {
-      "name": "rustls",
-      "version": "0.23.43"
-    },
-    {
-      "name": "rustls-pki-types",
-      "version": "1.15.1"
-    },
-    {
-      "name": "rustls-webpki",
-      "version": "0.103.14"
     },
     {
       "name": "rustversion",
@@ -492,10 +456,6 @@
     {
       "name": "strsim",
       "version": "0.11.1"
-    },
-    {
-      "name": "subtle",
-      "version": "2.6.1"
     },
     {
       "name": "syn",
@@ -582,22 +542,6 @@
       "version": "0.5.2"
     },
     {
-      "name": "untrusted",
-      "version": "0.9.0"
-    },
-    {
-      "name": "ureq",
-      "version": "3.4.0"
-    },
-    {
-      "name": "ureq-proto",
-      "version": "0.6.1"
-    },
-    {
-      "name": "utf8-zero",
-      "version": "0.8.1"
-    },
-    {
       "name": "utf8_iter",
       "version": "1.0.4"
     },
@@ -608,10 +552,6 @@
     {
       "name": "version_check",
       "version": "0.9.5"
-    },
-    {
-      "name": "webpki-roots",
-      "version": "1.0.9"
     },
     {
       "name": "winnow",
@@ -642,10 +582,6 @@
       "version": "0.1.7"
     },
     {
-      "name": "zeroize",
-      "version": "1.9.0"
-    },
-    {
       "name": "zerotrie",
       "version": "0.2.5"
     },
@@ -666,11 +602,11 @@
   "schema": "toktier.rust_compiled_closure.v1",
   "selections": [
     {
-      "features": "default,network,prebuilt-gpu,serving,sqlite",
+      "features": "default,prebuilt-gpu,serving,sqlite",
       "target": "x86_64-unknown-linux-gnu"
     },
     {
-      "features": "default,jit,network,prebuilt-gpu,serving,sqlite",
+      "features": "default,jit,prebuilt-gpu,serving,sqlite",
       "target": "x86_64-unknown-linux-gnu"
     }
   ]

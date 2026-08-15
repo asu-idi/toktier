@@ -178,7 +178,7 @@ PACKAGE AND SPDX INDEX
   unindent 0.2.4 [crates.io]: MIT OR Apache-2.0
   unit-prefix 0.5.2 [crates.io]: MIT
   utf8_iter 1.0.4 [crates.io]: Apache-2.0 OR MIT
-  uuid 1.24.0 [crates.io]: Apache-2.0 OR MIT
+  uuid 1.24.1 [crates.io]: Apache-2.0 OR MIT
   wasip2 1.0.4+wasi-0.2.12 [crates.io]: Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
   wasm-bindgen 0.2.127 [crates.io]: MIT OR Apache-2.0
   wasm-bindgen-macro 0.2.127 [crates.io]: MIT OR Apache-2.0
@@ -3139,7 +3139,7 @@ applies to:
 
 sha256: 436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d
 applies to:
-  uuid 1.24.0/LICENSE-MIT
+  uuid 1.24.1/LICENSE-MIT
 
 Copyright (c) 2014 The Rust Project Developers
 Copyright (c) 2018 Ashley Mannix, Christopher Armstrong, Dylan DPC, Hunar Roop Kahlon
@@ -5591,7 +5591,7 @@ applies to:
   unicode-normalization-alignments 0.1.12/LICENSE-APACHE
   unicode-segmentation 1.13.3/LICENSE-APACHE
   unicode-width 0.2.2/LICENSE-APACHE
-  uuid 1.24.0/LICENSE-APACHE
+  uuid 1.24.1/LICENSE-APACHE
   wasip2 1.0.4+wasi-0.2.12/LICENSE-APACHE
   wasm-bindgen 0.2.127/LICENSE-APACHE
   wasm-bindgen-macro 0.2.127/LICENSE-APACHE

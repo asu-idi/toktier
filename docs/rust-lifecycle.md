@@ -247,9 +247,16 @@ directory does not activate that vendoring configuration.
 a CycloneDX 1.5 SBOM and a dependency-license bundle for the non-development
 Rust closure; these are embedded in the Rust package data and air-gap export.
 
-The public crate and Python wheel copy their runtime registries, schemas,
-tables, source, and fatbin from one checked source set through
-`tools/sync_rust_package_data.py`; drift fails the release check.
+The public crate and Python wheel copy the data they carry from one checked
+source set through `tools/sync_rust_package_data.py`; drift fails the release
+check. Both surfaces carry the same runtime registry, the same routing,
+kernel, repair and artifact tables, the same kernel sources and fatbin --
+twenty files, byte-identical on each side -- and the same four legal
+documents, which the wheel keeps under `.dist-info/licenses/`. Two kinds of
+file ride in the crate alone: the four JSON schemas, which are inputs to the
+maintainer tools rather than to either runtime, and the Gigatoken patch,
+which records how the engine was built rather than anything either runtime
+reads.
 
 Crates.io publication is not performed by these tools. The workspace currently
 uses exact-version path dependencies for TokTier's internal crates; the

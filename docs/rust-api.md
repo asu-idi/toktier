@@ -401,8 +401,9 @@ The current feature surface is:
 | `serde` | no | serialization for public diagnostic records |
 
 `network` was a default feature through 0.2.4. It is opt-in from 0.2.5,
-because it is the only feature that pulls a TLS stack -- sixteen packages,
-9.7% of the default compiled closure -- into builds that may never fetch.
+because it is the only feature that pulls a TLS stack into builds that may
+never fetch. It is sixteen packages: the default build of this release
+compiles 149, and enabling `network` makes that 165.
 A build without it keeps every offline lifecycle surface and answers
 `NETWORK_DISABLED` when acquisition is actually required;
 `Runtime::doctor()` reports it as `network_compiled`. Because the judged

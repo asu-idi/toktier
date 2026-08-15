@@ -15,12 +15,25 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import shlex
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+#: The fast CPU binding records the digest of the two legal artifacts it
+#: names, and `tools/generate_native_legal.py` rewrites those artifacts from
+#: the lockfile. Rebinding the digests here keeps a refresh self-consistent:
+#: they were hand-held before, and a refresh that moved the files without
+#: them left a mismatch for a later gate to find.
+FAST_CPU_BINDING = ROOT / "tools/fast_cpu_binding.json"
+LEGAL_KEYS = (
+    ("sbom_path", "sbom_sha256"),
+    ("license_bundle_path", "license_bundle_sha256"),
+)
 
 GENERATORS = (
     "tools/generate_judged_closure.py",
@@ -40,6 +53,33 @@ def run(command: list[str]) -> int:
 
 def verification_commands() -> list[list[str]]:
     return [[sys.executable, generator, "--check"] for generator in GENERATORS]
+
+
+def legal_digest_problems(*, rewrite: bool) -> list[str]:
+    """Answer for, or restate, the two legal digests the binding records."""
+
+    document = json.loads(FAST_CPU_BINDING.read_text(encoding="utf-8"))
+    legal = document["legal"]
+    problems: list[str] = []
+    changed = False
+    for path_key, digest_key in LEGAL_KEYS:
+        observed = hashlib.sha256((ROOT / legal[path_key]).read_bytes()).hexdigest()
+        if legal[digest_key] == observed:
+            continue
+        if rewrite:
+            legal[digest_key] = observed
+            changed = True
+        else:
+            problems.append(
+                f"{FAST_CPU_BINDING}: {digest_key} records "
+                f"{legal[digest_key]}, but {legal[path_key]} hashes to {observed}"
+            )
+    if changed:
+        FAST_CPU_BINDING.write_text(
+            json.dumps(document, indent=2) + "\n", encoding="utf-8"
+        )
+        print(f"{FAST_CPU_BINDING}: updated", flush=True)
+    return problems
 
 
 def main() -> int:
@@ -65,6 +105,14 @@ def main() -> int:
                 file=sys.stderr,
             )
             return returncode
+        if not arguments.check and command[-1].endswith("generate_native_legal.py"):
+            legal_digest_problems(rewrite=True)
+    problems = legal_digest_problems(rewrite=False)
+    for problem in problems:
+        print(f"error: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+    print(f"{FAST_CPU_BINDING}: legal digests check passed", flush=True)
     return 0
 
 

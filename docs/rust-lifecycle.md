@@ -172,16 +172,27 @@ re-authenticated against their recorded SHA-256; changing metadata or fatbin
 bytes quarantines the entry.
 
 An exact compiler-binary/architecture tuple must appear in the registry for
-automatic certified compilation. Otherwise no cache directory is created and
-the error prints the explicit opt-in. Experimental use is deliberately local
-to one builder and remains labelled after successful comparison:
+automatic **certified** compilation. Since 0.2.6 a tuple that is merely
+unjudged is a different case from one that fails to verify. Under the
+default `Policy::Supported` the compile proceeds, the product is cached
+and reused like any other, and its manifest carries
+`assurance: supported_untested`; under `Policy::Certified` the older
+behaviour is what happens, and the error prints the explicit opt-in. A
+source, host or flags mismatch, and a world-writable compiler component,
+refuse under every policy unless the caller accepts them.
+
+Experimental use is deliberately local to one builder and remains labelled
+after successful comparison:
 
 ```text
 toktier-rust gpu compile qwen3_8b --accept-uncertified-jit
 ```
 
 Application code must also select `Policy::Experimental`; the waiver is stored
-in the binding manifest but never promoted into certification.
+in the binding manifest but never promoted into certification. A
+`supported_untested` product needs no such selection, and
+`toktier-rust verify-local --engine gpu --family <family>` is how its route
+is compared with this binary's reference engine here.
 
 ## Serving policy
 

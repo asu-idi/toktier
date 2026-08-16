@@ -491,27 +491,27 @@
     },
     {
       "name": "toktier",
-      "version": "0.2.5"
+      "version": "0.2.6"
     },
     {
       "name": "toktier-cuda-driver",
-      "version": "0.2.5"
+      "version": "0.2.6"
     },
     {
       "name": "toktier-gigatoken-core",
-      "version": "0.2.5"
+      "version": "0.2.6"
     },
     {
       "name": "toktier-routing-core",
-      "version": "0.2.5"
+      "version": "0.2.6"
     },
     {
       "name": "toktier-store-core",
-      "version": "0.2.5"
+      "version": "0.2.6"
     },
     {
       "name": "toktier-store-sqlite",
-      "version": "0.2.5"
+      "version": "0.2.6"
     },
     {
       "name": "typenum",

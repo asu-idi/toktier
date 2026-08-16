@@ -640,7 +640,7 @@ layers together.
 
 ## Documentation
 
-- [`docs/releases/v0.2.5.md`](docs/releases/v0.2.5.md) — release notes for this version.
+- [`docs/releases/v0.2.6.md`](docs/releases/v0.2.6.md) — release notes for this version.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — layers, routing, and store format.
 - [`ROADMAP.md`](ROADMAP.md) — release scope and planned integration.
 - [`docs/support-matrix.md`](docs/support-matrix.md) — artifacts and covered repositories.

@@ -12,11 +12,11 @@
     ],
     "component": {
       "type": "application",
-      "bom-ref": "pkg:cargo/toktier-py@0.2.5",
+      "bom-ref": "pkg:cargo/toktier-py@0.2.6",
       "name": "toktier-py",
-      "version": "0.2.5",
+      "version": "0.2.6",
       "scope": "required",
-      "purl": "pkg:cargo/toktier-py@0.2.5",
+      "purl": "pkg:cargo/toktier-py@0.2.6",
       "description": "Thin Python facade over the toktier session store (pyo3).",
       "licenses": [
         {
@@ -3740,11 +3740,11 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cargo/toktier-cuda-driver@0.2.5",
+      "bom-ref": "pkg:cargo/toktier-cuda-driver@0.2.6",
       "name": "toktier-cuda-driver",
-      "version": "0.2.5",
+      "version": "0.2.6",
       "scope": "required",
-      "purl": "pkg:cargo/toktier-cuda-driver@0.2.5",
+      "purl": "pkg:cargo/toktier-cuda-driver@0.2.6",
       "description": "Minimal dynamically loaded CUDA Driver API host for TokTier's prebuilt kernels.",
       "licenses": [
         {
@@ -3760,11 +3760,11 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cargo/toktier-gigatoken-core@0.2.5",
+      "bom-ref": "pkg:cargo/toktier-gigatoken-core@0.2.6",
       "name": "toktier-gigatoken-core",
-      "version": "0.2.5",
+      "version": "0.2.6",
       "scope": "required",
-      "purl": "pkg:cargo/toktier-gigatoken-core@0.2.5",
+      "purl": "pkg:cargo/toktier-gigatoken-core@0.2.6",
       "description": "TokTier's audited, corrected native Gigatoken BPE core.",
       "licenses": [
         {
@@ -3780,11 +3780,11 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cargo/toktier-routing-core@0.2.5",
+      "bom-ref": "pkg:cargo/toktier-routing-core@0.2.6",
       "name": "toktier-routing-core",
-      "version": "0.2.5",
+      "version": "0.2.6",
       "scope": "required",
-      "purl": "pkg:cargo/toktier-routing-core@0.2.5",
+      "purl": "pkg:cargo/toktier-routing-core@0.2.6",
       "description": "Allocation-free per-request routing and certified BPE boundary selection for TokTier.",
       "licenses": [
         {
@@ -3800,11 +3800,11 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cargo/toktier-store-core@0.2.5",
+      "bom-ref": "pkg:cargo/toktier-store-core@0.2.6",
       "name": "toktier-store-core",
-      "version": "0.2.5",
+      "version": "0.2.6",
       "scope": "required",
-      "purl": "pkg:cargo/toktier-store-core@0.2.5",
+      "purl": "pkg:cargo/toktier-store-core@0.2.6",
       "description": "Session store core for toktier: append-only text-to-token-ids sessions with certified extension, block-hash prefix sharing, and a strict on-disk record format (format v1).",
       "licenses": [
         {
@@ -3820,11 +3820,11 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cargo/toktier-store-sqlite@0.2.5",
+      "bom-ref": "pkg:cargo/toktier-store-sqlite@0.2.6",
       "name": "toktier-store-sqlite",
-      "version": "0.2.5",
+      "version": "0.2.6",
       "scope": "required",
-      "purl": "pkg:cargo/toktier-store-sqlite@0.2.5",
+      "purl": "pkg:cargo/toktier-store-sqlite@0.2.6",
       "description": "SQLite persistence tier for the toktier session store. The database file is owned exclusively by this Rust layer; records travel in store format v1.",
       "licenses": [
         {
@@ -5606,13 +5606,13 @@
       ]
     },
     {
-      "ref": "pkg:cargo/toktier-cuda-driver@0.2.5",
+      "ref": "pkg:cargo/toktier-cuda-driver@0.2.6",
       "dependsOn": [
         "pkg:cargo/libc@0.2.177"
       ]
     },
     {
-      "ref": "pkg:cargo/toktier-gigatoken-core@0.2.5",
+      "ref": "pkg:cargo/toktier-gigatoken-core@0.2.6",
       "dependsOn": [
         "pkg:cargo/aho-corasick@1.1.3",
         "pkg:cargo/base64@0.22.1",
@@ -5631,17 +5631,17 @@
       ]
     },
     {
-      "ref": "pkg:cargo/toktier-py@0.2.5",
+      "ref": "pkg:cargo/toktier-py@0.2.6",
       "dependsOn": [
         "pkg:cargo/pyo3@0.23.5",
         "pkg:cargo/serde_json@1.0.151",
-        "pkg:cargo/toktier-routing-core@0.2.5",
-        "pkg:cargo/toktier-store-core@0.2.5",
-        "pkg:cargo/toktier-store-sqlite@0.2.5"
+        "pkg:cargo/toktier-routing-core@0.2.6",
+        "pkg:cargo/toktier-store-core@0.2.6",
+        "pkg:cargo/toktier-store-sqlite@0.2.6"
       ]
     },
     {
-      "ref": "pkg:cargo/toktier-routing-core@0.2.5",
+      "ref": "pkg:cargo/toktier-routing-core@0.2.6",
       "dependsOn": [
         "pkg:cargo/aho-corasick@1.1.3",
         "pkg:cargo/base64@0.22.1",
@@ -5651,23 +5651,23 @@
         "pkg:cargo/serde_json@1.0.151",
         "pkg:cargo/sha2@0.11.0",
         "pkg:cargo/tokenizers@0.22.2",
-        "pkg:cargo/toktier-cuda-driver@0.2.5",
-        "pkg:cargo/toktier-gigatoken-core@0.2.5",
-        "pkg:cargo/toktier-store-core@0.2.5"
+        "pkg:cargo/toktier-cuda-driver@0.2.6",
+        "pkg:cargo/toktier-gigatoken-core@0.2.6",
+        "pkg:cargo/toktier-store-core@0.2.6"
       ]
     },
     {
-      "ref": "pkg:cargo/toktier-store-core@0.2.5",
+      "ref": "pkg:cargo/toktier-store-core@0.2.6",
       "dependsOn": [
         "pkg:cargo/blake2b_simd@1.0.3",
         "pkg:cargo/sha2@0.11.0"
       ]
     },
     {
-      "ref": "pkg:cargo/toktier-store-sqlite@0.2.5",
+      "ref": "pkg:cargo/toktier-store-sqlite@0.2.6",
       "dependsOn": [
         "pkg:cargo/rusqlite@0.39.0",
-        "pkg:cargo/toktier-store-core@0.2.5"
+        "pkg:cargo/toktier-store-core@0.2.6"
       ]
     },
     {

@@ -20,6 +20,11 @@ struct FamilyResult {
 struct CampaignResult {
     schema: &'static str,
     requested_device: String,
+    /// The device this reading was actually taken on, as the runtime
+    /// probe names it. The requested device is `cuda:0` on every GPU
+    /// host, so without this two readings from different architectures
+    /// differ only in digests a reader has to look up elsewhere.
+    architecture: Option<String>,
     runtime_source_digest: String,
     fast_cpu_source_digest: String,
     native_host_source_digest: String,
@@ -156,6 +161,10 @@ fn main() -> toktier::Result<()> {
     let result = CampaignResult {
         schema: "toktier.rust_api.matrix.v1",
         requested_device: requested,
+        architecture: doctor
+            .cuda
+            .as_ref()
+            .and_then(|cuda| cuda.architecture.clone()),
         runtime_source_digest: doctor.runtime_build.source_digest,
         fast_cpu_source_digest: doctor.runtime_build.fast_cpu_source_digest,
         native_host_source_digest: doctor.runtime_build.native_host_source_digest,

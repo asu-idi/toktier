@@ -32,6 +32,10 @@ GPU_READINGS = {
     "sm_89": ROOT / "readings/gpu_native_frontend_sm89_parity.json",
     "sm_120": ROOT / "readings/gpu_native_frontend_sm120_parity.json",
 }
+#: The venues a Rust API matrix is taken at, and where each reading lands.
+#: The key is also the architecture the reading has to name: every GPU
+#: venue asks for `cuda:0`, so the requested device does not tell two of
+#: them apart and the reading says which device answered.
 MATRIX_READINGS = {
     "cpu": ROOT / "readings/rust_api_matrix_cpu.json",
     "sm_89": ROOT / "readings/rust_api_matrix_sm89.json",
@@ -167,6 +171,7 @@ def verify_public_matrix(binding: dict[str, Any], *, bootstrap: bool) -> None:
             != binding["native_host_source_digest"]
             or reading.get("toolchain") != binding["toolchain"]
             or reading.get("build_flags") != binding["build_flags"]
+            or reading.get("architecture") != (None if target == "cpu" else target)
             or reading.get("families") != MATRIX_FAMILIES
             or reading.get("documents") != MATRIX_DOCUMENTS
             or reading.get("mismatches") != 0

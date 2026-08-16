@@ -430,6 +430,17 @@ class Comparison:
     def passed(self) -> bool:
         return self.mismatches == 0 and self.served == self.documents
 
+    @property
+    def measured(self) -> bool:
+        """Whether this run says anything about the engine at all.
+
+        A run over documents the route never served compared the judge
+        with itself. That is not a pass and it is not a failure either;
+        ids that differ are evidence whoever served them, but ids that
+        agree are evidence of nothing when the route did not run.
+        """
+        return self.mismatches > 0 or self.served == self.documents
+
 
 def compare(
     subject: object,

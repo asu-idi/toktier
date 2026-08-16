@@ -992,6 +992,22 @@ def _verify_one_engine(
             judge.close()
     finally:
         subject.close()
+    if not comparison.measured:
+        # Nothing about the engine was measured, so nothing is recorded.
+        # Reporting a pass here would be the one dishonest thing this
+        # command could do.
+        return {
+            "engine": engine,
+            "status": "not_measured",
+            "documents": comparison.documents,
+            "bytes": comparison.bytes,
+            "mismatches": 0,
+            "first_mismatch": None,
+            "served_by_engine": comparison.served,
+            "input": source,
+            "record_path": None,
+            "record_readable": False,
+        }
     record = record_for(key, comparison, documents=documents, source=source)
     path = write_record(config, record)
     written = read_record(config, key)
@@ -1098,6 +1114,15 @@ def _print_verify_human(payload: Mapping[str, object]) -> None:
             )
             continue
         documents = item["documents"]
+        if status == "not_measured":
+            print(
+                f"{engine}: the {engine} route served "
+                f"{item['served_by_engine']} of {documents} documents, so "
+                "this run measured nothing about it and no record was "
+                "written; `toktier doctor --family <family>` says why the "
+                "route did not run"
+            )
+            continue
         if status == "passed":
             print(
                 f"{engine}: locally_verified -- you compared this "

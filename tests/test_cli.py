@@ -1314,6 +1314,30 @@ def test_gpu_verify_reports_a_disagreement_and_changes_nothing(
     assert "certified" not in captured.out.replace("policy='certified'", "")
 
 
+def test_gpu_verify_records_nothing_when_the_route_never_ran(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Agreement over documents the engine never served is not a pass."""
+    from toktier import facade
+
+    def fake_load(_family: str, **keywords: object) -> _FakeVerifyTokenizer:
+        # Both sides answer as the reference engine: the route was
+        # planned and then fell back for every document.
+        return _FakeVerifyTokenizer({}, "hf")
+
+    monkeypatch.setattr(facade, "load", fake_load)
+
+    exit_code = cli.main(
+        ["gpu", "verify", "qwen3_8b", "--engine", "gpu", "--synthetic", "3"]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "measured nothing about it and no record was written" in captured.out
+    assert "locally_verified" not in captured.out
+
+
 def test_gpu_verify_names_an_engine_this_machine_cannot_open(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

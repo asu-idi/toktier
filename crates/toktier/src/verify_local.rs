@@ -703,12 +703,46 @@ fn render(comparisons: &[Comparison], request: &Request) -> String {
 /// route, and that is the caller's decision to make.
 pub(crate) fn run(request: &Request) -> Result<Vec<Comparison>> {
     let mut comparisons = Vec::new();
+    let asked_for_both = request.engines.len() > 1;
     for engine in &request.engines {
         for family in &request.families {
-            comparisons.push(compare_one(*engine, family, request)?);
+            match compare_one(*engine, family, request) {
+                Ok(comparison) => comparisons.push(comparison),
+                // `--engine both` on a machine with no usable device is
+                // the ordinary case rather than a failure of the
+                // command: the engine that could not be opened is named
+                // and the other one still runs. A single explicit
+                // `--engine` has nothing to fall back to, so its error
+                // travels to the caller unchanged.
+                Err(error) if asked_for_both => comparisons.push(unavailable(
+                    *engine,
+                    family,
+                    format!(
+                        "this machine could not open the {} route: {error}",
+                        engine.word()
+                    ),
+                )),
+                Err(error) => return Err(error),
+            }
         }
     }
     Ok(comparisons)
+}
+
+/// A comparison that did not happen, and why.
+fn unavailable(engine: Engine, family: &str, note: String) -> Comparison {
+    Comparison {
+        engine: engine.word().to_owned(),
+        family: family.to_owned(),
+        route: "not opened".to_owned(),
+        documents: 0,
+        accelerated_documents: 0,
+        bytes: 0,
+        mismatches: 0,
+        first_mismatch: None,
+        record: None,
+        note: Some(note),
+    }
 }
 
 fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Comparison> {
@@ -823,6 +857,29 @@ fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Compar
                 first_mismatch = Some((index as u64, position as u64));
             }
         }
+    }
+    // A run over documents the route never served compared the
+    // reference engine with itself. That is not a passing check and it
+    // is not a failing one either -- it measured nothing about the
+    // route -- so it is reported and no record is written. Disagreement
+    // is different: ids that differ are evidence whoever served them.
+    if mismatches == 0 && accelerated_documents < request.documents.len() as u64 {
+        return Ok(Comparison {
+            engine: engine.word().to_owned(),
+            family: family.to_owned(),
+            route,
+            documents: request.documents.len() as u64,
+            accelerated_documents,
+            bytes,
+            mismatches,
+            first_mismatch,
+            record: None,
+            note: Some(format!(
+                "the {} route served {accelerated_documents} of {} documents, so this run                  measured nothing about it and no record was written; `doctor` says why the                  route did not run",
+                engine.word(),
+                request.documents.len()
+            )),
+        });
     }
     let record = VerificationRecord {
         schema: RECORD_SCHEMA.to_owned(),

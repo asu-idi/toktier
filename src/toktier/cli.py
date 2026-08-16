@@ -494,6 +494,17 @@ def _doctor_report(
     }
 
 
+#: Fields whose printed line says what the value is for. The driver and
+#: the CUDA runtime are observed and reported because a reader wants to
+#: know them, not because a certificate rests on them; a registry row
+#: that binds a driver floor is checked separately, as a precondition
+#: for the kernel loading at all.
+_DOCTOR_QUALIFIERS: dict[str, str] = {
+    "driver_version": "environment fact; not a certificate premise",
+    "cuda_available": "environment fact; not a certificate premise",
+}
+
+
 def _print_doctor_human(report: dict[str, object]) -> None:
     for name, value in report.items():
         if name == "family" and isinstance(value, Mapping):
@@ -530,6 +541,9 @@ def _print_doctor_human(report: dict[str, object]) -> None:
             rendered = "none"
         else:
             rendered = str(value)
+        qualifier = _DOCTOR_QUALIFIERS.get(name)
+        if qualifier is not None:
+            rendered = f"{rendered} ({qualifier})"
         print(f"{name}: {rendered}")
 
 

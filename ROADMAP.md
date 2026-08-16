@@ -103,6 +103,15 @@ Widening it is a campaign rather than a code change, and the next two are
 `sm_90` (H100, GH200) and `sm_80` (A100), each on the same protocol the
 current entries were taken under.
 
+Since 0.2.6 a device outside that list is no longer refused by default:
+the shipped kernel runs there if it loads, and the route is labelled
+`supported_untested` rather than certified, with `toktier-rust
+verify-local` / `toktier gpu verify` available to compare it with the
+reference engine on the caller's own text. Every campaign that lands
+turns one of those labels into a certificate; until then the label says
+plainly that nobody measured the combination. `Policy::Certified` keeps
+the older, stricter admission.
+
 ## Additional CPU engines
 
 The first release ships the corrected Gigatoken engine as its certified CPU

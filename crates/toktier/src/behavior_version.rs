@@ -131,9 +131,20 @@ fn unchanged(unit: &str, version: &str) -> String {
 
 /// How to see, on one's own text, what the accelerated engines would do
 /// differently from the reference engine in this binary.
+///
+/// The command takes the measurement and records it; it is the same one
+/// the `supported_untested` label points at, and it is the only thing
+/// this crate offers here, because whether a particular text is affected
+/// is a question about that text and nobody else can answer it.
 const COMPARE_HINT: &str = "To compare the accelerated engine with this binary's reference \
-                            engine on your own text, encode that text under Policy::Reference \
-                            as well and compare the ids";
+                            engine on your own text, run: toktier-rust verify-local --engine \
+                            cpu --family <family> --input <path>";
+
+/// The same command, offered where the two sides are already known to
+/// disagree somewhere and the open question is whether it reaches the
+/// caller's own text.
+const AFFECTED_HINT: &str = "To see whether your text is affected, run: toktier-rust \
+                             verify-local --engine cpu --family <family> --input <path>";
 
 fn readings() -> &'static Vec<Reading> {
     static READINGS: OnceLock<Vec<Reading>> = OnceLock::new();
@@ -178,7 +189,7 @@ fn decide(
                 return format!(
                     "mismatched: the reference engine in this binary {} where the certified \
                      evidence was taken on {}; some code points may tokenize differently; the \
-                     accelerated engines are held on the reference route",
+                     accelerated engines are held on the reference route. {AFFECTED_HINT}",
                     carries(&reading.unit, observed),
                     reading.judged
                 );
@@ -188,7 +199,8 @@ fn decide(
                 if let Some(moved) = drift(&reading.unit) {
                     return format!(
                         "mismatched: the behaviour version of {} could not be read in this \
-                         binary, so the package versions are compared instead: {moved}",
+                         binary, so the package versions are compared instead: {moved}. \
+                         {AFFECTED_HINT}",
                         reading.unit
                     );
                 }
@@ -294,7 +306,9 @@ mod tests {
             moved,
             "mismatched: the reference engine in this binary carries Unicode 17.0 (regex \
              tables) where the certified evidence was taken on 16.0; some code points may \
-             tokenize differently; the accelerated engines are held on the reference route"
+             tokenize differently; the accelerated engines are held on the reference route. \
+             To see whether your text is affected, run: toktier-rust verify-local --engine cpu \
+             --family <family> --input <path>"
         );
         // A unit that cannot be read falls back to the package
         // comparison the build script made, and only refuses when that
@@ -308,7 +322,9 @@ mod tests {
                 (unit == "regex").then_some("regex 1.13.1 -> 1.14.0")
             }),
             "mismatched: the behaviour version of regex could not be read in this binary, so \
-             the package versions are compared instead: regex 1.13.1 -> 1.14.0"
+             the package versions are compared instead: regex 1.13.1 -> 1.14.0. To see whether \
+             your text is affected, run: toktier-rust verify-local --engine cpu --family \
+             <family> --input <path>"
         );
         // Everything agreeing.
         assert_eq!(

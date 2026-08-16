@@ -154,6 +154,44 @@ architecture explicitly; an unlisted architecture is not eligible under
 `CERTIFIED` (`R_SM_UNCERTIFIED`) regardless of what a build system could
 produce for it.
 
+### 3.0 The `SUPPORTED` policy and the assurance vocabulary (added in 0.2.6)
+
+The status vocabulary above is unchanged: it says what the registry
+records about a backend, and every sentence of it still holds. What 0.2.6
+adds is a second word for the running configuration, because "not
+certified" was answering two different questions at once.
+
+A campaign judges the devices and compilers it had. A device it never
+ran on is not a device it found wrong, and until 0.2.6 the two were
+refused with one word. From this release they are told apart:
+
+| Assurance | What is true of the running route | Admitted under |
+|---|---|---|
+| `certified` | The configuration appears in the registry, its status is `certified` or `certified_source`, and every constraint that row binds verifies here. | every policy except `REFERENCE` |
+| `supported_untested` | Every constraint the registry binds verifies, and the device architecture or the compiler toolchain is one no campaign judged. | `SUPPORTED` (the default) |
+| `locally_verified` | The same, and a local check on this machine has compared the route with the reference engine and they agreed. | `SUPPORTED` |
+| refused | Something bound did not verify: a digest, build flags, an engine binding, the certified core of the compiled closure, or an integrity condition such as a world-writable compiler component. | an explicit opt-in only |
+
+The device-architecture rule of Section 3 keeps its wording exactly: an
+unlisted architecture is not eligible **under `CERTIFIED`**, and that is
+still true. `SUPPORTED` is a different policy, and it admits the route
+and labels it rather than calling it certified. The `R_SM_UNCERTIFIED`
+reason code is unchanged and is still the reason `CERTIFIED` refuses.
+
+Two things this vocabulary does not do. It does not add a registry
+status: nothing is written into a record, and the generator is
+untouched. And `locally_verified` is not a certificate: it is a record
+of a measurement somebody took on one machine, filed under the device,
+delivery, image digest, compiler triple, driver, source identities and
+family artifact it was taken under, and it stops applying as soon as any
+of them moves. A local check that disagreed leaves the route labelled
+exactly as it would have been had nobody run one.
+
+Driver and CUDA runtime versions are environment facts rather than
+certificate premises, and are reported as such on both faces. Where a
+delivery row binds `driver_min`, that floor is a precondition for the
+image loading at all and is still checked under every policy.
+
 ### 3.1 Generated lookup tables are bound artifacts (frozen)
 
 Kernel behavior depends on generated lookup tables (character-class

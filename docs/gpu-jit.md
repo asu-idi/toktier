@@ -354,20 +354,44 @@ exact ids. Under JIT delivery, and under the experimental
 `repair_backend="fastokens"` adapter, requests stay on the Python host, whose
 GPU backend opens the same way, at the first input that routes to the GPU.
 
-The JIT toolchain gate is fail-closed. A registry-judged triple of the actual
-selected NVCC release, `torch.version.cuda`, and PyTorch distribution version
-can be compiled or warmed explicitly without weakening the policy:
+A registry-judged triple of the actual selected NVCC release,
+`torch.version.cuda`, and PyTorch distribution version can be compiled or
+warmed explicitly:
 
 ```bash
 toktier gpu compile qwen3_8b
 ```
 
-If the triple is not judged, that command and `device="cuda"` fail with
-`BACKEND_UNAVAILABLE`; the error names the selected compiler path/release,
-torch runtime, certified constraint, and exact opt-in command. The default
-`device="auto"` path instead emits a `RuntimeWarning` and continues through
-the corrected Gigatoken → HF chain. A matching torch CUDA label is insufficient
-on its own: torch CUDA 13.0 with an actually selected NVCC 13.2 is unjudged.
+Since 0.2.6 an unjudged triple is a coverage gap rather than a
+verification failure, and the default `SUPPORTED` policy compiles it,
+runs it, caches the product like any other, and labels the route
+`supported_untested`. What still refuses is everything that did not
+verify: a kernel source or host digest, build flags, the engine
+bindings, or a compiler component anyone can write to.
+
+Under `policy="certified"` the older behaviour is exactly what happens.
+The triple gate is fail-closed there: that command and `device="cuda"`
+fail with `BACKEND_UNAVAILABLE`, and the error names the selected
+compiler path/release, torch runtime, certified constraint, and both
+ways forward. The `device="auto"` path emits a `RuntimeWarning` and
+continues through the corrected Gigatoken → HF chain. A matching torch
+CUDA label is insufficient on its own: torch CUDA 13.0 with an actually
+selected NVCC 13.2 is unjudged.
+
+To measure an unjudged combination on your own text rather than take it
+on trust:
+
+```bash
+toktier gpu verify qwen3_8b --input my-text.txt
+```
+
+It encodes each document on the GPU route and on the reference engine
+and compares every id; `--synthetic N` generates documents from rules
+when there is nothing at hand. A check that agreed raises the label to
+`locally_verified` until the driver, toolchain, kernel, source identity
+or artifact moves; a check that disagreed is reported and changes
+nothing, and `policy="certified"` is the way to hold the combination on
+the reference route.
 
 There is one deliberately loud escape hatch for experiments:
 

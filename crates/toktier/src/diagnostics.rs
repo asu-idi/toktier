@@ -279,6 +279,13 @@ pub struct CudaFacts {
     pub device_ordinal: u32,
     pub available: bool,
     pub architecture: Option<String>,
+    /// The CUDA driver API version the device was opened through.
+    ///
+    /// An environment fact, not a certificate premise: it is reported
+    /// because a reader wants to know it, and no certification claim
+    /// rests on the number. Where a registry row binds a driver floor,
+    /// that floor is checked separately as a precondition for the
+    /// kernel loading at all.
     pub driver_api_version: Option<i32>,
     pub error: Option<String>,
 }

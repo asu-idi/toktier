@@ -180,6 +180,16 @@ tokenizer.explain() -> Mapping[str, object]
   the probe snapshot summary, and accumulated fallback reason codes.
   The mapping's exact keys are informational in v1 and may grow; the
   method name and the presence of the plan and reason codes are stable.
+- 0.2.6 grows the mapping in the way that sentence anticipated:
+  `supported_untested` lists the coverage gaps the default policy
+  admitted -- a device architecture or a compiler toolchain no
+  certification campaign judged -- in the same shape as `plan_reasons`,
+  and is empty on a judged combination. `certification.state` gains the
+  values `supported_untested` and `locally_verified`, and
+  `certification.effective_verdict` gains `supported`. Existing keys and
+  values keep their meanings; a reader that gated on
+  `effective_verdict == "certified"` still gets exactly the
+  configurations it used to.
 
 ## 7. Out of scope for v1 (recorded so absence is deliberate)
 

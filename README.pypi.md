@@ -49,7 +49,13 @@ the complete sweeps are in [`docs/benchmarks.md`](https://github.com/asu-idi/tok
   text is cut are compared by the version of those tables rather than by their
   package version, and `doctor` reports each one. The property data the fast
   CPU pre-tokenizer reads is pinned to the Unicode version the reference
-  engine carries, with an exhaustive gate that keeps the two equal. Served
+  engine carries, with an exhaustive gate that keeps the two equal. On the
+  GPU side, driver and CUDA versions are reported as environment facts, a
+  device architecture or compiler toolchain no campaign judged now runs
+  under the new default `supported` policy and is labelled
+  `supported_untested`, and `toktier-rust verify-local` / `toktier gpu
+  verify` compares such a route with the reference engine on your own
+  text and records the answer as `locally_verified`. Served
   IDs, the store format, and the kernel ABI are unchanged. See the
   [v0.2.6 release notes](https://github.com/asu-idi/toktier/blob/v0.2.6/docs/releases/v0.2.6.md).
 - **2026.08.15** 🚀 **toktier 0.2.5** released — the Rust crate's `network`

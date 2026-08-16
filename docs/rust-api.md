@@ -324,6 +324,64 @@ the lockfile it finds there is the one `--locked` actually used.) This is the
 `unlocated` rule rather than the tier rule: no comparison was made at all, so
 neither reading can answer, and the advisory has nothing to report.
 
+### Device and toolchain assurance
+
+The sections above are about what code was compiled. This one is about
+where it runs, which is a separate question with a separate answer.
+
+A certification campaign measures a kernel on the devices and with the
+compilers it actually had. Nothing in that measurement says a device it
+never saw is wrong -- only that nobody looked. Until 0.2.6 the two were
+answered with the same word, so an unlisted architecture and a build
+whose identity did not verify were both refused as "uncertified". They
+are now separate:
+
+| Assurance | What it says | Reached under |
+|---|---|---|
+| `certified` | The exact configuration appears in the shipped registry and every constraint it binds verifies here. | every policy except `Reference` |
+| `supported_untested` | The engines and digests are the judged ones; the device architecture or the compiler triple is one no campaign ran on, and the kernel loads and runs here. | `Policy::Supported` (the default) |
+| `locally_verified` | The same, plus a local check on this machine compared the route with this binary's reference engine and they agreed. | `Policy::Supported` |
+| refused | Something that was bound did not verify: a source digest, a host digest, build flags, the certified core of the closure, or a compiler component anyone can write to. | nothing but an explicit opt-in |
+
+`Policy::Supported` is the default from 0.2.6. `Policy::Certified` keeps
+its frozen meaning exactly and is the strict switch: under it an
+unlisted device or an unjudged compiler triple routes to the reference
+engine as it always has. The last row does not move under either: a
+coverage gap is admitted, a verification failure is not.
+
+The JIT path splits the same way. A source, host or flags mismatch still
+refuses, and so does a world-writable compiler component unless the
+caller accepts it explicitly; only an unjudged (triple, device) pair is
+admitted, and the product it builds is cached and reused like any other.
+
+Driver and CUDA runtime versions are reported as environment facts and
+are not certificate premises: `driver_api_version: 13020 (environment
+fact; not a certificate premise)`. Where a registry row does bind a
+driver floor, that floor is a loadability precondition and is still
+checked.
+
+To measure a route yourself:
+
+```text
+toktier-rust verify-local --engine both --family qwen3_8b --input my-text.txt
+```
+
+It encodes your documents on the accelerated route and on this binary's
+reference engine and compares every id. `--synthetic N` builds documents
+from rules instead, so a check needs no corpus and no network.
+`--engine cpu` asks the same question of the integrated CPU engine,
+which is what the `behavior_versions` advisory points at when an R2
+library has moved.
+
+What it writes is a record, not a certificate. The record is filed under
+the device, delivery, image digest, compiler triple, driver, the two
+source identities and the family artifact, so it stops applying the
+moment any of those moves; `--forget` removes it. A check that
+disagreed is kept and reported, and the route keeps the label it would
+have had if nobody had run one -- running the tool never makes a
+configuration more restricted than not running it, and nothing is
+changed on the caller's behalf.
+
 ## Buffers, batches, and decode
 
 ```rust,no_run

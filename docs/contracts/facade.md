@@ -430,12 +430,22 @@ admitted that way is reported, never silent:
   and labels it, or the `--accept-uncertified-jit` opt-in, which is
   still the only way past a refusal that is not about coverage.
 
+One naming point worth stating, because the word invites the opposite
+reading: **`policy="auto"` and `tier="auto"` are not the default
+policy.** Both have always been aliases for `CERTIFIED` and both still
+are, so passing either selects the strict setting -- judged devices and
+judged compilers only -- while passing nothing selects `SUPPORTED`.
+Neither meaning changed in 0.2.6; they simply stopped naming the same
+policy.
+
 `Tokenizer.verification_key(engine)` returns the facts a local check of
 `"gpu"` or `"cpu"` on this machine would be about, or `None` when the
-engine's identity cannot be named. `toktier gpu verify <family>` takes
-the measurement and records it; the record expires when any of those
-facts moves, and a check that disagreed leaves the route labelled
-exactly as it would have been had nobody run one.
+engine's identity cannot be named. `toktier verify-local --family
+<family>` takes the measurement and records it; it is a top-level
+command with the same name and options as `toktier-rust verify-local`.
+The record expires when any of those facts moves, and a check that
+disagreed leaves the route labelled exactly as it would have been had
+nobody run one.
 
 ## 6. Record reader
 

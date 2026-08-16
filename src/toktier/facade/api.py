@@ -169,8 +169,9 @@ def _unjudged_toolchain_ways_forward(family: str) -> str:
         "select the default policy (policy='supported'), which runs this "
         "combination and labels it supported_untested, or keep this policy "
         f"and opt in once with `{_uncertified_jit_remedy(family)}`; either "
-        "way nobody has measured this pair, and `toktier gpu verify "
-        f"{family}` compares it with the reference engine on your own text"
+        "way nobody has measured this pair, and `toktier verify-local "
+        f"--family {family}` compares it with the reference engine on your "
+        "own text"
     )
 
 

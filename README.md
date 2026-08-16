@@ -58,8 +58,8 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
   GPU side, driver and CUDA versions are reported as environment facts, a
   device architecture or compiler toolchain no campaign judged now runs
   under the new default `supported` policy and is labelled
-  `supported_untested`, and `toktier-rust verify-local` / `toktier gpu
-  verify` compares such a route with the reference engine on your own
+  `supported_untested`, and `verify-local` (the same command on both
+  faces) compares such a route with the reference engine on your own
   text and records the answer as `locally_verified`. Served
   IDs, the store format, and the kernel ABI are unchanged. See the
   [v0.2.6 release notes](docs/releases/v0.2.6.md).

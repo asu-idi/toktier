@@ -382,7 +382,7 @@ To measure an unjudged combination on your own text rather than take it
 on trust:
 
 ```bash
-toktier gpu verify qwen3_8b --input my-text.txt
+toktier verify-local --family qwen3_8b --engine gpu --input my-text.txt
 ```
 
 It encodes each document on the GPU route and on the reference engine

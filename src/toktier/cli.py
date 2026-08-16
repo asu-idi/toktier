@@ -1033,7 +1033,7 @@ def _verify_one_engine(
     }
 
 
-def _gpu_verify(arguments: argparse.Namespace) -> int:
+def _verify_local(arguments: argparse.Namespace) -> int:
     """Compare an accelerated route with the reference engine, here.
 
     This is the command the ``supported_untested`` label points at. It
@@ -1299,15 +1299,26 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     compile_jit.set_defaults(handler=_gpu_compile)
 
-    verify = gpu_commands.add_parser(
-        "verify",
+    # A top-level command rather than a `gpu` subcommand: it compares the
+    # CPU fast path as readily as the GPU one, and it carries the same
+    # name on both faces so there is one thing to remember.
+    verify = commands.add_parser(
+        "verify-local",
         help=(
             "compare an accelerated route with the reference engine on "
             "this machine and record the answer"
         ),
         parents=[shared],
     )
-    verify.add_argument("family", metavar="FAMILY")
+    # Named rather than positional, so the two faces take the same
+    # command line: `toktier verify-local --family qwen3_8b --engine gpu`
+    # and `toktier-rust verify-local --family qwen3_8b --engine gpu`.
+    verify.add_argument(
+        "--family",
+        metavar="FAMILY",
+        required=True,
+        help="the family to compare",
+    )
     verify.add_argument(
         "--engine",
         choices=("cpu", "gpu", "both"),
@@ -1351,7 +1362,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="remove this machine's record for the selected engines",
     )
-    verify.set_defaults(handler=_gpu_verify)
+    verify.set_defaults(handler=_verify_local)
 
     version = commands.add_parser(
         "version", help="show the toktier version", parents=[shared]

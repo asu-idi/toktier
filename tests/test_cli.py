@@ -1249,7 +1249,7 @@ def _verify_loader(
     monkeypatch.setattr(facade, "load", fake_load)
 
 
-def test_gpu_verify_records_a_local_check_that_agreed(
+def test_verify_local_records_a_local_check_that_agreed(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -1258,8 +1258,8 @@ def test_gpu_verify_records_a_local_check_that_agreed(
 
     exit_code = cli.main(
         [
-            "gpu",
-            "verify",
+            "verify-local",
+            "--family",
             "qwen3_8b",
             "--engine",
             "gpu",
@@ -1286,7 +1286,7 @@ def test_gpu_verify_records_a_local_check_that_agreed(
     assert Path(entry["record_path"]).exists()
 
 
-def test_gpu_verify_reports_a_disagreement_and_changes_nothing(
+def test_verify_local_reports_a_disagreement_and_changes_nothing(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -1303,7 +1303,9 @@ def test_gpu_verify_reports_a_disagreement_and_changes_nothing(
         cli, "_verify_documents", lambda _arguments: (["x"], "your text")
     )
 
-    exit_code = cli.main(["gpu", "verify", "qwen3_8b", "--engine", "gpu"])
+    exit_code = cli.main(
+        ["verify-local", "--family", "qwen3_8b", "--engine", "gpu"]
+    )
 
     captured = capsys.readouterr()
     # A disagreement is a non-zero exit and a sentence, not a policy
@@ -1314,7 +1316,7 @@ def test_gpu_verify_reports_a_disagreement_and_changes_nothing(
     assert "certified" not in captured.out.replace("policy='certified'", "")
 
 
-def test_gpu_verify_records_nothing_when_the_route_never_ran(
+def test_verify_local_records_nothing_when_the_route_never_ran(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -1329,7 +1331,15 @@ def test_gpu_verify_records_nothing_when_the_route_never_ran(
     monkeypatch.setattr(facade, "load", fake_load)
 
     exit_code = cli.main(
-        ["gpu", "verify", "qwen3_8b", "--engine", "gpu", "--synthetic", "3"]
+        [
+            "verify-local",
+            "--family",
+            "qwen3_8b",
+            "--engine",
+            "gpu",
+            "--synthetic",
+            "3",
+        ]
     )
 
     captured = capsys.readouterr()
@@ -1338,7 +1348,7 @@ def test_gpu_verify_records_nothing_when_the_route_never_ran(
     assert "locally_verified" not in captured.out
 
 
-def test_gpu_verify_names_an_engine_this_machine_cannot_open(
+def test_verify_local_names_an_engine_this_machine_cannot_open(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -1356,7 +1366,7 @@ def test_gpu_verify_names_an_engine_this_machine_cannot_open(
     monkeypatch.setattr(facade, "load", fake_load)
 
     exit_code = cli.main(
-        ["gpu", "verify", "qwen3_8b", "--synthetic", "2", "--json"]
+        ["verify-local", "--family", "qwen3_8b", "--synthetic", "2", "--json"]
     )
 
     captured = capsys.readouterr()
@@ -1373,21 +1383,37 @@ def test_gpu_verify_names_an_engine_this_machine_cannot_open(
     ]
 
 
-def test_gpu_verify_forgets_a_record_without_encoding_anything(
+def test_verify_local_forgets_a_record_without_encoding_anything(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _verify_loader(monkeypatch, subject_backend="gpu")
     assert (
         cli.main(
-            ["gpu", "verify", "qwen3_8b", "--engine", "gpu", "--synthetic", "2"]
+            [
+                "verify-local",
+                "--family",
+                "qwen3_8b",
+                "--engine",
+                "gpu",
+                "--synthetic",
+                "2",
+            ]
         )
         == 0
     )
     capsys.readouterr()
 
     exit_code = cli.main(
-        ["gpu", "verify", "qwen3_8b", "--engine", "gpu", "--forget", "--json"]
+        [
+            "verify-local",
+            "--family",
+            "qwen3_8b",
+            "--engine",
+            "gpu",
+            "--forget",
+            "--json",
+        ]
     )
 
     captured = capsys.readouterr()

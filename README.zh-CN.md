@@ -52,7 +52,7 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
   GPU 这一侧：驱动与 CUDA 版本改为按"环境事实"如实报告，不再作为证书前提；
   认证活动没有测过的设备架构或编译工具链，在新的默认 `supported` 策略下会
   照常运行并标注为 `supported_untested`；`toktier-rust verify-local` /
-  `toktier gpu verify` 可以用你自己的文本把这条路与参考引擎逐 id 对一遍，
+  `toktier verify-local` 可以用你自己的文本把这条路与参考引擎逐 id 对一遍，
   通过则记为 `locally_verified`（这是一次本机测量的记录，不是证书）。
   对外返回的 ID、store 格式与 kernel ABI 都没有变化。详见
   [v0.2.6 发布说明](docs/releases/v0.2.6.md)（英文）。

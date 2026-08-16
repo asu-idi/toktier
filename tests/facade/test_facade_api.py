@@ -78,7 +78,7 @@ def test_auto_device_warns_with_explicit_unjudged_jit_remedy(
         # Both ways past a coverage refusal are named, so a reader under
         # CERTIFIED sees the choice rather than one escape hatch.
         assert "policy='supported'" in message
-        assert "toktier gpu verify tiny_bytes" in message
+        assert "toktier verify-local --family tiny_bytes" in message
         assert tokenizer.plan.backend == BACKEND_REFERENCE
     finally:
         tokenizer.close()

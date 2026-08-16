@@ -954,6 +954,7 @@
       "crates/toktier/src/package_data.rs",
       "crates/toktier/src/serving.rs",
       "crates/toktier/src/suggest.rs",
+      "crates/toktier/src/verify_local.rs",
       "crates/toktier/src/bin/"
     ],
     "engine_crates": [

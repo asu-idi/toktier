@@ -79,7 +79,7 @@ impl Default for RuntimeBuilder {
                 artifact_cache,
                 artifact_manager: None,
                 explicit_artifacts: HashMap::new(),
-                policy: Policy::Certified,
+                policy: Policy::default(),
                 device: Device::Auto,
                 gpu_delivery: GpuDelivery::Auto,
                 gpu_min_bytes: 64 * 1024,
@@ -397,6 +397,10 @@ impl Runtime {
         let mut gpu = None;
         #[allow(unused_mut)]
         let mut gpu_detail = None;
+        #[allow(unused_mut)]
+        let mut gpu_assurance = None;
+        #[allow(unused_mut)]
+        let mut gpu_verification_key = None;
         #[cfg(feature = "jit")]
         let mut jit_detail = None;
         let wants_gpu = !matches!(self.inner.config.device, Device::Cpu)
@@ -428,7 +432,12 @@ impl Runtime {
                             None => JitCompiler::builder().build()?,
                         };
                         compiler
-                            .compile_product(&family, &self.inner.registry, ordinal)
+                            .compile_product(
+                                &family,
+                                &self.inner.registry,
+                                ordinal,
+                                self.inner.config.policy,
+                            )
                             .and_then(|product| {
                                 let facts = product.facts.clone();
                                 crate::gpu_data::build_jit(
@@ -468,6 +477,28 @@ impl Runtime {
                 };
                 match built {
                     Ok((built, _maybe_facts)) => {
+                        // What this route can be called. A judged device
+                        // is certified as before; an unjudged one is
+                        // supported, and locally verified when a check
+                        // this machine ran says the two engines agreed.
+                        gpu_assurance = Some(match built.assurance {
+                            crate::gpu_data::Assurance::Judged => Certification::Certified,
+                            crate::gpu_data::Assurance::Experimental => Certification::Experimental,
+                            crate::gpu_data::Assurance::Unjudged => {
+                                let key = crate::verify_local::gpu_key(
+                                    &built,
+                                    &family,
+                                    &artifact.identity().tokenizer_sha256,
+                                );
+                                let verified = crate::verify_local::is_locally_verified(&key);
+                                gpu_verification_key = Some(key);
+                                if verified {
+                                    Certification::LocallyVerified
+                                } else {
+                                    Certification::Supported
+                                }
+                            }
+                        });
                         gpu_detail = Some((built.architecture, built.driver_api_version));
                         gpu = Some(built.engine);
                         #[cfg(feature = "jit")]
@@ -587,8 +618,8 @@ impl Runtime {
                 Certification::Experimental
             } else if self.inner.config.policy == Policy::Reference {
                 Certification::Reference
-            } else if gpu_detail.is_some() {
-                Certification::Certified
+            } else if let Some(assurance) = gpu_assurance {
+                assurance
             } else if fast_cpu.is_some() {
                 Certification::CertifiedSource
             } else {
@@ -604,6 +635,7 @@ impl Runtime {
                 plan,
                 store: std::sync::Mutex::new(store),
                 gpu_detail,
+                gpu_verification_key,
                 #[cfg(feature = "jit")]
                 jit_detail,
             }),
@@ -720,6 +752,12 @@ pub struct Tokenizer {
 }
 
 impl Tokenizer {
+    /// What a local verification of this tokenizer's GPU route would be
+    /// filed under, when that route is one no campaign has judged.
+    pub(crate) fn verification_key(&self) -> Option<&crate::verify_local::VerificationKey> {
+        self.inner.gpu_verification_key.as_ref()
+    }
+
     pub fn family(&self) -> &str {
         &self.inner.artifact.identity().family
     }

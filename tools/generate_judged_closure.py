@@ -104,9 +104,12 @@ ENGINE_CRATES = (
 
 #: Files of `crates/toktier/src` that are not on the encode path: artifact
 #: acquisition and packaging, the filesystem helpers they use, the serving
-#: pool, the suggestion helper, the error and diagnostic records, and the
-#: CLI. A direct dependency named only from these is reported rather than
-#: certified, which is why `fs2` and `tar` are periphery.
+#: pool, the suggestion helper, the error and diagnostic records, the local
+#: verification command, and the CLI. A direct dependency named only from
+#: these is reported rather than certified, which is why `fs2` and `tar`
+#: are periphery. The verification command drives the encode path rather
+#: than being on it: it is a diagnostic a person runs, and a package only
+#: it names is not part of what answers a request.
 FACADE_LIFECYCLE_SOURCES = (
     "artifact.rs",
     "bundle.rs",
@@ -116,6 +119,7 @@ FACADE_LIFECYCLE_SOURCES = (
     "package_data.rs",
     "serving.rs",
     "suggest.rs",
+    "verify_local.rs",
 )
 
 #: Files of `crates/toktier/src` that are on the encode path. Listing them

@@ -221,6 +221,29 @@ pub(crate) fn monotonic_nonce() -> u128 {
         .as_nanos()
 }
 
+/// Write `bytes` to `path` as an owner-only file, replacing whatever was
+/// there.
+///
+/// Unlike the JIT cache's writer this one replaces: a local verification
+/// record is the latest answer for one combination, not an immutable
+/// product, and the combination it is about is already in its name.
+pub(crate) fn write_private_file(path: &Path, bytes: &[u8]) -> Result<()> {
+    let temporary = path.with_extension("tmp");
+    let _ = fs::remove_file(&temporary);
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|error| Error::new(ErrorCode::Io, error.to_string()).with_path(&temporary))?;
+    set_private_file(&file)?;
+    use std::io::Write;
+    file.write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|error| Error::new(ErrorCode::Io, error.to_string()).with_path(&temporary))?;
+    fs::rename(&temporary, path)
+        .map_err(|error| Error::new(ErrorCode::Io, error.to_string()).with_path(path))
+}
+
 pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }

@@ -3,8 +3,24 @@
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum Policy {
-    /// Admit only evidence-bound accelerated routes; fall back exactly.
+    /// Everything [`Policy::Certified`] admits, and in addition a device
+    /// or compiler toolchain the certification campaigns have not judged,
+    /// as long as the shipped kernel loads and runs on it and the build
+    /// itself is the judged one. Such a route is labelled
+    /// [`Certification::Supported`] rather than certified, and
+    /// [`Certification::LocallyVerified`] once a local check has compared
+    /// it against the reference engine on this machine.
+    ///
+    /// The default since 0.2.6. What it does **not** admit is any
+    /// disagreement inside the certified core: a build that is not the
+    /// judged one, a fatbin that does not match its digest, or a
+    /// world-writable compiler component still routes to the reference
+    /// engine.
     #[default]
+    Supported,
+    /// Admit only evidence-bound accelerated routes; fall back exactly.
+    /// Unchanged in meaning: a device architecture or a compiler triple
+    /// the registry has not judged is not eligible here.
     Certified,
     /// Force the frozen Hugging Face reference implementation.
     Reference,
@@ -13,6 +29,14 @@ pub enum Policy {
     RequireAccelerated,
     /// Permit explicitly requested experimental delivery while labelling it.
     Experimental,
+}
+
+impl Policy {
+    /// Whether this policy admits a device or toolchain no campaign has
+    /// judged, on a build whose own certified core is intact.
+    pub(crate) fn admits_unjudged_device(self) -> bool {
+        matches!(self, Self::Supported | Self::RequireAccelerated)
+    }
 }
 
 /// Requested execution device.
@@ -116,6 +140,18 @@ impl ReasonCode {
 pub enum Certification {
     Certified,
     CertifiedSource,
+    /// The engines are the judged ones and they run here, but this
+    /// device or compiler toolchain is outside the judged list, so no
+    /// campaign has measured this combination. Admitted by default under
+    /// [`Policy::Supported`]; `Policy::Certified` routes it to the
+    /// reference engine instead.
+    Supported,
+    /// A `Supported` route that a local check has compared against this
+    /// binary's reference engine on this machine. The record is not a
+    /// certificate: it says what was compared, by whom, and on what, and
+    /// it expires when the driver, toolchain, kernel or source identity
+    /// changes.
+    LocallyVerified,
     Experimental,
     Reference,
 }

@@ -22,6 +22,9 @@ pub(crate) struct TokenizerInner {
     pub(crate) plan: RoutePlan,
     pub(crate) store: std::sync::Mutex<SessionStoreState>,
     pub(crate) gpu_detail: Option<(String, i32)>,
+    /// What a local verification of this route would be filed under,
+    /// when the route is one a campaign has not judged.
+    pub(crate) gpu_verification_key: Option<crate::verify_local::VerificationKey>,
     #[cfg(feature = "jit")]
     pub(crate) jit_detail: Option<crate::JitArtifact>,
 }

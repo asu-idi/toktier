@@ -13,7 +13,7 @@ use toktier_cuda_driver::CudaContext;
 
 use crate::fsutil::{hex, monotonic_nonce, open_private_lock, set_private_file, sync_directory};
 use crate::manifest::{domain_sha256_hex, sha256_hex, Registry};
-use crate::{Error, ErrorCode, Result};
+use crate::{Error, ErrorCode, Policy, Result};
 
 const UNIT_NAME: &str = "prebuilt_unit.cu";
 const KERNEL_NAME: &str = "pretok_kernel.cu";
@@ -28,7 +28,7 @@ const KERNEL_BYTES: &[u8] = include_bytes!(concat!(
 const SOURCE_DOMAIN: &[u8] = b"toktier.rust_jit_source.v1\0";
 const BINDING_DOMAIN: &[u8] = b"toktier.rust_jit_binding.v2\0";
 const FATBIN_DOMAIN: &[u8] = b"toktier.kernel_fatbin.v1\0";
-const MANIFEST_SCHEMA: &str = "toktier.rust_jit_binding.v2";
+const MANIFEST_SCHEMA: &str = "toktier.rust_jit_binding.v3";
 const FROZEN_ORACLE_VERSION: &str = "0.22.2";
 const NORMALIZED_FLAGS: &[&str] = &[
     "-fatbin",
@@ -64,6 +64,13 @@ pub struct JitArtifact {
     pub domain_digest: String,
     pub binding_digest: String,
     pub certified: bool,
+    /// Which assurance this product carries: `"certified"` when every
+    /// axis is an admitted binding, `"supported_untested"` when the
+    /// source, host and flags are the judged ones and this (compiler,
+    /// device) pair is not one a campaign ran, `"experimental"` when the
+    /// caller waived something. `certified` above is `true` only for the
+    /// first.
+    pub assurance: String,
     pub cache_hit: bool,
     pub compiler: JitToolchainFacts,
     pub warning: Option<String>,
@@ -205,7 +212,28 @@ struct BindingManifest {
     product_domain_digest: String,
     product_size: u64,
     certified: bool,
+    assurance: String,
     experimental_waiver: Option<String>,
+}
+
+/// What the compiler stage established about one product.
+///
+/// The axes are kept apart because they answer different questions. The
+/// source, the Rust host source and the build flags say whether this is
+/// the code the evidence was taken on -- a disagreement there is a
+/// disagreement inside the certified core, and no policy admits it. The
+/// compiler triple and the device say whether a campaign has run this
+/// combination, which `Policy::Supported` admits and labels. A
+/// world-writable compiler component is an integrity signal rather than
+/// a version one and stays behind an explicit waiver.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum JitAssurance {
+    /// Every axis is an admitted binding.
+    Certified,
+    /// The core axes agree; this (compiler, device) pair is not judged.
+    Unjudged,
+    /// Admitted only because the caller waived something.
+    Experimental,
 }
 
 pub(crate) struct JitProduct {
@@ -215,7 +243,7 @@ pub(crate) struct JitProduct {
     pub(crate) compute_minor: i32,
     pub(crate) driver_api_version: i32,
     pub(crate) domain_digest: String,
-    pub(crate) certified: bool,
+    pub(crate) assurance: JitAssurance,
     pub(crate) facts: JitArtifact,
 }
 
@@ -241,11 +269,32 @@ impl JitCompiler {
     }
 
     /// Compile or verify one family/device binding and return public facts.
+    /// Compile for one family on one device, under the default policy.
+    ///
+    /// The default policy compiles for a device or compiler triple no
+    /// campaign has judged and labels the product `supported_untested`;
+    /// [`JitCompiler::compile_under`] asks under another policy.
     pub fn compile(&self, family: &str, device_ordinal: u32) -> Result<JitArtifact> {
+        self.compile_under(family, device_ordinal, Policy::default())
+    }
+
+    /// The same, under a policy the caller chooses.
+    ///
+    /// `Policy::Certified` refuses an unjudged (compiler, device) pair
+    /// before compiling rather than after, which is what a caller who
+    /// selected that policy asked for.
+    pub fn compile_under(
+        &self,
+        family: &str,
+        device_ordinal: u32,
+        policy: Policy,
+    ) -> Result<JitArtifact> {
         let registry = Registry::load()?;
         let ordinal = i32::try_from(device_ordinal)
             .map_err(|_| Error::new(ErrorCode::InvalidArgument, "CUDA ordinal exceeds i32"))?;
-        Ok(self.compile_product(family, &registry, ordinal)?.facts)
+        Ok(self
+            .compile_product(family, &registry, ordinal, policy)?
+            .facts)
     }
 
     pub(crate) fn compile_product(
@@ -253,6 +302,7 @@ impl JitCompiler {
         family: &str,
         registry: &Registry,
         device_ordinal: i32,
+        policy: Policy,
     ) -> Result<JitProduct> {
         let context = CudaContext::new(device_ordinal)
             .map_err(|error| Error::new(ErrorCode::KernelIncompatible, error.to_string()))?;
@@ -286,28 +336,56 @@ impl JitCompiler {
             .and_then(serde_json::Value::as_str)
             .unwrap_or("")
             .to_owned();
-        let jit_evidence_id = direct_evidence_id(
+        let axes = direct_axes(
             jit,
             &source_digest,
             &compiler,
             &architecture,
             env!("TOKTIER_RUST_API_NATIVE_HOST_SOURCE_SHA256"),
-        )
-        .map(str::to_owned);
+        );
         let unsafe_component = compiler.world_writable_component.is_some();
+        let jit_evidence_id = axes.admitted_evidence().map(str::to_owned);
         let certified = jit_evidence_id.is_some() && !unsafe_component;
-        let warning = (!certified).then(|| {
+        // Which of the two kinds of "not certified" this is. A core axis
+        // that disagrees, or a compiler component anyone can rewrite, is
+        // a waiver question and stays behind one. A (compiler, device)
+        // pair nobody has judged is a coverage question: the code is the
+        // judged code, and the default policy runs it labelled.
+        let assurance = if certified {
+            JitAssurance::Certified
+        } else if axes.core_axes_hold() && !unsafe_component {
+            JitAssurance::Unjudged
+        } else {
+            JitAssurance::Experimental
+        };
+        let warning = (assurance == JitAssurance::Experimental).then(|| {
             format!(
-                "UNCERTIFIED JIT OPT-IN: direct NVCC {} {} for {architecture} is not an admitted TokTier binding; outputs remain outside the certified exact-ID guarantee",
-                compiler.release, compiler.build
+                "UNCERTIFIED JIT OPT-IN: direct NVCC {} {} for {architecture} is not an admitted TokTier binding ({}); outputs remain outside the certified exact-ID guarantee",
+                compiler.release, compiler.build,
+                axes.refusal(unsafe_component)
             )
         });
-        if !certified && !self.inner.accept_uncertified {
+        if assurance == JitAssurance::Experimental && !self.inner.accept_uncertified {
             return Err(Error::new(
                 ErrorCode::UncertifiedJit,
                 format!(
-                    "direct JIT is fail-closed for NVCC {} {} on {architecture}; no cache was created. Explicitly construct JitCompiler::builder().accept_uncertified_jit(true), or run `toktier gpu compile {family} --accept-uncertified-jit` for an experimental one-shot build",
-                    compiler.release, compiler.build
+                    "direct JIT is fail-closed for NVCC {} {} on {architecture}: {}. No cache was created. Explicitly construct JitCompiler::builder().accept_uncertified_jit(true), or run `toktier-rust gpu compile {family} --accept-uncertified-jit` for an experimental one-shot build",
+                    compiler.release, compiler.build,
+                    axes.refusal(unsafe_component)
+                ),
+            )
+            .with_family(family));
+        }
+        if assurance == JitAssurance::Unjudged
+            && !policy.admits_unjudged_device()
+            && !self.inner.accept_uncertified
+        {
+            return Err(Error::new(
+                ErrorCode::UncertifiedJit,
+                format!(
+                    "NVCC {} {} on {architecture} is not a judged pair: {}. The source, the Rust host and the build flags are the judged ones, so Policy::Supported compiles here and labels the route supported; policy {policy:?} admits only judged pairs and no cache was created",
+                    compiler.release, compiler.build,
+                    axes.refusal(unsafe_component)
                 ),
             )
             .with_family(family));
@@ -401,6 +479,7 @@ impl JitCompiler {
             jit_evidence_id,
             class_table_digest,
             certified,
+            assurance,
             warning,
         );
         let _ = fs::remove_dir_all(&staging);
@@ -427,6 +506,7 @@ impl JitCompiler {
         jit_evidence_id: Option<String>,
         class_table_digest: String,
         certified: bool,
+        assurance: JitAssurance,
         warning: Option<String>,
     ) -> Result<JitProduct> {
         let unit = staging.join(UNIT_NAME);
@@ -520,6 +600,7 @@ impl JitCompiler {
             product_domain_digest: product_domain_digest.clone(),
             product_size: image.len() as u64,
             certified,
+            assurance: assurance_word(assurance).to_owned(),
             experimental_waiver: warning.clone(),
         };
         let manifest_path = staging.join("binding.json");
@@ -591,7 +672,7 @@ impl JitCompiler {
             compute_minor: minor,
             driver_api_version,
             domain_digest: manifest.product_domain_digest.clone(),
-            certified: manifest.certified,
+            assurance: assurance_from_word(&manifest.assurance),
             facts: JitArtifact {
                 family: family.to_owned(),
                 artifact_sha256: manifest.artifact_sha256,
@@ -605,6 +686,7 @@ impl JitCompiler {
                 domain_digest: manifest.product_domain_digest,
                 binding_digest: binding_digest.to_owned(),
                 certified: manifest.certified,
+                assurance: manifest.assurance,
                 cache_hit: true,
                 compiler: compiler.clone(),
                 warning,
@@ -642,13 +724,96 @@ fn binding_digest(binding: &BindingInput<'_>) -> Result<String> {
     Ok(domain_sha256_hex(BINDING_DOMAIN, &bytes))
 }
 
-fn direct_evidence_id<'a>(
+/// The axes a direct-JIT binding is judged on, kept apart.
+///
+/// `UNCERTIFIED_JIT` used to say only "not an admitted binding", which is
+/// true of five different situations that want four different answers.
+struct JitAxes<'a> {
+    /// The CUDA source this binary carries is the judged one.
+    source_matches: bool,
+    /// The Rust CUDA host source is the judged one.
+    host_matches: bool,
+    /// The compiler flags are the judged ones.
+    flags_match: bool,
+    /// A campaign ran on this device with a direct-JIT product.
+    device_judged: bool,
+    /// The evidence id of a judged toolchain entry for this compiler and
+    /// this architecture, when the registry names one.
+    toolchain_evidence: Option<&'a str>,
+}
+
+impl<'a> JitAxes<'a> {
+    /// Whether what this binary would compile is what the evidence was
+    /// taken on. A disagreement here is a disagreement inside the
+    /// certified core and no policy admits it.
+    fn core_axes_hold(&self) -> bool {
+        self.source_matches && self.host_matches && self.flags_match
+    }
+
+    /// The evidence id, when every axis is an admitted binding.
+    fn admitted_evidence(&self) -> Option<&'a str> {
+        (self.core_axes_hold() && self.device_judged)
+            .then_some(self.toolchain_evidence)
+            .flatten()
+    }
+
+    /// Which axis to name in a refusal, in the order a reader can act on:
+    /// the integrity signal first, then the code, then the coverage.
+    fn refusal(&self, unsafe_component: bool) -> String {
+        let mut reasons = Vec::new();
+        if unsafe_component {
+            reasons.push("a component of the compiler toolchain is world-writable".to_owned());
+        }
+        if !self.source_matches {
+            reasons.push("the CUDA source in this binary is not the judged one".to_owned());
+        }
+        if !self.host_matches {
+            reasons.push("the Rust CUDA host source is not the judged one".to_owned());
+        }
+        if !self.flags_match {
+            reasons.push("the compiler flags are not the judged ones".to_owned());
+        }
+        if !self.device_judged {
+            reasons.push("no campaign judged a direct-JIT product on this device".to_owned());
+        }
+        if self.toolchain_evidence.is_none() {
+            reasons.push("this compiler release and build are not a judged toolchain".to_owned());
+        }
+        if reasons.is_empty() {
+            return "every axis is an admitted binding".to_owned();
+        }
+        reasons.join("; ")
+    }
+}
+
+/// The word one assurance is written as, in the cache manifest and in
+/// the public facts.
+fn assurance_word(assurance: JitAssurance) -> &'static str {
+    match assurance {
+        JitAssurance::Certified => "certified",
+        JitAssurance::Unjudged => "supported_untested",
+        JitAssurance::Experimental => "experimental",
+    }
+}
+
+/// The same, read back. A word this release does not know is read as the
+/// most restrictive of the three, which is the fail-closed direction for
+/// a cache written by another version.
+fn assurance_from_word(word: &str) -> JitAssurance {
+    match word {
+        "certified" => JitAssurance::Certified,
+        "supported_untested" => JitAssurance::Unjudged,
+        _ => JitAssurance::Experimental,
+    }
+}
+
+fn direct_axes<'a>(
     jit: &'a serde_json::Map<String, serde_json::Value>,
     source_digest: &str,
     compiler: &JitToolchainFacts,
     architecture: &str,
     host_source_digest: &str,
-) -> Option<&'a str> {
+) -> JitAxes<'a> {
     let source_matches = jit
         .get("direct_source_digest")
         .and_then(serde_json::Value::as_str)
@@ -666,7 +831,7 @@ fn direct_evidence_id<'a>(
                 .filter_map(serde_json::Value::as_str)
                 .eq(NORMALIZED_FLAGS.iter().copied())
         });
-    let device_matches = jit
+    let device_judged = jit
         .get("direct_devices")
         .and_then(serde_json::Value::as_array)
         .is_some_and(|values| {
@@ -674,7 +839,7 @@ fn direct_evidence_id<'a>(
                 .iter()
                 .any(|value| value.as_str() == Some(architecture))
         });
-    let evidence_id = jit
+    let toolchain_evidence = jit
         .get("direct_toolchains")
         .and_then(serde_json::Value::as_array)
         .and_then(|values| {
@@ -697,9 +862,13 @@ fn direct_evidence_id<'a>(
                     .filter(|value| !value.is_empty())
             })
         });
-    (source_matches && host_matches && flags_match && device_matches)
-        .then_some(evidence_id)
-        .flatten()
+    JitAxes {
+        source_matches,
+        host_matches,
+        flags_match,
+        device_judged,
+        toolchain_evidence,
+    }
 }
 
 fn normalized_arguments(architecture: &str) -> Vec<String> {
@@ -1174,6 +1343,7 @@ mod tests {
             product_domain_digest: domain_sha256_hex(FATBIN_DOMAIN, product),
             product_size: product.len() as u64,
             certified: true,
+            assurance: "certified".to_owned(),
             experimental_waiver: None,
         };
         fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
@@ -1215,15 +1385,99 @@ mod tests {
             }]
         });
         let row = value.as_object().unwrap();
-        assert_eq!(
-            direct_evidence_id(row, &source, &compiler, "sm_120", &host),
-            Some("ev-direct-jit-test")
-        );
+        let axes = direct_axes(row, &source, &compiler, "sm_120", &host);
+        assert_eq!(axes.admitted_evidence(), Some("ev-direct-jit-test"));
+        assert!(axes.core_axes_hold());
         let mut changed = compiler.clone();
         changed.compiler_sha256 = "c".repeat(64);
+        let other = direct_axes(row, &source, &changed, "sm_120", &host);
+        assert_eq!(other.admitted_evidence(), None);
+        // The axes stay apart: another compiler binary is a coverage
+        // question, not a claim that this binary carries other code.
+        assert!(other.core_axes_hold());
+        assert!(other.refusal(false).contains("not a judged toolchain"));
+    }
+
+    /// Which axis a refusal names, and which of them no policy waives.
+    ///
+    /// The five situations `UNCERTIFIED_JIT` used to describe with one
+    /// sentence are told apart here: a device or compiler nobody judged
+    /// is a coverage gap, and the default policy runs it labelled; a
+    /// source, host or flag that is not the judged one means this binary
+    /// would compile other code, which nothing admits; a world-writable
+    /// compiler component is an integrity signal and stays behind an
+    /// explicit waiver.
+    #[test]
+    fn a_refusal_names_the_axis_it_is_about() {
+        let compiler = JitToolchainFacts {
+            selected_path: "/opt/cuda/bin/nvcc".into(),
+            resolved_path: "/opt/cuda/bin/nvcc".into(),
+            release: "13.2".to_owned(),
+            build: "V13.2.78".to_owned(),
+            compiler_sha256: "a".repeat(64),
+            world_writable_component: None,
+        };
+        let source = source_digest();
+        let host = "b".repeat(64);
+        let admitted = serde_json::json!({
+            "direct_source_digest": source,
+            "direct_host_source_digest": host,
+            "direct_build_flags": NORMALIZED_FLAGS,
+            "direct_devices": ["sm_120"],
+            "direct_toolchains": [{
+                "release": "13.2",
+                "build": "V13.2.78",
+                "compiler_sha256": "a".repeat(64),
+                "architecture": "sm_120",
+                "evidence_id": "ev-direct-jit-test"
+            }]
+        });
+        let row = admitted.as_object().unwrap();
+
+        // An unjudged device: the code is the judged code.
+        let unjudged_device = direct_axes(row, &source, &compiler, "sm_100", &host);
+        assert!(unjudged_device.core_axes_hold());
+        assert_eq!(unjudged_device.admitted_evidence(), None);
+        let refusal = unjudged_device.refusal(false);
+        assert!(refusal.contains("no campaign judged a direct-JIT product on this device"));
+        assert!(!refusal.contains("world-writable"));
+
+        // Another CUDA source: not a coverage question.
+        let other_source = direct_axes(row, &"f".repeat(64), &compiler, "sm_120", &host);
+        assert!(!other_source.core_axes_hold());
+        assert!(other_source
+            .refusal(false)
+            .contains("the CUDA source in this binary is not the judged one"));
+
+        // Another Rust host source, and a world-writable component.
+        let other_host = direct_axes(row, &source, &compiler, "sm_120", &"0".repeat(64));
+        assert!(!other_host.core_axes_hold());
+        assert!(other_host
+            .refusal(true)
+            .starts_with("a component of the compiler toolchain is world-writable"));
+
+        // Everything admitted says so.
         assert_eq!(
-            direct_evidence_id(row, &source, &changed, "sm_120", &host),
-            None
+            direct_axes(row, &source, &compiler, "sm_120", &host).refusal(false),
+            "every axis is an admitted binding"
+        );
+    }
+
+    /// The word a product is filed under survives the cache, and a word
+    /// this release does not know is read as the most restrictive one.
+    #[test]
+    fn the_assurance_word_round_trips_and_fails_closed() {
+        for assurance in [
+            JitAssurance::Certified,
+            JitAssurance::Unjudged,
+            JitAssurance::Experimental,
+        ] {
+            assert_eq!(assurance_from_word(assurance_word(assurance)), assurance);
+        }
+        assert_eq!(assurance_word(JitAssurance::Unjudged), "supported_untested");
+        assert_eq!(
+            assurance_from_word("something-a-later-release-writes"),
+            JitAssurance::Experimental
         );
     }
 }

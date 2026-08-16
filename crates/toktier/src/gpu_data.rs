@@ -41,10 +41,34 @@ const DEEPSEEK_META: &[u8] = include_bytes!(concat!(
     "/data/src/toktier/kernels/tables/pretok_classes_deepseek.v1.meta.json"
 ));
 
+/// How much has been measured about running this kernel on this device.
+///
+/// Not a policy and not a permission: the policy decides whether an
+/// assurance is admitted, and this says which one the route has, so the
+/// label a caller reads is a fact rather than a restatement of what was
+/// asked for.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Assurance {
+    /// A certification campaign ran on this architecture with this
+    /// delivery.
+    Judged,
+    /// The shipped kernel loads and runs here and no campaign has
+    /// measured this combination.
+    Unjudged,
+    /// Reached only through an explicit waiver.
+    Experimental,
+}
+
 pub(crate) struct BuiltGpu {
     pub(crate) engine: Arc<dyn NativeGpuEngine>,
     pub(crate) architecture: String,
     pub(crate) driver_api_version: i32,
+    pub(crate) assurance: Assurance,
+    /// `prebuilt` or `jit`: which delivery loaded.
+    pub(crate) delivery: &'static str,
+    /// The digest of the image that loaded, so a local verification
+    /// record can say which kernel it was taken over.
+    pub(crate) image_digest: String,
 }
 
 pub(crate) fn build_prebuilt(
@@ -99,23 +123,45 @@ pub(crate) fn build_prebuilt(
     let (major, minor) = context.architecture();
     let architecture = format!("sm_{major}{minor}");
     let driver_api_version = context.driver_version();
-    let certified = json_string_array(prebuilt_support.get("devices"))
+    // Which of the three things this device can be. `judged` is a device
+    // a campaign ran on; `experimental` is one the registry names as
+    // reachable under an explicit waiver; anything else is a device the
+    // shipped kernel may still load and run on, which `Policy::Supported`
+    // admits and labels rather than refuses.
+    let judged = json_string_array(prebuilt_support.get("devices"))
         .iter()
         .any(|device| device == &architecture);
     let experimental = json_string_array(prebuilt_support.get("devices_experimental"))
         .iter()
         .any(|device| device == &architecture);
-    if !(certified || policy == Policy::Experimental && experimental) {
+    let assurance = if judged {
+        Assurance::Judged
+    } else if policy == Policy::Experimental && experimental {
+        Assurance::Experimental
+    } else if policy.admits_unjudged_device() {
+        Assurance::Unjudged
+    } else {
         return Err(Error::new(
             ErrorCode::KernelIncompatible,
             format!(
-                "prebuilt GPU architecture {} is not admitted by policy {policy:?}",
-                architecture
+                "prebuilt GPU architecture {architecture} is not in the judged device list, and \
+                 policy {policy:?} admits only judged devices; Policy::Supported loads the \
+                 shipped kernel here and labels the route supported instead"
             ),
         ));
+    };
+    // The build manifest describes the toolchain and the architectures
+    // the fatbin was built for. A device outside that list can still be
+    // reached, through the PTX the fatbin carries, so the manifest is
+    // required to describe the build rather than this device.
+    if registry.prebuilt.toolchain.is_empty() {
+        return Err(Error::new(
+            ErrorCode::RegistryInvalid,
+            "prebuilt manifest does not describe the build toolchain",
+        ));
     }
-    if registry.prebuilt.toolchain.is_empty()
-        || !registry.prebuilt.architectures.contains_key(&architecture)
+    if assurance == Assurance::Judged
+        && !registry.prebuilt.architectures.contains_key(&architecture)
     {
         return Err(Error::new(
             ErrorCode::RegistryInvalid,
@@ -160,6 +206,7 @@ pub(crate) fn build_prebuilt(
         device_ordinal,
         architecture,
         driver_api_version,
+        assurance,
         PREBUILT_FATBIN,
         &registry.prebuilt.fatbin.digest,
         "prebuilt",
@@ -181,12 +228,35 @@ pub(crate) fn build_jit(
             "JIT product architecture facts are internally inconsistent",
         ));
     }
-    if !product.certified && policy != Policy::Experimental {
-        return Err(Error::new(
-            ErrorCode::UncertifiedJit,
-            "an unregistered JIT product is usable only under Policy::Experimental",
-        ));
-    }
+    // A product the compiler stage did not admit at all reaches here
+    // only under an explicit waiver; one it admitted without a judged
+    // (toolchain, device) pair is what `Policy::Supported` labels.
+    let assurance = match product.assurance {
+        crate::jit::JitAssurance::Certified => Assurance::Judged,
+        crate::jit::JitAssurance::Unjudged if policy.admits_unjudged_device() => {
+            Assurance::Unjudged
+        }
+        crate::jit::JitAssurance::Unjudged => {
+            return Err(Error::new(
+                ErrorCode::UncertifiedJit,
+                format!(
+                    "this JIT product was compiled for {}, which the registry has not judged \
+                     with this compiler; policy {policy:?} admits only judged pairs, and \
+                     Policy::Supported runs it labelled supported instead",
+                    product.architecture
+                ),
+            ))
+        }
+        crate::jit::JitAssurance::Experimental if policy == Policy::Experimental => {
+            Assurance::Experimental
+        }
+        crate::jit::JitAssurance::Experimental => {
+            return Err(Error::new(
+                ErrorCode::UncertifiedJit,
+                "a JIT product built on a waiver is usable only under Policy::Experimental",
+            ))
+        }
+    };
     build_image(
         registry,
         artifact,
@@ -194,6 +264,7 @@ pub(crate) fn build_jit(
         device_ordinal,
         product.architecture.clone(),
         product.driver_api_version,
+        assurance,
         &product.image,
         &product.domain_digest,
         "jit",
@@ -208,6 +279,7 @@ fn build_image(
     device_ordinal: i32,
     architecture: String,
     driver_api_version: i32,
+    assurance: Assurance,
     image: &[u8],
     image_digest: &str,
     delivery: &str,
@@ -318,6 +390,9 @@ fn build_image(
         engine: Arc::new(engine),
         architecture,
         driver_api_version,
+        assurance,
+        delivery: if delivery == "jit" { "jit" } else { "prebuilt" },
+        image_digest: image_digest.to_owned(),
     })
 }
 

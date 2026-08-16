@@ -10,7 +10,8 @@ fn usage() -> &'static str {
      toktier-rust artifacts mirror FAMILY --out DIRECTORY [--cache PATH]\n\
      toktier-rust artifacts export FAMILY --out BUNDLE [--cache PATH]\n\
      toktier-rust artifacts import BUNDLE [--cache PATH] [--offline]\n\
-     toktier-rust gpu compile FAMILY [--device N] [--jit-cache PATH] [--nvcc PATH] [--accept-uncertified-jit]"
+     toktier-rust gpu compile FAMILY [--device N] [--jit-cache PATH] [--nvcc PATH] [--accept-uncertified-jit]\n\
+     toktier-rust verify-local --family FAMILY [--engine cpu|gpu|both] [--input PATH|-] [--synthetic N] [--max-bytes N] [--seed N] [--delivery prebuilt|jit|auto] [--device N] [--json] [--forget]"
 }
 
 fn flag_value(arguments: &[String], flag: &str) -> Result<Option<String>, Box<dyn StdError>> {
@@ -119,6 +120,10 @@ fn run() -> Result<(), Box<dyn StdError>> {
         }
         Some("artifacts") => artifact_command(&arguments[1..]),
         Some("gpu") => gpu_command(&arguments[1..]),
+        Some("verify-local") => {
+            println!("{}", toktier::verify_local_command(&arguments[1..])?);
+            Ok(())
+        }
         _ => Err(usage().into()),
     }
 }

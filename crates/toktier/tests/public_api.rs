@@ -497,3 +497,74 @@ fn a_bundle_file_record_is_nameable_from_the_crate_root() {
     assert_eq!(one_file_summary(first), ("tokenizer.json", 24));
     assert_eq!(first.sha256.len(), 64);
 }
+
+/// The default policy runs a device or compiler toolchain no campaign
+/// judged, and says so rather than calling it certified. Selecting
+/// `Policy::Certified` is the one-line way back to the previous rule.
+///
+/// This asserts the shape of the decision on any host: the policy values
+/// exist, the default is the wider one, and the strict one is unchanged.
+/// What a route is labelled on an unjudged device is a question for a
+/// host that has one.
+#[test]
+fn the_default_policy_admits_an_unjudged_device_and_the_strict_one_does_not() {
+    use toktier::{Certification, Policy};
+    assert_eq!(Policy::default(), Policy::Supported);
+    assert_ne!(Policy::default(), Policy::Certified);
+    // The two labels an unjudged device can carry are distinct from the
+    // three that were there before, so a consumer matching on them is
+    // not silently told "certified" about something no campaign ran.
+    for label in [Certification::Supported, Certification::LocallyVerified] {
+        assert_ne!(label, Certification::Certified);
+        assert_ne!(label, Certification::CertifiedSource);
+        assert_ne!(label, Certification::Experimental);
+    }
+    assert_ne!(Certification::Supported, Certification::LocallyVerified);
+}
+
+/// A build with no accelerated route admitted has nothing for a local
+/// check to compare, and the command says that instead of writing a
+/// record about a comparison it did not make.
+#[test]
+fn a_local_check_without_an_accelerated_route_says_so() {
+    let Some(root) = artifact_root() else {
+        return;
+    };
+    std::env::set_var("TOKTIER_TEST_ARTIFACTS", &root);
+    let report = toktier::verify_local_command(&[
+        "--family".to_owned(),
+        "qwen3_8b".to_owned(),
+        "--engine".to_owned(),
+        "cpu".to_owned(),
+        "--synthetic".to_owned(),
+        "4".to_owned(),
+    ]);
+    let Ok(report) = report else {
+        return;
+    };
+    if report.contains("admitted no cpu route") {
+        assert!(report.contains("doctor"), "{report}");
+    } else {
+        assert!(report.contains("documents"), "{report}");
+    }
+}
+
+/// The command refuses arguments it cannot act on rather than guessing:
+/// no family, no text, an engine word it does not know.
+#[test]
+fn a_local_check_refuses_arguments_it_cannot_act_on() {
+    let refusal =
+        toktier::verify_local_command(&["--engine".to_owned(), "cpu".to_owned()]).unwrap_err();
+    assert!(refusal.message().contains("--family"), "{refusal}");
+    let refusal = toktier::verify_local_command(&[
+        "--family".to_owned(),
+        "qwen3_8b".to_owned(),
+        "--engine".to_owned(),
+        "quantum".to_owned(),
+    ])
+    .unwrap_err();
+    assert!(refusal.message().contains("cpu, gpu or both"), "{refusal}");
+    let refusal =
+        toktier::verify_local_command(&["--family".to_owned(), "qwen3_8b".to_owned()]).unwrap_err();
+    assert!(refusal.message().contains("--synthetic"), "{refusal}");
+}

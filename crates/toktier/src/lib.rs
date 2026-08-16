@@ -26,6 +26,7 @@ mod runtime;
 mod serving;
 mod session;
 mod suggest;
+mod verify_local;
 
 // The build script's dependency-closure comparison is compiled into the
 // test build so its unit tests run with the rest of the suite; the path
@@ -58,6 +59,7 @@ pub use serving::{
     ServingResponse, ServingSession, ServingTimings,
 };
 pub use session::{Session, SessionStats};
+pub use verify_local::verify_local_command;
 
 /// Version of the frozen native Hugging Face oracle.
 pub const ORACLE: &str = "tokenizers==0.22.2";

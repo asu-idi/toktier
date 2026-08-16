@@ -74,7 +74,11 @@ def test_auto_device_warns_with_explicit_unjudged_jit_remedy(
         message = str(caught[0].message)
         assert "CUDA 13.0 / torch 2.11.0+cu130" in message
         assert "CUDA 13.0 / torch 2.13.0+cu130" in message
-        assert "outside TokTier's certified exact-ID guarantee" in message
+        assert "certified exact-ID guarantee" in message
+        # Both ways past a coverage refusal are named, so a reader under
+        # CERTIFIED sees the choice rather than one escape hatch.
+        assert "policy='supported'" in message
+        assert "toktier gpu verify tiny_bytes" in message
         assert tokenizer.plan.backend == BACKEND_REFERENCE
     finally:
         tokenizer.close()
@@ -103,6 +107,7 @@ def test_cuda_device_failure_carries_unjudged_jit_remedy(
     assert remedy in message
     assert "observed CUDA 13.0 / torch 2.11.0+cu130" in message
     assert "certified constraint: CUDA 13.0 / torch 2.13.0+cu130" in message
+    assert "policy='supported'" in caught.value.details["ways_forward"]
 
 
 def test_load_fixes_a_reference_plan(rig: Rig) -> None:
@@ -121,18 +126,19 @@ def test_explain_is_the_routing_explanation_plus_facade_keys(rig: Rig) -> None:
     """The facade reports through the routing layer's own explanation.
 
     The requested routing policy travels under ``routing_policy`` -- the
-    bare name ``policy`` with the value ``"certified"`` read like a
+    bare name ``policy`` with a value like ``"certified"`` read as a
     certification state, which it is not -- and the certification block
     is present as its own answer. The facade plans against an empty
     registry view in this release, so that block says no certification
-    identity was consulted.
+    identity was consulted. Since 0.2.6 the default policy is
+    ``supported``, which is what an unconfigured rig reports.
     """
     tokenizer = rig.tokenizer()
     report = tokenizer.explain()
     assert tokenizer.explain(summary=False) == report
 
     assert report["family"] == rig.family
-    assert report["routing_policy"] == "certified"
+    assert report["routing_policy"] == "supported"
     assert "policy" not in report
     certification = report["certification"]
     assert isinstance(certification, dict)
@@ -152,6 +158,9 @@ def test_explain_is_the_routing_explanation_plus_facade_keys(rig: Rig) -> None:
     assert "prebuilt_host_build_flags" in probe
     assert "prebuilt_host_toolchain" in probe
     assert report["experimental_waivers"] == []
+    # Nothing ran on an unmeasured combination here, so the key that
+    # would name one is present and empty rather than absent.
+    assert report["supported_untested"] == []
     assert report["store_directory"] is None
     assert "store" not in report  # the store has not been touched
 

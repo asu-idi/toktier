@@ -51,25 +51,37 @@ POLICY_ALIAS_AUTO: str = "auto"
 
 
 class RoutingPolicy(enum.Enum):
-    """The four routing policies (frozen enum).
+    """The routing policies (frozen enum, appended to in 0.2.6).
 
     ``tier="auto"``, where accepted, is a convenience alias for
     :attr:`CERTIFIED`. The alias is resolved by :meth:`coerce`, and by
     the enum call form (``RoutingPolicy("auto")``) which delegates to
     it, so a constructor argument and a configuration value spell the
-    alias the same way.
+    alias the same way. The alias keeps pointing at :attr:`CERTIFIED`;
+    the default is :attr:`SUPPORTED`, so asking for ``auto`` asks for
+    the stricter of the two.
     """
 
-    #: Default. Accelerated paths only where the support registry
-    #: certifies them for this exact configuration; otherwise reference.
+    #: Default since 0.2.6. Everything :attr:`CERTIFIED` admits, and in
+    #: addition a device architecture or compiler toolchain no
+    #: certification campaign has judged, as long as the shipped kernel
+    #: loads and runs there and every certified constraint verifies.
+    #: Such a route is reported as ``supported_untested`` rather than as
+    #: certified, and as ``locally_verified`` once a local check has
+    #: compared it with the reference engine on that machine.
+    SUPPORTED = "supported"
+
+    #: Accelerated paths only where the support registry certifies them
+    #: for this exact configuration; otherwise reference. The default
+    #: through 0.2.5, and the way back to that behaviour since.
     CERTIFIED = "certified"
 
     #: Always run the reference backend; no accelerated code is planned
     #: or executed.
     REFERENCE = "reference"
 
-    #: Like CERTIFIED, but raise the specific cause error at plan time
-    #: if no certified accelerated path is eligible.
+    #: Like SUPPORTED, but raise the specific cause error at plan time
+    #: if no accelerated path is eligible.
     REQUIRE_ACCELERATED = "require_accelerated"
 
     #: Permits uncertified accelerated paths. Outputs under this policy
@@ -92,6 +104,15 @@ class RoutingPolicy(enum.Enum):
             if member.value == word:
                 return member
         return None
+
+    def admits_unjudged_device(self) -> bool:
+        """Whether this policy runs a device or toolchain nobody judged.
+
+        The engines still have to be the judged ones and every bound
+        digest still has to verify; what this waives is coverage, not
+        integrity.
+        """
+        return self in (RoutingPolicy.SUPPORTED, RoutingPolicy.REQUIRE_ACCELERATED)
 
     @classmethod
     def coerce(cls, value: RoutingPolicy | str) -> RoutingPolicy:

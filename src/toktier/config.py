@@ -347,7 +347,7 @@ class Config:
     #: Enable extended diagnostics collection.
     diagnostics: bool = False
     #: Default routing policy.
-    routing_policy: RoutingPolicy = RoutingPolicy.CERTIFIED
+    routing_policy: RoutingPolicy = RoutingPolicy.SUPPORTED
 
     def __post_init__(self) -> None:
         """Normalize and validate the resolved field values.

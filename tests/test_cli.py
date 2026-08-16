@@ -14,6 +14,7 @@ Two kinds of artifact test live here, and the difference matters:
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import importlib.metadata
 import importlib.util
@@ -1042,9 +1043,15 @@ class _FakeJitTokenizer:
         self.closed = True
 
 
-def test_gpu_compile_uses_certified_policy_by_default(
+def test_gpu_compile_follows_the_configured_policy_by_default(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """The compile command asks for whatever this machine resolves.
+
+    Since 0.2.6 that is ``SUPPORTED``, so an unjudged compiler pair
+    compiles and runs here and the report says which label it earned
+    rather than refusing first and offering an opt-in.
+    """
     from toktier import facade
 
     calls: list[tuple[str, dict[str, object]]] = []
@@ -1065,7 +1072,7 @@ def test_gpu_compile_uses_certified_policy_by_default(
             "qwen3_8b",
             {
                 "device": "cuda",
-                "policy": "certified",
+                "policy": "supported",
                 "gpu_delivery": "jit",
                 "gpu_min_bytes": 0,
             },
@@ -1075,21 +1082,47 @@ def test_gpu_compile_uses_certified_policy_by_default(
     assert tokenizer.closed is True
     assert json.loads(captured.out) == {
         "accepted_uncertified_jit": False,
+        "certification_state": None,
         "experimental_waivers": [],
         "family": "qwen3_8b",
         "jit_ready": True,
         "kernel_delivery": "jit",
-        "policy": "certified",
+        "policy": "supported",
         "requested_uncertified_jit_opt_in": False,
+        "supported_untested": [],
         "warning": None,
     }
     assert captured.err == ""
+
+
+def _pin_certified_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resolve the strict policy, the way a configuration file can.
+
+    ``--accept-uncertified-jit`` is what remains for the policies that
+    still refuse a combination nobody judged, so the tests that exercise
+    the flag have to be under one of them.
+    """
+    from toktier.config import Config
+    from toktier.policy import RoutingPolicy
+
+    resolved = Config.resolve()
+    monkeypatch.setattr(
+        Config,
+        "resolve",
+        classmethod(
+            lambda _cls, **_keywords: dataclasses.replace(
+                resolved, routing_policy=RoutingPolicy.CERTIFIED
+            )
+        ),
+    )
 
 
 def test_gpu_compile_requires_a_loud_explicit_opt_in_for_unjudged_jit(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from toktier import facade
+
+    _pin_certified_policy(monkeypatch)
 
     waiver: dict[str, object] = {
         "backend": "gpu",
@@ -1155,6 +1188,7 @@ def test_gpu_compile_risk_flag_cannot_waive_a_different_premise(
         )
 
     monkeypatch.setattr(facade, "load", fake_load)
+    _pin_certified_policy(monkeypatch)
 
     exit_code = cli.main(["gpu", "compile", "qwen3_8b", "--accept-uncertified-jit"])
 
@@ -1164,6 +1198,179 @@ def test_gpu_compile_risk_flag_cannot_waive_a_different_premise(
     assert captured.out == ""
     assert "error BACKEND_UNAVAILABLE: uncertified architecture" in captured.err
     assert "UNCERTIFIED JIT OPT-IN" not in captured.err
+
+
+class _FakeVerifyTokenizer:
+    """A tokenizer stand-in for the local verification command."""
+
+    def __init__(self, ids: dict[str, tuple[int, ...]], backend: str) -> None:
+        self._ids = ids
+        self._backend = backend
+        self.closed = False
+
+    def encode(self, text: str, *, lookup: str | None = None) -> object:
+        import dataclasses as _dataclasses
+
+        return _dataclasses.make_dataclass("E", ["ids"])(
+            self._ids.get(text, (1, 2, 3))
+        )
+
+    def explain(self, *, summary: bool = False) -> dict[str, object]:
+        return {"last_execution_backend": self._backend}
+
+    def verification_key(self, engine: str) -> object:
+        from toktier.verify_local import VerificationKey
+
+        return VerificationKey(
+            engine=engine,
+            family="qwen3_8b",
+            artifact_sha256="a" * 64,
+            architecture="sm_100" if engine == "gpu" else None,
+            delivery="prebuilt" if engine == "gpu" else None,
+        )
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _verify_loader(
+    monkeypatch: pytest.MonkeyPatch, *, subject_backend: str
+) -> None:
+    from toktier import facade
+
+    def fake_load(_family: str, **keywords: object) -> _FakeVerifyTokenizer:
+        reference = keywords.get("policy") == "reference"
+        return _FakeVerifyTokenizer(
+            {}, "hf" if reference else subject_backend
+        )
+
+    monkeypatch.setattr(facade, "load", fake_load)
+
+
+def test_gpu_verify_records_a_local_check_that_agreed(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The command the supported_untested label points at."""
+    _verify_loader(monkeypatch, subject_backend="gpu")
+
+    exit_code = cli.main(
+        [
+            "gpu",
+            "verify",
+            "qwen3_8b",
+            "--engine",
+            "gpu",
+            "--synthetic",
+            "4",
+            "--max-bytes",
+            "128",
+            "--json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads(captured.out)
+    assert payload["documents"] == 4
+    assert payload["input"] == "generated"
+    entry = payload["engines"][0]
+    assert entry["engine"] == "gpu"
+    assert entry["status"] == "passed"
+    assert entry["mismatches"] == 0
+    assert entry["served_by_engine"] == 4
+    # The record is on disk and reads back under its own key.
+    assert entry["record_readable"] is True
+    assert Path(entry["record_path"]).exists()
+
+
+def test_gpu_verify_reports_a_disagreement_and_changes_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from toktier import facade
+
+    def fake_load(_family: str, **keywords: object) -> _FakeVerifyTokenizer:
+        reference = keywords.get("policy") == "reference"
+        return _FakeVerifyTokenizer(
+            {} if reference else {"x": (9, 9)}, "hf" if reference else "gpu"
+        )
+
+    monkeypatch.setattr(facade, "load", fake_load)
+    monkeypatch.setattr(
+        cli, "_verify_documents", lambda _arguments: (["x"], "your text")
+    )
+
+    exit_code = cli.main(["gpu", "verify", "qwen3_8b", "--engine", "gpu"])
+
+    captured = capsys.readouterr()
+    # A disagreement is a non-zero exit and a sentence, not a policy
+    # change: the route keeps the label it already had.
+    assert exit_code == 2
+    assert "local verification failed on 1 of 1 documents" in captured.out
+    assert "Nothing was changed automatically." in captured.out
+    assert "certified" not in captured.out.replace("policy='certified'", "")
+
+
+def test_gpu_verify_names_an_engine_this_machine_cannot_open(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``--engine both`` on a machine with no GPU still checks the CPU."""
+    from toktier import facade
+
+    def fake_load(_family: str, **keywords: object) -> _FakeVerifyTokenizer:
+        if keywords.get("device") == "cuda":
+            raise BackendUnavailable(
+                "no usable device", details={"backend": "gpu"}
+            )
+        reference = keywords.get("policy") == "reference"
+        return _FakeVerifyTokenizer({}, "hf" if reference else "fast_cpu")
+
+    monkeypatch.setattr(facade, "load", fake_load)
+
+    exit_code = cli.main(
+        ["gpu", "verify", "qwen3_8b", "--synthetic", "2", "--json"]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads(captured.out)
+    assert [item["engine"] for item in payload["engines"]] == ["cpu"]
+    assert payload["skipped"] == [
+        {
+            "engine": "gpu",
+            "status": "not_available",
+            "reason": "BACKEND_UNAVAILABLE",
+            "message": "no usable device",
+        }
+    ]
+
+
+def test_gpu_verify_forgets_a_record_without_encoding_anything(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _verify_loader(monkeypatch, subject_backend="gpu")
+    assert (
+        cli.main(
+            ["gpu", "verify", "qwen3_8b", "--engine", "gpu", "--synthetic", "2"]
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    exit_code = cli.main(
+        ["gpu", "verify", "qwen3_8b", "--engine", "gpu", "--forget", "--json"]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads(captured.out)
+    assert payload["engines"] == [
+        {"engine": "gpu", "forgot_record": True, "status": "forgotten"}
+    ]
+    assert payload["documents"] == 0
 
 
 def test_json_failure_emits_a_machine_readable_error(

@@ -9,6 +9,7 @@ import json
 import platform
 import sys
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn, cast
 
 from . import __version__
@@ -42,12 +43,17 @@ from .paths import (
     private_dir_problem,
     store_state_dir,
 )
+from .policy import BACKEND_FAST_CPU, BACKEND_GPU
 
 if TYPE_CHECKING:
     from .engine.gpu.toolchain import NvccFacts
 
 _USAGE_ERROR = 64
 _TOKTIER_ERROR = 2
+#: A local verification that ran and disagreed. Deliberately the same
+#: code a refusal exits with: a script that treats non-zero as "do not
+#: rely on this route" is reading it correctly either way.
+_VERIFY_MISMATCH = _TOKTIER_ERROR
 
 
 class _UsageError(Exception):
@@ -770,12 +776,21 @@ def _version(arguments: argparse.Namespace) -> int:
 
 
 def _gpu_compile(arguments: argparse.Namespace) -> int:
-    """Build or reuse the JIT kernel under a certified or explicit-risk policy."""
+    """Build or reuse the JIT kernel under the configured policy.
+
+    The first attempt runs under whatever policy this machine resolves,
+    which since 0.2.6 is ``SUPPORTED`` unless the configuration says
+    otherwise. A compiler pair no campaign judged compiles and runs
+    there, and the route is labelled ``supported_untested`` rather than
+    admitted quietly. ``--accept-uncertified-jit`` is what remains for
+    the stricter policies: under ``CERTIFIED`` the refusal still happens
+    and the flag is the one-process opt-in past it, exactly as before.
+    """
     from .facade import load
 
     requested_acceptance = bool(arguments.accept_uncertified_jit)
     accepted = False
-    policy = "certified"
+    policy = Config.resolve().routing_policy.value
     warning: str | None = None
     try:
         tokenizer = load(
@@ -854,6 +869,12 @@ def _gpu_compile(arguments: argparse.Namespace) -> int:
         "requested_uncertified_jit_opt_in": requested_acceptance,
         "accepted_uncertified_jit": accepted,
         "experimental_waivers": report.get("experimental_waivers", []),
+        # What the policy admitted on coverage rather than on evidence:
+        # a device or a compiler pair nobody judged. Empty on a judged
+        # combination, and never folded into the waivers above, which
+        # say something different.
+        "supported_untested": report.get("supported_untested", []),
+        "certification_state": _certification_state(report),
         "warning": warning,
     }
     if arguments.json:
@@ -868,6 +889,243 @@ def _gpu_compile(arguments: argparse.Namespace) -> int:
                 rendered = str(value).lower() if isinstance(value, bool) else str(value)
             print(f"{name}: {rendered}")
     return 0
+
+
+def _verify_documents(arguments: argparse.Namespace) -> tuple[list[str], str]:
+    """The documents to compare, and where they came from.
+
+    A caller's own text is the point of the command; the generator is
+    there so somebody with nothing at hand can still run it. It builds
+    documents from rules written in this package, so a check costs no
+    license question and no network.
+    """
+    from .verify_local import generate, split_documents
+
+    source = arguments.input
+    if source is not None:
+        text = (
+            sys.stdin.read()
+            if source == "-"
+            else Path(source).read_text(encoding="utf-8")
+        )
+        documents = split_documents(text)
+        if not documents:
+            raise UnsupportedConfig(
+                "the input holds no documents to compare",
+                details={
+                    "option": "--input",
+                    "value": source,
+                    "reason": "one document per non-empty line",
+                },
+            )
+        return documents, "your text"
+    return (
+        generate(arguments.synthetic, arguments.max_bytes, arguments.seed),
+        "generated",
+    )
+
+
+def _verify_one_engine(
+    family: str,
+    engine: str,
+    documents: Sequence[str],
+    *,
+    config: Config,
+    source: str,
+    forget: bool,
+) -> dict[str, object]:
+    """Compare one engine with the reference engine, and record it."""
+    from .facade import load
+    from .verify_local import (
+        compare,
+        forget_record,
+        read_record,
+        record_for,
+        write_record,
+    )
+
+    backend = BACKEND_GPU if engine == "gpu" else BACKEND_FAST_CPU
+    # Every document goes to the engine under test, whatever its size:
+    # the automatic crossover is a performance decision and this command
+    # is asking a correctness question about one route.
+    subject = load(
+        family,
+        config=config,
+        device="cuda" if engine == "gpu" else "cpu",
+        gpu_min_bytes=0,
+    )
+    try:
+        key = subject.verification_key(engine)
+        if key is None:
+            raise BackendUnavailable(
+                f"the {engine} route on this machine cannot be named, so a "
+                "local check has nothing to file its answer under",
+                details={"backend": backend, "engine": engine},
+            )
+        if forget:
+            removed = forget_record(config, key)
+            return {
+                "engine": engine,
+                "forgot_record": removed,
+                "status": "forgotten" if removed else "no_record",
+            }
+        judge = load(family, config=config, device="cpu", policy="reference")
+        try:
+            comparison = compare(
+                subject, judge, documents, expected_backend=backend
+            )
+        finally:
+            judge.close()
+    finally:
+        subject.close()
+    record = record_for(key, comparison, documents=documents, source=source)
+    path = write_record(config, record)
+    written = read_record(config, key)
+    return {
+        "engine": engine,
+        "status": record.status,
+        "documents": record.documents,
+        "bytes": record.bytes,
+        "mismatches": record.mismatches,
+        "first_mismatch": (
+            None
+            if record.first_mismatch is None
+            else list(record.first_mismatch)
+        ),
+        # How many of those documents the engine under test actually
+        # served. A route that fell back would otherwise compare the
+        # judge with itself and report an agreement nobody measured.
+        "served_by_engine": comparison.served,
+        "input": record.input,
+        "input_digest": record.input_digest,
+        "record_path": str(path),
+        "record_readable": written is not None,
+    }
+
+
+def _gpu_verify(arguments: argparse.Namespace) -> int:
+    """Compare an accelerated route with the reference engine, here.
+
+    This is the command the ``supported_untested`` label points at. It
+    is explicit and it stays explicit: nothing runs it automatically, it
+    tokenizes only what the caller hands it or what the generator
+    builds from rules, and what it writes is a record of a measurement
+    rather than a certificate. A disagreement is reported and nothing is
+    changed on the caller's behalf -- the route keeps the label it
+    already had, and choosing ``policy="certified"`` is the way to hold
+    the combination on the reference route.
+    """
+    config = Config.resolve()
+    engines = (
+        ["cpu", "gpu"] if arguments.engine == "both" else [arguments.engine]
+    )
+    forget = bool(arguments.forget)
+    documents: list[str] = []
+    source = "none"
+    if not forget:
+        documents, source = _verify_documents(arguments)
+    results: list[dict[str, object]] = []
+    skipped: list[dict[str, object]] = []
+    for engine in engines:
+        try:
+            results.append(
+                _verify_one_engine(
+                    arguments.family,
+                    engine,
+                    documents,
+                    config=config,
+                    source=source,
+                    forget=forget,
+                )
+            )
+        except ToktierError as error:
+            # ``both`` on a machine with no usable GPU is the ordinary
+            # case, not a failure of the command: the engine that could
+            # not be opened is named and the other one still runs. A
+            # single explicit ``--engine`` has nothing to fall back to,
+            # so its error travels to the caller unchanged.
+            if arguments.engine != "both":
+                raise
+            skipped.append(
+                {
+                    "engine": engine,
+                    "status": "not_available",
+                    "reason": error.code,
+                    "message": str(error),
+                }
+            )
+    payload: dict[str, object] = {
+        "family": arguments.family,
+        "engines": results,
+        "skipped": skipped,
+        "documents": len(documents),
+        "input": source,
+    }
+    failed = [item for item in results if item.get("status") == "failed"]
+    if arguments.json:
+        print(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+    else:
+        _print_verify_human(payload)
+    return _VERIFY_MISMATCH if failed else 0
+
+
+def _print_verify_human(payload: Mapping[str, object]) -> None:
+    """One block per engine, in the words the label uses."""
+    print(f"family: {payload['family']}")
+    print(f"input: {payload['input']} ({payload['documents']} documents)")
+    for item in cast(Sequence[Mapping[str, object]], payload["engines"]):
+        engine = item["engine"]
+        status = item["status"]
+        if status in {"forgotten", "no_record"}:
+            removed = status == "forgotten"
+            print(
+                f"{engine}: "
+                f"{'record removed' if removed else 'no record to remove'}"
+            )
+            continue
+        documents = item["documents"]
+        if status == "passed":
+            print(
+                f"{engine}: locally_verified -- you compared this "
+                f"machine's {engine} route with the reference engine on "
+                f"{documents} documents ({item['input']}); this record is "
+                "not a certificate and expires when the driver, toolchain, "
+                "kernel or source identity changes"
+            )
+        else:
+            first = item["first_mismatch"]
+            where = (
+                ""
+                if not isinstance(first, list)
+                else f" (first: doc {first[0]} at token {first[1]})"
+            )
+            print(
+                f"{engine}: local verification failed on "
+                f"{item['mismatches']} of {documents} documents{where}. The "
+                f"{engine} route on this machine does not match the "
+                "reference engine for those inputs; select "
+                "policy='certified' to keep this combination on the "
+                "reference route. Nothing was changed automatically."
+            )
+        served = item["served_by_engine"]
+        if isinstance(served, int) and served != documents:
+            print(
+                f"{engine}: {served} of {documents} documents were served by "
+                f"the {engine} route; the rest fell back, so they compared "
+                "the reference engine with itself"
+            )
+        print(f"{engine}: record {item['record_path']}")
+    for item in cast(Sequence[Mapping[str, object]], payload["skipped"]):
+        print(f"{item['engine']}: not available here -- {item['message']}")
+
+
+def _certification_state(report: Mapping[str, object]) -> str | None:
+    """The label one explanation gives the route it planned."""
+    certification = report.get("certification")
+    if not isinstance(certification, Mapping):
+        return None
+    state = certification.get("state")
+    return state if isinstance(state, str) else None
 
 
 def _is_jit_toolchain_waiver(value: object) -> bool:
@@ -1001,6 +1259,60 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     compile_jit.set_defaults(handler=_gpu_compile)
+
+    verify = gpu_commands.add_parser(
+        "verify",
+        help=(
+            "compare an accelerated route with the reference engine on "
+            "this machine and record the answer"
+        ),
+        parents=[shared],
+    )
+    verify.add_argument("family", metavar="FAMILY")
+    verify.add_argument(
+        "--engine",
+        choices=("cpu", "gpu", "both"),
+        default="both",
+        help=(
+            "which accelerated route to compare (default: both; an engine "
+            "this machine cannot open is named and skipped)"
+        ),
+    )
+    verify.add_argument(
+        "--input",
+        metavar="PATH",
+        help=(
+            "your own documents, one per non-empty line; '-' reads standard "
+            "input. Without this, documents are generated from rules"
+        ),
+    )
+    verify.add_argument(
+        "--synthetic",
+        type=int,
+        default=2000,
+        metavar="N",
+        help="generated documents to compare when --input is absent",
+    )
+    verify.add_argument(
+        "--max-bytes",
+        type=int,
+        default=4096,
+        metavar="N",
+        help="largest generated document, in bytes",
+    )
+    verify.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        metavar="N",
+        help="seed of the generator, so a run can be repeated exactly",
+    )
+    verify.add_argument(
+        "--forget",
+        action="store_true",
+        help="remove this machine's record for the selected engines",
+    )
+    verify.set_defaults(handler=_gpu_verify)
 
     version = commands.add_parser(
         "version", help="show the toktier version", parents=[shared]

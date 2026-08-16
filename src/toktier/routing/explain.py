@@ -58,6 +58,8 @@ def _certification_state(
     gpu_delivery: str | None = None,
     *,
     has_experimental_waiver: bool = False,
+    has_untested_coverage: bool = False,
+    locally_verified: bool = False,
 ) -> dict[str, object]:
     """How the running configuration is labeled.
 
@@ -81,8 +83,18 @@ def _certification_state(
     ``effective_verdict`` answers the separate in-process question. It
     collapses both certified registry kinds to ``certified``, reports an
     eligible route that depends on a waiver as ``experimental``, reports
-    ``reference`` when the pinned reference oracle itself served the
-    request, and is otherwise ``unverified``.
+    ``supported`` for a route that runs on a device or toolchain no
+    campaign measured, reports ``reference`` when the pinned reference
+    oracle itself served the request, and is otherwise ``unverified``.
+
+    ``supported_untested`` and ``locally_verified`` are the two states
+    added in 0.2.6. The first says the engines are the judged ones and
+    this combination is not one the certification campaigns ran; the
+    second says the operator of this machine has since compared it with
+    the reference engine here and it agreed. Neither is a certificate,
+    and the second is not a claim this project makes: it is a record of
+    what somebody measured, valid until the driver, toolchain, kernel,
+    source identity or artifact moves.
 
     ``reference`` exists because ``unverified`` was answering two very
     different questions with one word. Under the reference route the
@@ -124,7 +136,13 @@ def _certification_state(
     if accelerated_open:
         status = statuses.get(route_plan.backend)
         state = (
-            "certified"
+            # A route admitted on coverage is labelled for what it is,
+            # whatever the registry says about the judged devices: the
+            # record's status describes the combinations it judged, and
+            # this is not one of them.
+            ("locally_verified" if locally_verified else "supported_untested")
+            if has_untested_coverage
+            else "certified"
             if status == STATUS_CERTIFIED
             else "certified_source"
             if status == STATUS_CERTIFIED_SOURCE
@@ -135,6 +153,8 @@ def _certification_state(
     effective_verdict = (
         "experimental"
         if has_experimental_waiver or state == "experimental"
+        else "supported"
+        if state in {"supported_untested", "locally_verified"}
         else "certified"
         if state in {"certified", "certified_source"}
         else "reference"
@@ -275,6 +295,7 @@ def build_explanation(
     delivery_record: ArtifactRecord | None = None,
     last_execution: Mapping[str, object] | None = None,
     gpu_delivery: str | None = None,
+    locally_verified: bool = False,
 ) -> dict[str, object]:
     """Assemble the diagnostic mapping for one tokenizer.
 
@@ -303,6 +324,16 @@ def build_explanation(
         if assessment.eligible
         for reason in assessment.waived
     ]
+    # Coverage gaps the SUPPORTED policy admitted: this device or this
+    # compiler toolchain is not one a certification campaign ran on, and
+    # everything the registry does bind still verified. Kept apart from
+    # the waivers because they are a different statement.
+    untested = [
+        reason_to_dict(reason)
+        for assessment in assessments
+        if assessment.eligible
+        for reason in assessment.supported
+    ]
     executed = _executed_backend(last_execution)
     return {
         "api_version": api_version,
@@ -323,6 +354,10 @@ def build_explanation(
         "fallback_chain": list(route_plan.fallback_chain),
         "plan_reasons": [reason_to_dict(reason) for reason in route_plan.reasons],
         "experimental_waivers": waivers,
+        # Present since 0.2.6: what ran without a campaign having
+        # measured it. Empty on a judged device with a judged toolchain,
+        # which is every configuration this key did not exist for.
+        "supported_untested": untested,
         "fallback_counts": dict(fallback_counts or {}),
         # Which kernel delivery the process runs (prebuilt / jit), or
         # None before any kernel load; prebuilt availability is the
@@ -347,6 +382,8 @@ def build_explanation(
             route_plan,
             gpu_delivery,
             has_experimental_waiver=bool(waivers),
+            has_untested_coverage=bool(untested),
+            locally_verified=locally_verified,
         ),
         "probe": snapshot.summary(),
     }

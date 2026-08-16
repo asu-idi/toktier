@@ -34,6 +34,12 @@ Checks 5-9, 11 and 12 are certification statements, so ``EXPERIMENTAL``
 may proceed past them; each one it passes is recorded as a waiver and
 reported by ``explain()``, never silently. Check 10 blocks under every
 policy, because a kernel that failed to build cannot run.
+
+Two of these refusals are about coverage rather than verification: the
+device architecture of check 9, and the compiler/runtime pair of check
+13. In both the bound identity verifies and no campaign has measured the
+combination. ``SUPPORTED`` proceeds past those two and records each as a
+supported-untested note; ``CERTIFIED`` refuses them as it always has.
 """
 
 from __future__ import annotations
@@ -96,12 +102,20 @@ class BackendAssessment:
     when it is eligible. ``waived`` lists certification gaps that only
     ``EXPERIMENTAL`` policy permitted; they are diagnostics, not plan
     reasons, because the backend they describe was selected.
+
+    ``supported`` lists the coverage gaps ``SUPPORTED`` admitted: a
+    device architecture or compiler toolchain no campaign judged, on a
+    configuration whose every bound digest still verified. They are
+    diagnostics for the same reason, and they are kept apart from
+    ``waived`` because they are a different claim: nobody measured this
+    combination, rather than something did not verify.
     """
 
     backend: str
     eligible: bool
     blocking: PlanReason | None = None
     waived: tuple[PlanReason, ...] = ()
+    supported: tuple[PlanReason, ...] = ()
 
 
 def _reason(
@@ -149,9 +163,17 @@ class _Blocked(Exception):
 
 
 class _RefuseFn(Protocol):
-    """Callback a check uses to refuse (or waive) an option."""
+    """Callback a check uses to refuse (or waive) an option.
 
-    def __call__(self, reason: PlanReason, *, waivable: bool) -> None:
+    ``waivable`` says whether ``EXPERIMENTAL`` may waive the refusal.
+    ``coverage`` says whether the refusal is about a combination nobody
+    has measured, rather than about something that failed to verify;
+    only a coverage refusal is admitted by ``SUPPORTED``.
+    """
+
+    def __call__(
+        self, reason: PlanReason, *, waivable: bool, coverage: bool = False
+    ) -> None:
         """Refuse the backend, unless the policy waives this check."""
 
 
@@ -164,10 +186,16 @@ def assess_backend(
 ) -> BackendAssessment:
     """Evaluate one accelerated backend. Pure; no I/O."""
     waived: list[PlanReason] = []
+    supported: list[PlanReason] = []
 
-    def refuse(reason: PlanReason, *, waivable: bool) -> None:
+    def refuse(
+        reason: PlanReason, *, waivable: bool, coverage: bool = False
+    ) -> None:
         if waivable and policy is RoutingPolicy.EXPERIMENTAL:
             waived.append(reason)
+            return
+        if coverage and policy.admits_unjudged_device():
+            supported.append(reason)
             return
         raise _Blocked(reason)
 
@@ -179,9 +207,13 @@ def assess_backend(
             eligible=False,
             blocking=blocked.reason,
             waived=tuple(waived),
+            supported=tuple(supported),
         )
     return BackendAssessment(
-        backend=backend, eligible=True, waived=tuple(waived)
+        backend=backend,
+        eligible=True,
+        waived=tuple(waived),
+        supported=tuple(supported),
     )
 
 
@@ -467,7 +499,11 @@ def _assess(
             )
         return
 
-    # 9. Device architecture explicitly judged.
+    # 9. Device architecture explicitly judged. A device outside the
+    #    judged list is a coverage gap rather than a verification
+    #    failure: the kernel is the bound one and it loads there, and no
+    #    campaign has run on it. SUPPORTED admits that and labels it;
+    #    CERTIFIED refuses it, as it always has.
     if view.devices:
         architectures = {device.architecture for device in snapshot.devices}
         if not architectures & set(view.devices):
@@ -479,6 +515,7 @@ def _assess(
                     certified=list(view.devices),
                 ),
                 waivable=True,
+                coverage=True,
             )
 
     # 10. Driver at or above the certified floor.
@@ -551,7 +588,12 @@ def _assess(
                 waivable=True,
             )
 
-    # 13. Bound build flags and toolchain constraint.
+    # 13. Bound build flags and toolchain constraint. The flags are the
+    #     recipe this source was judged under, so a difference there is a
+    #     verification failure. The compiler/runtime pair is the other
+    #     kind of gap: the sources and flags are the judged ones and no
+    #     campaign compiled them with this particular pair, which is what
+    #     SUPPORTED admits and labels.
     if view.status == STATUS_CERTIFIED_SOURCE:
         if tuple(view.build_flags) != tuple(snapshot.kernel_cache.build_flags):
             refuse(
@@ -576,6 +618,7 @@ def _assess(
                     observed=snapshot.kernel_cache.toolchain,
                 ),
                 waivable=True,
+                coverage=True,
             )
 
 

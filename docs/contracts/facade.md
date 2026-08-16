@@ -406,6 +406,37 @@ growing appends; ``*_appends`` are successes, not misses. Keys are
 informational and may grow within 0.x; the method and the plan/reason
 presence are stable.
 
+### 5.1 Supported routes and local verification (added in 0.2.6)
+
+The paragraphs above keep their meanings. What changed is which
+combinations reach a refusal at all: under the `SUPPORTED` policy that
+0.2.6 makes the default (`routing.md` Section 1.1), a device
+architecture or a JIT compiler pair that no certification campaign
+judged no longer refuses, so the `RuntimeWarning` and the
+`BackendUnavailable` described above are what `CERTIFIED` does. A route
+admitted that way is reported, never silent:
+
+- `explain()["supported_untested"]` lists the coverage reasons the
+  policy admitted, in the same shape as `plan_reasons`. It is empty on a
+  judged device with a judged toolchain, which is every configuration
+  that existed before this key did.
+- `certification.state` reads `supported_untested`, or `locally_verified`
+  when a local check on this machine has compared the route with the
+  reference engine and agreed; `certification.effective_verdict` reads
+  `supported` for both. Neither word is `certified`, and neither is a
+  claim this project makes about the combination.
+- The remedy text for a `CERTIFIED` refusal names both of the ways
+  forward: selecting the default policy, which admits the combination
+  and labels it, or the `--accept-uncertified-jit` opt-in, which is
+  still the only way past a refusal that is not about coverage.
+
+`Tokenizer.verification_key(engine)` returns the facts a local check of
+`"gpu"` or `"cpu"` on this machine would be about, or `None` when the
+engine's identity cannot be named. `toktier gpu verify <family>` takes
+the measurement and records it; the record expires when any of those
+facts moves, and a check that disagreed leaves the route labelled
+exactly as it would have been had nobody run one.
+
 ## 6. Record reader
 
 `toktier.records.decode_record(record: bytes) -> RecordView` is the

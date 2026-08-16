@@ -33,6 +33,41 @@ code namespace are contract; new reason codes may be appended (see Section 5.4).
   are reported distinctly in `explain()` and in the registry -- see
   `registry.md` for the honest-labeling rules.
 
+### 1.1 The `SUPPORTED` policy (added in 0.2.6)
+
+The four rows above keep their meanings exactly. This release appends a
+fifth value and makes it the default, so the `(default)` marker in the v1
+table names what v1 shipped rather than what a fresh `Tokenizer` selects
+today.
+
+| Value | Meaning |
+|---|---|
+| `SUPPORTED` (default) | Everything `CERTIFIED` admits, and in addition a device architecture or compiler toolchain no certification campaign has judged, provided the shipped kernel loads and runs there and every constraint the registry does bind still verifies. Such a route is reported as `supported_untested`, or `locally_verified` once a local check on that machine has compared it with the reference engine. |
+
+What this supersedes, said plainly: the bullet above that reads "an
+uncertified path is only reachable by explicit `EXPERIMENTAL` opt-in"
+described two different things with one word. A path whose engines,
+digests or build identity do not verify is still reachable only through
+`EXPERIMENTAL`, and that half stands unchanged. A path whose every bound
+constraint verifies and whose device or compiler no campaign has run on
+is a coverage gap rather than a verification failure; from 0.2.6 the
+default policy admits it and labels it, and `CERTIFIED` refuses it as
+before. `registry.md` Section 1.1 is unaffected: an unlisted architecture
+remains ineligible under `CERTIFIED`.
+
+- `REQUIRE_ACCELERATED` follows the default rather than `CERTIFIED`: it
+  asks that some accelerated path be eligible, and on a device outside
+  the judged list the honest answer to that question is now yes.
+- `tier="auto"` still names `CERTIFIED`, so it selects the stricter of
+  the two rather than the default.
+- The new labels appear in `explain()` under `certification.state`
+  (`supported_untested`, `locally_verified`), under
+  `certification.effective_verdict` (`supported`), and as a
+  `supported_untested` list of the coverage reasons the policy admitted,
+  which is the same reason vocabulary and adds no code.
+- Nothing about this is automatic on the request path: the local check
+  is a command a person runs, and its record only ever adds a label.
+
 ## 2. Three phases: probe, plan, execute (frozen structure)
 
 1. **Probe** -- collect facts, change nothing. The probe gathers: importable

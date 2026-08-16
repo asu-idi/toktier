@@ -38,6 +38,7 @@ from toktier.routing.plan import assessments_for, plan
 from toktier.routing.probe import DeviceInfo, ProbeSnapshot
 from toktier.routing.registry_view import RegistryView
 
+SUPPORTED = RoutingPolicy.SUPPORTED
 CERTIFIED = RoutingPolicy.CERTIFIED
 REFERENCE = RoutingPolicy.REFERENCE
 REQUIRE = RoutingPolicy.REQUIRE_ACCELERATED
@@ -69,6 +70,8 @@ class Expect:
     backend: str | None = None
     reasons: tuple[ReasonCode, ...] = ()
     waived: tuple[ReasonCode, ...] = ()
+    #: Coverage gaps the SUPPORTED policy admitted and labelled.
+    supported: tuple[ReasonCode, ...] = ()
     error: type[ToktierError] | None = None
 
 
@@ -88,8 +91,11 @@ def _reference_only() -> Expect:
     return _blocked(ReasonCode.R_POLICY_REFERENCE)
 
 
-def _eligible(waived: tuple[ReasonCode, ...] = ()) -> Expect:
-    return Expect(backend=BACKEND_GPU, waived=waived)
+def _eligible(
+    waived: tuple[ReasonCode, ...] = (),
+    supported: tuple[ReasonCode, ...] = (),
+) -> Expect:
+    return Expect(backend=BACKEND_GPU, waived=waived, supported=supported)
 
 
 def _state(
@@ -116,8 +122,15 @@ def _uncertified_case(
     code: ReasonCode = ReasonCode.R_UNCERTIFIED_ARTIFACT,
     error: type[ToktierError] = UncertifiedTokenizer,
     waivable: bool = True,
+    coverage: bool = False,
 ) -> State:
-    """A state where the accelerated path is closed for one reason."""
+    """A state where the accelerated path is closed for one reason.
+
+    ``coverage`` marks the reasons that are about a combination nobody
+    has measured rather than about something that failed to verify. The
+    SUPPORTED policy admits those and labels them; it refuses everything
+    else exactly as CERTIFIED does.
+    """
     return State(
         build=_state(
             registry_kwargs=registry_kwargs,
@@ -125,9 +138,10 @@ def _uncertified_case(
             config_kwargs=config_kwargs,
         ),
         expect={
+            SUPPORTED: _eligible(supported=(code,)) if coverage else _blocked(code),
             CERTIFIED: _blocked(code),
             REFERENCE: _reference_only(),
-            REQUIRE: Expect(error=error),
+            REQUIRE: _eligible(supported=(code,)) if coverage else Expect(error=error),
             EXPERIMENTAL: _eligible((code,)) if waivable else _blocked(code),
         },
     )
@@ -250,12 +264,16 @@ STATES: dict[str, State] = {
         snapshot_kwargs={"oracle_version": "0.23.0"},
         code=ReasonCode.R_ORACLE_MISMATCH,
     ),
+    # The one coverage gap in this table: the kernel is the bound one
+    # and it loads on this device; what is missing is a campaign that
+    # ran there.
     "device_architecture_unlisted": _uncertified_case(
         snapshot_kwargs={
             "devices": (DeviceInfo(index=0, name="older", architecture="sm_75"),)
         },
         code=ReasonCode.R_SM_UNCERTIFIED,
         error=KernelIncompatible,
+        coverage=True,
     ),
     "driver_below_certified_minimum": _uncertified_case(
         snapshot_kwargs={"driver_version": "550.0"},
@@ -296,10 +314,14 @@ STATES: dict[str, State] = {
             "kernel_cache": support.gpu_ready_kernel_cache(build_flags=("-O2",))
         }
     ),
+    # The compiler pair is the other coverage axis: the sources and the
+    # flags are the judged ones and no campaign compiled them with this
+    # pair, so SUPPORTED runs it and labels it while CERTIFIED refuses.
     "toolchain_constraint_unverified": _uncertified_case(
         snapshot_kwargs={
             "kernel_cache": support.gpu_ready_kernel_cache(toolchain_satisfied=None)
-        }
+        },
+        coverage=True,
     ),
 }
 
@@ -338,6 +360,13 @@ def test_plan_matrix(name: str, policy: RoutingPolicy) -> None:
         for reason in assessment.waived
     )
     assert waived == expected.waived
+    supported = tuple(
+        reason.code
+        for assessment in assessments
+        if assessment.eligible
+        for reason in assessment.supported
+    )
+    assert supported == expected.supported
 
 
 def test_matrix_covers_every_plan_time_reason_code() -> None:

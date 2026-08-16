@@ -29,7 +29,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib.util import find_spec
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 from uuid import uuid4
 
 from .._oracle import ORACLE_PACKAGE, import_oracle, oracle_version
@@ -77,6 +77,9 @@ from ..routing.registry_load import shipped_registry
 from ..routing.registry_view import ArtifactRecord
 from ..session import SessionUpdate
 from .store import DEFAULT_CACHE_BUDGET_BYTES, EntryStore
+
+if TYPE_CHECKING:
+    from ..verify_local import VerificationKey
 
 __all__ = ["Encoding", "Session", "Tokenizer", "from_pretrained", "load"]
 
@@ -149,6 +152,26 @@ def _jit_toolchain_rejection(route_plan: RoutePlan) -> PlanReason | None:
 def _uncertified_jit_remedy(family: str) -> str:
     """Explicit CLI opt-in for an unjudged JIT toolchain."""
     return f"toktier gpu compile {family} --accept-uncertified-jit"
+
+
+def _unjudged_toolchain_ways_forward(family: str) -> str:
+    """The two ways past a refusal that is only about coverage.
+
+    Since 0.2.6 the default ``SUPPORTED`` policy admits an unjudged
+    compiler pair and labels the route ``supported_untested``, so a
+    reader who reached this text under ``CERTIFIED`` has a choice to
+    make rather than a single escape hatch. Both are named, and neither
+    is described as safe: the first says who has not measured this
+    combination, the second says the same and asks the caller to say it
+    out loud.
+    """
+    return (
+        "select the default policy (policy='supported'), which runs this "
+        "combination and labels it supported_untested, or keep this policy "
+        f"and opt in once with `{_uncertified_jit_remedy(family)}`; either "
+        "way nobody has measured this pair, and `toktier gpu verify "
+        f"{family}` compares it with the reference engine on your own text"
+    )
 
 
 def _last_execution_view(report: Mapping[str, object]) -> Mapping[str, object]:
@@ -507,11 +530,9 @@ class Tokenizer:
             warnings.warn(
                 "TokTier refused uncertified JIT acceleration: observed "
                 f"{observed}; certified constraint: {constraint}. Requests "
-                f"will use {self._plan.backend!r}. To compile and evaluate "
-                "this combination anyway, run `"
-                f"{_uncertified_jit_remedy(entry.family)}`. That explicit "
-                "opt-in runs the JIT combination outside TokTier's certified "
-                "exact-ID guarantee.",
+                f"will use {self._plan.backend!r}. To run this combination, "
+                f"{_unjudged_toolchain_ways_forward(entry.family)}. Neither "
+                "route is covered by TokTier's certified exact-ID guarantee.",
                 RuntimeWarning,
                 stacklevel=2,
             )
@@ -538,10 +559,13 @@ class Tokenizer:
                 constraint = jit_rejection.detail.get("constraint", "unknown")
                 remedy = _uncertified_jit_remedy(entry.family)
                 details["remedy"] = remedy
+                details["ways_forward"] = _unjudged_toolchain_ways_forward(
+                    entry.family
+                )
                 message += (
                     f"; observed {observed}; certified constraint: "
-                    f"{constraint}; to compile this unjudged combination "
-                    f"for explicit evaluation, run `{remedy}`"
+                    f"{constraint}; to run this unjudged combination, "
+                    f"{_unjudged_toolchain_ways_forward(entry.family)}"
                 )
             self._backend.close()
             raise BackendUnavailable(message, details=details)
@@ -605,6 +629,87 @@ class Tokenizer:
     def plan(self) -> RoutePlan:
         """The immutable route plan fixed at construction."""
         return self._plan
+
+    # -- local verification --------------------------------------------
+
+    def verification_key(self, engine: str) -> VerificationKey | None:
+        """What a local check of one engine on this machine is about.
+
+        ``engine`` is ``"gpu"`` or ``"cpu"``. The key gathers the facts a
+        measurement would depend on -- the device, the delivery, the
+        image, the compiler, the driver, the two source identities and
+        the exact artifact -- so a record taken under it is read back
+        only while all of them still hold. ``None`` for any other engine
+        name, which is the fail-closed answer: a combination this
+        tokenizer cannot name carries no record.
+
+        The key is not a certificate and does not become one. It is the
+        filing address of something a person measured here.
+        """
+        from ..verify_local import VerificationKey
+
+        cache = self._snapshot.kernel_cache
+        if engine == "gpu":
+            delivery = (
+                cache.delivery or cache.preferred_delivery or self._gpu_delivery
+            )
+            return VerificationKey(
+                engine="gpu",
+                family=self.family,
+                artifact_sha256=self._artifact_sha256,
+                architecture=next(
+                    (
+                        device.architecture
+                        for device in self._snapshot.devices
+                    ),
+                    None,
+                ),
+                delivery=delivery,
+                image_digest=(
+                    cache.binary_digest
+                    if delivery == "prebuilt"
+                    else cache.source_digest
+                ),
+                class_table_digest=cache.class_table_digest,
+                build_flags=tuple(cache.build_flags),
+                toolchain=(
+                    cache.toolchain
+                    if delivery == "jit"
+                    else cache.host_toolchain
+                ),
+                driver_version=self._snapshot.driver_version,
+                host_source_digest=cache.host_source_digest,
+                engine_source_digest=cache.source_digest,
+            )
+        if engine == "cpu":
+            facts = self._snapshot.fast_cpu_engine
+            return VerificationKey(
+                engine="cpu",
+                family=self.family,
+                artifact_sha256=self._artifact_sha256,
+                build_flags=tuple(facts.build_flags),
+                toolchain=facts.toolchain,
+                engine_source_digest=facts.source_digest,
+                config_digest=facts.config_digest,
+            )
+        return None
+
+    def _locally_verified(self) -> bool:
+        """Whether the planned accelerated route carries a passing check.
+
+        Read-only and quiet: a missing record, an unreadable one and one
+        taken on another combination all answer ``False``, which is the
+        label a route has when nobody has measured it here.
+        """
+        from ..verify_local import is_locally_verified
+
+        engine = {BACKEND_GPU: "gpu", BACKEND_FAST_CPU: "cpu"}.get(
+            self._plan.backend
+        )
+        if engine is None:
+            return False
+        key = self.verification_key(engine)
+        return key is not None and is_locally_verified(self._config, key)
 
     # -- encoding ------------------------------------------------------
 
@@ -785,6 +890,7 @@ class Tokenizer:
                 last_execution if isinstance(last_execution, Mapping) else None
             ),
             gpu_delivery=actual_delivery or self._gpu_delivery,
+            locally_verified=self._locally_verified(),
         )
         report["kernel_delivery"] = actual_delivery
         delivery_report = report.get("kernel_deliveries")

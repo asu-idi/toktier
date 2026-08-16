@@ -2,604 +2,926 @@
   "generated_by": "tools/generate_judged_closure.py",
   "packages": [
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "adler2",
+      "tier": "periphery",
       "version": "2.0.1"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "ahash",
+      "tier": "periphery",
       "version": "0.8.12"
     },
     {
+      "criterion": "R1",
       "name": "aho-corasick",
+      "tier": "core",
       "version": "1.1.3"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "arrayref",
+      "tier": "periphery",
       "version": "0.3.9"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "arrayvec",
+      "tier": "periphery",
       "version": "0.7.8"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "base64",
+      "tier": "periphery",
       "version": "0.13.1"
     },
     {
+      "criterion": "R1",
       "name": "base64",
+      "tier": "core",
       "version": "0.22.1"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "bitflags",
+      "tier": "periphery",
       "version": "2.13.1"
     },
     {
+      "criterion": "R1",
       "name": "blake2b_simd",
+      "tier": "core",
       "version": "1.0.3"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "block-buffer",
+      "tier": "periphery",
       "version": "0.12.1"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "bumpalo",
+      "tier": "periphery",
       "version": "3.20.3"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "bytes",
+      "tier": "periphery",
       "version": "1.12.1"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "castaway",
+      "tier": "periphery",
       "version": "0.2.4"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "cc",
+      "tier": "periphery",
       "version": "1.4.3"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "cfg-if",
+      "tier": "periphery",
       "version": "1.0.4"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "compact_str",
+      "tier": "periphery",
       "version": "0.9.1"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "console",
+      "tier": "periphery",
       "version": "0.16.4"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "const-oid",
+      "tier": "periphery",
       "version": "0.10.2"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "constant_time_eq",
+      "tier": "periphery",
       "version": "0.3.1"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "cpufeatures",
+      "tier": "periphery",
       "version": "0.3.0"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "crc32fast",
+      "tier": "periphery",
       "version": "1.5.0"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "crossbeam-deque",
+      "tier": "periphery",
       "version": "0.8.7"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "crossbeam-epoch",
+      "tier": "periphery",
       "version": "0.9.20"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "crossbeam-utils",
+      "tier": "periphery",
       "version": "0.8.22"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "crypto-common",
+      "tier": "periphery",
       "version": "0.2.2"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "darling",
+      "tier": "periphery",
       "version": "0.20.11"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "darling_core",
+      "tier": "periphery",
       "version": "0.20.11"
     },
     {
+      "criterion": "periphery:proc-macro",
       "name": "darling_macro",
+      "tier": "periphery",
       "version": "0.20.11"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "dary_heap",
+      "tier": "periphery",
       "version": "0.3.9"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "derive_builder",
+      "tier": "periphery",
       "version": "0.20.2"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "derive_builder_core",
+      "tier": "periphery",
       "version": "0.20.2"
     },
     {
+      "criterion": "periphery:proc-macro",
       "name": "derive_builder_macro",
+      "tier": "periphery",
       "version": "0.20.2"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "digest",
+      "tier": "periphery",
       "version": "0.11.3"
     },
     {
+      "criterion": "periphery:proc-macro",
       "name": "displaydoc",
+      "tier": "periphery",
       "version": "0.2.7"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "either",
+      "tier": "periphery",
       "version": "1.17.0"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "esaxx-rs",
+      "tier": "periphery",
       "version": "0.1.10"
     },
     {
+      "criterion": "R1",
       "name": "eyre",
+      "tier": "core",
       "version": "0.6.12"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "fallible-iterator",
+      "tier": "periphery",
       "version": "0.3.0"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "fallible-streaming-iterator",
+      "tier": "periphery",
       "version": "0.1.9"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "faststr",
+      "tier": "periphery",
       "version": "0.2.34"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "filetime",
+      "tier": "periphery",
       "version": "0.2.29"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "find-msvc-tools",
+      "tier": "periphery",
       "version": "0.1.11"
     },
     {
+      "criterion": "R1",
       "name": "flate2",
+      "tier": "core",
       "version": "1.1.9"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "fnv",
+      "tier": "periphery",
       "version": "1.0.7"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "foldhash",
+      "tier": "periphery",
       "version": "0.2.0"
     },
     {
+      "criterion": "periphery:lifecycle-only-direct-dependency",
       "name": "fs2",
+      "tier": "periphery",
       "version": "0.4.3"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "getrandom",
+      "tier": "periphery",
       "version": "0.3.4"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "hashbrown",
+      "tier": "periphery",
       "version": "0.16.1"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "hashlink",
+      "tier": "periphery",
       "version": "0.11.1"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "hybrid-array",
+      "tier": "periphery",
       "version": "0.4.14"
     },
     {
+      "criterion": "periphery:classified",
       "name": "icu_collections",
+      "tier": "periphery",
       "version": "2.2.0"
     },
     {
+      "criterion": "periphery:classified",
       "name": "icu_locale_core",
+      "tier": "periphery",
       "version": "2.3.0"
     },
     {
+      "criterion": "R1",
       "name": "icu_properties",
+      "tier": "core",
       "version": "2.2.0"
     },
     {
+      "behavior_source": "crate-version",
+      "behavior_unit": "icu_properties_data",
+      "behavior_version": "crate:2.2.0",
+      "criterion": "R2",
       "name": "icu_properties_data",
+      "tier": "core",
       "version": "2.2.0"
     },
     {
+      "criterion": "periphery:classified",
       "name": "icu_provider",
+      "tier": "periphery",
       "version": "2.3.0"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "ident_case",
+      "tier": "periphery",
       "version": "1.0.1"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "indenter",
+      "tier": "periphery",
       "version": "0.3.4"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "indicatif",
+      "tier": "periphery",
       "version": "0.18.6"
     },
     {
+      "criterion": "R1",
       "name": "itertools",
+      "tier": "core",
       "version": "0.14.0"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "itoa",
+      "tier": "periphery",
       "version": "1.0.18"
     },
     {
+      "criterion": "R1",
       "name": "libc",
+      "tier": "core",
       "version": "0.2.177"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "libsqlite3-sys",
+      "tier": "periphery",
       "version": "0.37.0"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "litemap",
+      "tier": "periphery",
       "version": "0.8.3"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "log",
+      "tier": "periphery",
       "version": "0.4.33"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "macro_rules_attribute",
+      "tier": "periphery",
       "version": "0.2.3"
     },
     {
+      "criterion": "periphery:proc-macro",
       "name": "macro_rules_attribute-proc_macro",
+      "tier": "periphery",
       "version": "0.2.3"
     },
     {
+      "criterion": "R1",
       "name": "memchr",
+      "tier": "core",
       "version": "2.8.3"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "minimal-lexical",
+      "tier": "periphery",
       "version": "0.2.1"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "miniz_oxide",
+      "tier": "periphery",
       "version": "0.8.9"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "monostate",
+      "tier": "periphery",
       "version": "0.1.18"
     },
     {
+      "criterion": "periphery:proc-macro",
       "name": "monostate-impl",
+      "tier": "periphery",
       "version": "0.1.18"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "nom",
+      "tier": "periphery",
       "version": "7.1.3"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "once_cell",
+      "tier": "periphery",
       "version": "1.21.4"
     },
     {
+      "behavior_source": "runtime:onig::version",
+      "behavior_unit": "onig",
+      "behavior_version": "6.9.10",
+      "criterion": "R2",
       "name": "onig",
+      "tier": "core",
       "version": "6.5.3"
     },
     {
+      "behavior_source": "runtime:onig::version",
+      "behavior_unit": "onig",
+      "behavior_version": "6.9.10",
+      "criterion": "R2",
       "name": "onig_sys",
+      "tier": "core",
       "version": "69.9.3"
     },
     {
+      "criterion": "periphery:proc-macro",
       "name": "paste",
+      "tier": "periphery",
       "version": "1.0.15"
     },
     {
+      "criterion": "periphery:proc-macro",
       "name": "pastey",
+      "tier": "periphery",
       "version": "0.2.3"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "pkg-config",
+      "tier": "periphery",
       "version": "0.3.34"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "portable-atomic",
+      "tier": "periphery",
       "version": "1.15.0"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "potential_utf",
+      "tier": "periphery",
       "version": "0.1.6"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "ppv-lite86",
+      "tier": "periphery",
       "version": "0.2.21"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "proc-macro2",
+      "tier": "periphery",
       "version": "1.0.107"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "quote",
+      "tier": "periphery",
       "version": "1.0.47"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "rand",
+      "tier": "periphery",
       "version": "0.9.5"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "rand_chacha",
+      "tier": "periphery",
       "version": "0.9.0"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "rand_core",
+      "tier": "periphery",
       "version": "0.9.5"
     },
     {
+      "criterion": "R1",
       "name": "rayon",
+      "tier": "core",
       "version": "1.11.0"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "rayon-cond",
+      "tier": "periphery",
       "version": "0.4.0"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "rayon-core",
+      "tier": "periphery",
       "version": "1.13.0"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "ref-cast",
+      "tier": "periphery",
       "version": "1.0.26"
     },
     {
+      "criterion": "periphery:proc-macro",
       "name": "ref-cast-impl",
+      "tier": "periphery",
       "version": "1.0.26"
     },
     {
+      "behavior_source": "probe:regex-age",
+      "behavior_unit": "regex",
+      "behavior_version": "16.0",
+      "criterion": "R2",
       "name": "regex",
+      "tier": "core",
       "version": "1.13.1"
     },
     {
+      "behavior_source": "probe:regex-age",
+      "behavior_unit": "regex",
+      "behavior_version": "16.0",
+      "criterion": "R2",
       "name": "regex-automata",
+      "tier": "core",
       "version": "0.4.18"
     },
     {
+      "behavior_source": "probe:regex-age",
+      "behavior_unit": "regex",
+      "behavior_version": "16.0",
+      "criterion": "R2",
       "name": "regex-syntax",
+      "tier": "core",
       "version": "0.8.11"
     },
     {
+      "criterion": "R1",
       "name": "rusqlite",
+      "tier": "core",
       "version": "0.39.0"
     },
     {
+      "criterion": "R1",
       "name": "rustc-hash",
+      "tier": "core",
       "version": "2.1.1"
     },
     {
+      "criterion": "periphery:proc-macro",
       "name": "rustversion",
+      "tier": "periphery",
       "version": "1.0.23"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "ryu",
+      "tier": "periphery",
       "version": "1.0.23"
     },
     {
+      "criterion": "R1",
       "name": "serde",
+      "tier": "core",
       "version": "1.0.228"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "serde_core",
+      "tier": "periphery",
       "version": "1.0.228"
     },
     {
+      "criterion": "periphery:proc-macro",
       "name": "serde_derive",
+      "tier": "periphery",
       "version": "1.0.228"
     },
     {
+      "criterion": "R1",
       "name": "serde_json",
+      "tier": "core",
       "version": "1.0.151"
     },
     {
+      "criterion": "R1",
       "name": "sha2",
+      "tier": "core",
       "version": "0.11.0"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "shlex",
+      "tier": "periphery",
       "version": "2.0.1"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "simd-adler32",
+      "tier": "periphery",
       "version": "0.3.10"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "simdutf8",
+      "tier": "periphery",
       "version": "0.1.5"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "smallvec",
+      "tier": "periphery",
       "version": "1.15.2"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "sonic-number",
+      "tier": "periphery",
       "version": "0.1.2"
     },
     {
+      "criterion": "R1",
       "name": "sonic-rs",
+      "tier": "core",
       "version": "0.5.8"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "sonic-simd",
+      "tier": "periphery",
       "version": "0.1.4"
     },
     {
+      "criterion": "R1",
       "name": "spm_precompiled",
+      "tier": "core",
       "version": "0.1.4"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "stable_deref_trait",
+      "tier": "periphery",
       "version": "1.2.1"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "static_assertions",
+      "tier": "periphery",
       "version": "1.1.0"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "strsim",
+      "tier": "periphery",
       "version": "0.11.1"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "syn",
+      "tier": "periphery",
       "version": "2.0.119"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "syn",
+      "tier": "periphery",
       "version": "3.0.3"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "synstructure",
+      "tier": "periphery",
       "version": "0.13.2"
     },
     {
+      "criterion": "periphery:lifecycle-only-direct-dependency",
       "name": "tar",
+      "tier": "periphery",
       "version": "0.4.46"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "thiserror",
+      "tier": "periphery",
       "version": "2.0.20"
     },
     {
+      "criterion": "periphery:proc-macro",
       "name": "thiserror-impl",
+      "tier": "periphery",
       "version": "2.0.20"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "tinystr",
+      "tier": "periphery",
       "version": "0.8.4"
     },
     {
+      "criterion": "R1",
       "name": "tokenizers",
+      "tier": "core",
       "version": "0.22.2"
     },
     {
+      "criterion": "R0",
       "name": "toktier",
+      "tier": "core",
       "version": "0.2.6"
     },
     {
+      "criterion": "R0",
       "name": "toktier-cuda-driver",
+      "tier": "core",
       "version": "0.2.6"
     },
     {
+      "criterion": "R0",
       "name": "toktier-gigatoken-core",
+      "tier": "core",
       "version": "0.2.6"
     },
     {
+      "criterion": "R0",
       "name": "toktier-routing-core",
+      "tier": "core",
       "version": "0.2.6"
     },
     {
+      "criterion": "R0",
       "name": "toktier-store-core",
+      "tier": "core",
       "version": "0.2.6"
     },
     {
+      "criterion": "R0",
       "name": "toktier-store-sqlite",
+      "tier": "core",
       "version": "0.2.6"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "typenum",
+      "tier": "periphery",
       "version": "1.20.1"
     },
     {
+      "criterion": "periphery:classified",
       "name": "unicode-ident",
+      "tier": "periphery",
       "version": "1.0.24"
     },
     {
+      "criterion": "R1",
       "name": "unicode-normalization-alignments",
+      "tier": "core",
       "version": "0.1.12"
     },
     {
+      "behavior_source": "const:UNICODE_VERSION",
+      "behavior_unit": "unicode-segmentation",
+      "behavior_version": "17.0.0",
+      "criterion": "R2",
       "name": "unicode-segmentation",
+      "tier": "core",
       "version": "1.13.3"
     },
     {
+      "criterion": "periphery:classified",
       "name": "unicode-width",
+      "tier": "periphery",
       "version": "0.2.2"
     },
     {
+      "behavior_source": "crate-version",
+      "behavior_unit": "unicode_categories",
+      "behavior_version": "crate:0.1.1",
+      "criterion": "R2",
       "name": "unicode_categories",
+      "tier": "core",
       "version": "0.1.1"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "unit-prefix",
+      "tier": "periphery",
       "version": "0.5.2"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "utf8_iter",
+      "tier": "periphery",
       "version": "1.0.4"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "vcpkg",
+      "tier": "periphery",
       "version": "0.2.15"
     },
     {
+      "criterion": "periphery:not-reachable-from-an-engine-crate",
       "name": "version_check",
+      "tier": "periphery",
       "version": "0.9.5"
     },
     {
+      "criterion": "R1",
       "name": "winnow",
+      "tier": "core",
       "version": "1.0.4"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "writeable",
+      "tier": "periphery",
       "version": "0.6.4"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "yoke",
+      "tier": "periphery",
       "version": "0.8.3"
     },
     {
+      "criterion": "periphery:proc-macro",
       "name": "yoke-derive",
+      "tier": "periphery",
       "version": "0.8.2"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "zerocopy",
+      "tier": "periphery",
       "version": "0.8.56"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "zerofrom",
+      "tier": "periphery",
       "version": "0.1.8"
     },
     {
+      "criterion": "periphery:proc-macro",
       "name": "zerofrom-derive",
+      "tier": "periphery",
       "version": "0.1.7"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "zerotrie",
+      "tier": "periphery",
       "version": "0.2.5"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "zerovec",
+      "tier": "periphery",
       "version": "0.11.7"
     },
     {
+      "criterion": "periphery:proc-macro",
       "name": "zerovec-derive",
+      "tier": "periphery",
       "version": "0.11.4"
     },
     {
+      "criterion": "periphery:reachable-not-text-semantics",
       "name": "zmij",
+      "tier": "periphery",
       "version": "1.0.23"
     }
   ],
   "root": "toktier",
-  "schema": "toktier.rust_compiled_closure.v1",
+  "schema": "toktier.rust_compiled_closure.v2",
   "selections": [
     {
       "features": "default,prebuilt-gpu,serving,sqlite",
@@ -609,5 +931,98 @@
       "features": "default,jit,prebuilt-gpu,serving,sqlite",
       "target": "x86_64-unknown-linux-gnu"
     }
-  ]
+  ],
+  "tier_rule": {
+    "behavior_sources": {
+      "icu_properties_data": "crate-version",
+      "onig": "runtime:onig::version",
+      "regex": "probe:regex-age",
+      "unicode-segmentation": "const:UNICODE_VERSION",
+      "unicode_categories": "crate-version"
+    },
+    "behavior_units": {
+      "icu_properties_data": "icu_properties_data",
+      "onig": "onig",
+      "onig_sys": "onig",
+      "regex": "regex",
+      "regex-automata": "regex",
+      "regex-syntax": "regex",
+      "unicode-segmentation": "unicode-segmentation",
+      "unicode_categories": "unicode_categories"
+    },
+    "compiled_set_command": "cargo tree --locked --offline --package toktier --edges normal,build --target <target> --prefix none --format {p} [--features <features>]",
+    "encode_path_exclusions": [
+      "crates/toktier/src/artifact.rs",
+      "crates/toktier/src/bundle.rs",
+      "crates/toktier/src/diagnostics.rs",
+      "crates/toktier/src/error.rs",
+      "crates/toktier/src/fsutil.rs",
+      "crates/toktier/src/package_data.rs",
+      "crates/toktier/src/serving.rs",
+      "crates/toktier/src/suggest.rs",
+      "crates/toktier/src/bin/"
+    ],
+    "engine_crates": [
+      "toktier-gigatoken-core",
+      "toktier-routing-core",
+      "toktier-cuda-driver"
+    ],
+    "graph_command": "cargo metadata --format-version 1 --locked --offline --filter-platform <target> [--features <features>]",
+    "name_net": "^(regex|fancy-regex|onig|pcre|unicode[-_]|icu_|ucd|spm_|.*normaliz|.*segment|.*graphem|tokenizers)",
+    "statement": "The certified core is R0 the workspace members, R1 their non-development direct dependencies that encode-path sources name, and R2 the text-semantics libraries reachable from an engine crate through normal edges. Everything else this build compiles is periphery: it is compared and reported, and it does not decide certification. R0 and R1 are pinned exactly by our own edges, so they cannot move by version; R2 is compared by behaviour version, and its package versions are reported in the advisory.",
+    "text_semantics_table": {
+      "icu_collections": {
+        "reason": "code point set and trie containers; they carry no Unicode knowledge of their own",
+        "tier": "periphery"
+      },
+      "icu_locale_core": {
+        "reason": "locale identifier plumbing for the compiled-data provider",
+        "tier": "periphery"
+      },
+      "icu_properties_data": {
+        "reason": "the Unicode property tables behind icu_properties, which are the fast CPU pre-tokenizer's character classes",
+        "tier": "core"
+      },
+      "icu_provider": {
+        "reason": "data provider plumbing for the compiled-data provider",
+        "tier": "periphery"
+      },
+      "onig": {
+        "reason": "the Oniguruma binding the reference engine uses for every byte-level BPE family's split pattern",
+        "tier": "core"
+      },
+      "onig_sys": {
+        "reason": "the Oniguruma C library behind onig; its built-in Unicode tables define the classes those patterns name",
+        "tier": "core"
+      },
+      "regex": {
+        "reason": "the regex crate the reference engine uses for added-token boundaries and whitespace stripping; its Unicode class semantics decide where those splits fall",
+        "tier": "core"
+      },
+      "regex-automata": {
+        "reason": "the engine behind regex",
+        "tier": "core"
+      },
+      "regex-syntax": {
+        "reason": "the parser and Unicode class tables behind regex",
+        "tier": "core"
+      },
+      "unicode-ident": {
+        "reason": "the identifier tables proc-macro2 reads while macros expand; not linked into the running artifact",
+        "tier": "periphery"
+      },
+      "unicode-segmentation": {
+        "reason": "grapheme and word segmentation in the reference engine's BERT pre-tokenizer, strip normalizer and normalizer core; the algorithm moves with the Unicode version",
+        "tier": "core"
+      },
+      "unicode-width": {
+        "reason": "display width for the progress bars of indicatif and console; not on the encode path",
+        "tier": "periphery"
+      },
+      "unicode_categories": {
+        "reason": "general-category tests in the reference engine's punctuation pre-tokenizer and BERT normalizer",
+        "tier": "core"
+      }
+    }
+  }
 }

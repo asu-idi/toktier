@@ -7,16 +7,22 @@ use sha2::{Digest, Sha256};
 
 // Single definition of the certification path sets, shared with
 // crates/toktier-py/build.rs and cross-checked against the tools-side
-// table by tools/generate_registry.py --check.
+// table by tools/generate_registry.py --check. Three includers use
+// different parts of it -- this script asks for every answer at once,
+// the sibling script asks only for two digests, and the crate's test
+// build asks for the comparison one subset at a time -- so each include
+// carries the allowance rather than the module dropping helpers that
+// another includer needs.
 #[path = "build_support/source_identity.rs"]
+#[allow(dead_code)]
 mod source_identity;
 
 use source_identity::{
-    dependency_closure_status, fast_cpu_source_paths, hex, identity_sentinel_enabled,
-    locate_governing_lock, native_host_source_paths, rust_api_source_paths, source_digest,
-    Consumption, GoverningLock, JudgedPackage, CARGO_LOCK_ENV, FAST_CPU_DOMAIN,
-    IDENTITY_SENTINEL_ENV, IDENTITY_SENTINEL_HEX, JUDGED_CLOSURE_RELATIVE, JUDGED_CLOSURE_SCHEMA,
-    JUDGED_LOCK_RELATIVE, NATIVE_HOST_DOMAIN, RUST_API_DOMAIN,
+    closure_statuses, fast_cpu_source_paths, hex, identity_sentinel_enabled, locate_governing_lock,
+    native_host_source_paths, rust_api_source_paths, source_digest, Consumption, GoverningLock,
+    JudgedPackage, Tier, CARGO_LOCK_ENV, FAST_CPU_DOMAIN, IDENTITY_SENTINEL_ENV,
+    IDENTITY_SENTINEL_HEX, JUDGED_CLOSURE_RELATIVE, JUDGED_CLOSURE_SCHEMA, JUDGED_LOCK_RELATIVE,
+    NATIVE_HOST_DOMAIN, RUST_API_DOMAIN,
 };
 
 const PACKAGE_IDENTITY_SCHEMA: &str = "toktier.rust_package_source_identity.v1";
@@ -28,6 +34,10 @@ const PACKAGE_IDENTITY_SCHEMA: &str = "toktier.rust_package_source_identity.v1";
 /// missing, truncated, or malformed record means this build cannot be
 /// compared with the judged one, which is a reason to withhold
 /// certification -- not a reason to stop a build that is otherwise fine.
+///
+/// An entry that names no tier, or one this reader does not know, is
+/// read as part of the certified core: a package this reader cannot
+/// place decides the certificate rather than being reported next to it.
 fn read_judged_closure(path: &Path) -> Result<Vec<JudgedPackage>, String> {
     let bytes = fs::read(path)
         .map_err(|error| format!("the judged compiled closure is unreadable: {error}"))?;
@@ -51,7 +61,14 @@ fn read_judged_closure(path: &Path) -> Result<Vec<JudgedPackage>, String> {
                     .map(str::to_owned)
             };
             match (field("name"), field("version")) {
-                (Some(name), Some(version)) => Ok(JudgedPackage { name, version }),
+                (Some(name), Some(version)) => Ok(JudgedPackage {
+                    name,
+                    version,
+                    tier: Tier::from_record(field("tier").as_deref()),
+                    behavior_unit: field("behavior_unit"),
+                    behavior_version: field("behavior_version"),
+                    behavior_source: field("behavior_source"),
+                }),
                 _ => Err("the judged compiled closure has an unreadable entry".to_owned()),
             }
         })
@@ -139,8 +156,34 @@ fn main() {
     if let GoverningLock::Found(path) | GoverningLock::JudgedRecordNamed(path) = &governing {
         println!("cargo:rerun-if-changed={}", path.display());
     }
-    let closure_status = dependency_closure_status(&judged_lock, &judged_closure, &governing);
-    println!("cargo:rustc-env=TOKTIER_RUST_API_DEPENDENCY_CLOSURE={closure_status}");
+    // One reading of the two lockfiles, reported four ways: the whole
+    // closure as before; the certified core, which is what decides
+    // certification; the core packages whose behaviour version the
+    // running binary reads for itself, which the build script can only
+    // report the package move of; and everything outside the core, which
+    // travels as an advisory. The judged behaviour versions travel with
+    // them so the runtime has both sides of that comparison.
+    let statuses = closure_statuses(&judged_lock, &judged_closure, &governing);
+    println!(
+        "cargo:rustc-env=TOKTIER_RUST_API_DEPENDENCY_CLOSURE={}",
+        statuses.strict
+    );
+    println!(
+        "cargo:rustc-env=TOKTIER_RUST_API_CORE_CLOSURE_STATIC={}",
+        statuses.core_static
+    );
+    println!(
+        "cargo:rustc-env=TOKTIER_RUST_API_R2_DRIFT={}",
+        statuses.r2_drift
+    );
+    println!(
+        "cargo:rustc-env=TOKTIER_RUST_API_DEPENDENCY_ADVISORY={}",
+        statuses.advisory
+    );
+    println!(
+        "cargo:rustc-env=TOKTIER_RUST_API_JUDGED_BEHAVIOR={}",
+        statuses.judged_behavior
+    );
 
     println!("cargo:rerun-if-env-changed={IDENTITY_SENTINEL_ENV}");
     let (rust_api_source, fast_cpu_source, native_host_source) = if identity_sentinel_enabled() {

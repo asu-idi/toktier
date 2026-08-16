@@ -42,8 +42,12 @@ pub fn identity_sentinel_enabled() -> bool {
 // recorded digests instead, and would otherwise say nothing at all
 // about how Cargo resolved this build's transitive versions. The
 // helpers below let the build script compare the graph that governs
-// this build against the graph that was judged, and report the answer;
-// `Registry::rust_api_build_certified` requires `verified`.
+// this build against the graph that was judged, and report the answer.
+// Since 0.2.6 the answer is reported in two places: the whole-closure
+// reading, and the same comparison restricted to the certified core.
+// `Registry::rust_api_build_certified` requires the second one to read
+// `verified`; the first is reported and, for the periphery, carried as
+// an advisory.
 
 /// Explicit pointer to the lockfile that governs this build, for
 /// layouts where it cannot be found by walking up from `OUT_DIR`.
@@ -58,7 +62,7 @@ pub const JUDGED_LOCK_RELATIVE: &str = "data/build/judged_dependencies.lock";
 pub const JUDGED_CLOSURE_RELATIVE: &str = "data/build/judged_compiled_closure.json";
 
 /// The schema tag the judged compiled closure must carry.
-pub const JUDGED_CLOSURE_SCHEMA: &str = "toktier.rust_compiled_closure.v1";
+pub const JUDGED_CLOSURE_SCHEMA: &str = "toktier.rust_compiled_closure.v2";
 
 /// The package whose transitive closure is compared.
 pub const CLOSURE_ROOT: &str = "toktier";
@@ -221,21 +225,92 @@ pub fn closure<'a>(packages: &'a [LockPackage], root: &str) -> Vec<&'a LockPacka
     seen
 }
 
+/// Which side of the certificate a package sits on.
+///
+/// `Core` is the default for anything a record does not classify: a
+/// record this reader cannot place is treated as deciding the
+/// certificate rather than as reportable, which is the fail-closed
+/// direction.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Tier {
+    /// TokTier's own crates, the packages they call directly, and the
+    /// text-semantics libraries beneath them.
+    Core,
+    /// Everything else the judged build compiled.
+    Periphery,
+}
+
+impl Tier {
+    /// The tier a record names, or `Core` when it names none this reader
+    /// knows.
+    pub fn from_record(value: Option<&str>) -> Self {
+        match value {
+            Some("periphery") => Self::Periphery,
+            _ => Self::Core,
+        }
+    }
+}
+
 /// One package the judged build compiled.
 ///
-/// Names and versions only: the content hash and origin of each one come
-/// from the judged lockfile, so the two records cannot hold different
-/// opinions about the same package.
+/// Names, versions and tiers: the content hash and origin of each one
+/// come from the judged lockfile, so the two records cannot hold
+/// different opinions about the same package.
+///
+/// A core package can also name the behaviour unit it belongs to -- the
+/// Unicode tables a regex engine carries, the Oniguruma library a
+/// binding links -- together with the version of that unit the evidence
+/// was taken on and where it is read. Those are the packages whose
+/// correct behaviour is defined by an evolving external standard, so
+/// their package version moving is not by itself a change of behaviour.
+/// The comparison of the unit itself happens at run time, in the binary
+/// that links it; a package with no readable unit is compared exactly
+/// here, which is the strict direction.
 pub struct JudgedPackage {
     pub name: String,
     pub version: String,
+    pub tier: Tier,
+    pub behavior_unit: Option<String>,
+    pub behavior_version: Option<String>,
+    pub behavior_source: Option<String>,
 }
+
+impl JudgedPackage {
+    /// Whether the version of this package's behaviour unit is one a
+    /// running binary can read for itself.
+    ///
+    /// Everything else -- including a core package whose record names no
+    /// unit, and one whose record is incomplete -- is compared exactly by
+    /// the build script.
+    pub fn behavior_is_probed(&self) -> bool {
+        self.tier == Tier::Core
+            && self.behavior_unit.is_some()
+            && self.behavior_version.is_some()
+            && self
+                .behavior_source
+                .as_deref()
+                .is_some_and(|source| source != CRATE_VERSION_BEHAVIOR_SOURCE)
+    }
+}
+
+/// The behaviour source a record names for a unit whose version is its
+/// package version. Such a unit is compared exactly by the build script,
+/// so no probe runs for it.
+pub const CRATE_VERSION_BEHAVIOR_SOURCE: &str = "crate-version";
+
+/// Separators for the one-line values the build script hands the runtime
+/// through `cargo:rustc-env`. Both are ASCII separators, so neither can
+/// appear in a package name, a version, or a rendered report.
+pub const FIELD_SEPARATOR: char = '\u{1f}';
+pub const RECORD_SEPARATOR: char = '\u{1e}';
 
 /// One package the judged build compiled that this build does not.
 ///
 /// Carried far enough to say what to do about it: which versions of the
-/// same package this build reaches, and whether the disagreement is about
-/// the version at all.
+/// same package this build reaches, whether the disagreement is about
+/// the version at all, and which side of the certificate the package
+/// sits on.
+#[derive(Clone)]
 pub struct Divergence {
     pub name: String,
     /// The version the certified build compiled.
@@ -249,6 +324,42 @@ pub struct Divergence {
     /// True when this build's graph holds more than one version of the
     /// package, so a Cargo package spec has to name the version too.
     pub ambiguous_spec: bool,
+    /// Which side of the certificate the judged record puts this package
+    /// on.
+    pub tier: Tier,
+    /// The behaviour unit this package belongs to, when the record names
+    /// one whose version a running binary can read.
+    pub behavior_unit: Option<String>,
+}
+
+impl Divergence {
+    /// Whether this disagreement is about the version at all.
+    ///
+    /// A package that resolves from somewhere else, or that this build
+    /// does not resolve, is not a version that moved: no probe of the
+    /// behaviour it carries can speak for a copy that is not the judged
+    /// one, so these stay with the exact comparison.
+    fn is_version_move(&self) -> bool {
+        !self.other_copy && !self.found_versions.is_empty()
+    }
+
+    /// The unit whose behaviour version answers for this package, when
+    /// this is a version move of a package that names one.
+    fn probed_unit(&self) -> Option<&str> {
+        self.is_version_move()
+            .then_some(self.behavior_unit.as_deref())
+            .flatten()
+    }
+
+    /// Both sides of a version move, for the advisory.
+    fn version_move(&self) -> String {
+        format!(
+            "{} {} -> {}",
+            self.name,
+            self.judged_version,
+            self.found_versions.join(", ")
+        )
+    }
 }
 
 /// Cargo's compatibility range for a version: the leading non-zero
@@ -450,6 +561,11 @@ pub fn closure_divergences<'a>(
                 .collect(),
             other_copy: exact.is_some() && !same_copy,
             ambiguous_spec: same_name.len() > 1,
+            tier: judged.tier,
+            behavior_unit: judged
+                .behavior_is_probed()
+                .then(|| judged.behavior_unit.clone())
+                .flatten(),
         });
         diverging_packages.push(competitor.or(exact));
     }
@@ -530,6 +646,52 @@ pub fn render_divergences(divergences: &[Divergence]) -> String {
             commands.join(" && ")
         ));
     }
+    report.push_str(&render_tail(divergences));
+    report
+}
+
+/// The same packages, said as an advisory rather than as a refusal.
+///
+/// The list and the commands are the ones the whole-closure report
+/// carries; what changes is the frame around them. These packages are
+/// outside the certified core, so the sentence says where they are, that
+/// they are reported rather than gating, and how to align them anyway --
+/// without calling them harmless, which is not what is being claimed.
+pub fn render_advisory(divergences: &[Divergence]) -> String {
+    let mut report = match divergences {
+        [single] => format!(
+            "one package outside the certified core is not the judged one; it is reported here \
+             and does not enter the certificate: {}",
+            single.summary()
+        ),
+        many => format!(
+            "{} packages outside the certified core are not the judged ones; they are reported \
+             here and do not enter the certificate: {}",
+            many.len(),
+            many.iter()
+                .map(Divergence::summary)
+                .collect::<Vec<_>>()
+                .join("; ")
+        ),
+    };
+    let commands = divergences
+        .iter()
+        .filter_map(Divergence::alignment_command)
+        .collect::<Vec<_>>();
+    if !commands.is_empty() {
+        report.push_str(&format!(
+            ". To align them anyway, run in the workspace that owns the governing lockfile: {}",
+            commands.join(" && ")
+        ));
+    }
+    report.push_str(&render_tail(divergences));
+    report
+}
+
+/// The clauses both reports end with: what a version change cannot
+/// align, and what this build compiles that the judged one did not.
+fn render_tail(divergences: &[Divergence]) -> String {
+    let mut report = String::new();
     let by_copy = divergences
         .iter()
         .filter(|divergence| divergence.other_copy)
@@ -702,9 +864,10 @@ pub fn unlocated_status() -> String {
          graph could not be compared and this build is not certified. The judged graph travels \
          with the crate as {JUDGED_LOCK_RELATIVE}, and the packages the judged build actually \
          compiled as {JUDGED_CLOSURE_RELATIVE}; both can be read there. Building from a \
-         workspace whose own Cargo.lock resolves those versions is what earns `verified`; \
-         {CARGO_LOCK_ENV} names the governing lockfile for layouts where walking up from OUT_DIR \
-         does not reach it, and is compared as given"
+         workspace whose own Cargo.lock resolves those versions is what earns `verified`, for the \
+         certified core and for the whole closure alike; {CARGO_LOCK_ENV} names the governing \
+         lockfile for layouts where walking up from OUT_DIR does not reach it, and is compared \
+         as given"
     )
 }
 
@@ -727,9 +890,78 @@ pub fn judged_record_named_status(named: &Path) -> String {
     )
 }
 
+/// What one comparison of this build against the judged one produced.
+///
+/// Kept apart from the sentences it turns into, because the same reading
+/// answers several questions: the whole closure, the certified core, the
+/// packages whose behaviour the runtime probes for itself, and the
+/// advisory for everything else.
+enum Comparison {
+    /// The comparison could not be made and the reason is a mismatch.
+    Refused(String),
+    /// No lockfile that governs this build could be named.
+    Unlocated(String),
+    /// The comparison ran; these packages disagree.
+    Compared(Vec<Divergence>),
+}
+
+fn compare_for_status(
+    judged_lock: &Path,
+    judged_closure: &Result<Vec<JudgedPackage>, String>,
+    governing: &GoverningLock,
+) -> Comparison {
+    let judged_closure = match judged_closure {
+        Ok(packages) => packages,
+        Err(reason) => return Comparison::Refused(reason.clone()),
+    };
+    let governing = match governing {
+        GoverningLock::Found(path) => path,
+        GoverningLock::JudgedRecordNamed(path) => {
+            return Comparison::Unlocated(judged_record_named_status(path))
+        }
+        GoverningLock::Missing => return Comparison::Unlocated(unlocated_status()),
+    };
+    let judged = match fs::read_to_string(judged_lock) {
+        Ok(text) => match check_lock_format("the judged lockfile", &text) {
+            Ok(()) => parse_lock(&text),
+            Err(reason) => return Comparison::Refused(reason),
+        },
+        Err(error) => {
+            return Comparison::Refused(format!("judged lockfile is unreadable: {error}"))
+        }
+    };
+    let found = match fs::read_to_string(governing) {
+        Ok(text) => match check_lock_format("the governing lockfile", &text) {
+            Ok(()) => parse_lock(&text),
+            Err(reason) => return Comparison::Refused(reason),
+        },
+        Err(error) => {
+            return Comparison::Refused(format!("governing lockfile is unreadable: {error}"))
+        }
+    };
+    match closure_divergences(&judged, judged_closure, &found) {
+        Ok(divergences) => Comparison::Compared(divergences),
+        Err(reason) => Comparison::Refused(reason),
+    }
+}
+
+/// The three-way answer for one subset of the comparison.
+fn status_for(comparison: &Comparison, selected: Vec<&Divergence>) -> String {
+    match comparison {
+        Comparison::Refused(reason) => format!("mismatched: {reason}"),
+        Comparison::Unlocated(reason) => reason.clone(),
+        Comparison::Compared(_) if selected.is_empty() => "verified".to_owned(),
+        Comparison::Compared(_) => format!("mismatched: {}", render_selected(&selected)),
+    }
+}
+
 /// One line naming how this build's resolved graph compares with the
 /// judged one: `verified`, `unlocated: <guidance>`, or
 /// `mismatched: <what differs, and what aligns it>`.
+///
+/// This is the whole-closure reading, unchanged in name, type and shape
+/// since 0.2.4. Since 0.2.6 it is reported rather than gating;
+/// [`ClosureStatuses::core_static`] is the reading the certificate uses.
 ///
 /// Every way of not knowing is a `mismatched` or `unlocated` line, never
 /// a `verified` one and never a panic: an unreadable record is a reason
@@ -739,32 +971,156 @@ pub fn dependency_closure_status(
     judged_closure: &Result<Vec<JudgedPackage>, String>,
     governing: &GoverningLock,
 ) -> String {
-    let judged_closure = match judged_closure {
-        Ok(packages) => packages,
-        Err(reason) => return format!("mismatched: {reason}"),
+    let comparison = compare_for_status(judged_lock, judged_closure, governing);
+    let selected = match &comparison {
+        Comparison::Compared(divergences) => divergences.iter().collect(),
+        _ => Vec::new(),
     };
-    let governing = match governing {
-        GoverningLock::Found(path) => path,
-        GoverningLock::JudgedRecordNamed(path) => return judged_record_named_status(path),
-        GoverningLock::Missing => return unlocated_status(),
+    status_for(&comparison, selected)
+}
+
+/// Every answer the build script hands the compiled crate, taken from
+/// one reading of the two lockfiles.
+pub struct ClosureStatuses {
+    /// The whole compiled closure, in the shape 0.2.4 introduced.
+    pub strict: String,
+    /// The same comparison restricted to the packages the certificate
+    /// speaks for, less those whose behaviour version the running binary
+    /// reads for itself.
+    pub core_static: String,
+    /// The core packages whose package version moved and whose behaviour
+    /// version the running binary reads: one `unit<RS>report` record per
+    /// unit, separated by `FIELD_SEPARATOR`. Empty when none moved.
+    pub r2_drift: String,
+    /// The packages outside the certified core that differ, as a report
+    /// with the commands that align them. Empty when none differ.
+    pub advisory: String,
+    /// The behaviour version the evidence was taken on, per unit:
+    /// `unit<RS>version<RS>source` records separated by
+    /// `FIELD_SEPARATOR`.
+    pub judged_behavior: String,
+}
+
+/// Which behaviour units the record describes consistently.
+///
+/// A unit two records disagree about is left out, which puts every
+/// package of it back on the exact comparison.
+fn probed_units(judged_closure: &[JudgedPackage]) -> Vec<(String, String, String)> {
+    let mut units: Vec<(String, String, String)> = Vec::new();
+    let mut poisoned: Vec<String> = Vec::new();
+    for package in judged_closure {
+        if !package.behavior_is_probed() {
+            continue;
+        }
+        let unit = package.behavior_unit.clone().expect("a probed unit");
+        let version = package.behavior_version.clone().expect("a probed version");
+        let source = package.behavior_source.clone().expect("a probed source");
+        match units.iter().find(|(name, _, _)| *name == unit) {
+            Some((_, recorded, recorded_source))
+                if recorded == &version && recorded_source == &source => {}
+            Some(_) => {
+                if !poisoned.contains(&unit) {
+                    poisoned.push(unit);
+                }
+            }
+            None => units.push((unit, version, source)),
+        }
+    }
+    units.retain(|(name, _, _)| !poisoned.contains(name));
+    units.sort();
+    units
+}
+
+/// Whether a divergence is one the runtime's own probe answers for.
+fn is_probed_move(divergence: &Divergence, units: &[(String, String, String)]) -> bool {
+    divergence
+        .probed_unit()
+        .is_some_and(|unit| units.iter().any(|(name, _, _)| name == unit))
+}
+
+/// The divergences of one subset, rendered with their commands.
+fn render_selected(selected: &[&Divergence]) -> String {
+    let owned = selected
+        .iter()
+        .map(|divergence| (*divergence).clone())
+        .collect::<Vec<_>>();
+    render_divergences(&owned)
+}
+
+/// Every answer the build script emits, from one comparison.
+pub fn closure_statuses(
+    judged_lock: &Path,
+    judged_closure: &Result<Vec<JudgedPackage>, String>,
+    governing: &GoverningLock,
+) -> ClosureStatuses {
+    let comparison = compare_for_status(judged_lock, judged_closure, governing);
+    let units = match judged_closure {
+        Ok(packages) => probed_units(packages),
+        Err(_) => Vec::new(),
     };
-    let judged = match fs::read_to_string(judged_lock) {
-        Ok(text) => match check_lock_format("the judged lockfile", &text) {
-            Ok(()) => parse_lock(&text),
-            Err(reason) => return format!("mismatched: {reason}"),
-        },
-        Err(error) => return format!("mismatched: judged lockfile is unreadable: {error}"),
+    let judged_behavior = units
+        .iter()
+        .map(|(unit, version, source)| {
+            format!("{unit}{RECORD_SEPARATOR}{version}{RECORD_SEPARATOR}{source}")
+        })
+        .collect::<Vec<_>>()
+        .join(&FIELD_SEPARATOR.to_string());
+    let empty: Vec<Divergence> = Vec::new();
+    let divergences = match &comparison {
+        Comparison::Compared(divergences) => divergences.as_slice(),
+        _ => empty.as_slice(),
     };
-    let found = match fs::read_to_string(governing) {
-        Ok(text) => match check_lock_format("the governing lockfile", &text) {
-            Ok(()) => parse_lock(&text),
-            Err(reason) => return format!("mismatched: {reason}"),
-        },
-        Err(error) => return format!("mismatched: governing lockfile is unreadable: {error}"),
+    let strict = status_for(&comparison, divergences.iter().collect());
+    let core_static = status_for(
+        &comparison,
+        divergences
+            .iter()
+            .filter(|divergence| {
+                divergence.tier == Tier::Core && !is_probed_move(divergence, &units)
+            })
+            .collect(),
+    );
+    let mut drift = Vec::new();
+    for (unit, _, _) in &units {
+        let moved = divergences
+            .iter()
+            .filter(|divergence| {
+                is_probed_move(divergence, &units)
+                    && divergence.probed_unit() == Some(unit.as_str())
+            })
+            .map(Divergence::version_move)
+            .collect::<Vec<_>>();
+        if !moved.is_empty() {
+            drift.push(format!("{unit}{RECORD_SEPARATOR}{}", moved.join("; ")));
+        }
+    }
+    let advisory = match &comparison {
+        Comparison::Compared(_) => {
+            let outside = divergences
+                .iter()
+                .filter(|divergence| divergence.tier == Tier::Periphery)
+                .collect::<Vec<_>>();
+            if outside.is_empty() {
+                String::new()
+            } else {
+                render_advisory(
+                    &outside
+                        .iter()
+                        .map(|divergence| (*divergence).clone())
+                        .collect::<Vec<_>>(),
+                )
+            }
+        }
+        // A build that could not be compared has nothing to advise
+        // about: the core answer already says so.
+        _ => String::new(),
     };
-    match compare_closures(&judged, judged_closure, &found) {
-        Ok(()) => "verified".to_owned(),
-        Err(reason) => format!("mismatched: {reason}"),
+    ClosureStatuses {
+        strict,
+        core_static,
+        r2_drift: drift.join(&FIELD_SEPARATOR.to_string()),
+        advisory,
+        judged_behavior,
     }
 }
 
@@ -898,10 +1254,10 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        check_lock_format, closure, compare_closures, dependency_closure_status,
-        locate_governing_lock_from, lock_format_version, parse_lock, Consumption, GoverningLock,
-        JudgedPackage, CARGO_LOCK_ENV, JUDGED_CLOSURE_RELATIVE, JUDGED_LOCK_RELATIVE,
-        SUPPORTED_LOCK_VERSIONS,
+        check_lock_format, closure, closure_statuses, compare_closures, dependency_closure_status,
+        locate_governing_lock_from, lock_format_version, parse_lock, ClosureStatuses, Consumption,
+        GoverningLock, JudgedPackage, Tier, CARGO_LOCK_ENV, CRATE_VERSION_BEHAVIOR_SOURCE,
+        JUDGED_CLOSURE_RELATIVE, JUDGED_LOCK_RELATIVE, RECORD_SEPARATOR, SUPPORTED_LOCK_VERSIONS,
     };
 
     const JUDGED: &str = r#"
@@ -1002,11 +1358,59 @@ checksum = "ffff"
             ("toktier-routing-core", "0.2.4"),
         ]
         .into_iter()
-        .map(|(name, version)| JudgedPackage {
+        .map(|(name, version)| core_package(name, version))
+        .collect()
+    }
+
+    /// One judged package of the certified core, with no behaviour unit
+    /// of its own: the shape of an R0 or R1 entry.
+    fn core_package(name: &str, version: &str) -> JudgedPackage {
+        JudgedPackage {
             name: name.to_owned(),
             version: version.to_owned(),
-        })
-        .collect()
+            tier: Tier::Core,
+            behavior_unit: None,
+            behavior_version: None,
+            behavior_source: None,
+        }
+    }
+
+    /// The same package outside the certified core.
+    fn periphery_package(name: &str, version: &str) -> JudgedPackage {
+        JudgedPackage {
+            tier: Tier::Periphery,
+            ..core_package(name, version)
+        }
+    }
+
+    /// A core package whose behaviour version a running binary reads.
+    fn probed_package(name: &str, version: &str, unit: &str) -> JudgedPackage {
+        JudgedPackage {
+            behavior_unit: Some(unit.to_owned()),
+            behavior_version: Some("16.0".to_owned()),
+            behavior_source: Some("probe:regex-age".to_owned()),
+            ..core_package(name, version)
+        }
+    }
+
+    fn statuses(judged_closure: Vec<JudgedPackage>, found: &str) -> ClosureStatuses {
+        let temporary = tempfile::tempdir().unwrap();
+        let judged_lock = temporary.path().join("judged.lock");
+        let governing = temporary.path().join("Cargo.lock");
+        fs::write(&judged_lock, JUDGED).unwrap();
+        fs::write(&governing, found).unwrap();
+        closure_statuses(
+            &judged_lock,
+            &Ok(judged_closure),
+            &GoverningLock::Found(governing),
+        )
+    }
+
+    /// A consumer graph in which `memchr` moved and nothing else did.
+    fn memchr_moved() -> String {
+        CONSUMER
+            .replace("memchr 2.8.3", "memchr 2.8.4")
+            .replace("version = \"2.8.3\"", "version = \"2.8.4\"")
     }
 
     fn compare(judged_lock: &str, found: &str) -> Result<(), String> {
@@ -1194,10 +1598,7 @@ checksum = "9999"
     #[test]
     fn a_closure_the_judged_lockfile_does_not_back_is_refused() {
         let mut judged_closure = compiled();
-        judged_closure.push(JudgedPackage {
-            name: "phantom".to_owned(),
-            version: "1.0.0".to_owned(),
-        });
+        judged_closure.push(core_package("phantom", "1.0.0"));
         assert_eq!(
             compare_closures(&parse_lock(JUDGED), &judged_closure, &parse_lock(CONSUMER)),
             Err(
@@ -1247,6 +1648,299 @@ checksum = "9999"
         assert!(status.contains("is not certified"), "{status}");
     }
 
+    // -----------------------------------------------------------------
+    // Which packages the certificate speaks for.
+    // -----------------------------------------------------------------
+
+    /// The reading the certificate uses is the core one. A package
+    /// outside the core that moved is reported, with its command, and
+    /// the core answer stays `verified`.
+    #[test]
+    fn a_package_outside_the_core_is_reported_rather_than_refused() {
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| package.name != "memchr");
+        judged_closure.push(periphery_package("memchr", "2.8.3"));
+        let answers = statuses(judged_closure, &memchr_moved());
+        assert_eq!(answers.core_static, "verified");
+        assert!(
+            answers.strict.starts_with("mismatched: "),
+            "{}",
+            answers.strict
+        );
+        assert_eq!(
+            answers.advisory,
+            "one package outside the certified core is not the judged one; it is reported here \
+             and does not enter the certificate: memchr 2.8.3 (this build compiles 2.8.4). To \
+             align them anyway, run in the workspace that owns the governing lockfile: cargo \
+             update --precise 2.8.3 memchr"
+        );
+        assert!(answers.r2_drift.is_empty(), "{}", answers.r2_drift);
+    }
+
+    /// Several packages outside the core are named together, in the
+    /// advisory's own frame: where they are, that they are reported
+    /// rather than gating, and the commands that align them anyway. The
+    /// frame never calls them harmless.
+    #[test]
+    fn the_advisory_names_where_the_packages_are_and_what_it_does_not_claim() {
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| !["memchr", "serde"].contains(&package.name.as_str()));
+        judged_closure.push(periphery_package("memchr", "2.8.3"));
+        judged_closure.push(periphery_package("serde", "1.0.228"));
+        let drifted = memchr_moved().replace("version = \"1.0.228\"", "version = \"1.0.229\"");
+        let answers = statuses(judged_closure, &drifted);
+        assert_eq!(
+            answers.advisory,
+            "2 packages outside the certified core are not the judged ones; they are reported \
+             here and do not enter the certificate: serde 1.0.228 (this build compiles 1.0.229); \
+             memchr 2.8.3 (this build compiles 2.8.4). To align them anyway, run in the \
+             workspace that owns the governing lockfile: cargo update --precise 1.0.228 serde && \
+             cargo update --precise 2.8.3 memchr"
+        );
+        assert_eq!(answers.core_static, "verified");
+        for word in ["harmless", "safe", "cannot"] {
+            assert!(!answers.advisory.contains(word), "{}", answers.advisory);
+        }
+    }
+
+    /// The same move inside the core holds the core answer, and there is
+    /// nothing to advise about.
+    #[test]
+    fn a_package_inside_the_core_holds_the_core_answer() {
+        let answers = statuses(compiled(), &memchr_moved());
+        assert_eq!(answers.core_static, answers.strict);
+        assert!(
+            answers.core_static.starts_with("mismatched: "),
+            "{}",
+            answers.core_static
+        );
+        assert!(answers.advisory.is_empty(), "{}", answers.advisory);
+    }
+
+    /// Fail-closed: an entry a record does not classify, or classifies
+    /// with a word this reader does not know, decides the certificate
+    /// rather than being reported beside it.
+    #[test]
+    fn an_unclassified_entry_is_read_as_core() {
+        assert_eq!(Tier::from_record(None), Tier::Core);
+        assert_eq!(Tier::from_record(Some("")), Tier::Core);
+        assert_eq!(Tier::from_record(Some("advisory")), Tier::Core);
+        assert_eq!(Tier::from_record(Some("periphery")), Tier::Periphery);
+        // And end to end: the same drift as above, from a record whose
+        // entries carry no tier at all.
+        let answers = statuses(compiled(), &memchr_moved());
+        assert!(
+            answers.core_static.starts_with("mismatched: "),
+            "{}",
+            answers.core_static
+        );
+    }
+
+    /// A core package whose behaviour version the runtime reads is not
+    /// compared by package version here: the move is handed over as
+    /// drift, and the core answer waits for the probe.
+    #[test]
+    fn a_probed_package_hands_its_version_move_to_the_runtime() {
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| package.name != "memchr");
+        judged_closure.push(probed_package("memchr", "2.8.3", "regex"));
+        let answers = statuses(judged_closure, &memchr_moved());
+        assert_eq!(answers.core_static, "verified");
+        assert_eq!(
+            answers.r2_drift,
+            format!("regex{RECORD_SEPARATOR}memchr 2.8.3 -> 2.8.4")
+        );
+        assert!(answers.advisory.is_empty(), "{}", answers.advisory);
+        assert!(
+            answers.strict.starts_with("mismatched: "),
+            "{}",
+            answers.strict
+        );
+    }
+
+    /// A probed package that resolves from somewhere other than the
+    /// judged one is not a version that moved, so no probe can answer
+    /// for it and it stays with the exact comparison.
+    #[test]
+    fn a_probed_package_from_another_source_stays_with_the_exact_comparison() {
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| package.name != "memchr");
+        judged_closure.push(probed_package("memchr", "2.8.3", "regex"));
+        let repackaged = CONSUMER.replace("checksum = \"bbbb\"", "checksum = \"b0b0\"");
+        let answers = statuses(judged_closure, &repackaged);
+        assert!(
+            answers
+                .core_static
+                .contains("a different copy of the judged package"),
+            "{}",
+            answers.core_static
+        );
+        assert!(answers.r2_drift.is_empty(), "{}", answers.r2_drift);
+    }
+
+    /// A record that disagrees with itself about a unit's behaviour
+    /// version leaves that unit out, which puts every package of it back
+    /// on the exact comparison.
+    #[test]
+    fn a_unit_two_entries_disagree_about_is_not_probed() {
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| package.name != "memchr");
+        judged_closure.push(probed_package("memchr", "2.8.3", "regex"));
+        let mut other = probed_package("serde", "1.0.228", "regex");
+        other.behavior_version = Some("17.0".to_owned());
+        judged_closure.retain(|package| package.name != "serde");
+        judged_closure.push(other);
+        let answers = statuses(judged_closure, &memchr_moved());
+        assert!(
+            answers.judged_behavior.is_empty(),
+            "{}",
+            answers.judged_behavior
+        );
+        assert!(
+            answers.core_static.starts_with("mismatched: "),
+            "{}",
+            answers.core_static
+        );
+        assert!(answers.r2_drift.is_empty(), "{}", answers.r2_drift);
+    }
+
+    /// A unit whose behaviour version is its package version is compared
+    /// here rather than probed, so it never appears in the drift line.
+    #[test]
+    fn a_unit_read_from_its_crate_version_is_compared_exactly() {
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| package.name != "memchr");
+        let mut package = probed_package("memchr", "2.8.3", "counted-by-version");
+        package.behavior_source = Some(CRATE_VERSION_BEHAVIOR_SOURCE.to_owned());
+        package.behavior_version = Some("crate:2.8.3".to_owned());
+        judged_closure.push(package);
+        let answers = statuses(judged_closure, &memchr_moved());
+        assert!(
+            answers.core_static.starts_with("mismatched: "),
+            "{}",
+            answers.core_static
+        );
+        assert!(answers.r2_drift.is_empty(), "{}", answers.r2_drift);
+        assert!(
+            answers.judged_behavior.is_empty(),
+            "{}",
+            answers.judged_behavior
+        );
+    }
+
+    /// The judged behaviour versions travel as one record per unit, in a
+    /// fixed order, so the runtime reads them without a parser of its
+    /// own.
+    #[test]
+    fn the_judged_behaviour_versions_travel_one_record_per_unit() {
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| !["memchr", "serde"].contains(&package.name.as_str()));
+        judged_closure.push(probed_package("memchr", "2.8.3", "regex"));
+        judged_closure.push(probed_package("serde", "1.0.228", "regex"));
+        let answers = statuses(judged_closure, CONSUMER);
+        assert_eq!(
+            answers.judged_behavior,
+            format!("regex{RECORD_SEPARATOR}16.0{RECORD_SEPARATOR}probe:regex-age")
+        );
+        assert_eq!(answers.core_static, "verified");
+    }
+
+    /// Splitting the report does not split the commands out of order:
+    /// each side carries the packages it names, and a core package that
+    /// depends on a periphery one still comes first inside its own list.
+    #[test]
+    fn each_side_of_the_split_carries_its_own_runnable_commands() {
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| package.name != "memchr");
+        judged_closure.push(periphery_package("memchr", "2.8.3"));
+        let drifted = memchr_moved().replace("version = \"1.0.228\"", "version = \"1.0.229\"");
+        let answers = statuses(judged_closure, &drifted);
+        // serde is core and memchr is periphery; each report names one
+        // package and carries the command for that package alone.
+        assert_eq!(
+            answers.core_static,
+            "mismatched: the judged build compiled serde 1.0.228; this build compiles 1.0.229. \
+             To align this build, run in the workspace that owns the governing lockfile: cargo \
+             update --precise 1.0.228 serde"
+        );
+        assert_eq!(
+            answers.advisory,
+            "one package outside the certified core is not the judged one; it is reported here \
+             and does not enter the certificate: memchr 2.8.3 (this build compiles 2.8.4). To \
+             align them anyway, run in the workspace that owns the governing lockfile: cargo \
+             update --precise 2.8.3 memchr"
+        );
+        // The whole-closure reading still holds both, dependents first.
+        assert!(
+            answers
+                .strict
+                .contains("2 packages this build compiles are not the judged ones")
+                && answers.strict.find("serde").unwrap() < answers.strict.find("memchr").unwrap(),
+            "{}",
+            answers.strict
+        );
+    }
+
+    /// A build that cannot be compared says so on the core reading and
+    /// advises about nothing: there is no comparison to draw an advisory
+    /// from.
+    #[test]
+    fn a_build_that_cannot_be_compared_advises_about_nothing() {
+        let unlocated = closure_statuses(
+            std::path::Path::new("/nonexistent"),
+            &Ok(compiled()),
+            &GoverningLock::Missing,
+        );
+        assert!(unlocated.core_static.starts_with("unlocated: "));
+        assert_eq!(unlocated.core_static, unlocated.strict);
+        assert!(unlocated.advisory.is_empty());
+        assert!(unlocated.r2_drift.is_empty());
+
+        let broken = closure_statuses(
+            std::path::Path::new("/nonexistent"),
+            &Err("the judged compiled closure is unreadable: no such file".to_owned()),
+            &GoverningLock::Found(PathBuf::from("/nonexistent")),
+        );
+        assert_eq!(
+            broken.core_static,
+            "mismatched: the judged compiled closure is unreadable: no such file"
+        );
+        assert!(broken.advisory.is_empty());
+        assert!(broken.judged_behavior.is_empty());
+    }
+
+    /// The whole-closure reading is the one 0.2.5 produced, to the byte.
+    /// Splitting the answer added readings; it did not reword this one.
+    #[test]
+    fn the_whole_closure_reading_is_unchanged() {
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| package.name != "memchr");
+        judged_closure.push(periphery_package("memchr", "2.8.3"));
+        let answers = statuses(judged_closure, &memchr_moved());
+        assert_eq!(
+            answers.strict,
+            "mismatched: the judged build compiled memchr 2.8.3; this build compiles 2.8.4. To \
+             align this build, run in the workspace that owns the governing lockfile: cargo \
+             update --precise 2.8.3 memchr"
+        );
+        // And the two producers of that reading answer alike: the
+        // whole-closure status function is the same comparison, asked
+        // for one subset instead of four.
+        let temporary = tempfile::tempdir().unwrap();
+        let judged_lock = temporary.path().join("judged.lock");
+        let governing = temporary.path().join("Cargo.lock");
+        fs::write(&judged_lock, JUDGED).unwrap();
+        fs::write(&governing, memchr_moved()).unwrap();
+        assert_eq!(
+            answers.strict,
+            dependency_closure_status(
+                &judged_lock,
+                &Ok(compiled()),
+                &GoverningLock::Found(governing),
+            )
+        );
+    }
+
     #[test]
     fn every_status_stays_on_one_line() {
         // The build script hands this string to Cargo as one
@@ -1254,7 +1948,13 @@ checksum = "9999"
         let drifted = CONSUMER
             .replace("memchr 2.8.3", "memchr 2.8.4")
             .replace("version = \"2.8.3\"", "version = \"2.8.4\"");
-        let statuses = [
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| package.name != "memchr");
+        judged_closure.push(periphery_package("memchr", "2.8.3"));
+        judged_closure.push(probed_package("serde", "1.0.228", "regex"));
+        judged_closure.retain(|package| package.name != "serde" || package.behavior_unit.is_some());
+        let split = statuses(judged_closure, &drifted);
+        let lines = [
             dependency_closure_status(
                 std::path::Path::new("/nonexistent"),
                 &Ok(compiled()),
@@ -1269,8 +1969,13 @@ checksum = "9999"
             compare(JUDGED, CONSUMER)
                 .map(|()| "verified".to_owned())
                 .unwrap(),
+            split.strict,
+            split.core_static,
+            split.r2_drift,
+            split.advisory,
+            split.judged_behavior,
         ];
-        for status in statuses {
+        for status in lines {
             assert!(!status.contains('\n'), "{status}");
         }
     }

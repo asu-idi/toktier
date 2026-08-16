@@ -150,35 +150,52 @@ fn readings() -> &'static Vec<Reading> {
 pub(crate) fn core_closure() -> &'static str {
     static CORE: OnceLock<String> = OnceLock::new();
     CORE.get_or_init(|| {
-        let recorded = env!("TOKTIER_RUST_API_CORE_CLOSURE_STATIC");
-        if recorded != "verified" {
-            return recorded.to_owned();
-        }
-        for reading in readings() {
-            match &reading.observed {
-                Some(observed) if observed != &reading.judged => {
+        decide(
+            env!("TOKTIER_RUST_API_CORE_CLOSURE_STATIC"),
+            readings(),
+            &drift_for,
+        )
+    })
+}
+
+/// The core answer, from the build script's half and this binary's half.
+///
+/// Taken apart from where the two halves come from so that each state
+/// can be exercised: the build script already refused; a unit whose
+/// tables moved; a unit that cannot be read while its packages moved;
+/// and everything agreeing.
+fn decide(
+    recorded: &str,
+    readings: &[Reading],
+    drift: &dyn Fn(&str) -> Option<&'static str>,
+) -> String {
+    if recorded != "verified" {
+        return recorded.to_owned();
+    }
+    for reading in readings {
+        match &reading.observed {
+            Some(observed) if observed != &reading.judged => {
+                return format!(
+                    "mismatched: the reference engine in this binary {} where the certified \
+                     evidence was taken on {}; some code points may tokenize differently; the \
+                     accelerated engines are held on the reference route",
+                    carries(&reading.unit, observed),
+                    reading.judged
+                );
+            }
+            Some(_) => {}
+            None => {
+                if let Some(moved) = drift(&reading.unit) {
                     return format!(
-                        "mismatched: the reference engine in this binary {} where the certified \
-                         evidence was taken on {}; some code points may tokenize differently; \
-                         the accelerated engines are held on the reference route",
-                        carries(&reading.unit, observed),
-                        reading.judged
+                        "mismatched: the behaviour version of {} could not be read in this \
+                         binary, so the package versions are compared instead: {moved}",
+                        reading.unit
                     );
-                }
-                Some(_) => {}
-                None => {
-                    if let Some(drift) = drift_for(&reading.unit) {
-                        return format!(
-                            "mismatched: the behaviour version of {} could not be read in this \
-                             binary, so the package versions are compared instead: {drift}",
-                            reading.unit
-                        );
-                    }
                 }
             }
         }
-        "verified".to_owned()
-    })
+    }
+    "verified".to_owned()
 }
 
 pub(crate) fn core_closure_verified() -> bool {
@@ -237,9 +254,86 @@ pub(crate) fn facts() -> Vec<BehaviorVersion> {
 #[cfg(test)]
 mod tests {
     use super::{
-        carries, drift_for, observe, readings, unchanged, AGE_CANDIDATES, FIELD_SEPARATOR,
-        RECORD_SEPARATOR,
+        carries, decide, drift_for, observe, readings, unchanged, Reading, AGE_CANDIDATES,
+        FIELD_SEPARATOR, RECORD_SEPARATOR,
     };
+
+    fn reading(unit: &str, judged: &str, observed: Option<&str>) -> Reading {
+        Reading {
+            unit: unit.to_owned(),
+            judged: judged.to_owned(),
+            source: "probe:regex-age".to_owned(),
+            observed: observed.map(str::to_owned),
+        }
+    }
+
+    fn no_drift(_: &str) -> Option<&'static str> {
+        None
+    }
+
+    /// The four states of the core answer, each asked directly.
+    #[test]
+    fn the_core_answer_has_four_states() {
+        // The build script already refused: its words stand, whatever
+        // the probes say.
+        assert_eq!(
+            decide(
+                "mismatched: the judged build compiled memchr 2.8.3",
+                &[reading("regex", "16.0", Some("17.0"))],
+                &no_drift,
+            ),
+            "mismatched: the judged build compiled memchr 2.8.3"
+        );
+        // Tables that moved: named, with both versions and what follows.
+        let moved = decide(
+            "verified",
+            &[reading("regex", "16.0", Some("17.0"))],
+            &no_drift,
+        );
+        assert_eq!(
+            moved,
+            "mismatched: the reference engine in this binary carries Unicode 17.0 (regex \
+             tables) where the certified evidence was taken on 16.0; some code points may \
+             tokenize differently; the accelerated engines are held on the reference route"
+        );
+        // A unit that cannot be read falls back to the package
+        // comparison the build script made, and only refuses when that
+        // comparison found something.
+        assert_eq!(
+            decide("verified", &[reading("regex", "16.0", None)], &no_drift),
+            "verified"
+        );
+        assert_eq!(
+            decide("verified", &[reading("regex", "16.0", None)], &|unit| {
+                (unit == "regex").then_some("regex 1.13.1 -> 1.14.0")
+            }),
+            "mismatched: the behaviour version of regex could not be read in this binary, so \
+             the package versions are compared instead: regex 1.13.1 -> 1.14.0"
+        );
+        // Everything agreeing.
+        assert_eq!(
+            decide(
+                "verified",
+                &[
+                    reading("regex", "16.0", Some("16.0")),
+                    reading("onig", "6.9.10", Some("6.9.10")),
+                ],
+                &no_drift,
+            ),
+            "verified"
+        );
+    }
+
+    /// A record that names no unit at all leaves the answer where the
+    /// build script left it, which is the exact comparison.
+    #[test]
+    fn a_record_with_no_units_leaves_the_exact_answer_standing() {
+        assert_eq!(decide("verified", &[], &no_drift), "verified");
+        assert_eq!(
+            decide("unlocated: no lockfile", &[], &no_drift),
+            "unlocated: no lockfile"
+        );
+    }
 
     /// The record and the libraries agree in this workspace. The judged
     /// values are written by `tools/generate_judged_closure.py` from the

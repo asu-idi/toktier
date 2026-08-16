@@ -97,6 +97,12 @@ evidence was produced on. macOS and Windows support is planned for the layers
 that do not depend on CUDA (reference backend, routing, store); the accelerated
 path stays tied to platforms where evidence exists.
 
+The certified device list is short for the same reason: it names the
+architectures verdicts were actually run on, today `sm_89` and `sm_120`.
+Widening it is a campaign rather than a code change, and the next two are
+`sm_90` (H100, GH200) and `sm_80` (A100), each on the same protocol the
+current entries were taken under.
+
 ## Additional CPU engines
 
 The first release ships the corrected Gigatoken engine as its certified CPU
@@ -129,7 +135,7 @@ identical to the serial path. The admission rules apply unchanged — without
 certification evidence for the accelerated backend, the delta stays on the
 CPU lane.
 
-## Dependency-graph judgement: narrowed to the compiled closure (done in 0.2.4)
+## Dependency-graph judgement: narrowed to the compiled closure (0.2.4), then to the certified core (0.2.6)
 
 Since 0.2.4 an accelerated route also asks that the dependency graph of the
 build be the graph the certification campaign judged (`docs/rust-api.md`).
@@ -158,6 +164,41 @@ feature resolution. An earlier draft of this section offered "a build-script
 helper for another target" as an example of what falls outside; measurement
 says otherwise, since `cc` declares `find-msvc-tools` unconditionally and
 Cargo compiles it on Linux too. It stays inside the judgement.
+
+0.2.6 closes the first of those two by narrowing what the certificate is
+about rather than by chasing versions. It speaks for the certified core --
+this repository's own crates, the packages they call directly, and the
+text-semantics libraries beneath them -- and reports the rest as an advisory
+with the commands that align it. A fresh consumer whose periphery drifted is
+certified; the drift is still named. The libraries that decide where text is
+cut are compared by the version of the tables they carry, so a package move
+that leaves those tables alone no longer withholds the route.
+
+What is still open, and where each one is answered:
+
+- an `unlocated` build, where no governing lockfile can be named --
+  `cargo install --locked toktier` is the everyday case;
+- the feature list, which is a build flag rather than a package: a build
+  with `network` on compiles the same two engines and is still not
+  certified;
+- `RUSTFLAGS` and non-judged profiles;
+- an R2 upstream that publishes new tables between one release-day
+  re-judgement and the next, which puts fresh consumers on the reference
+  engine until they align;
+- a `git` dependency on this crate, even at the release commit.
+
+## Character classes from the judge rather than from a second Unicode source (0.2.7)
+
+The fast CPU pre-tokenizer builds its character-class tables from ICU
+property data, while the reference engine reads the same classes from
+Oniguruma. 0.2.6 pins the property data to the Unicode version the judge
+carries and gates the two against each other exhaustively
+(`tools/check_class_parity.py`), which makes the two sides equal today and
+says loudly when they stop being. The structural form of the same fix is to
+build those tables from the judge's own behaviour, the way the GPU class
+tables and the CPU repair tables already are, which would also take the ICU
+crates out of the compiled closure. It needs a CPU parity campaign to land,
+so it is a release of its own.
 
 ## Certification suite (second wave)
 

@@ -41,6 +41,16 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 
 ## 最新动态
 
+- **2026.08.TBD** 🚀 **toktier 0.2.6** 发布——Rust 侧认证现在只为
+  certified core 说话（TokTier 自家的 crate、它们直接调用的包，以及
+  它们下面真正参与分词计算的文本语义库）；编译闭包其余部分
+  的版本差异改以 advisory 形式如实报告并附对齐命令，不再拦下加速
+  路径；整闭包的严格读数仍保留在 `dependency_closure`。决定文本切点的
+  那几个库，改按它们携带的 Unicode 表的版本比对，而不是按 crate
+  版本；`doctor` 逐一报出。快速 CPU 预分词器读的属性数据已钉到参考
+  引擎所携带的同一个 Unicode 版本，并有穷举对拍的门看住两边一致。
+  对外返回的 ID、store 格式与 kernel ABI 都没有变化。详见
+  [v0.2.6 发布说明](docs/releases/v0.2.6.md)（英文）。
 - **2026.08.15** 🚀 **toktier 0.2.5** 发布——Rust crate 的 `network` feature
   改为按需开启，这让可能从不联网取件的默认构建少带 16 个包和整套 TLS 栈；
   仍需通过网络获取工件时加上 `features = ["network"]`，命令行则用

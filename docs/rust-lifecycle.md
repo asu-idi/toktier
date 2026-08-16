@@ -227,9 +227,10 @@ handles never raises it implicitly.
   is built in a temporary directory with no lockfile above it, so the
   dependency-closure check answers `unlocated` and the build is not certified
   for an accelerated route. Certification for a Rust consumer is earned in a
-  workspace whose own lockfile resolves the judged graph; `doctor` prints the
-  commands that take a workspace there, and `docs/rust-api.md` describes the
-  check in full.
+  workspace whose own lockfile can be located and whose certified core
+  resolves the judged packages; packages outside that core are reported as an
+  advisory instead of withholding the route. `doctor` prints the commands that
+  take a workspace there, and `docs/rust-api.md` describes the check in full.
 - The crate is published on crates.io from 0.2.0 onward and carries the
   package version (axis 1 of `docs/contracts/versioning.md`); the earlier
   `0.0.1` number was a source/workspace preview. Patch versions preserve the

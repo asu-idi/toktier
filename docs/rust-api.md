@@ -66,17 +66,94 @@ build with no accelerated route admitted reports `None` per execution
 while the plan explains itself once. The codes are the frozen `R_*`
 namespace of `docs/contracts/routing.md` Section 5; a code this release
 has no variant for arrives as `ReasonCode::Other` carrying the code
-itself, which is what that contract asks consumers to expect.
+itself, which is what that contract asks consumers to expect. Because a
+reason describes a departure from the admitted route, a session append
+that re-encodes its whole window reports a reason on a certified build,
+where the admitted engine is the repaired CPU one, and none on an
+uncertified build, where the admitted engine is the reference and
+re-encoding the window is what that engine does. The ids are the same on
+both.
 Accelerated admission also requires the exact Rust facade source, rustc,
 features, target, and profile facts to appear in the shipped
-`runtime_builds` registry, **and** the dependency graph this build compiles
-to be the judged one. `Runtime::doctor()` reports the second answer as
-`runtime_build.dependency_closure` (`toktier::DEPENDENCY_CLOSURE`):
-`verified`, a line starting `unlocated:` when no governing lockfile could be
-named, or one starting `mismatched:` naming every package that differs.
-Anything but `verified` is not certified. When the flags are what stands in
-the way, `runtime_build.build_flag_divergence` names which key differs and
-what to do about it.
+`runtime_builds` registry, **and** the certified core of the compiled
+closure to be the judged one. The whole closure is still compared;
+`runtime_build.dependency_closure` (`toktier::DEPENDENCY_CLOSURE`) reports
+that reading and `runtime_build.dependency_advisory` names packages outside
+the core that differ, with the command that aligns them. Neither of the two
+decides `certified`; `runtime_build.core_closure` does. Both answers take
+the same three shapes: `verified`, a line starting `unlocated:` when no
+governing lockfile could be named, or one starting `mismatched:` naming
+every package that differs. When the flags are what stands in the way,
+`runtime_build.build_flag_divergence` names which key differs and what to
+do about it.
+
+### What the certificate speaks for
+
+The **certified core** is TokTier's own crates, the packages they call
+directly, and the text-semantics libraries beneath them. Three mechanical
+rules draw it, and the record that travels with the crate carries both the
+rules and the answer, as `tier_rule` and a `tier` on every package in
+`data/build/judged_compiled_closure.json`:
+
+- **R0** -- the six crates this repository publishes.
+- **R1** -- their non-development direct dependencies that an encode-path
+  source file names: `tokenizers`, `icu_properties`, `spm_precompiled`,
+  `unicode-normalization-alignments`, `memchr`, `aho-corasick`, `rayon`,
+  `sonic-rs`, `winnow`, `serde`, `sha2` and the rest of that list. Every
+  one of them is pinned exactly by at least one of our own edges, which a
+  generation gate requires, so **an R1 package cannot drift by version**:
+  a consumer resolving today gets the judged version or a refusal about a
+  copy that is not the judged package. `fs2` and `tar` are direct
+  dependencies that no encode-path file names -- they serve the artifact
+  cache and bundle import -- so they are outside the core.
+- **R2** -- the text-semantics libraries an engine crate reaches through
+  normal edges: `regex`, `regex-automata`, `regex-syntax`, `onig`,
+  `onig_sys`, `unicode-segmentation`, `unicode_categories` and
+  `icu_properties_data`. What these do is defined by an evolving external
+  standard -- a Unicode version, a regex dialect -- so a version of one of
+  them really can change ids by design rather than by fault. FINDING 041
+  and 043 in the research record are two measured cases of exactly that.
+
+R2 is compared by **behaviour version** rather than by package version:
+the version of the tables, not of the crate that ships them.
+`Runtime::doctor()` reports each unit in `runtime_build.behavior_versions`,
+beside the value the evidence was taken on, and says where it is read:
+the newest `\p{Age=...}` the regex engine accepts, `onig::version()`, and
+`unicode_segmentation::UNICODE_VERSION`. A unit whose version cannot be
+read in a binary falls back to comparing its package versions exactly,
+which is the strict direction. So a build whose `regex` moved a patch
+version while its Unicode tables stayed put is still certified, and the
+move is named in `dependency_advisory`; **a build whose tables moved to
+another Unicode version is not certified** and routes to the reference
+engine.
+
+Which packages are text-semantics libraries is data, and its completeness
+is a gate: any package in the closure whose name matches
+`regex|onig|pcre|unicode[-_]|icu_|ucd|spm_|*normaliz*|*segment*|*graphem*|tokenizers`
+must be classified by hand, on one side or the other, with a reason, or the
+record cannot be generated. `icu_collections`, `icu_locale_core`,
+`icu_provider`, `unicode-ident` and `unicode-width` are classified outside
+the core: container, plumbing, compile-time and display-width code that
+carries no Unicode knowledge of its own.
+
+Everything else the build compiles is **periphery**: error handling,
+logging, containers, build-script helpers, JSON internals, the SQLite C
+sources. When one of them differs, `dependency_advisory` names it and
+carries the `cargo update --precise` command that aligns it, and the
+accelerated route is not withheld. That is a statement about what the
+certificate covers, not a claim that a package outside the core cannot
+influence behaviour.
+
+**One premise the comparison used to leave unwritten.** Certification
+compares this crate's ids with the ids the reference engine produces, and
+that engine cuts text on Unicode character classes it reads from
+Oniguruma, while the fast CPU pre-tokenizer reads the same classes from
+ICU property data. The two have to answer alike about every code point for
+that comparison to mean what it says. Since 0.2.6 the property data is
+pinned to the Unicode version Oniguruma carries and a gate compares the
+two exhaustively, over every scalar value and every class the shipped
+patterns name (`tools/check_class_parity.py`). A release that moves either
+side moves both.
 
 ### What the dependency judgement is, and is not
 
@@ -103,6 +180,10 @@ re-checked in a gate. `find-msvc-tools` illustrates the cost of drawing it
 there. `cc` declares it unconditionally, so Cargo compiles it on Linux even
 though only a Windows build would call it, and it stays inside the judgement.
 
+Every package it names is compared. What the answer is then used for
+depends on the tier the record gives it: the core decides `certified`, the
+periphery is reported.
+
 **What is deliberately not judged.** Packages this build compiles that the
 certified build did not. Concretely: a consumer's own feature unification can
 activate an optional dependency of a judged package and so add a package to
@@ -126,7 +207,9 @@ host are not the set recorded for the judged target.
 into this build is the code the certification campaigns ran. `mismatched`
 says at least one package that really does enter the artifact is not the
 judged one, and carries what aligns it. `unlocated` says the comparison could
-not be made, so nothing is claimed. The mechanism addresses accidental drift,
+not be made, so nothing is claimed. The same three answers are reported in
+two places -- `dependency_closure` for the whole compiled closure and
+`core_closure` for the certified core -- and only the second one gates. The mechanism addresses accidental drift,
 not a hostile build host: anyone able to edit the sources, the lockfile, or
 the shipped records on their own machine can make any self-report say
 anything. A crate's checksum is verified when the package is downloaded and
@@ -168,14 +251,35 @@ the way to take the accelerated route knowingly anyway.
 ### What a fresh resolution answers, and how to align it
 
 A consumer who adds the crate today and lets Cargo resolve the graph should
-expect `mismatched`, not `verified`. TokTier's own edges are pinned exactly,
-but the transitive versions underneath third-party dependencies are not, and
-they move as those crates publish. A resolution taken on a later day than the
-certification campaign is therefore the normal case, and the closure check is
-built to refuse it rather than to assume it away: an unjudged graph produces
-no certificate.
+expect `dependency_closure: mismatched`, not `verified`. TokTier's own edges
+are pinned exactly, but the transitive versions underneath third-party
+dependencies are not, and they move as those crates publish. A resolution
+taken on a later day than the certification campaign is therefore the normal
+case.
 
-A refused build is not a broken one. `Policy::Certified` routes it to the
+What that costs depends on where the packages that moved sit. When only the
+periphery moved, `core_closure` reads `verified`, `certified` is `true`, the
+accelerated route is admitted, and `dependency_advisory` names the packages
+and prints the commands. When an R2 unit moved to another Unicode version,
+`core_closure` reads `mismatched` and this build routes to the reference
+engine until its lockfile is aligned or the next release is judged against
+the newer tables.
+
+What still earns no certificate at all:
+
+- an `unlocated` build -- no governing lockfile could be named (see below);
+- a build whose flags are not the judged ones: `RUSTFLAGS`, a development
+  profile, or a feature list no judged recipe carries, `network` among them;
+- a build whose R0 or R1 packages resolve from somewhere other than the
+  judged package -- a `[patch]`, a fork, a mirror, a vendored copy;
+- a build whose R2 tables read another Unicode version, as above;
+- a dependency on this crate taken as a `git` dependency, even at the exact
+  release commit and with byte-identical sources: Cargo records the origin
+  as `git+...` rather than the registry, and this crate's own siblings then
+  resolve as copies of the judged packages rather than as them. Depend on
+  the published crate to be certified.
+
+A build refused on its core is not a broken one. `Policy::Certified` routes it to the
 frozen Hugging Face reference engine, which is the same implementation the
 certification campaigns compare against, so the IDs are exactly the ones the
 accelerated route would have produced -- what is lost is the acceleration, not
@@ -184,7 +288,8 @@ the answer. An explicit `Device::Cuda` request says so with
 can opt such a build into an accelerated candidate, and every result stays
 labelled experimental.
 
-Two paths lead back to `verified`, and `doctor()` prints the first one:
+Two paths lead back to `verified`, on either reading, and `doctor()` prints
+the first one:
 
 - **Align the consumer's own lockfile.** A `mismatched` line carries a
   `cargo update --precise <judged version> <package>` command for every
@@ -215,7 +320,9 @@ manifest -- comparing a packaged file against itself would answer nothing.
 The installed `toktier-rust` binary is fully usable; it runs the reference
 engine. (`cargo install --locked --path <unpacked crate>` does report
 `verified`, because Cargo then builds under the package's own directory and
-the lockfile it finds there is the one `--locked` actually used.)
+the lockfile it finds there is the one `--locked` actually used.) This is the
+`unlocated` rule rather than the tier rule: no comparison was made at all, so
+neither reading can answer, and the advisory has nothing to report.
 
 ## Buffers, batches, and decode
 
@@ -403,13 +510,16 @@ The current feature surface is:
 `network` was a default feature through 0.2.4. It is opt-in from 0.2.5,
 because it is the only feature that pulls a TLS stack into builds that may
 never fetch. It is sixteen packages: the default build of this release
-compiles 149, and enabling `network` makes that 165.
+compiles 148, and enabling `network` makes that 164.
 A build without it keeps every offline lifecycle surface and answers
 `NETWORK_DISABLED` when acquisition is actually required;
 `Runtime::doctor()` reports it as `network_compiled`. Because the judged
 build recipe records this crate's feature list, the certified default build
-for 0.2.5 is the one without `network`, and a build that enables it
-diverges from that recipe on the `features` key.
+for 0.2.6 is the one without `network`, and a build that enables it
+diverges from that recipe on the `features` key. The feature list is a
+build flag rather than a package, so the tier rules above do not reach it:
+a build that turns `network` on is not certified even though the two
+engines it compiles are byte for byte the judged ones.
 
 The normal dependency graph contains no PyO3, Python, PyTorch, or mandatory
 async executor. The prebuilt GPU host dynamically uses the CUDA Driver API and

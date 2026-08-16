@@ -53,6 +53,32 @@ identity, features/profile, exact rustc, and the fast-CPU/native-host
 digests). An unregistered build falls back to HF under `CERTIFIED`, and an
 explicit CUDA request reports `UNCERTIFIED_RUNTIME` (see `docs/rust-api.md`).
 
+### 1.2 The dependency graph the runtime build compiles (added in 0.2.6)
+
+Added in 0.2.4 and narrowed in 0.2.6; the frozen rule above is unchanged.
+A Rust API build is additionally required to compile the **certified
+core** of the judged dependency closure: this project's own crates, the
+packages they call directly from encode-path sources, and the
+text-semantics libraries beneath them. Each package of the shipped
+judged-closure record carries the tier and the rule that placed it
+there. Packages outside the core are compared and reported, and do not
+decide eligibility. A package of the core whose behaviour is defined by
+an evolving external standard is compared by the version of the tables
+it carries rather than by its package version; where that version cannot
+be read, the package version is compared exactly.
+
+### 1.3 One Unicode version across the compared engines (added in 0.2.6)
+
+Every certification reading compares an accelerated engine's ids with
+the ids the frozen oracle produces. Both sides cut text on Unicode
+character classes, and that comparison only means what it says while
+both sides answer alike about every code point. Accordingly: the Unicode
+property data an accelerated engine reads must agree, over every scalar
+value and every class the shipped pre-tokenizer patterns name, with the
+classes the oracle's own regex engine answers. This is a stated premise
+of every reading rather than a property of any one of them, and a
+release that moves either side moves both and re-takes the readings.
+
 ## 2. Oracle version policy (frozen)
 
 - Each record names the oracle package, the exact package versions

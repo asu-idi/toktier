@@ -40,6 +40,18 @@ the complete sweeps are in [`docs/benchmarks.md`](https://github.com/asu-idi/tok
 
 ## News
 
+- **2026.08.TBD** 🚀 **toktier 0.2.6** released — Rust certification now
+  speaks for the certified core (TokTier's own crates, the packages they call
+  directly, and the text-semantics libraries beneath them); drift elsewhere in
+  the compiled closure is reported as an advisory with alignment commands and
+  no longer withholds acceleration; the whole-closure reading stays available
+  as `dependency_closure`. The libraries whose Unicode tables decide where
+  text is cut are compared by the version of those tables rather than by their
+  package version, and `doctor` reports each one. The property data the fast
+  CPU pre-tokenizer reads is pinned to the Unicode version the reference
+  engine carries, with an exhaustive gate that keeps the two equal. Served
+  IDs, the store format, and the kernel ABI are unchanged. See the
+  [v0.2.6 release notes](https://github.com/asu-idi/toktier/blob/v0.2.6/docs/releases/v0.2.6.md).
 - **2026.08.15** 🚀 **toktier 0.2.5** released — the Rust crate's `network`
   feature is now opt-in, which takes sixteen packages and the whole TLS
   stack out of a default build that may never fetch; add

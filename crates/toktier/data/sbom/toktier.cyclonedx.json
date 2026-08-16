@@ -6327,10 +6327,13 @@
         "pkg:cargo/toktier-store-sqlite@0.2.6",
         "pkg:cargo/flate2@1.1.9",
         "pkg:cargo/fs2@0.4.3",
+        "pkg:cargo/onig@6.5.3",
+        "pkg:cargo/regex@1.13.1",
         "pkg:cargo/serde@1.0.228",
         "pkg:cargo/serde_json@1.0.151",
         "pkg:cargo/sha2@0.11.0",
         "pkg:cargo/tar@0.4.46",
+        "pkg:cargo/unicode-segmentation@1.13.3",
         "pkg:cargo/ureq@3.4.0"
       ],
       "ref": "pkg:cargo/toktier@0.2.6"

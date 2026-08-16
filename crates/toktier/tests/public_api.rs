@@ -99,11 +99,21 @@ fn doctor_is_typed_and_python_free() {
         // until fresh matrix evidence updates the shipped registry.
         assert!(facts.runtime_build.certified);
     }
-    // A build inside this workspace resolves the judged graph, so the
-    // closure check must pass here whatever the profile decides about
-    // certification.
+    // A build inside this workspace resolves the judged graph, so both
+    // closure readings must pass here whatever the profile decides about
+    // certification, and there is nothing to advise about.
     assert_eq!(facts.runtime_build.dependency_closure, "verified");
     assert_eq!(toktier::DEPENDENCY_CLOSURE, "verified");
+    assert_eq!(facts.runtime_build.core_closure, "verified");
+    assert_eq!(facts.runtime_build.dependency_advisory, None);
+    // The text-semantics units this binary carries are reported beside
+    // the versions the evidence was taken on, and they agree here.
+    assert!(!facts.runtime_build.behavior_versions.is_empty());
+    for behavior in &facts.runtime_build.behavior_versions {
+        assert!(!behavior.unit.is_empty());
+        assert!(!behavior.source.is_empty());
+        assert_eq!(behavior.observed.as_deref(), Some(behavior.judged.as_str()));
+    }
     assert_eq!(facts.runtime_build.source_digest.len(), 64);
     assert_eq!(facts.runtime_build.fast_cpu_source_digest.len(), 64);
     assert_eq!(facts.runtime_build.native_host_source_digest.len(), 64);

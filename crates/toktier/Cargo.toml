@@ -30,6 +30,16 @@ serde = []
 [dependencies]
 flate2.workspace = true
 fs2.workspace = true
+# The three text-semantics libraries the reference engine's own graph
+# already resolves. They are taken here as caret edges rather than exact
+# ones on purpose: the certificate compares the version of the tables
+# they carry, which `crates/toktier/src/behavior_version.rs` reads from
+# the libraries this build links, and pinning the packages exactly would
+# be the comparison this release deliberately stopped making. `onig`
+# takes no default features, the way `tokenizers` takes it, so no
+# bindgen enters the build.
+onig = { version = "6", default-features = false }
+regex = "1"
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -38,6 +48,7 @@ toktier-routing-core = { path = "../toktier-routing-core", version = "=0.2.6" }
 toktier-cuda-driver = { path = "../toktier-cuda-driver", version = "=0.2.6", optional = true }
 toktier-store-core = { path = "../toktier-store-core", version = "=0.2.6" }
 toktier-store-sqlite = { path = "../toktier-store-sqlite", version = "=0.2.6", optional = true }
+unicode-segmentation = "1"
 ureq = { workspace = true, optional = true }
 
 [dev-dependencies]

@@ -123,6 +123,7 @@ FACADE_LIFECYCLE_SOURCES = (
 #: this directory has to be classified by a person, and `--check` says so
 #: until it is.
 FACADE_ENCODE_SOURCES = (
+    "behavior_version.rs",
     "buffer.rs",
     "gpu_data.rs",
     "jit.rs",

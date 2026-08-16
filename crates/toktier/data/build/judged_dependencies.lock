@@ -1658,6 +1658,8 @@ version = "0.2.6"
 dependencies = [
  "flate2",
  "fs2",
+ "onig",
+ "regex",
  "serde",
  "serde_json",
  "sha2",
@@ -1667,6 +1669,7 @@ dependencies = [
  "toktier-routing-core",
  "toktier-store-core",
  "toktier-store-sqlite",
+ "unicode-segmentation",
  "ureq",
 ]
 

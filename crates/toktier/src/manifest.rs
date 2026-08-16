@@ -592,9 +592,13 @@ impl Registry {
         // The register binds compile-time facts about this crate's own
         // sources. Those sources are compiled together with whatever
         // versions Cargo resolved for the transitive graph, so a build
-        // whose resolved closure is not the judged one is not the build
+        // whose certified core is not the judged one is not the build
         // the evidence was taken on, whatever its source digests say.
-        if !crate::dependency_closure_verified() {
+        // The core is this crate's own crates, the packages they call
+        // directly, and the text-semantics libraries beneath them;
+        // everything else the build compiles is compared and reported
+        // rather than gating (`crate::DEPENDENCY_CLOSURE`).
+        if !crate::behavior_version::core_closure_verified() {
             return false;
         }
         let observed_flags = env!("TOKTIER_RUST_API_BUILD_FLAGS")

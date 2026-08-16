@@ -281,6 +281,9 @@ impl Runtime {
             dependency_closure: crate::DEPENDENCY_CLOSURE.to_owned(),
             build_flag_divergence: self.inner.registry.rust_api_build_flag_divergence(),
             certified: self.inner.registry.rust_api_build_certified(),
+            core_closure: crate::behavior_version::core_closure().to_owned(),
+            dependency_advisory: crate::behavior_version::dependency_advisory().map(str::to_owned),
+            behavior_versions: crate::behavior_version::facts(),
         };
         let ordinal = match self.inner.config.device {
             Device::Cuda(ordinal) => ordinal,

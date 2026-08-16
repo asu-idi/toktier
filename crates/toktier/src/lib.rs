@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 
 mod artifact;
+mod behavior_version;
 mod buffer;
 mod bundle;
 mod diagnostics;
@@ -43,8 +44,8 @@ pub use bundle::{
     export_bundle, import_bundle, inspect_bundle, BundleFileInspection, BundleInspection,
 };
 pub use diagnostics::{
-    Backend, Certification, CudaFacts, Device, DoctorFacts, ExecutionFacts, GpuDelivery, Policy,
-    ReasonCode, RoutePlan, RuntimeBuildFacts, StoreStats,
+    Backend, BehaviorVersion, Certification, CudaFacts, Device, DoctorFacts, ExecutionFacts,
+    GpuDelivery, Policy, ReasonCode, RoutePlan, RuntimeBuildFacts, StoreStats,
 };
 pub use error::{Error, ErrorCode, Result};
 #[cfg(feature = "jit")]
@@ -61,7 +62,7 @@ pub use session::{Session, SessionStats};
 /// Version of the frozen native Hugging Face oracle.
 pub const ORACLE: &str = "tokenizers==0.22.2";
 
-/// How this build's resolved dependency graph compares with the graph
+/// How the whole compiled closure of this build compares with the graph
 /// the certification evidence was taken on: `"verified"`, or a line
 /// beginning `"unlocated: "` when no governing lockfile could be named,
 /// or one beginning `"mismatched: "` naming every package that is not
@@ -72,11 +73,11 @@ pub const ORACLE: &str = "tokenizers==0.22.2";
 /// each package it names, and an `unlocated` line says where the judged
 /// graph travels and how to name the governing lockfile.
 ///
-/// Reported by [`Runtime::doctor`] and required for an accelerated
-/// route: this crate's own sources are judged by digest, and the
-/// versions Cargo resolved around them are judged here.
+/// Since 0.2.6 this is a reading, not a gate. An accelerated route
+/// requires the certified core of that closure to be the judged one,
+/// which [`RuntimeBuildFacts::core_closure`] reports; packages outside
+/// the core are compared as well and reported in
+/// [`RuntimeBuildFacts::dependency_advisory`]. Readers who want the
+/// 0.2.4 and 0.2.5 rule can require this constant to read `"verified"`
+/// themselves.
 pub const DEPENDENCY_CLOSURE: &str = env!("TOKTIER_RUST_API_DEPENDENCY_CLOSURE");
-
-pub(crate) fn dependency_closure_verified() -> bool {
-    DEPENDENCY_CLOSURE == "verified"
-}

@@ -182,16 +182,57 @@ pub struct RuntimeBuildFacts {
     pub native_host_source_digest: String,
     pub toolchain: String,
     pub build_flags: Vec<String>,
-    /// How the resolved dependency graph of this build compares with the
-    /// judged one (see [`crate::DEPENDENCY_CLOSURE`]). Anything other
-    /// than `"verified"` holds `certified` below at `false`, and says
-    /// both which packages differ and what aligns them.
+    /// How the whole compiled closure of this build compares with the
+    /// judged one (three-way shape unchanged since 0.2.4). Since 0.2.6
+    /// this is a reading, not a gate: `certified` looks at
+    /// `core_closure`. Readers who want the 0.2.4 and 0.2.5 rule can
+    /// require `dependency_closure == "verified"` themselves.
     pub dependency_closure: String,
     /// Why the build flags of this build are not the judged ones, when a
     /// judged entry agrees with it on every other axis. `None` when the
     /// flags match, or when something else is the disagreement.
     pub build_flag_divergence: Option<String>,
+    /// `true` when the certified core of this build -- TokTier's own
+    /// crates, the packages they call directly, and the text-semantics
+    /// libraries beneath them -- is the one the certification evidence
+    /// was taken on, together with the source identities, toolchain and
+    /// build flags of a judged entry. Packages outside that core are
+    /// compared as well and reported in `dependency_advisory`; they do
+    /// not decide this field.
     pub certified: bool,
+    /// The same comparison as `dependency_closure`, restricted to the
+    /// certified core. Anything other than `"verified"` here holds
+    /// `certified` at `false` and says what differs and what aligns it.
+    pub core_closure: String,
+    /// What this build compiles that the judged build did not, where the
+    /// difference is reported rather than gating: packages outside the
+    /// certified core, and core packages whose package version moved
+    /// while the behaviour version this binary reads did not. `None`
+    /// when there is nothing to report. It never says that the packages
+    /// it names cannot influence behaviour; it says which packages the
+    /// certificate covers and reports the rest.
+    pub dependency_advisory: Option<String>,
+    /// The version of the text semantics this binary carries, per unit,
+    /// beside the version the evidence was taken on.
+    pub behavior_versions: Vec<BehaviorVersion>,
+}
+
+/// The version of one text-semantics unit, as this binary reads it and
+/// as the certification evidence recorded it.
+///
+/// A unit is the thing whose version can move ids: the Unicode tables a
+/// regex engine carries, the Oniguruma library a binding links, the
+/// segmentation tables a crate ships. `observed` is `None` for a unit
+/// this binary has no way to ask, in which case the package versions of
+/// that unit are compared exactly instead.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
+pub struct BehaviorVersion {
+    pub unit: String,
+    pub observed: Option<String>,
+    pub judged: String,
+    pub source: String,
 }
 
 /// Non-invasive CUDA probe result. Probe failure is data, not a panic.

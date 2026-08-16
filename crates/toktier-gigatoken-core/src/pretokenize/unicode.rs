@@ -553,3 +553,134 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod class_parity {
+    use super::{
+        DsCharClass, KimiCharClass, O200kCharClass, ds_class_of, kimi_class_of, o200k_class_of,
+    };
+
+    /// Every character class the shipped pre-tokenizer patterns name, as
+    /// the judge writes it and as this crate's tables answer it.
+    ///
+    /// The classes are asked in the shape the patterns use them, which is
+    /// also the shape the tables encode: `\p{Lu}` and `\p{Lt}` appear
+    /// only together, so the tables carry one class for the pair; the
+    /// same holds for `\p{Lm}` with `\p{Lo}` and for `\p{P}` with
+    /// `\p{S}`. Asking about a distinction the tables do not draw would
+    /// be asking about something no id depends on.
+    const CLASSES: &[(&str, fn(u32) -> bool)] = &[
+        (r"[\p{Lu}\p{Lt}]", |cp| {
+            o200k_class_of(cp) == O200kCharClass::Upper
+        }),
+        (r"\p{Ll}", |cp| o200k_class_of(cp) == O200kCharClass::Lower),
+        (r"[\p{Lm}\p{Lo}]", |cp| {
+            o200k_class_of(cp) == O200kCharClass::Caseless
+        }),
+        (r"\p{L}", |cp| {
+            matches!(
+                o200k_class_of(cp),
+                O200kCharClass::Upper | O200kCharClass::Lower | O200kCharClass::Caseless
+            )
+        }),
+        (r"\p{M}", |cp| o200k_class_of(cp) == O200kCharClass::Mark),
+        (r"\p{N}", |cp| o200k_class_of(cp) == O200kCharClass::Number),
+        (r"[\p{P}\p{S}]", |cp| {
+            ds_class_of(cp) == DsCharClass::PunctSym
+        }),
+        (r"\s", |cp| o200k_class_of(cp) == O200kCharClass::Whitespace),
+        (r"\p{Han}", |cp| kimi_class_of(cp).is_han()),
+    ];
+
+    /// Every scalar value, once, in one string: the judge is asked about
+    /// the whole of Unicode in one scan per class rather than once per
+    /// code point, which keeps an exhaustive gate to about a second.
+    fn every_scalar() -> String {
+        (0..=char::MAX as u32)
+            .filter_map(char::from_u32)
+            .collect::<String>()
+    }
+
+    /// The code points the judge puts in one class.
+    fn judged(pattern: &str, text: &str) -> Vec<u32> {
+        let regex = onig::Regex::new(pattern).expect("the judge reads this pattern");
+        regex
+            .find_iter(text)
+            .map(|(start, end)| {
+                let matched = &text[start..end];
+                let mut characters = matched.chars();
+                let first = characters.next().expect("a matched character");
+                assert!(
+                    characters.next().is_none(),
+                    "{pattern} matched more than one character at {start}"
+                );
+                first as u32
+            })
+            .collect()
+    }
+
+    /// The certification compares this crate's ids with the ids the
+    /// reference engine produces, and the reference engine cuts text on
+    /// these classes. That comparison assumes the two sides answer alike
+    /// about every code point, which was never written down and, until
+    /// this release, was not true: the property data this crate reads had
+    /// moved to a Unicode version ahead of the one Oniguruma carries, so
+    /// 4,804 code points -- among them the whole of CJK Extension J --
+    /// were letters or Han here and unassigned there. The pin that fixed
+    /// it is in the workspace manifest; this is the gate that keeps it.
+    #[test]
+    fn every_class_answers_the_way_the_judge_does() {
+        let text = every_scalar();
+        for (pattern, ours) in CLASSES {
+            let mut theirs = vec![false; (char::MAX as usize) + 1];
+            for code_point in judged(pattern, &text) {
+                theirs[code_point as usize] = true;
+            }
+            let mut differences = Vec::new();
+            for code_point in (0..=char::MAX as u32).filter(|cp| char::from_u32(*cp).is_some()) {
+                if ours(code_point) != theirs[code_point as usize] {
+                    differences.push(code_point);
+                }
+            }
+            assert!(
+                differences.is_empty(),
+                "{pattern}: {} code points answer differently here than in the judge, first {}",
+                differences.len(),
+                differences
+                    .iter()
+                    .take(8)
+                    .map(|code_point| format!("U+{code_point:04X}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+    }
+
+    /// The three code points FINDING/044 measured, named one by one so a
+    /// future data move says which of them came back rather than only
+    /// that a count changed. U+10940 and U+323B0 were assigned in Unicode
+    /// 17.0; U+0295 is older than either side and changed category in it.
+    #[test]
+    fn the_measured_sentinels_answer_the_way_the_judge_does() {
+        for (code_point, letter, han) in [
+            (0x10940u32, false, false),
+            (0x323B0, false, false),
+            (0x0295, true, false),
+        ] {
+            let is_letter = matches!(
+                o200k_class_of(code_point),
+                O200kCharClass::Upper | O200kCharClass::Lower | O200kCharClass::Caseless
+            );
+            assert_eq!(is_letter, letter, "letter at U+{code_point:04X}");
+            assert_eq!(
+                kimi_class_of(code_point).is_han(),
+                han,
+                "Han at U+{code_point:04X}"
+            );
+        }
+        // U+0295 is a lowercase letter on both sides, which is the half
+        // of the finding that is not about newly assigned code points.
+        assert_eq!(o200k_class_of(0x0295), O200kCharClass::Lower);
+        assert_eq!(kimi_class_of(0x0295), KimiCharClass::Lower);
+    }
+}

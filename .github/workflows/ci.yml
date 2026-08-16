@@ -166,6 +166,14 @@ jobs:
         # reason the two records below do.
         run: python3 tools/generate_judged_closure.py --check
       - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
+        # The fast CPU pre-tokenizer reads its character classes from ICU
+        # property data and the reference engine reads the same classes
+        # from Oniguruma. The two have to answer alike about every code
+        # point for the id comparison behind certification to mean what
+        # it says, and they only do so while the property data is pinned
+        # to the Unicode version Oniguruma carries.
+        run: python3 tools/check_class_parity.py
+      - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
         run: python3 tools/generate_native_legal.py --check
       - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
         # Same closure, other consumer: the SBOM and license list that the

@@ -31,6 +31,15 @@ spm_precompiled.workspace = true
 unicode-normalization-alignments.workspace = true
 winnow.workspace = true
 
+[dev-dependencies]
+# The judge, for the character-class parity gate in
+# `src/pretokenize/unicode.rs`: the reference engine reaches Oniguruma
+# through `tokenizers`, and this crate's classes have to answer about
+# every code point the way Oniguruma does. Taken with no default
+# features, the way `tokenizers` takes it, so no bindgen enters the
+# build.
+onig = { version = "6", default-features = false }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
 

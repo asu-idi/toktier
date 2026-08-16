@@ -305,7 +305,7 @@
       "criterion": "periphery:classified",
       "name": "icu_collections",
       "tier": "periphery",
-      "version": "2.2.0"
+      "version": "2.0.0"
     },
     {
       "criterion": "periphery:classified",
@@ -317,16 +317,16 @@
       "criterion": "R1",
       "name": "icu_properties",
       "tier": "core",
-      "version": "2.2.0"
+      "version": "2.0.2"
     },
     {
       "behavior_source": "crate-version",
       "behavior_unit": "icu_properties_data",
-      "behavior_version": "crate:2.2.0",
+      "behavior_version": "crate:2.0.1",
       "criterion": "R2",
       "name": "icu_properties_data",
       "tier": "core",
-      "version": "2.2.0"
+      "version": "2.0.1"
     },
     {
       "criterion": "periphery:classified",
@@ -834,12 +834,6 @@
       "name": "unit-prefix",
       "tier": "periphery",
       "version": "0.5.2"
-    },
-    {
-      "criterion": "periphery:reachable-not-text-semantics",
-      "name": "utf8_iter",
-      "tier": "periphery",
-      "version": "1.0.4"
     },
     {
       "criterion": "periphery:not-reachable-from-an-engine-crate",

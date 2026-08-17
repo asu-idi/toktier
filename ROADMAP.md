@@ -98,10 +98,11 @@ that do not depend on CUDA (reference backend, routing, store); the accelerated
 path stays tied to platforms where evidence exists.
 
 The certified device list is short for the same reason: it names the
-architectures verdicts were actually run on, today `sm_89` and `sm_120`.
-Widening it is a campaign rather than a code change, and the next two are
-`sm_90` (H100, GH200) and `sm_80` (A100), each on the same protocol the
-current entries were taken under.
+architectures verdicts were actually run on, today `sm_80`, `sm_89`,
+`sm_90` and `sm_120`. Widening it is a campaign rather than a code
+change: `sm_80` (A100) and `sm_90` (H200) were added in 0.2.6 by running
+the same protocol the earlier entries were taken under, and the ones
+still outside the list wait on the same thing.
 
 Since 0.2.6 a device outside that list is no longer refused by default:
 the shipped kernel runs there if it loads, and the route is labelled

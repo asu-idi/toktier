@@ -276,7 +276,7 @@ def test_doctor_human(
         f"driver_version: {_DOCTOR_DRIVER_VERSION} "
         "(environment fact; not a certificate premise)\n"
         "automatic_gpu_delivery_certification: "
-        "sm_120=certified; sm_90=experimental\n"
+        "sm_120=certified; sm_90=certified\n"
         "prebuilt_fatbin_available: true\n"
         f"prebuilt_fatbin_digest: {_shipped_prebuilt_digest()}\n"
         "prebuilt_native_host_ready: true\n"
@@ -407,7 +407,7 @@ def test_doctor_json(
         "driver_version": _DOCTOR_DRIVER_VERSION,
         "automatic_gpu_delivery_certification": {
             "sm_120": "certified",
-            "sm_90": "experimental",
+            "sm_90": "certified",
         },
         "prebuilt_fatbin_available": True,
         "prebuilt_fatbin_digest": _shipped_prebuilt_digest(),

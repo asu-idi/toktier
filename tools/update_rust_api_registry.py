@@ -29,7 +29,9 @@ SCHEMA = ROOT / "schemas/support_registry.schema.json"
 BINDING = ROOT / "tools/rust_api_binding.json"
 CPU_READING = ROOT / "readings/fast_cpu_native_frontend_parity.json"
 GPU_READINGS = {
+    "sm_80": ROOT / "readings/gpu_native_frontend_sm80_parity.json",
     "sm_89": ROOT / "readings/gpu_native_frontend_sm89_parity.json",
+    "sm_90": ROOT / "readings/gpu_native_frontend_sm90_parity.json",
     "sm_120": ROOT / "readings/gpu_native_frontend_sm120_parity.json",
 }
 #: The venues a Rust API matrix is taken at, and where each reading lands.

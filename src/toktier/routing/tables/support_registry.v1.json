@@ -6,7 +6,7 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:4c905887792bda941e9990b62e584ddf52c3c3b4730a577908bec4362fa71503",
+  "root_digest": "sha256:a93ef5bc6194f16c7bc693c8f2262bdf2878f3e87f654bf5dfed1004181eef6b",
   "oracles": [
     {
       "oracle_id": "tokenizers",
@@ -235,14 +235,14 @@
               "toolchain": "cuda 13.2 (V13.2.78)",
               "devices": [
                 "sm_120",
-                "sm_89"
+                "sm_80",
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_80",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -359,14 +359,14 @@
               "toolchain": "cuda 13.2 (V13.2.78)",
               "devices": [
                 "sm_120",
-                "sm_89"
+                "sm_80",
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_80",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -483,14 +483,14 @@
               "toolchain": "cuda 13.2 (V13.2.78)",
               "devices": [
                 "sm_120",
-                "sm_89"
+                "sm_80",
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_80",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -607,14 +607,14 @@
               "toolchain": "cuda 13.2 (V13.2.78)",
               "devices": [
                 "sm_120",
-                "sm_89"
+                "sm_80",
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_80",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -731,14 +731,14 @@
               "toolchain": "cuda 13.2 (V13.2.78)",
               "devices": [
                 "sm_120",
-                "sm_89"
+                "sm_80",
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_80",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -843,14 +843,14 @@
               "toolchain": "cuda 13.2 (V13.2.78)",
               "devices": [
                 "sm_120",
-                "sm_89"
+                "sm_80",
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_80",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -955,14 +955,14 @@
               "toolchain": "cuda 13.2 (V13.2.78)",
               "devices": [
                 "sm_120",
-                "sm_89"
+                "sm_80",
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_80",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1067,14 +1067,14 @@
               "toolchain": "cuda 13.2 (V13.2.78)",
               "devices": [
                 "sm_120",
-                "sm_89"
+                "sm_80",
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_80",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1179,14 +1179,14 @@
               "toolchain": "cuda 13.2 (V13.2.78)",
               "devices": [
                 "sm_120",
-                "sm_89"
+                "sm_80",
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_80",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1303,14 +1303,14 @@
               "toolchain": "cuda 13.2 (V13.2.78)",
               "devices": [
                 "sm_120",
-                "sm_89"
+                "sm_80",
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_80",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1427,14 +1427,14 @@
               "toolchain": "cuda 13.2 (V13.2.78)",
               "devices": [
                 "sm_120",
-                "sm_89"
+                "sm_80",
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_80",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1551,14 +1551,14 @@
               "toolchain": "cuda 13.2 (V13.2.78)",
               "devices": [
                 "sm_120",
-                "sm_89"
+                "sm_80",
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_80",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1675,14 +1675,14 @@
               "toolchain": "cuda 13.2 (V13.2.78)",
               "devices": [
                 "sm_120",
-                "sm_89"
+                "sm_80",
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_80",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1799,14 +1799,14 @@
               "toolchain": "cuda 13.2 (V13.2.78)",
               "devices": [
                 "sm_120",
-                "sm_89"
+                "sm_80",
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_80",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1923,14 +1923,14 @@
               "toolchain": "cuda 13.2 (V13.2.78)",
               "devices": [
                 "sm_120",
-                "sm_89"
+                "sm_80",
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_80",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",

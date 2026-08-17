@@ -195,7 +195,7 @@ The install profile and input shape then determine the automatic route:
 
 The two GPU rows describe what happens when the GPU route is admitted, and
 admission is narrower than "a GPU is present": the certified policy opens
-only the architectures the shipped evidence covers -- `sm_89` and `sm_120`
+only the architectures the shipped evidence covers -- `sm_80`, `sm_89`, `sm_90` and `sm_120`
 for the prebuilt delivery -- so on any other architecture those rows fall to
 the row above them and `explain()` records the reason. The evidence scale
 per architecture is in
@@ -354,8 +354,8 @@ publication remains a separate release decision.
 ### GPU delivery
 
 The prebuilt fatbin contains `sm_75/80/86/89/90/100/120` images and a
-`compute_75` PTX fallback. Its binary-digest-bound certificate covers `sm_89`
-and `sm_120`; the other embedded architectures are marked `experimental`. With
+`compute_75` PTX fallback. Its binary-digest-bound certificate covers
+`sm_80`, `sm_89`, `sm_90` and `sm_120`; the other embedded architectures are marked `experimental`. With
 the default facade, `toktier[gpu]` selects this prebuilt delivery and
 `toktier[gpu-jit]` selects JIT from the detected profile; an explicit
 `gpu_delivery=` argument can override that detection. Under prebuilt delivery

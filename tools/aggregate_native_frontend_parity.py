@@ -214,9 +214,13 @@ def main() -> int:
             raise GenerationError("--scale is only valid for GPU readings")
         document = aggregate_cpu(arguments.input_dir)
     else:
-        if arguments.architecture not in {"sm_89", "sm_120"}:
+        # The architectures the shipped fatbin carries a native image
+        # for. An aggregation for anything else would have no
+        # architecture digest to bind, and the check below says so.
+        if arguments.architecture not in {"sm_80", "sm_89", "sm_90", "sm_120"}:
             raise GenerationError(
-                "GPU aggregation requires --architecture sm_89 or sm_120"
+                "GPU aggregation requires --architecture sm_80, sm_89, "
+                "sm_90 or sm_120"
             )
         if arguments.scale is None:
             raise GenerationError(

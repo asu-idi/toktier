@@ -20,8 +20,8 @@ r580-generation (CUDA 13) or newer driver, `torch` for tensors and
 streams, and nothing else: no `nvcc`, no `ninja`, no first-load
 compile. Because the judged binary *is* the shipped binary, the
 registry records this delivery as `certified`, bound to the fatbin's
-binary digest, on the architectures its verdict battery ran (sm_89 and
-sm_120); the other embedded architectures are labeled `experimental`.
+binary digest, on the architectures its verdict battery ran (sm_80, sm_89, sm_90 and sm_120);
+the other embedded architectures are labeled `experimental`.
 When the prebuilt delivery cannot serve — old driver, missing torch,
 digest mismatch — the loader falls back to JIT if that delivery is
 installed and eligible, and otherwise the request continues down the

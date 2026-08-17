@@ -99,8 +99,17 @@ PACKAGED_OUTPUT = (
     / "support_registry.v1.json"
 )
 
+#: Which architectures the prebuilt delivery is certified for, and where
+#: each one's campaign reading lives. This mapping *is* the certified
+#: device list: an architecture enters it only when a reading of the
+#: shipped fatbin on that hardware exists, and everything else the fatbin
+#: carries an image for is listed as experimental instead. Every reading
+#: has to name the same native host, because one prebuilt row binds one
+#: host identity for all of them.
 PREBUILT_HARDWARE_READINGS = {
+    "sm_80": REPOSITORY_ROOT / "readings" / "gpu_native_frontend_sm80_parity.json",
     "sm_89": REPOSITORY_ROOT / "readings" / "gpu_native_frontend_sm89_parity.json",
+    "sm_90": REPOSITORY_ROOT / "readings" / "gpu_native_frontend_sm90_parity.json",
     "sm_120": REPOSITORY_ROOT / "readings" / "gpu_native_frontend_sm120_parity.json",
 }
 

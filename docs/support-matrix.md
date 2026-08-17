@@ -18,7 +18,7 @@ audit records behind this document and does not ship inside the package.
 
 | Status | Meaning |
 |---|---|
-| `certified` | Evidence on file for this artifact and this backend, with the backend identified by a binary digest. The prebuilt GPU kernel delivery in this release is in this state on its judged architectures (sm_89 and sm_120). |
+| `certified` | Evidence on file for this artifact and this backend, with the backend identified by a binary digest. The prebuilt GPU kernel delivery in this release is in this state on its judged architectures (sm_80, sm_89, sm_90 and sm_120). |
 | `certified_source` | Evidence binds source identity, build flags, and exact toolchain rather than one platform-specific binary. The integrated corrected-Gigatoken CPU engine and the locally compiled GPU JIT use this state; each also binds its backend-specific inputs. |
 | `reference-only` | No accelerated route is offered. The reference implementation runs and the reason is reported by `explain()`. This is also the state when the installed reference version differs from the certified one. |
 | `experimental` | Available only by explicit opt-in; no certified exact-ID claim applies. Fastokens is exposed only in this state. |
@@ -51,6 +51,19 @@ the scale at which each wave re-takes it. Since 0.2.5 each reading says
 which it is in band, as `scale: full` or `scale: spot`; the registry
 check requires the field, and before it existed the only difference was
 an unlabelled document count.
+
+0.2.6 adds `sm_80` and `sm_90` as certified rows, each taken on the same
+bounded spot check as `sm_89` -- fifteen families, 100,000 documents per
+family, 6,104,728,470 characters, zero mismatches -- and each binding the
+same host build identity as the rows already there. Their standing is
+narrower than `sm_89`'s, and the difference is worth saying plainly:
+`sm_89` rests on a full per-family campaign taken earlier on the same
+fatbin lineage, with the cross-architecture record above behind it, while
+`sm_80` and `sm_90` have the spot check and nothing yet behind it. The
+readings were taken on NCSA Delta, on an `A100-SXM4-40GB` and an `H200`
+respectively, both on driver 595.71.05, against the architecture images
+the shipped fatbin already carried. What the two rows claim is what was
+measured on that hardware, and no more.
 
 ## Certified CPU fast repair
 
@@ -113,7 +126,7 @@ them at fetch time.
 
 GPU status names the prebuilt kernel delivery: `certified (prebuilt)` is
 binary-digest bound to the shipped fatbin, source/build bound to its Rust
-request host, and judged on sm_89 and sm_120. The JIT delivery of the same
+request host, and judged on sm_80, sm_89, sm_90 and sm_120. The JIT delivery of the same
 kernels remains `certified_source`;
 the registry records both, per delivery, and the loader verifies the
 delivery it actually runs.

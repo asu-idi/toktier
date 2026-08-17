@@ -875,7 +875,9 @@ fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Compar
             first_mismatch,
             record: None,
             note: Some(format!(
-                "the {} route served {accelerated_documents} of {} documents, so this run                  measured nothing about it and no record was written; `doctor` says why the                  route did not run",
+                "the {} route served {accelerated_documents} of {} documents, so \
+                 this run measured nothing about it and no record was written; \
+                 `doctor` says why the route did not run",
                 engine.word(),
                 request.documents.len()
             )),

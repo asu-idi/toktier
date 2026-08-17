@@ -24,7 +24,7 @@ import verify_carryover  # noqa: E402
 CERTIFIED = {
     "fast_cpu": "bede8c9342e6129b267d28531a4842b83277b90c8b6a467b511decb2abd1dbda",
     "native_host": "2203d2c5ad6fc5f06037cad13bded1eb46404801f162ad02f0a3004d68f0a6b4",
-    "rust_api": "d7a4e58e6c3e6a13873a9ea3d2f9d8f1818394796b39ff0f05f1fdb2395d2938",
+    "rust_api": "89cacb94874a7de7db2d107b0120b1e97716f23e4abebf603b03f2b31732af0e",
 }
 
 

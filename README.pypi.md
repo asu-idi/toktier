@@ -463,6 +463,29 @@ This adapter re-encodes the full session and reports
 is not covered by the 12.4 TB (12.33 trillion characters) corrected-Gigatoken
 claim.
 
+There is now a measurement behind that. Over differential runs at increasing
+scale, up to 998,857,881 documents per artifact against
+`tokenizers==0.22.2`, we observed five defects in the upstream 0.3.1 code
+relative to that reference: one raises an error on a rare character, and four
+are silent id divergences where nothing is raised, so the caller cannot tell.
+Each has a standalone reproduction that fails on a build made from unmodified
+upstream sources. Reports have been prepared for the upstream project. With
+five patches of our own applied to those sources, the final differential --
+998,857,881 documents per artifact across 15 tokenizer artifacts --
+recorded zero id divergences, under a 108-codepoint guard that routed a small
+set of documents to the reference path.
+
+Those readings describe a source revision rather than a binary. The
+`engine_digest` in `explain()` covers the compiled extension too, so a wheel
+built from the same sources on another machine reports a different digest --
+the two patched wheels behind these numbers report `4c7e9c9f03313cc0...` and
+`24e3cccaef6d97f4...`, and the unmodified upstream comparison build reports
+`8600f509c10dc03c...`. Every build reports version `0.3.1`, so version
+separates none of them; `docs/support-matrix.md` carries the full digests. If
+your installation reports another digest, these numbers are not about it. The
+adapter's status is unchanged: still experimental, still opt-in, still never
+chosen automatically.
+
 ## Correctness and evidence
 
 The certified reference is Hugging Face `tokenizers` 0.22.2 with default

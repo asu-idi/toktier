@@ -21,7 +21,7 @@ audit records behind this document and does not ship inside the package.
 | `certified` | Evidence on file for this artifact and this backend, with the backend identified by a binary digest. The prebuilt GPU kernel delivery in this release is in this state on its judged architectures (sm_80, sm_89, sm_90 and sm_120). |
 | `certified_source` | Evidence binds source identity, build flags, and exact toolchain rather than one platform-specific binary. The integrated corrected-Gigatoken CPU engine and the locally compiled GPU JIT use this state; each also binds its backend-specific inputs. |
 | `reference-only` | No accelerated route is offered. The reference implementation runs and the reason is reported by `explain()`. This is also the state when the installed reference version differs from the certified one. |
-| `experimental` | Available only by explicit opt-in; no certified exact-ID claim applies. Fastokens is exposed only in this state. |
+| `experimental` | Available only by explicit opt-in; no certified exact-ID claim applies. Fastokens is exposed only in this state, and the measurements described below do not move it out of that state. |
 | `unsupported` | The named engine is known not to load or represent this artifact and is never planned. |
 
 Statuses are recorded per artifact **and** per backend: a family can be
@@ -92,6 +92,37 @@ version, and tokenizer artifact all match the registry. Otherwise the facade
 runs HF and gives the failed axis in `explain()`. Fastokens 0.3.1 is a separate
 explicit experimental full-session adapter and has no TokTier exact-ID
 guarantee.
+
+That position is now backed by a measurement rather than only by a
+disclaimer. Over differential runs at increasing scale, up to 998,857,881
+documents per artifact against `tokenizers==0.22.2`, the same frozen
+reference used everywhere else here, we observed five defects in the upstream
+0.3.1 code relative to that reference: one raises an error on a rare
+character, and four are silent id divergences where nothing is raised, so the
+caller cannot tell. Each has a standalone reproduction that fails on a build
+made from unmodified upstream sources. Reports have been prepared for the
+upstream project. With five patches of our own applied to those sources, the
+final differential -- 998,857,881 documents per artifact across 15 tokenizer
+artifacts, 14,982,868,215 document-artifact comparisons -- recorded zero id
+divergences, under a 108-codepoint guard that routed 505 documents per
+artifact to the reference path.
+
+What those readings describe is a source revision, not a binary. The
+`engine_digest` the adapter reports in `explain()` covers the compiled
+extension as well as the Python files, so a wheel built from the same sources
+on another machine reports a different digest, and version separates nothing
+because every build reports `0.3.1`. The three builds behind the numbers
+above report:
+
+- patched sources, the wheel used for the 998,857,881-per-artifact run:
+  `4c7e9c9f03313cc0c262eb781e9cf3389cc802ea5bd0eee9db367b326d0c17d9`
+- patched sources, the wheel used for the supporting checks:
+  `24e3cccaef6d97f43d016a2483d1b423a0e40e4717b756ce7f47da1894f14aa2`
+- unmodified upstream sources, the comparison build:
+  `8600f509c10dc03c98013bb9b7be214e0fae4bcb3f3618b937cd5f92ccc9120a`
+
+If your installation reports some other digest, these numbers are simply not
+about it. The adapter's status in this table is unchanged either way.
 
 The exact engine binding and native-equivalence record are in
 [`tools/fast_cpu_binding.json`](../tools/fast_cpu_binding.json). A focused

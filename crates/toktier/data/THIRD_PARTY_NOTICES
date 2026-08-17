@@ -104,6 +104,13 @@ and has no TokTier exact-ID guarantee.
       newline normalized)
     Upstream license: https://github.com/crusoecloud/fastokens/blob/v0.3.1/LICENSE
     Upstream notices: https://github.com/crusoecloud/fastokens/blob/v0.3.1/NOTICES.txt
+    Note: toktier does not modify or redistribute this dependency; it is
+      installed from the upstream distribution as an explicit optional
+      extra. A differential against tokenizers 0.22.2 recorded id
+      divergences we observed in the upstream 0.3.1 code, four of them
+      silent; reports have been prepared for the upstream project. See
+      docs/support-matrix.md for the measurement and for which builds it
+      describes.
 
   Gigatoken 0.10.0+toktier.pinned.1 (modified from 0.10.0)
     Upstream: https://github.com/marcelroed/gigatoken

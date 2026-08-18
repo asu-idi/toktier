@@ -6,7 +6,7 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:a93ef5bc6194f16c7bc693c8f2262bdf2878f3e87f654bf5dfed1004181eef6b",
+  "root_digest": "sha256:7462282460462a7af49849b4f6725deaec57064b15de6265e786af5f2aba27a5",
   "oracles": [
     {
       "oracle_id": "tokenizers",
@@ -2075,10 +2075,10 @@
   "runtime_builds": [
     {
       "runtime": "rust_api",
-      "source_digest": "89cacb94874a7de7db2d107b0120b1e97716f23e4abebf603b03f2b31732af0e",
+      "source_digest": "1f4e4a0c8aea045320b277f7ca9494acae451976a69a336cdf67ace2d8b8fe63",
       "fast_cpu_source_digest": "bede8c9342e6129b267d28531a4842b83277b90c8b6a467b511decb2abd1dbda",
       "native_host_source_digest": "2203d2c5ad6fc5f06037cad13bded1eb46404801f162ad02f0a3004d68f0a6b4",
-      "source_digest_v2": "631cb22d72ab2441718a9fadf236f7bded71c1a5c946af9b2544f2bf0ae7120d",
+      "source_digest_v2": "3db773609dda1b21c572c71a86ba024d649427cfe363d3de9754f285dcabeee9",
       "fast_cpu_source_digest_v2": "b1c760349e94a2ab8e3cca2ec2dfb624f855e78dbea2d08bcc2c44d5c2d161c8",
       "native_host_source_digest_v2": "575db46ff69ce1ca6fe57f9d552acbb22322d1bd10f8b70e76d2dc82be423ab7",
       "build_flags": [
@@ -2095,10 +2095,10 @@
     },
     {
       "runtime": "rust_api",
-      "source_digest": "89cacb94874a7de7db2d107b0120b1e97716f23e4abebf603b03f2b31732af0e",
+      "source_digest": "1f4e4a0c8aea045320b277f7ca9494acae451976a69a336cdf67ace2d8b8fe63",
       "fast_cpu_source_digest": "bede8c9342e6129b267d28531a4842b83277b90c8b6a467b511decb2abd1dbda",
       "native_host_source_digest": "2203d2c5ad6fc5f06037cad13bded1eb46404801f162ad02f0a3004d68f0a6b4",
-      "source_digest_v2": "631cb22d72ab2441718a9fadf236f7bded71c1a5c946af9b2544f2bf0ae7120d",
+      "source_digest_v2": "3db773609dda1b21c572c71a86ba024d649427cfe363d3de9754f285dcabeee9",
       "fast_cpu_source_digest_v2": "b1c760349e94a2ab8e3cca2ec2dfb624f855e78dbea2d08bcc2c44d5c2d161c8",
       "native_host_source_digest_v2": "575db46ff69ce1ca6fe57f9d552acbb22322d1bd10f8b70e76d2dc82be423ab7",
       "build_flags": [

@@ -1115,13 +1115,23 @@ def _print_verify_human(payload: Mapping[str, object]) -> None:
             continue
         documents = item["documents"]
         if status == "not_measured":
-            print(
-                f"{engine}: the {engine} route served "
-                f"{item['served_by_engine']} of {documents} documents, so "
-                "this run measured nothing about it and no record was "
-                "written; `toktier doctor --family <family>` says why the "
-                "route did not run"
-            )
+            served = item["served_by_engine"]
+            if served == 0:
+                print(
+                    f"{engine}: the {engine} route served none of the "
+                    f"{documents} documents, so this run measured nothing "
+                    "about it and no record was written; `toktier doctor "
+                    "--family <family>` says why the route did not run"
+                )
+            else:
+                print(
+                    f"{engine}: the {engine} route served {served} of "
+                    f"{documents} documents; the served ones compared equal, "
+                    "but the run does not cover the route and no record was "
+                    "written; the rest went to the reference path document "
+                    "by document, so a record needs an input the route "
+                    "serves throughout"
+                )
             continue
         if status == "passed":
             print(

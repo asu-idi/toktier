@@ -375,9 +375,19 @@ engines.
 It encodes your documents on the accelerated route and on this binary's
 reference engine and compares every id. `--synthetic N` builds documents
 from rules instead, so a check needs no corpus and no network.
-`--engine cpu` asks the same question of the integrated CPU engine,
-which is what the `behavior_versions` advisory points at when an R2
-library has moved.
+`--engine cpu` asks the same question of the integrated CPU engine. That
+is what the `behavior_versions` advisory points at when an R2 package
+moved while the tables it carries did not: the certificate holds there
+and the CPU route is admitted, so the command has something to compare.
+It is not what a `mismatched` core points at -- that state holds the
+accelerated engines on the reference route, so there is no accelerated
+CPU route to compare, and the line names the alignment command instead.
+
+A record is written only when the route served every document. A run it
+served in part is reported and not recorded: those documents were
+compared and agreed, but the run does not cover the route. A run it
+served not at all measured nothing, because both sides were then the
+reference engine.
 
 What it writes is a record, not a certificate. The record is filed under
 the device, delivery, image digest, compiler triple, driver, the two

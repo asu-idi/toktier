@@ -140,11 +140,20 @@ const COMPARE_HINT: &str = "To compare the accelerated engine with this binary's
                             engine on your own text, run: toktier-rust verify-local --engine \
                             cpu --family <family> --input <path>";
 
-/// The same command, offered where the two sides are already known to
-/// disagree somewhere and the open question is whether it reaches the
-/// caller's own text.
-const AFFECTED_HINT: &str = "To see whether your text is affected, run: toktier-rust \
-                             verify-local --engine cpu --family <family> --input <path>";
+/// What to offer where the certified core itself is mismatched.
+///
+/// Not the command above: that state holds the accelerated engines on
+/// the reference route, so this release admits no accelerated cpu route
+/// for `verify-local --engine cpu` to compare, and pointing at it would
+/// send the reader to an answer of "there is nothing here". What is
+/// actionable is putting the library back where the evidence was taken,
+/// so this names the alignment command in the same form the dependency
+/// advisory uses.
+const AFFECTED_HINT: &str = "This build admits no accelerated cpu route while the core is \
+                             mismatched, so `verify-local --engine cpu` has nothing to \
+                             compare here; put the library back on the judged behaviour \
+                             version instead, in the workspace that owns the governing \
+                             lockfile: cargo update --precise <judged version> <package>";
 
 fn readings() -> &'static Vec<Reading> {
     static READINGS: OnceLock<Vec<Reading>> = OnceLock::new();
@@ -307,8 +316,10 @@ mod tests {
             "mismatched: the reference engine in this binary carries Unicode 17.0 (regex \
              tables) where the certified evidence was taken on 16.0; some code points may \
              tokenize differently; the accelerated engines are held on the reference route. \
-             To see whether your text is affected, run: toktier-rust verify-local --engine cpu \
-             --family <family> --input <path>"
+             This build admits no accelerated cpu route while the core is mismatched, so \
+             `verify-local --engine cpu` has nothing to compare here; put the library back \
+             on the judged behaviour version instead, in the workspace that owns the \
+             governing lockfile: cargo update --precise <judged version> <package>"
         );
         // A unit that cannot be read falls back to the package
         // comparison the build script made, and only refuses when that
@@ -322,9 +333,11 @@ mod tests {
                 (unit == "regex").then_some("regex 1.13.1 -> 1.14.0")
             }),
             "mismatched: the behaviour version of regex could not be read in this binary, so \
-             the package versions are compared instead: regex 1.13.1 -> 1.14.0. To see whether \
-             your text is affected, run: toktier-rust verify-local --engine cpu --family \
-             <family> --input <path>"
+             the package versions are compared instead: regex 1.13.1 -> 1.14.0. This build \
+             admits no accelerated cpu route while the core is mismatched, so `verify-local \
+             --engine cpu` has nothing to compare here; put the library back on the judged \
+             behaviour version instead, in the workspace that owns the governing lockfile: \
+             cargo update --precise <judged version> <package>"
         );
         // Everything agreeing.
         assert_eq!(

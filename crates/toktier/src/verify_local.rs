@@ -332,7 +332,36 @@ pub(crate) fn cpu_key(family: &str, artifact_sha256: &str) -> VerificationKey {
 
 #[cfg(test)]
 mod tests {
-    use super::{generate, input_digest, split_documents, VerificationKey, TOOL_VERSION};
+    use super::{
+        generate, input_digest, split_documents, uncovered_note, VerificationKey, TOOL_VERSION,
+    };
+
+    /// A run that served part of its documents measured that part, and
+    /// the sentence says so rather than calling it nothing.
+    #[test]
+    fn a_partly_served_run_says_what_it_did_compare() {
+        let none = uncovered_note("cpu", 0, 3);
+        assert!(
+            none.contains("served none of the 3 documents")
+                && none.contains("measured nothing about it")
+                && none.contains("`doctor` says why the route did not run"),
+            "{none}"
+        );
+
+        let some = uncovered_note("cpu", 2, 3);
+        assert!(
+            some.contains("served 2 of 3 documents")
+                && some.contains("the served ones compared equal"),
+            "{some}"
+        );
+        // The partial state is neither a pass nor "nothing measured",
+        // and `doctor` answers about the plan rather than about the
+        // documents that took the reference path.
+        for word in ["measured nothing", "doctor", "locally_verified"] {
+            assert!(!some.contains(word), "{some}");
+        }
+        assert!(some.contains("no record was written"), "{some}");
+    }
 
     fn key() -> VerificationKey {
         VerificationKey {
@@ -745,6 +774,33 @@ fn unavailable(engine: Engine, family: &str, note: String) -> Comparison {
     }
 }
 
+/// What to say when the route did not serve every document.
+///
+/// Two states share this branch and a reader is owed the difference. A
+/// route that served nothing compared the reference engine with itself,
+/// so the run says nothing about it at all. A route that served some of
+/// them did measure those, and they agreed: what the run lacks is
+/// coverage, not a result, and calling that "measured nothing" would be
+/// less than the truth. Neither writes a record, and the second is not
+/// sent to `doctor`, which answers about the plan rather than about the
+/// documents that took the reference path.
+fn uncovered_note(engine: &str, served: u64, documents: u64) -> String {
+    if served == 0 {
+        format!(
+            "the {engine} route served none of the {documents} documents, so this \
+             run measured nothing about it and no record was written; `doctor` says \
+             why the route did not run"
+        )
+    } else {
+        format!(
+            "the {engine} route served {served} of {documents} documents; the served \
+             ones compared equal, but the run does not cover the route and no record \
+             was written; the rest went to the reference path document by document, \
+             so a record needs an input the route serves throughout"
+        )
+    }
+}
+
 fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Comparison> {
     let device = match engine {
         Engine::Cpu => crate::Device::Cpu,
@@ -858,12 +914,20 @@ fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Compar
             }
         }
     }
-    // A run over documents the route never served compared the
-    // reference engine with itself. That is not a passing check and it
-    // is not a failing one either -- it measured nothing about the
-    // route -- so it is reported and no record is written. Disagreement
-    // is different: ids that differ are evidence whoever served them.
+    // A run the route did not serve in full does not cover it, so no
+    // record is written. Two different things reach here and the
+    // sentence says which: a route that served nothing compared the
+    // reference engine with itself and measured nothing at all, while a
+    // route that served some of the documents did measure those, and
+    // they agreed -- what is missing is coverage, not a result.
+    // Disagreement is different again: ids that differ are evidence
+    // whoever served them, and that path writes its record above.
     if mismatches == 0 && accelerated_documents < request.documents.len() as u64 {
+        let note = uncovered_note(
+            engine.word(),
+            accelerated_documents,
+            request.documents.len() as u64,
+        );
         return Ok(Comparison {
             engine: engine.word().to_owned(),
             family: family.to_owned(),
@@ -874,13 +938,7 @@ fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Compar
             mismatches,
             first_mismatch,
             record: None,
-            note: Some(format!(
-                "the {} route served {accelerated_documents} of {} documents, so \
-                 this run measured nothing about it and no record was written; \
-                 `doctor` says why the route did not run",
-                engine.word(),
-                request.documents.len()
-            )),
+            note: Some(note),
         });
     }
     let record = VerificationRecord {

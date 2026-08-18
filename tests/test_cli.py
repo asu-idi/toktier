@@ -1354,8 +1354,53 @@ def test_verify_local_records_nothing_when_the_route_never_ran(
 
     captured = capsys.readouterr()
     assert exit_code == 0
+    assert "served none of the 3 documents" in captured.out
     assert "measured nothing about it and no record was written" in captured.out
     assert "locally_verified" not in captured.out
+
+
+def test_verify_local_says_what_a_partly_served_run_did_compare(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A run the route served in part measured that part, and says so.
+
+    Calling it "measured nothing" was the reading an evaluation
+    objected to: those documents were compared and they agreed. What
+    the run lacks is coverage, so it still writes no record.
+    """
+    from toktier import facade
+
+    class _PartlyServed(_FakeVerifyTokenizer):
+        """A subject that takes the accelerated route every other time."""
+
+        def __init__(self) -> None:
+            super().__init__({}, "fast_cpu")
+            self._calls = 0
+
+        def explain(self, *, summary: bool = False) -> dict[str, object]:
+            self._calls += 1
+            backend = "fast_cpu" if self._calls == 1 else "hf"
+            return {"last_execution_backend": backend}
+
+    def fake_load(_family: str, **keywords: object) -> _FakeVerifyTokenizer:
+        if keywords.get("policy") == "reference":
+            return _FakeVerifyTokenizer({}, "hf")
+        return _PartlyServed()
+
+    monkeypatch.setattr(facade, "load", fake_load)
+
+    exit_code = cli.main(
+        ["verify-local", "--family", "qwen3_8b", "--engine", "cpu", "--synthetic", "3"]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "served 1 of 3 documents" in captured.out
+    assert "the served ones compared equal" in captured.out
+    assert "no record was written" in captured.out
+    for word in ("measured nothing", "locally_verified", "toktier doctor"):
+        assert word not in captured.out
 
 
 def test_verify_local_names_an_engine_this_machine_cannot_open(

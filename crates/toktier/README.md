@@ -9,8 +9,16 @@ state store without a GIL or Python-shaped token collection.
 use toktier::{ArtifactManager, Device, Revision, Runtime};
 
 fn main() -> toktier::Result<()> {
+    // Any directory this process can write. A shared location such as
+    // /var/cache/toktier serves a whole machine, once it exists and the
+    // process may write it; the first call below acquires the artifact,
+    // which needs the optional `network` feature described further down.
+    let cache = format!(
+        "{}/.cache/toktier/artifacts",
+        std::env::var("HOME").unwrap_or_else(|_| ".".to_owned())
+    );
     let artifacts = ArtifactManager::builder()
-        .cache("/var/cache/toktier/artifacts")
+        .cache(cache)
         .build()?;
     let runtime = Runtime::builder()
         .artifacts(artifacts)
@@ -42,7 +50,7 @@ over TLS is the optional `network` feature, which is not enabled by
 default from 0.2.5 on:
 
 ```toml
-toktier = { version = "0.2.5", features = ["network"] }
+toktier = { version = "0.2.6", features = ["network"] }
 ```
 
 The optional `jit`
@@ -55,6 +63,15 @@ values/offsets representation for batches, and suffix-replacement patches for
 agent appends. Accelerated paths are admitted only when the embedded registry
 and the bytes observed in this process prove the complete binding. Otherwise
 they fall to the frozen `tokenizers==0.22.2` reference.
+
+One exception, added in 0.2.6 and the default since: `Policy::Supported` also
+admits a coverage gap -- a device architecture or compiler triple no campaign
+judged -- provided the shipped kernel loads and every constraint the registry
+does bind still verifies. Such a route is labelled `supported_untested`, never
+`certified`, and `toktier-rust verify-local` compares it with this binary's
+reference engine on your own text. A binding that fails to verify is a
+different matter and is still refused. `Policy::Certified` keeps the older,
+stricter admission.
 
 See [the Rust API guide](https://github.com/asu-idi/toktier/blob/main/docs/rust-api.md),
 the [lifecycle and distribution guide](https://github.com/asu-idi/toktier/blob/main/docs/rust-lifecycle.md),

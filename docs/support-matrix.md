@@ -124,6 +124,12 @@ above report:
 If your installation reports some other digest, these numbers are simply not
 about it. The adapter's status in this table is unchanged either way.
 
+As with the upstream audit above, what backs these readings -- the
+differential run records, the five standalone reproductions, the patches, and
+the three wheels whose digests are listed -- lives in the audit records behind
+this document and does not ship inside the package. What ships is the summary
+in this section.
+
 The exact engine binding and native-equivalence record are in
 [`tools/fast_cpu_binding.json`](../tools/fast_cpu_binding.json). A focused
 released-API rerun over every row is in

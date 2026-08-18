@@ -431,12 +431,13 @@ admitted that way is reported, never silent:
   still the only way past a refusal that is not about coverage.
 
 One naming point worth stating, because the word invites the opposite
-reading: **`policy="auto"` and `tier="auto"` are not the default
-policy.** Both have always been aliases for `CERTIFIED` and both still
-are, so passing either selects the strict setting -- judged devices and
-judged compilers only -- while passing nothing selects `SUPPORTED`.
-Neither meaning changed in 0.2.6; they simply stopped naming the same
-policy.
+reading: **`policy="auto"` is not the default policy.** The alias has
+always named `CERTIFIED` and still does, so passing it selects the
+strict setting -- judged devices and judged compilers only -- while
+passing nothing selects `SUPPORTED`. Neither meaning changed in 0.2.6;
+they simply stopped naming the same policy. The keyword is `policy=`:
+`toktier.load` takes no `tier=` argument, and passing one is the
+ordinary `TypeError` for an unexpected keyword.
 
 `Tokenizer.verification_key(engine)` returns the facts a local check of
 `"gpu"` or `"cpu"` on this machine would be about, or `None` when the

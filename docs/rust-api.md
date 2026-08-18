@@ -541,7 +541,7 @@ enum is `#[non_exhaustive]`, so a `match` on it needs a catch-all arm.
 | `UncertifiedTokenizer` / `UNCERTIFIED_TOKENIZER` | The artifact itself has no certification row for the demanded route, or a repository/revision is outside the shipped equivalence table. |
 | `KernelIncompatible` / `KERNEL_INCOMPATIBLE` | The kernel cannot be admitted: uncertified SM, fatbin or class-table digest mismatch, a family the kernel does not cover, a device-side constraint. |
 | `JitCompileFailed` / `JIT_COMPILE_FAILED` | The `jit` feature ran NVCC and the compile, its inputs, or its products failed. |
-| `UncertifiedJit` / `UNCERTIFIED_JIT` | A JIT product outside the judged toolchain set was requested without `Policy::Experimental`. |
+| `UncertifiedJit` / `UNCERTIFIED_JIT` | A JIT product outside the judged toolchain set was requested under a policy that does not admit it. Since 0.2.6 the default `Policy::Supported` does admit an unjudged (toolchain, device) pair and labels the product `supported_untested`, so this code is what `Policy::Certified` returns for that case; a product built on an explicit waiver still needs `Policy::Experimental`. |
 | `QueueFull` / `QUEUE_FULL` | A bounded serving queue, byte budget, or per-session in-flight bound is at its limit. Backpressure, not failure. |
 | `RequestCancelled` / `REQUEST_CANCELLED` | A serving request was cancelled. Work already started may still have committed; the code does not claim a rollback. |
 | `DeadlineExceeded` / `DEADLINE_EXCEEDED` | A serving request passed its deadline. Same non-rollback caveat. |

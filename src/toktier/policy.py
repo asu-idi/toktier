@@ -45,7 +45,7 @@ BACKEND_FAST_CPU: str = "fast_cpu"
 BACKEND_FASTOKENS: str = "fastokens"
 
 #: Convenience alias accepted wherever a policy is named as a string
-#: (``tier="auto"``); it selects :attr:`RoutingPolicy.CERTIFIED` and
+#: (``policy="auto"``); it selects :attr:`RoutingPolicy.CERTIFIED` and
 #: introduces no additional behavior.
 POLICY_ALIAS_AUTO: str = "auto"
 
@@ -53,13 +53,14 @@ POLICY_ALIAS_AUTO: str = "auto"
 class RoutingPolicy(enum.Enum):
     """The routing policies (frozen enum, appended to in 0.2.6).
 
-    ``tier="auto"``, where accepted, is a convenience alias for
-    :attr:`CERTIFIED`. The alias is resolved by :meth:`coerce`, and by
-    the enum call form (``RoutingPolicy("auto")``) which delegates to
-    it, so a constructor argument and a configuration value spell the
-    alias the same way. The alias keeps pointing at :attr:`CERTIFIED`;
-    the default is :attr:`SUPPORTED`, so asking for ``auto`` asks for
-    the stricter of the two.
+    ``policy="auto"`` is a convenience alias for :attr:`CERTIFIED`. The
+    alias is resolved by :meth:`coerce`, and by the enum call form
+    (``RoutingPolicy("auto")``) which delegates to it, so a constructor
+    argument and a configuration value spell the alias the same way.
+    The keyword is ``policy=``: :func:`toktier.load` takes no ``tier=``
+    argument. The alias keeps pointing at :attr:`CERTIFIED`; the default
+    is :attr:`SUPPORTED`, so asking for ``auto`` asks for the stricter
+    of the two.
     """
 
     #: Default since 0.2.6. Everything :attr:`CERTIFIED` admits, and in

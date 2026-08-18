@@ -13,8 +13,10 @@ code namespace are contract; new reason codes may be appended (see Section 5.4).
 | `REQUIRE_ACCELERATED` | Like `CERTIFIED`, but if no certified accelerated path is eligible at plan time, construction raises the specific cause error instead of quietly planning reference. |
 | `EXPERIMENTAL` | Permits uncertified accelerated paths (unlisted GPU architectures, PTX-JIT products, uncertified families). Outputs under this policy are not covered by the certification claims. Never the default. |
 
-- `tier="auto"`, where accepted, is a convenience alias for `CERTIFIED`
-  and introduces no additional behavior.
+- `policy="auto"` is a convenience alias for `CERTIFIED` and introduces
+  no additional behavior. The alias is the string, not a second keyword:
+  the Python facade spells it `policy=`, and `toktier.load` takes no
+  `tier=` argument.
 - Under every policy, correctness-motivated fallbacks remain enabled:
   we prefer a miss over a wrong result, and an uncertified path is only
   reachable by explicit `EXPERIMENTAL` opt-in.
@@ -58,7 +60,7 @@ remains ineligible under `CERTIFIED`.
 - `REQUIRE_ACCELERATED` follows the default rather than `CERTIFIED`: it
   asks that some accelerated path be eligible, and on a device outside
   the judged list the honest answer to that question is now yes.
-- `tier="auto"` still names `CERTIFIED`, so it selects the stricter of
+- `policy="auto"` still names `CERTIFIED`, so it selects the stricter of
   the two rather than the default.
 - The new labels appear in `explain()` under `certification.state`
   (`supported_untested`, `locally_verified`), under
@@ -91,6 +93,13 @@ remains ineligible under `CERTIFIED`.
    reason code.
 
 ## 3. `RoutePlan` immutability (frozen)
+
+This section describes the Python facade's `RoutePlan`
+(`toktier.policy.RoutePlan`). The Rust crate has a type of the same name
+whose fields differ; it is documented in
+[`../rust-api.md`](../rust-api.md) and has had that shape since 0.2.5, so
+nothing here changed it. Both are immutable and both plan the same three
+phases; only the field list is a per-face matter.
 
 - `RoutePlan` is an immutable value object. Fields: `policy`,
   `backend` (selected backend identifier), `fallback_chain`

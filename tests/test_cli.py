@@ -725,20 +725,30 @@ def test_artifacts_verify_resolves_a_shipped_family(
 
     With an empty cache the command still fails, but on the missing
     bytes rather than on the family: an empty manifest would refuse
-    every family here, which is the failure this test exists for.
+    every family here, which is the failure this test exists for. The
+    sentence also has to say enough to act on -- which directory was
+    searched, which offline condition is in force, and a way forward --
+    because the human form has no ``details`` to fall back on.
     """
     monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
     family, _ = _smallest_shipped_family()
+    searched = (
+        tmp_path / "toktier-home" / "cache" / "artifacts"
+    )
 
     exit_code = cli.main(["artifacts", "verify", family])
 
     captured = capsys.readouterr()
     assert exit_code == 2
     assert captured.out == ""
-    assert captured.err == (
+    message = captured.err
+    assert message.startswith(
         "error ARTIFACT_NOT_FOUND: artifact file 'tokenizer.json' of "
-        f"{family!r} is not in the cache and fetching is disabled (offline)\n"
+        f"{family!r} is not in the cache at {searched}"
     )
+    assert "fetching is disabled (offline: no_source)" in message
+    assert f"toktier artifacts fetch {family}" in message
+    assert "toktier artifacts import <bundle>" in message
 
 
 def test_artifacts_fetch_refuses_a_family_the_package_does_not_ship(

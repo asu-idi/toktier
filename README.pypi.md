@@ -178,14 +178,15 @@ tok = toktier.load("qwen3_8b", policy=RoutingPolicy.CERTIFIED)
 
 | Policy | What runs | If a fast-path premise fails |
 |---|---|---|
-| `CERTIFIED` (default) | Only routes covered for the exact artifact, HF version, engine/kernel bytes, delivery, and hardware | Falls back to HF and records the reason |
+| `SUPPORTED` (default since 0.2.6) | Everything `CERTIFIED` admits, and in addition a device architecture or compiler toolchain no campaign has judged, provided the shipped kernel loads and runs there and every constraint the registry does bind still verifies; such a route is labelled `supported_untested` rather than certified | Falls back to HF and records the reason |
+| `CERTIFIED` (the strict setting; the default through 0.2.5) | Only routes covered for the exact artifact, HF version, engine/kernel bytes, delivery, and hardware | Falls back to HF and records the reason |
 | `REFERENCE` | HF `tokenizers` only | No accelerated route is attempted |
-| `REQUIRE_ACCELERATED` | The same certified routes | Construction raises if no fast path is eligible; per-input safety fallbacks remain enabled |
+| `REQUIRE_ACCELERATED` | The same routes the default policy admits | Construction raises if no fast path is eligible; per-input safety fallbacks remain enabled |
 | `EXPERIMENTAL` | May admit an unjudged combination for evaluation | Labels every waived premise; never the default |
 
 The install profile and input shape then determine the automatic route:
 
-| Situation under the default `CERTIFIED` policy | Automatic route |
+| Situation under the default `SUPPORTED` policy | Automatic route |
 |---|---|
 | `toktier`, one of 11 certified tokenizer artifacts (12 model families) | Corrected Gigatoken for full CPU encoding; HF if any binding check fails |
 | `toktier[gpu]`, cold/plain input below the GPU crossover (64 KiB default) | Corrected Gigatoken CPU path (HF for a family without CPU-fast certification) |
@@ -194,11 +195,15 @@ The install profile and input shape then determine the automatic route:
 | Added-token or repair guard cannot prove its premise | HF reference path for that input |
 
 The two GPU rows describe what happens when the GPU route is admitted, and
-admission is narrower than "a GPU is present": the certified policy opens
-only the architectures the shipped evidence covers -- `sm_80`, `sm_89`, `sm_90` and `sm_120`
-for the prebuilt delivery -- so on any other architecture those rows fall to
-the row above them and `explain()` records the reason. The evidence scale
-per architecture is in
+admission is narrower than "a GPU is present". The shipped evidence covers
+`sm_80`, `sm_89`, `sm_90` and `sm_120` for the prebuilt delivery. On any
+other architecture the default `SUPPORTED` policy still runs the shipped
+kernel when it loads and every constraint the registry does bind verifies,
+and labels that route `supported_untested` rather than certified;
+`toktier verify-local` compares it with the reference engine on your own
+text. The strict `CERTIFIED` policy refuses it instead, so those rows fall
+to the row above them. Either way `explain()` records the reason. The
+evidence scale per architecture is in
 [`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.2.6/docs/support-matrix.md#status-vocabulary).
 
 `explain(summary=True)` reports:
@@ -515,8 +520,11 @@ The machine-readable records are
 and [`tables/support_registry.json`](https://github.com/asu-idi/toktier/blob/v0.2.6/tables/support_registry.json). Shipped
 per-artifact readings account for 53,720,215,504 checks; an archived earlier
 phase accounts for the remaining 3,280,031,861. Together they produce the
-headline total above. A focused end-to-end rerun through the historical public
-session API is kept in
+headline total above. What ships is that per-artifact summary: the
+document-by-document ledger the campaigns were reduced from lives in the
+audit records behind this document and does not ship inside the package.
+A focused end-to-end rerun through the historical public session API is
+kept in
 [`readings/fast_cpu_focused_parity.json`](https://github.com/asu-idi/toktier/blob/v0.2.6/readings/fast_cpu_focused_parity.json).
 The executing one-call Rust front end is separately checked across all 11
 CPU-fast artifacts in

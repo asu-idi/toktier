@@ -151,6 +151,46 @@ def fetch_availability(
     )
 
 
+def _offline_not_found(
+    message: str,
+    *,
+    family: str,
+    searched: Path,
+    reasons: list[str],
+) -> ArtifactNotFound:
+    """The missing-artifact error an offline run should get.
+
+    The code and the exit status were always right; what a reader also
+    needs is which family was asked for, which directory was searched,
+    which of the three offline conditions is in force, and what to do
+    next. ``docs/contracts/errors.md`` names ``suggestions`` for that
+    last part, so the ways forward travel in the details as well as in
+    the sentence, and the human form is not a strictly poorer report
+    than ``--json``.
+    """
+    suggestions = [
+        f"toktier artifacts fetch {family}  # on a host with network access",
+        f"toktier artifacts export {family} --out <bundle>  # there, then "
+        "'toktier artifacts import <bundle>' here",
+    ]
+    remedy = (
+        f"run 'toktier artifacts fetch {family}' on a host with network "
+        f"access, or stage it here with 'toktier artifacts import <bundle>' "
+        f"written by 'toktier artifacts export {family} --out <bundle>' there"
+    )
+    return ArtifactNotFound(
+        f"{message} (offline: {', '.join(reasons)}); {remedy}",
+        details={
+            "family": family,
+            "searched": [str(searched)],
+            "offline": True,
+            "offline_reasons": reasons,
+            "suggestions": suggestions,
+            "remedy": remedy,
+        },
+    )
+
+
 @dataclass(frozen=True)
 class VerifiedArtifact:
     """An artifact whose files are present and hash-verified."""
@@ -305,27 +345,22 @@ class ArtifactStore:
             quarantined.append(str(self._quarantine(entry, target)))
 
         if availability.offline:
-            raise ArtifactNotFound(
+            raise _offline_not_found(
                 f"artifact file {artifact_file.name!r} of {entry.family!r} is not "
-                "in the cache and fetching is disabled (offline)",
-                details={
-                    "family": entry.family,
-                    "searched": [str(target)],
-                    "offline": True,
-                    "offline_reasons": list(availability.reasons),
-                },
+                f"in the cache at {target} and fetching is disabled",
+                family=entry.family,
+                searched=target,
+                reasons=list(availability.reasons),
             )
 
         source = self._source
         if source is None:  # pragma: no cover - the offline check covers this
-            raise ArtifactNotFound(
-                f"no artifact source configured for {entry.family!r}",
-                details={
-                    "family": entry.family,
-                    "searched": [str(target)],
-                    "offline": True,
-                    "offline_reasons": [REASON_NO_SOURCE],
-                },
+            raise _offline_not_found(
+                f"no artifact source configured for {entry.family!r}, and "
+                f"{target} does not hold the file",
+                family=entry.family,
+                searched=target,
+                reasons=[REASON_NO_SOURCE],
             )
         # `mkdir(parents=True, mode=...)` reaches only the last component
         # and leaves the rest at the umask, which is the shape section 5

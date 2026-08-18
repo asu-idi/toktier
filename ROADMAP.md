@@ -102,7 +102,11 @@ architectures verdicts were actually run on, today `sm_80`, `sm_89`,
 `sm_90` and `sm_120`. Widening it is a campaign rather than a code
 change: `sm_80` (A100) and `sm_90` (H200) were added in 0.2.6 by running
 the same protocol the earlier entries were taken under, and the ones
-still outside the list wait on the same thing.
+still outside the list wait on the same thing. Those two rows rest on a
+bounded spot check alone: unlike `sm_89`, neither has an earlier
+full-scale campaign behind it, and lifting them to that depth is itself
+a campaign. The scale of every row is in
+[`docs/support-matrix.md`](docs/support-matrix.md#status-vocabulary).
 
 Since 0.2.6 a device outside that list is no longer refused by default:
 the shipped kernel runs there if it loads, and the route is labelled

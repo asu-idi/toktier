@@ -158,14 +158,15 @@ tok = toktier.load("qwen3_8b", policy=RoutingPolicy.CERTIFIED)
 
 | 策略 | 执行的路由 | 快速路径前提不成立时 |
 |---|---|---|
-| `CERTIFIED`（默认） | 只执行精确工件、HF 版本、引擎/kernel 字节、交付方式和硬件均有证据覆盖的路由 | fallback 到 HF，并记录原因 |
+| `SUPPORTED`（0.2.6 起为默认） | `CERTIFIED` 放行的全部路由，另外还包括认证活动没有测过的设备架构或编译工具链——前提是随包 kernel 在那里能装载并运行，且注册表确实绑定的每一项约束都仍然通过；这样的路由标为 `supported_untested`，而不是 certified | fallback 到 HF，并记录原因 |
+| `CERTIFIED`（严格档；0.2.5 及以前的默认） | 只执行精确工件、HF 版本、引擎/kernel 字节、交付方式和硬件均有证据覆盖的路由 | fallback 到 HF，并记录原因 |
 | `REFERENCE` | 只使用 HF `tokenizers` | 不尝试任何加速路径 |
-| `REQUIRE_ACCELERATED` | 与 `CERTIFIED` 相同的认证路由 | 若构造时没有合格快速路径则报错；仍启用针对单个输入的安全 fallback |
+| `REQUIRE_ACCELERATED` | 与默认策略相同的路由 | 若构造时没有合格快速路径则报错；仍启用针对单个输入的安全 fallback |
 | `EXPERIMENTAL` | 评估时可以采用未经评审的组合 | 明确标出每项获豁免的前提；永远不是默认策略 |
 
 在此基础上，安装配置和输入形态会决定自动路由：
 
-| 默认 `CERTIFIED` 策略下的情形 | 自动路由 |
+| 默认 `SUPPORTED` 策略下的情形 | 自动路由 |
 |---|---|
 | 安装项为 `toktier`，且使用 11 个认证 tokenizer 工件（覆盖 12 个 family）之一 | 修正版 Gigatoken 完成 CPU 全量编码；任一绑定检查失败则使用 HF |
 | 安装项为 `toktier[gpu]`，且冷请求/普通请求的输入大小低于 GPU crossover（默认 64 KiB） | 修正版 Gigatoken CPU 路径（没有 CPU-fast 认证的 family 使用 HF） |
@@ -174,9 +175,12 @@ tok = toktier.load("qwen3_8b", policy=RoutingPolicy.CERTIFIED)
 | Added-token 或 repair guard 无法证明前提 | 该输入使用 HF 参考路径 |
 
 表中两行 GPU 描述的是 GPU 路由被准入之后的行为，而准入条件比"机器上有 GPU"
-更窄：认证策略只放行随包证据覆盖到的架构——预编译交付为
-`sm_80`、`sm_89`、`sm_90` 与 `sm_120`——因此在其他架构上，这两行会落到上一行，`explain()` 会记录原因。
-逐架构的证据规模见
+更窄。随包证据覆盖到的架构为：预编译交付的 `sm_80`、`sm_89`、`sm_90` 与
+`sm_120`。在其他架构上，默认的 `SUPPORTED` 策略仍会运行随包 kernel——只要它
+能装载、且注册表确实绑定的每一项约束都通过——并把该路由标为
+`supported_untested` 而不是 certified；`toktier verify-local` 可以用你自己的
+文本把它与参考引擎对一遍。严格的 `CERTIFIED` 策略则会拒绝它，这两行随之落到
+上一行。两种情况下 `explain()` 都会记录原因。逐架构的证据规模见
 [`docs/support-matrix.md`](docs/support-matrix.md#status-vocabulary)。
 
 `explain(summary=True)` 报告：

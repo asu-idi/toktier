@@ -722,6 +722,65 @@ observed on 2026-08-04, not a promise about the repository's current contents:
 what the package actually enforces is the digest comparison it performs at load
 time, which is unaffected by anything upstream does afterwards.
 
+## Repositories admitted after the snapshot
+
+The audit above is dated 2026-08-04. Repositories published later are added
+one at a time, on the same basis and with the same bookkeeping: the upstream
+file is fetched at a pinned commit, hashed, and compared byte for byte against
+the anchor artifact of an already certified family. Nothing new is certified
+here -- a row in this section is the reasoning chain of step 2 under
+[Verified model repositories](#verified-model-repositories), applied to one
+repository on a later date.
+
+| Repository | Revision | `tokenizer.json` sha256 | Size | Family | Basis | Compared on |
+|---|---|---|---|---|---|---|
+| `deepseek-ai/DeepSeek-V4-Pro-0813` | `72e1d3230f6c` | `8f9f37ca37fd` | 6,367,146 | `deepseek_v4_flash` | identical | 2026-08-27 |
+| `zai-org/GLM-5.3-Flash` | `3f1971b7b5f7` | `19e773648cb4` | 20,217,442 | `glm_5_2` | identical | 2026-08-27 |
+
+Both files are byte-identical to the anchor their family was certified on, so
+the certificate carries over unchanged and no campaign was run for either. The
+`tokenizer_config.json` of each repository was hashed alongside its
+`tokenizer.json` and is equal to the anchor's as well, which is recorded
+because the loaded tokenizer object depends on both.
+
+These rows are in the shipped registry, so the packaged counts include them:
+`identical` reads 152 and `total` reads 213 there, with 206 rows pointing at a
+packaged family. Counted as siblings, the verified total is 212, and the two
+families concerned hold seven sub-versions each.
+
+A repository listed here is subject to the same caveat as every other row: it
+records a comparison made on a date, not a promise about the repository's
+current contents. What the package enforces is the digest comparison it
+performs at load time.
+
+### Examined and not certified: the Qwen3.8 tokenizer
+
+`Qwen/Qwen3.8-27B` and `Qwen/Qwen3.8-Flash-Next` ship one and the same
+tokenizer, `tokenizer.json` sha256 `0997f410c57a` (12,809,320 bytes),
+examined on 2026-08-27. It is recorded here rather than counted, because it is
+not certified in this release and the package routes it accordingly.
+
+What was established. Its `model`, `normalizer`, `pre_tokenizer`,
+`post_processor` and `decoder` sections are equal to the certified
+`qwen3_5_08b` artifact -- the two share the pipeline capability
+`pipeline.bc687a3b57eba58b` -- and its `vocab.json` and `merges.txt` are
+byte-identical to that family's. The one difference is the added-token table:
+33 entries against 26, the seven extra ones being audio and text-to-speech
+specials at ids 248070-248076. That gives it an added-token capability of its
+own, `added-frontend.6f80a43b9fe6a15f`, for which no campaign reading exists.
+
+What follows from that. Under the rule stated at the top of this page --
+coverage is decided by tokenizer content -- a differing added-token table is a
+differing artifact, and the composition of this pipeline with this added-token
+table has no evidence behind it. Both repositories therefore resolve to the
+reference route and report `R_UNCERTIFIED_ARTIFACT`, which is the same answer
+the package gives for any content it has not certified. They are not siblings
+of `qwen3_5_08b` and are not counted anywhere in this document's totals.
+
+This entry is here so that the boundary is visible: a reader looking for these
+repositories finds what was examined and what was concluded, rather than
+silence.
+
 ## Documented exclusions
 
 | Subject | Reason |

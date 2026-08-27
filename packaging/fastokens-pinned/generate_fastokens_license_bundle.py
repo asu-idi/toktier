@@ -11,7 +11,7 @@ Usage::
 
     cargo metadata --offline --locked --format-version 1 \
         --manifest-path python/Cargo.toml > metadata.json
-    python3 packaging/fastokens-pinned/generate_license_bundle.py \
+    python3 packaging/fastokens-pinned/generate_fastokens_license_bundle.py \
         metadata.json packaging/fastokens-pinned/THIRD_PARTY_LICENSES-fastokens.txt
 """
 

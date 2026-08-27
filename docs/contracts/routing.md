@@ -96,9 +96,10 @@ remains ineligible under `CERTIFIED`.
 
 This section describes the Python facade's `RoutePlan`
 (`toktier.policy.RoutePlan`). The Rust crate has a type of the same name
-whose fields differ; it is documented in
-[`../rust-api.md`](../rust-api.md) and has had that shape since 0.2.5, so
-nothing here changed it. Both are immutable and both plan the same three
+whose fields differ; its field list is in
+[`../rust-api.md`](../rust-api.md) under "`RoutePlan` on the Rust
+surface", and it has had that shape since 0.2.5, so nothing here changed
+it. Both are immutable and both plan the same three
 phases; only the field list is a per-face matter.
 
 - `RoutePlan` is an immutable value object. Fields: `policy`,

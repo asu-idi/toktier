@@ -488,9 +488,12 @@ is admitted (explicit opt-in, never automatic); `engine_assurance` says what is
 known about the installed engine. When the installed bytes are the wheel
 toktier published, `engine_assurance` is `certified_pinned` and
 `exact_id_guarantee` is `true` in the guarded sense: ids equal the pinned
-reference or the request is routed to it by the adapter's Unicode guard. Any
-other build of fastokens -- the upstream wheel, a wheel you built yourself --
-reports `false`. The pinned distribution keeps the upstream import name;
+reference or the request is routed to it by the adapter's Unicode guard. What
+is compared is the engine digest, not who built the wheel: a build whose
+digest is not among the published ones -- the upstream wheel, or one built
+from the sdist, which another host or toolchain usually makes different --
+reports `false`, and a build whose digest is identical reads exactly as the
+published one does. The pinned distribution keeps the upstream import name;
 install either it or the upstream distribution, not both (`toktier doctor`
 reports which one is present). If the upstream distribution is already
 installed, reinstall rather than remove one of the two, because uninstalling

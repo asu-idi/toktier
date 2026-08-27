@@ -427,6 +427,27 @@ label it would have had if nobody had run one -- running the tool never
 makes a configuration more restricted than not running it, and nothing
 is changed on the caller's behalf.
 
+### `RoutePlan` on the Rust surface
+
+`Tokenizer::plan()` returns the immutable route the tokenizer was
+constructed with. `docs/contracts/routing.md` Section 3 describes the
+Python facade's `RoutePlan`; this crate has a type of the same name whose
+fields differ, and these are they:
+
+| Field | Type | What it holds |
+|---|---|---|
+| `family` | `String` | The family this plan is for. |
+| `artifact_sha256` | `String` | The verified artifact the plan is bound to; a different artifact is a different plan. |
+| `backends` | `Vec<Backend>` | The admitted backends in order. The reference engine is always reachable; a plan that admitted nothing accelerated holds `[Backend::HuggingFace]`. |
+| `gpu_min_bytes` | `u64` | The input size at or above which the GPU backend is selected, when one is admitted. Below it execution starts at the next admitted backend, which is the ordinary latency policy rather than a fault. |
+| `certification` | `Certification` | The label of the admitted route: `Certified`, `CertifiedSource`, `Supported`, `LocallyVerified`, `Experimental` or `Reference`. |
+| `reasons` | `Vec<ReasonCode>` | One entry per accelerated option that was considered and not admitted. This is where a build whose closure or device the registry does not judge says so, and what `verify-local` names when it has no accelerated route to compare. |
+
+The type is `#[non_exhaustive]`, so it is read rather than constructed by
+a consumer, and both plans are immutable for the lifetime of the
+tokenizer: a device appearing or an environment variable changing does
+not alter an existing plan. Construct a new tokenizer to re-plan.
+
 ## Buffers, batches, and decode
 
 ```rust,no_run

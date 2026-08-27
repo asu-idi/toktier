@@ -429,7 +429,9 @@ tok = toktier.load(
 引擎知道什么。当安装的字节就是 toktier 发布的那只 wheel 时，`engine_assurance`
 为 `certified_pinned`，`exact_id_guarantee` 为 `true`，其含义是带守卫的：返回的
 id 与钉住的参考实现相等，或者该请求已被适配器的 Unicode 守卫改由参考实现回答。
-其他任何 fastokens 构建——上游 wheel、你自己构建的 wheel——都报告 `false`。
+这里比较的是引擎摘要，而不是由谁构建：摘要不在已发布之列的构建——上游 wheel，
+或从 sdist 自行构建的 wheel（换一台主机或一套工具链通常就会得到不同摘要）——
+报告 `false`；摘要与已发布 wheel 完全相同的构建，读数也与它相同。
 钉住分发沿用上游的 import 名，因此只能安装它或上游分发之一，不能同时安装
 （`toktier doctor` 会报告当前装的是哪一个）。若已装有上游分发，请整体重装而不是
 卸掉其中一个，因为卸载任一分发都会删掉两者共享的文件：

@@ -508,8 +508,15 @@ policy gate is unchanged; its `exact_id_guarantee: false` detail describes
 what a certified policy gets from this backend (nothing), while the pinned
 build's assurance is reported by `explain()` once the adapter is opened
 under `EXPERIMENTAL`. The adapter's configuration id moved to
-`toktier-fastokens-full-experimental-v2` when the guard entered it, so
-stored sessions from the earlier meaning miss and re-encode.
+`toktier-fastokens-full-experimental-v2` when the guard entered it. The
+id is a component of the session fingerprint (Section 3), and the
+fingerprint is checked at two levels: a *record* written under another
+one misses and is re-encoded, while a persistent *store* carries one
+fingerprint for the whole directory and is refused at open with
+`SESSION_STATE_MISMATCH` when it does not match. So an in-process
+session from the earlier meaning re-encodes, and a store written under
+the earlier id is not opened at all -- a new store directory is the way
+forward, which the release notes say under Upgrading.
 
 ## 6. Record reader
 

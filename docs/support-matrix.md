@@ -107,8 +107,9 @@ maintained by the toktier project, published on PyPI by this project and
 installed by the `toktier[fastokens]` extra. The readings below were taken on
 the wheel named here (engine digest
 `0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec`); they do
-not apply to the upstream distribution or to a wheel built from the sdist,
-whose digests differ. The adapter itself remains an explicit experimental
+not apply to the upstream distribution, nor to a build of the same sources
+whose engine digest differs, which a build from the sdist on another host or
+toolchain usually does. The adapter itself remains an explicit experimental
 route: it is selected only with `policy="experimental"` and
 `repair_backend="fastokens"`, never automatically, and `certification` reads
 `experimental` for that reason alone. What is new is the second answer,
@@ -127,9 +128,11 @@ route: it is selected only with `policy="experimental"` and
 | Topology | 150 cells over 1/2/all visible CPUs x two throttling mechanisms (six topologies), 0 exceptions, 0 id mismatches against the full-core run |
 | Splice and edit | 13 families, 157,872 splices and 23,400 edits, 0 failing |
 
-Three qualifications belong next to those numbers. The subject is the wheel
-above, not the source revision: a wheel built elsewhere from the same sources
-carries a different digest and is not covered. "Guarded" means ids equal the
+Three qualifications belong next to those numbers. The subject is the bytes,
+not the source revision: what the adapter compares is the engine digest, so a
+build made elsewhere from the same sources is covered exactly when its digest
+is one listed here, and a build from the sdist on another host or toolchain
+usually carries a different one. "Guarded" means ids equal the
 reference **or** the request was routed to the reference by the adapter's
 Unicode guard; the guard the shipped adapter compiles from the registry covers
 154 code points, a strict superset of the 108 the run applied, re-derived on

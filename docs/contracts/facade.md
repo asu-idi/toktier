@@ -51,7 +51,7 @@ tok.explain()                                # full plan, reasons, counters
   config=None, policy=None, manifest=None, cache_budget_bytes=None,
   repair_backend="auto", gpu_delivery="auto", gpu_min_bytes=65536) ->
   Tokenizer` is the model-repository entry point. The repository id is a
-  lookup hint, never a certification identity. For one of the 210 audited
+  lookup hint, never a certification identity. For one of the 212 audited
   sibling repositories, or for a canonical self-row, omitted `revision`
   selects the recorded revision;
   for a canonical repository it selects the artifact-manifest revision; for
@@ -300,6 +300,14 @@ is reserved for the cases where nothing is known -- no registry record for the
 artifact, or an installed oracle outside the certified set
 (``certification.state == "reference_only"``), where the reference that runs
 is not the pinned one.
+
+One boundary belongs beside that statement. An artifact's identity is its
+``tokenizer.json``, which is the file the reference route is built from, while
+the certified CPU fast path is built through ``transformers.AutoTokenizer`` and
+also reads ``tokenizer_config.json``. For an input containing an added-token
+literal that only the configuration file declares, the two routes can return
+different ids today; ``docs/support-matrix.md`` records which artifact this is
+reachable on and states that the certified corpora contain no such input.
 
 The registry-derived ``certification.state`` remains unchanged beside it, and
 its ``reference`` / ``reference_only`` values keep their existing meanings.

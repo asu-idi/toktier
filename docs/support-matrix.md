@@ -297,18 +297,23 @@ everything below rests on it:
 
 | Basis | What was compared | Rows |
 |---|---|---|
-| identical | `tokenizer.json` sha256 equal to the certified artifact | 150 |
+| identical | `tokenizer.json` sha256 equal to the certified artifact | 152 |
 | identical (source file) | `kimi_k3` lineage: upstream `tiktoken.model` sha256 equal to the conversion source of the certified artifact | 12 |
 | equivalent (canonicalisation) | JSON content equal after canonicalisation; byte difference is formatting only | 10 |
 | equivalent (serialisation) | loads to the same tokenizer; byte difference is legacy serialisation form | 38 |
 
-**210 repositories** are verified on these bases, spread over 15 of the 18
-artifacts in the family matrix. The shipped registry carries one further row
-that is not a sibling: `moonshotai/Kimi-K3`, the canonical repository of the
-`kimi_k3` family itself, so that resolving it by name reports itself as the
-evidence repository instead of a byte-identical sibling. The file therefore
-holds 211 rows; every count in this section, and the audit accounting at the
-end of the page, counts the 210 siblings. Nine of them are cross-vendor: three
+**212 repositories** are verified on these bases, spread over 15 of the 18
+artifacts in the family matrix. Two of them were published after the audit
+snapshot and were admitted one at a time on the same basis; they are listed
+under [Repositories admitted after the
+snapshot](#repositories-admitted-after-the-snapshot), and the audit accounting
+at the end of the page counts the 210 that were in the snapshot. The shipped
+registry carries one further row that is not a sibling:
+`moonshotai/Kimi-K3`, the canonical repository of the `kimi_k3` family
+itself, so that resolving it by name reports itself as the evidence
+repository instead of a byte-identical sibling. The file therefore holds 213
+rows; every count in this section counts the 212 siblings. Nine of them are
+cross-vendor: three
 `nvidia/Nemotron-Terminal-*` repositories ship the `qwen3_8b` artifact
 verbatim, and six `nvidia/Llama-3.x-Nemotron-*` repositories carry the
 `llama_3_1_8b` tokenizer in a different serialisation. They are listed under
@@ -318,12 +323,12 @@ which is the same rule the loader applies.
 The shipped file's own `counts` object counts rows, not siblings, so it
 reads one higher on two of them and is not a second opinion about the
 table above: `identical_source` is **13** there against 12 here, and
-`total` is 211 against 210, both because the canonical `kimi_k3` row is
+`total` is 213 against 212, both because the canonical `kimi_k3` row is
 an `identical_source` row that is not a sibling. The per-artifact table
-further down totals `identical` at **162** rather than 150 for a
+further down totals `identical` at **164** rather than 152 for a
 different reason: it folds the 12 `identical (source file)` rows into
 that column, as its footnote says. The three numbers are consistent --
-150 + 12 = 162 siblings compared on a hash, plus the one canonical row
+152 + 12 = 164 siblings compared on a hash, plus the one canonical row
 the shipped counts also carry.
 
 The executable counterpart is `toktier.from_pretrained(repo_id)`. It resolves
@@ -348,9 +353,9 @@ counted.
 | `qwen3_5_08b` | 19 | 19 | 0 | 0 | 5 |
 | `llama_3_1_8b` | 13 | 3 | 5 | 5 | 6 |
 | `deepseek_v3` | 2 | 2 | 0 | 0 | 10 |
-| `deepseek_v4_flash` | 6 | 6 | 0 | 0 | 0 |
+| `deepseek_v4_flash` | 7 | 7 | 0 | 0 | 0 |
 | `gpt_oss_120b` | 3 | 3 | 0 | 0 | 0 |
-| `glm_5_2` | 6 | 6 | 0 | 0 | 0 |
+| `glm_5_2` | 7 | 7 | 0 | 0 | 0 |
 | `minimax_m3` | 1 | 1 | 0 | 0 | 11 |
 | `ministral_3_8b` | 2 | 2 | 0 | 0 | 5 |
 | `nemotron_3_nano_4b` | 19 | 16 | 3 | 0 | 1 |
@@ -360,7 +365,7 @@ counted.
 | `bert_cased` | 4 | 2 | 2 | 0 | 0 |
 | `bert_uncased` | 3 | 3 | 0 | 0 | 0 |
 | `bert_multilingual_cased` | 0 | 0 | 0 | 0 | 0 |
-| **total** | **210** | 162 | 10 | 38 | 77 |
+| **total** | **212** | 164 | 10 | 38 | 77 |
 
 `*` `kimi_k3` rows are compared at `tiktoken.model` level, for the reason given
 under the family matrix above.
@@ -376,7 +381,10 @@ in the family matrix above. The revision column records where the repository's
 default branch stood at the snapshot. `from_pretrained()` expands it to the
 audited full commit and uses that immutable revision by default; callers may
 request another revision, but the resulting file must still match by content
-before acceleration is admitted.
+before acceleration is admitted. A row marked &dagger; was published after
+the snapshot and admitted later; its revision is the commit it was compared at
+on the date given under [Repositories admitted after the
+snapshot](#repositories-admitted-after-the-snapshot).
 
 #### `qwen3_8b` (110 repositories)
 
@@ -542,7 +550,7 @@ before acceleration is admitted.
 | `deepseek-ai/DeepSeek-V3-0324` | `e9b33add7688` | `621ac2e32d0d` | identical |
 | `deepseek-ai/DeepSeek-V3-Base` | `afb92e1fa402` | `621ac2e32d0d` | identical |
 
-#### `deepseek_v4_flash` (6 repositories)
+#### `deepseek_v4_flash` (7 repositories)
 
 | Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
 |---|---|---|---|
@@ -552,6 +560,7 @@ before acceleration is admitted.
 | `deepseek-ai/DeepSeek-V4-Pro` | `b5968e9190ef` | `8f9f37ca37fd` | identical |
 | `deepseek-ai/DeepSeek-V4-Pro-Base` | `98730c030fbd` | `8f9f37ca37fd` | identical |
 | `deepseek-ai/DeepSeek-V4-Pro-DSpark` | `7c09739fd136` | `8f9f37ca37fd` | identical |
+| `deepseek-ai/DeepSeek-V4-Pro-0813` &dagger; | `72e1d3230f6c` | `8f9f37ca37fd` | identical |
 
 #### `gpt_oss_120b` (3 repositories)
 
@@ -561,7 +570,7 @@ before acceleration is admitted.
 | `openai/gpt-oss-safeguard-120b` | `3c7391182603` | `0614fe83cada` | identical |
 | `openai/gpt-oss-safeguard-20b` | `8a11e17b25c9` | `0614fe83cada` | identical |
 
-#### `glm_5_2` (6 repositories)
+#### `glm_5_2` (7 repositories)
 
 | Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
 |---|---|---|---|
@@ -571,6 +580,7 @@ before acceleration is admitted.
 | `zai-org/GLM-5.1` | `26e1bd6e011f` | `19e773648cb4` | identical |
 | `zai-org/GLM-5.1-FP8` | `f396cf805182` | `19e773648cb4` | identical |
 | `zai-org/GLM-5.2-FP8` | `ba978f7d347e` | `19e773648cb4` | identical |
+| `zai-org/GLM-5.3-Flash` &dagger; | `3f1971b7b5f7` | `19e773648cb4` | identical |
 
 #### `minimax_m3` (1 repositories)
 
@@ -702,7 +712,10 @@ a benchmark reference rather than a certified family.
 
 The accounting closes on the snapshot total: 470 repositories examined = 16
 anchors + 210 verified sub-versions + 77 core-equal + 83 different + 32 without
-a comparable file + 13 gated + 39 out of scope.
+a comparable file + 13 gated + 39 out of scope. This equation is about the
+snapshot and stays fixed: the two repositories admitted afterwards were not
+among the 470 examined on that date, which is why the verified total elsewhere
+on this page reads 212 while this line reads 210.
 
 ### What the snapshot is and is not
 
@@ -780,6 +793,25 @@ of `qwen3_5_08b` and are not counted anywhere in this document's totals.
 This entry is here so that the boundary is visible: a reader looking for these
 repositories finds what was examined and what was concluded, rather than
 silence.
+
+## Configuration-only added tokens
+
+An artifact's identity in this document is its `tokenizer.json`, and the
+reference route is built from that file alone. The certified CPU fast path is
+built through `transformers.AutoTokenizer`, which reads `tokenizer_config.json`
+as well, so it also sees added-token literals that only the configuration file
+declares. For an input that contains such a literal, the two routes can
+therefore return different ids today, and which of the two faces is the
+authoritative one is a question this release does not settle.
+
+The one artifact in this matrix where the difference is reachable is
+`qwen3_5_08b`: its `tokenizer.json` carries 26 added tokens and its
+`tokenizer_config.json` declares seven more, at ids 248070-248076. The
+certified corpora contain no occurrence of any of the seven, so the campaign
+readings on this page are unaffected, and every other artifact listed here
+declares its added tokens in `tokenizer.json` only. The boundary is recorded
+here so that a reader who constructs such an input knows what to expect from
+each route.
 
 ## Documented exclusions
 

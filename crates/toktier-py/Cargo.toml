@@ -18,9 +18,9 @@ crate-type = ["cdylib"]
 testing = ["toktier-store-core/testing"]
 
 [dependencies]
-toktier-routing-core = { path = "../toktier-routing-core", version = "=0.2.6" }
-toktier-store-core = { path = "../toktier-store-core", version = "=0.2.6" }
-toktier-store-sqlite = { path = "../toktier-store-sqlite", version = "=0.2.6" }
+toktier-routing-core = { path = "../toktier-routing-core", version = "=0.2.7" }
+toktier-store-core = { path = "../toktier-store-core", version = "=0.2.7" }
+toktier-store-sqlite = { path = "../toktier-store-sqlite", version = "=0.2.7" }
 pyo3.workspace = true
 serde_json.workspace = true
 

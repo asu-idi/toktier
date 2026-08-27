@@ -163,12 +163,12 @@ PACKAGE AND SPDX INDEX
   tinyvec 1.12.0 [crates.io]: Zlib OR Apache-2.0 OR MIT
   tinyvec_macros 0.1.1 [crates.io]: MIT OR Apache-2.0 OR Zlib
   tokenizers 0.22.2 [crates.io]: Apache-2.0
-  toktier-cuda-driver 0.2.6 [workspace]: Apache-2.0
-  toktier-gigatoken-core 0.2.6 [workspace]: MIT
-  toktier-py 0.2.6 [workspace]: Apache-2.0
-  toktier-routing-core 0.2.6 [workspace]: Apache-2.0
-  toktier-store-core 0.2.6 [workspace]: Apache-2.0
-  toktier-store-sqlite 0.2.6 [workspace]: Apache-2.0
+  toktier-cuda-driver 0.2.7 [workspace]: Apache-2.0
+  toktier-gigatoken-core 0.2.7 [workspace]: MIT
+  toktier-py 0.2.7 [workspace]: Apache-2.0
+  toktier-routing-core 0.2.7 [workspace]: Apache-2.0
+  toktier-store-core 0.2.7 [workspace]: Apache-2.0
+  toktier-store-sqlite 0.2.7 [workspace]: Apache-2.0
   typenum 1.20.1 [crates.io]: MIT OR Apache-2.0
   unicode-ident 1.0.24 [crates.io]: (MIT OR Apache-2.0) AND Unicode-3.0
   unicode-normalization-alignments 0.1.12 [crates.io]: MIT OR Apache-2.0
@@ -4759,7 +4759,7 @@ limitations under the License.
 
 sha256: 8176bb37dc7bb0199d28e0232a76e784521bc771c29553f2ec843e45ead6825a
 applies to:
-  toktier-gigatoken-core 0.2.6/vendor/NOTICE-TOKTIER.md
+  toktier-gigatoken-core 0.2.7/vendor/NOTICE-TOKTIER.md
 
 # Modification notice for the TokTier pinned build
 
@@ -6568,7 +6568,7 @@ DEALINGS IN THE SOFTWARE.
 
 sha256: b13f468525e8c77083490e46252a77772b2c42279aef381f0d8fd52f4a7fba40
 applies to:
-  toktier-gigatoken-core 0.2.6/NOTICE-gigatoken-pinned
+  toktier-gigatoken-core 0.2.7/NOTICE-gigatoken-pinned
 
 NOTICE: gigatoken (pinned build)
 ================================
@@ -7173,12 +7173,12 @@ applies to:
   sonic-simd 0.1.4/LICENSE
   spm_precompiled 0.1.4/LICENSE
   tokenizers 0.22.2/LICENSE
-  toktier-cuda-driver 0.2.6/LICENSE
-  toktier-gigatoken-core 0.2.6/LICENSE
-  toktier-py 0.2.6/LICENSE
-  toktier-routing-core 0.2.6/LICENSE
-  toktier-store-core 0.2.6/LICENSE
-  toktier-store-sqlite 0.2.6/LICENSE
+  toktier-cuda-driver 0.2.7/LICENSE
+  toktier-gigatoken-core 0.2.7/LICENSE
+  toktier-py 0.2.7/LICENSE
+  toktier-routing-core 0.2.7/LICENSE
+  toktier-store-core 0.2.7/LICENSE
+  toktier-store-sqlite 0.2.7/LICENSE
 
                                  Apache License
                            Version 2.0, January 2004
@@ -7766,8 +7766,8 @@ DEALINGS IN THE SOFTWARE.
 
 sha256: d2d13d2c278955bb904f498cfb45f3c10f69295ca1eb69f46aa777546b86d03e
 applies to:
-  toktier-gigatoken-core 0.2.6/LICENSE-gigatoken
-  toktier-gigatoken-core 0.2.6/vendor/LICENSE-gigatoken
+  toktier-gigatoken-core 0.2.7/LICENSE-gigatoken
+  toktier-gigatoken-core 0.2.7/vendor/LICENSE-gigatoken
 
 MIT License
 

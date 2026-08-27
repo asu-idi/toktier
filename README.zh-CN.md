@@ -6,7 +6,7 @@
 
 TokTier 是面向智能体 LLM 服务的有状态分词系统。它保留每个会话的 token
 状态，通过认证 CPU 路径对追加文本执行 repair，并为全新请求或大型请求提供
-认证 GPU 路径。两条快速路径返回的 token ID 序列，都与 Hugging Face（HF）
+认证 GPU 路径。两条快速路径返回的 token ID 序列都与 Hugging Face（HF）
 `tokenizers` 从头完整编码得到的 token ID 序列**完全一致（bit-identical）**。
 
 - **大规模精确验证。** 发布验证覆盖 15 个 tokenizer 工件、38 亿篇真实文档，
@@ -18,7 +18,7 @@ TokTier 是面向智能体 LLM 服务的有状态分词系统。它保留每个�
   的前提是引擎已构造并就绪，不是冷启动首次调用的数字。repair 读数只测量
   repair 操作本身，
   不包含将完整历史 token 序列物化为 Python tuple 的成本。
-- **先认证，再加速。** 只有精确的 tokenizer 工件、参考实现版本、kernel 交付方式
+- **先认证，再加速。** 只有在精确的 tokenizer 工件、参考实现版本、kernel 交付方式
   和架构均有记录证据覆盖时，系统才会采用快速路径。`explain()` 会报告实际路由
   及其原因。
 
@@ -41,38 +41,38 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 
 ## 最新动态
 
-- **2026.08.TBD** 🚀 **toktier 0.2.6** 发布——Rust 侧认证现在只为
-  certified core 说话（TokTier 自家的 crate、它们直接调用的包，以及
-  它们下面真正参与分词计算的文本语义库）；编译闭包其余部分
-  的版本差异改以 advisory 形式如实报告并附对齐命令，不再拦下加速
-  路径；整闭包的严格读数仍保留在 `dependency_closure`。决定文本切点的
-  那几个库，改按它们携带的 Unicode 表的版本比对，而不是按 crate
-  版本；`doctor` 逐一报出。快速 CPU 预分词器读的属性数据已钉到参考
-  引擎所携带的同一个 Unicode 版本，并有穷举对拍的门看住两边一致。
-  GPU 这一侧：驱动与 CUDA 版本改为按"环境事实"如实报告，不再作为证书前提；
-  认证活动没有测过的设备架构或编译工具链，在新的默认 `supported` 策略下会
+- **2026.08.TBD** 🚀 **toktier 0.2.6** 发布——Rust 侧认证现在仅对
+  certified core 作出声明（TokTier 自有的 crate、这些 crate 直接调用的包，以及
+  下层依赖中真正参与分词计算的文本语义库）；编译闭包其余部分
+  的版本差异改为以 advisory 形式如实报告，并附上对齐命令，不再阻止采用加速
+  路径；整个闭包的严格读数仍保留在 `dependency_closure`。决定文本切点的
+  库改为按其携带的 Unicode 表版本进行比对，而不是按 crate 版本比对；
+  `doctor` 会逐一报告。快速 CPU 预分词器读取的属性数据已固定为参考引擎
+  所携带的同一 Unicode 版本，并通过穷举对拍门禁确保二者一致。
+  GPU 方面：驱动与 CUDA 版本改为以“环境事实”的形式如实报告，不再作为证书前提；
+  认证活动未测试过的设备架构或编译工具链，在新的默认 `supported` 策略下会
   照常运行并标注为 `supported_untested`；`toktier-rust verify-local` /
-  `toktier verify-local` 可以用你自己的文本把这条路与参考引擎逐 id 对一遍，
-  通过则记为 `locally_verified`（这是一次本机测量的记录，不是证书）。
+  `toktier verify-local` 可以用你自己的文本，逐一核对该路径和参考引擎返回的 id，
+  通过后记为 `locally_verified`（这是一次本机测量记录，不是证书）。
   对外返回的 ID、store 格式与 kernel ABI 都没有变化。详见
   [v0.2.6 发布说明](docs/releases/v0.2.6.md)（英文）。
 - **2026.08.15** 🚀 **toktier 0.2.5** 发布——Rust crate 的 `network` feature
-  改为按需开启，这让可能从不联网取件的默认构建少带 16 个包和整套 TLS 栈；
+  改为按需开启，这使可能无需联网获取工件的默认构建少包含 16 个包和整套 TLS 栈；
   仍需通过网络获取工件时加上 `features = ["network"]`，命令行则用
-  `cargo install --locked --features network toktier`。Python 包的取件方式
-  与此前完全相同，这项 feature 变化够不到它；真正会被 Python 侧看到的是
-  `Session.revision` 自本版起可跨进程持久：在后续进程中恢复的会话报出其
-  记录携带的 revision，`Tokenizer.store_session_revision()` 也由 `None`
-  改为报出该数值。诊断面新增执行 `reason` 与 `network_compiled` 构建事实。
+  `cargo install --locked --features network toktier`。Python 包获取工件的方式
+  与此前完全相同，不受这项 feature 变化影响；Python 侧实际可见的变化是
+  `Session.revision` 自本版起可跨进程持久：在后续进程中恢复的会话会报告其
+  记录携带的 revision，`Tokenizer.store_session_revision()` 也不再报告 `None`，
+  而是报告该数值。诊断信息中新增执行 `reason` 和 `network_compiled` 构建事实。
   对外返回的 ID、store 格式与 kernel ABI 都没有变化。详见
   [v0.2.5 发布说明](docs/releases/v0.2.5.md)（英文）。
 - **2026.08.14** 🚀 **toktier 0.2.4** 发布——Han family（`kimi_k3`）以产品
-  自带的端到端 GPU 引擎正式进入认证名单；Rust 侧认证开始判定"这次构建真正
-  编译的那些包"，而不只是源码，build flags 也只声称 build script 观测得到的
+  自带的端到端 GPU 引擎正式进入认证名单；Rust 侧认证开始以“本次构建实际编译
+  的包”为判定依据，而不再只看源码；build flags 也只报告 build script 实际观测到的
   项；Rust crate 开始遵循 `TOKTIER_HOME`/XDG；Python facade 新增 `session()`
-  上下文管理器、全命令 `--json` 与 `doctor --family`；无法承载私有状态的
-  目录根、`artifacts check-conversion`、以及 last-execution 诊断，都在各自的
-  契约内作答。对外返回的 ID、store 格式与 kernel ABI 都没有变化。详见
+  上下文管理器、全命令 `--json` 与 `doctor --family`；对无法承载私有状态的
+  目录根、`artifacts check-conversion` 以及 last-execution 诊断，相关功能均按各自
+  契约给出结果。对外返回的 ID、store 格式与 kernel ABI 都没有变化。详见
   [v0.2.4 发布说明](docs/releases/v0.2.4.md)（英文）。
 - **2026.08.11** 🚀 **toktier 0.2.1** 发布——维护版本：诊断信息更完整
   （`doctor` 会报告 JIT 工具链是否合格，`explain()` 摘要逐项标明所指的时间
@@ -102,10 +102,10 @@ print(tok.explain(summary=True))        # 简明路由与判定
 
 先 `encode` 再 `decode`，不一定能还原为完全相同的文本：如果 tokenizer 的处理
 流程包含归一化（例如 NFC），返回的会是归一化后的文本。这是 tokenizer 自身的
-行为，并非 TokTier 造成的不一致。TokTier 给出的保证是关于 ID 的，这项保证不受影响：
+行为，并非 TokTier 造成的不一致。TokTier 保证的是 ID 一致性，这项保证不受影响：
 对于同一输入，其 ID 与 HF 从头编码的结果相同，而且两个解码器返回的文本也相同。
 
-如果应用代码拿到的是 Hugging Face 模型仓库，而不是 TokTier family id，也可以
+如果应用代码使用的是 Hugging Face 模型仓库，而不是 TokTier family id，也可以
 按 tokenizer 内容解析：
 
 ```python
@@ -113,7 +113,7 @@ tok = toktier.from_pretrained("Qwen/Qwen3-0.6B")
 ```
 
 对于已登记的 sibling 或 canonical 仓库，`from_pretrained()` 会下载经审计的
-不可变 revision，对解析到的那个文件计算 SHA-256，再查询由根摘要校验的
+不可变 revision，对解析出的文件计算 SHA-256，再查询由根摘要校验的
 sibling 注册表（210 个已审计仓库，另加 1 个 canonical 自指条目）。对于未登记的仓库，`from_pretrained()`
 在未显式传入 `revision=` 时解析 `main`。字节完全相同、经 canonicalization
 后等价或序列化等价的记录，会通过同一套 CPU/GPU 路由使用已经认证的
@@ -148,7 +148,7 @@ assert enc.ids == tok.encode(transcript, lookup="off").ids
 
 ### 路由与策略
 
-路由策略可以选择，也可以查看：
+路由策略既可选择，也可查看：
 
 ```python
 from toktier import RoutingPolicy
@@ -174,13 +174,13 @@ tok = toktier.load("qwen3_8b", policy=RoutingPolicy.CERTIFIED)
 | 已存在的会话收到严格追加 | 覆盖范围内的 12 个 family 使用修正版 Gigatoken CPU repair，不受完整对话总长度影响 |
 | Added-token 或 repair guard 无法证明前提 | 该输入使用 HF 参考路径 |
 
-表中两行 GPU 描述的是 GPU 路由被准入之后的行为，而准入条件比"机器上有 GPU"
+表中两行 GPU 描述的是 GPU 路由被准入之后的行为，而准入条件比“机器上有 GPU”
 更窄。随包证据覆盖到的架构为：预编译交付的 `sm_80`、`sm_89`、`sm_90` 与
 `sm_120`。在其他架构上，默认的 `SUPPORTED` 策略仍会运行随包 kernel——只要它
-能装载、且注册表确实绑定的每一项约束都通过——并把该路由标为
+能装载，且注册表确实绑定的每一项约束都通过——并把该路由标为
 `supported_untested` 而不是 certified；`toktier verify-local` 可以用你自己的
-文本把它与参考引擎对一遍。严格的 `CERTIFIED` 策略则会拒绝它，这两行随之落到
-上一行。两种情况下 `explain()` 都会记录原因。逐架构的证据规模见
+文本将该路径与参考引擎进行对比。严格的 `CERTIFIED` 策略则会拒绝该路径，此时
+表中这两行会回退至上一行所述路径。两种情况下 `explain()` 都会记录原因。逐架构的证据规模见
 [`docs/support-matrix.md`](docs/support-matrix.md#status-vocabulary)。
 
 `explain(summary=True)` 报告：
@@ -198,7 +198,7 @@ fallback 的计数。
 
 ## Rust serving API
 
-工作区（Cargo workspace）提供无需 Python 的 Rust serving facade，供直接
+工作区（Cargo workspace）提供无需 Python 的 Rust serving facade，供需要直接
 保留 token 状态的前端使用。它提供：
 
 - 固定版本工件的获取、镜像与气隙操作
@@ -227,8 +227,8 @@ Rust serving 接口见 [`docs/rust-api.md`](docs/rust-api.md)；工件获取、J
 
 从 0.1.1 开始，UTF-8 crossover 与 added-token 未命中预筛会在一次零分配的
 Rust selector 调用中完成。在已记录的 RTX 5090 主机上，4M-byte 控制平面微基准
-由 2.97 ms 降至 0.052 ms（57.5 倍）；该数据只衡量路由，与 tokenization 和
-Python 返回值物化分开。详见
+由 2.97 ms 降至 0.052 ms（57.5 倍）；该数据仅衡量路由，不包含 tokenization 和
+Python 返回值物化。详见
 [`docs/native-routing.md`](docs/native-routing.md)。
 
 ## 安装
@@ -241,8 +241,8 @@ cargo add toktier                   # 无 Python 依赖的 Rust serving API
 cargo add toktier --features network # 同上，并加上通过 TLS 获取工件的能力
 ```
 
-Python 包不受 Rust crate feature 的影响：它一如既往通过 `huggingface-hub`
-获取工件。Rust 侧自 0.2.5 起 `network` 改为按需开启；不开启时，crate 仍可
+Python 包不受 Rust crate feature 的影响，仍通过 `huggingface-hub`
+获取工件。Rust 侧的 `network` 自 0.2.5 起改为按需开启；不开启时，crate 仍可
 校验、镜像、导入导出工件，并基于已校验缓存运行。
 
 | 安装项 | 交付内容 | 要求 |
@@ -259,8 +259,8 @@ Python 包不受 Rust crate feature 的影响：它一如既往通过 `huggingfa
 ### JIT 工具链认证
 
 JIT 在工具链边界采用严格的 fail-closed 策略。认证会将 PyTorch 扩展构建器
-实际选择的 `nvcc`、`torch.version.cuda` 和 PyTorch 发行版版本分别作为独立维度
-核对。如果注册表未记录这个精确三元组，自动路由会给出醒目警告，并继续使用
+实际选择的 `nvcc`、`torch.version.cuda` 和 PyTorch 发行版版本作为独立维度
+分别核对。如果注册表未记录这个精确三元组，自动路由会给出醒目警告，并继续使用
 修正版 Gigatoken → HF fallback 链；显式请求 CUDA 则会直接失败，同时列出观测到的
 编译器/运行时三元组、认证约束和可直接复制的处理命令。例如，torch CUDA 13.0
 配 NVCC 13.2 不会被视为经评审的 NVCC 13.0 组合。经评审的组合可在首次使用前编译：
@@ -277,7 +277,7 @@ toktier gpu compile qwen3_8b --accept-uncertified-jit
 
 **这不会让生成的 kernel 获得认证。** 该命令在 `EXPERIMENTAL` 策略下运行，打印
 `UNCERTIFIED JIT OPT-IN` 警告，并记录所有获豁免的前提。应用代码也必须显式
-传入 `policy="experimental", gpu_delivery="jit"`；这项风险确认刻意不做持久化，
+传入 `policy="experimental", gpu_delivery="jit"`；这项风险确认有意不持久化，
 也不会被后续认证进程继承。使用结果前请检查
 `explain()["experimental_waivers"]`。
 
@@ -373,9 +373,9 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 上述字段描述的是这套安装。`toktier doctor --family FAMILY` 会另加一个
 `family` 段，回答某一个 family 在这台机器上的情况：它的认证身份、
 `fast_cpu` 与 GPU 状态，以及两个实际后端——一个对应达到或超过 crossover
-的请求，一个对应低于 crossover 的请求。差别正体现在后者：CPU 车道走参考
-实现的 family 在低于 crossover 时读作 `hf`，而安装层面的字段（同样属实）
-读作 `fast_cpu`。
+的请求，一个对应低于 crossover 的请求。差别体现在后者：对于在 CPU
+路径上使用参考实现的 family，低于 crossover 时对应后端为 `hf`，而安装层面的
+字段（同样属实）为 `fast_cpu`。
 
 因此，在未经评审的编译器上安装 `toktier[gpu-jit]`，会同时报告
 `automatic_gpu_candidate: true`、`jit_toolchain_satisfied: false`、
@@ -390,17 +390,17 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 如需统一指定所有目录的位置，可使用 `TOKTIER_HOME`（见
 `docs/contracts/config.md` 第 5 节）。
 
-自 0.2.4 起，Rust crate 以相同的优先级读取同一组变量，一套环境即可同时
-安置两层：
+自 0.2.4 起，Rust crate 按相同优先级读取同一组变量，因此可以用同一套环境变量
+同时配置两层的目录位置：
 
 | 层 | 工件缓存 | 已编译 kernel 缓存 | 会话状态 |
 |---|---|---|---|
 | Python（`toktier`） | `TOKTIER_HOME` / `XDG_CACHE_HOME` | `TOKTIER_HOME` / `XDG_CACHE_HOME` | `TOKTIER_HOME` / `XDG_STATE_HOME` |
 | Rust（`toktier` crate） | `TOKTIER_ARTIFACT_CACHE`，否则同一组根目录 | `TOKTIER_JIT_CACHE`，否则同一组根目录（`jit` feature） | `RuntimeBuilder::home()`，否则 `TOKTIER_HOME` / `XDG_STATE_HOME` |
 
-末级目录名仍是 crate 自己的：工件与 Python 产品同名并列，JIT 产物放在
+末级目录名仍沿用 crate 自身的命名：工件与 Python 产品同名并列，JIT 产物放在
 `jit-rust`，与 Python 的 `kernels` 目录有意区分，因为两者存放的东西不同。
-若三个根目录都没有设置，持久化会话会直接报错而不是凭猜测选一个位置——
+若三个根目录均未设置，持久化会话会直接报错，而不会自行选择位置——
 状态不是缓存。参见 [`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)。
 
 ### 实验性：Fastokens 对照
@@ -417,22 +417,22 @@ tok = toktier.load(
 不会自动选择它，它也不在修正版 Gigatoken 的 12.4 TB（12.33 万亿字符）声明
 的覆盖范围内。
 
-这一判断现在有实测支撑。在以 `tokenizers==0.22.2` 为参照、规模逐步放大、
-最高到每个工件 998,857,881 篇的一系列差分中，我们观察到上游 0.3.1
+这一判断已有实测数据支撑。在以 `tokenizers==0.22.2` 为参照、测试规模逐步扩大、
+每个工件最高达到 998,857,881 篇的一系列差分测试中，我们观察到上游 0.3.1
 代码相对该参照存在五处缺陷：一处会在罕见字符上报错，另外四处是静默的 id
-不一致——不抛异常、也没有任何提示，调用方无法从返回值看出差别。五处各有
-一个独立复现件，在由上游原始源码构建出的版本上都会失败。相关报告已为上游
+不一致——不抛异常、也没有任何提示，调用方无法从返回值看出差别。每处缺陷都有
+一个独立复现用例，在由上游原始源码构建出的版本上都会失败。相关报告已为上游
 项目准备好。在这些源码上应用我们自己的五个补丁后，最终一轮差分——每个工件
-998,857,881 篇、共 15 个 tokenizer 工件——录得零处 id 不一致，口径是一个
-108 码位的守卫，它会把一小部分文档改走参考实现路径。
+998,857,881 篇、共 15 个 tokenizer 工件——录得零处 id 不一致。该轮差分采用一个
+108 码位的守卫，它会使一小部分文档改走参考实现路径。
 
 上述读数描述的是**源码修订版本**，不是某个二进制。`explain()` 报告的
-`engine_digest` 同时覆盖编译出的扩展模块，因此由同一份源码在另一台机器上
-构建的轮子会报告不同的摘要——这些数字背后的两只补丁轮子分别报告
+`engine_digest` 同时覆盖编译出的扩展模块，因此使用同一份源码在另一台机器上
+构建的 wheel 会报告不同的摘要——产生这些数字的两个补丁 wheel 分别报告
 `4c7e9c9f03313cc0...` 与 `24e3cccaef6d97f4...`，作为对照的上游原始源码构建
-报告 `8600f509c10dc03c...`。所有构建的版本号都是 `0.3.1`，因此版本号区分不
-了它们；完整摘要见 `docs/support-matrix.md`。若你的安装报告的是别的摘要，
-上述数字就不是在描述它。该适配器的状态没有变化：仍是显式实验性、仍需显式
+报告 `8600f509c10dc03c...`。所有构建的版本号都是 `0.3.1`，因此无法通过版本号
+区分它们；完整摘要见 `docs/support-matrix.md`。若你的安装报告的是其他摘要，
+上述数字描述的便不是该安装。该适配器的状态没有变化：仍是显式实验性、仍需显式
 选择、仍不会被自动选中。
 
 ## 正确性与证据
@@ -445,8 +445,8 @@ tok = toktier.load(
 inspect` 列出的那些）、**15+3 个 model family**（byte-level BPE 加
 WordPiece；不同 family 可以共用同一工件）、**11 个具备 CPU 快路径认证的
 工件**（按精确工件继承覆盖 12 个 family），以及**注册表 211 条**（210 个
-已审计 sibling 仓库加 1 个 canonical 自指条目）。某个数字看起来与另一个
-对不上时，通常是因为它们属于不同的计数轴。
+已审计 sibling 仓库加 1 个 canonical 自指条目）。如果某个数字看起来与另一个
+不一致，通常是因为它们属于不同的计数轴。
 
 | 验证活动 | 规模 | 观测到的不一致 |
 |---|---:|---:|
@@ -468,7 +468,7 @@ WordPiece；不同 family 可以共用同一工件）、**11 个具备 CPU 快�
 检查，记录在
 [`readings/fast_cpu_native_frontend_parity.json`](readings/fast_cpu_native_frontend_parity.json)。
 
-三个状态把证据与运行时行为区分开：
+三个状态用于区分证据与运行时行为：
 
 | 状态 | 含义 |
 |---|---|
@@ -492,15 +492,15 @@ python tools/generate_sibling_aliases.py --check
 python tools/dev.py test-packaging
 ```
 
-其中五条同样可以在发布的 Rust 源码归档里跑通——该归档随源码带上了
-`evidence/`、`data/` 以及本 README 的译本。另外两条只在仓库内可用；在归档里
-它们会明确声明不适用，而不是给出一次莫名的失败：各自打印一行以 `declined:`
+其中五条同样可以在发布的 Rust 源码归档中正常运行——该归档随源码包含了
+`evidence/`、`data/` 以及本 README 的译本。其余两条只在仓库内可用；在归档中，
+它们会明确声明不适用，而不是返回含义不明的失败结果：各自打印一行以 `declined:`
 开头的说明，指出未检查任何内容，并以 `3` 退出——既不是通过，也不是发现问题。
 `generate_registry.py --release-check` 读取仓库自身的源码树与其已构建扩展，
-而归档两者皆无；归档所携带的注册表副本由 `validate_registry.py` 验证，那一条
-在归档里确实可跑。`dev.py test-packaging` 运行测试套件，而归档有意不携带它。
+而归档两者皆无；归档所携带的注册表副本由 `validate_registry.py` 验证，该命令
+在归档中确实可以运行。`dev.py test-packaging` 运行测试套件，而归档有意不携带它。
 两棵树的区分依据是归档构建器写在其根目录（且仅写在那里）的
-`SOURCE-MANIFEST.json`，因此仓库内的检出仍与此前完全一样地跑满七条。
+`SOURCE-MANIFEST.json`，因此仓库中的源码检出仍会与此前完全相同地运行全部七条命令。
 
 | 退出码 | 该工具在说什么 |
 |---|---|
@@ -508,7 +508,7 @@ python tools/dev.py test-packaging
 | `3` | 已声明不适用：这不是它能检查的树，未检查也未运行任何内容 |
 | 其他 | 已运行并发现了问题，或无法运行——具体由消息说明 |
 
-这里写明前置条件，是为了让一次失败确实代表问题本身，而不是缺少工具。
+这里列明前置条件，是为了让失败确实反映问题本身，而不是工具缺失。
 schema 检查需要 `jsonschema`（`pyproject.toml` 的 `test` 依赖组）；缺少时
 它会明确拒绝并提示 `error: the jsonschema package is required ...`。最后一条
 命令运行打包测试套件，还需要 `pytest`，同在该依赖组内——上面第一行直接
@@ -522,8 +522,8 @@ schema 检查需要 `jsonschema`（`pyproject.toml` 的 `test` 依赖组）；�
 `generate_registry.py` 从已编译扩展中读取 native host 的编译期身份：如果本仓库的
 `src/toktier/_native` 已构建，就使用该扩展，否则使用已安装 `toktier` wheel 中的
 扩展，并在 stderr 说明读取了哪一个；无论哪种情况，该身份都必须与当前源码集合
-完全一致。第二种读取仅是仓库内的便利做法——在发布的源码归档里该命令会直接
-声明不适用，而不是去回答一个属于本机上其他安装的扩展。`pytest tests/gpu` 遵循同一规则：断言该身份的两项测试会读取可用的
+完全一致。第二种读取仅是仓库内的便利做法——在发布的源码归档里，该命令会直接
+声明不适用，而不会读取本机其他安装中的扩展并据此给出结果。`pytest tests/gpu` 遵循同一规则：用于断言该身份的两项测试会读取可用的
 扩展，只有两者都不可用时才会注明原因并跳过。
 
 ## 性能
@@ -547,7 +547,7 @@ README 顶部的图比较了对同一文本执行自动 GPU/repair 路由与完�
 提升；实际性能仍取决于架构、负载和主机端交付方式。
 
 图中明确标注了 Hugging Face（HF）`tokenizers`，并注明每幅图对应的
-`docs/figures/*.data.json` 机器可读文件。基准文档还展示了直接使用其他引擎
+`docs/figures/*.data.json` 机器可读文件。基准文档还展示了直接使用其他引擎时
 速度更快的适用区间。
 
 ![单请求延迟](docs/figures/f1_single_request_latency.svg)
@@ -578,7 +578,7 @@ SHA-256、后端状态，以及 **210 个已验证模型仓库**；这些仓库�
 而不是某个字节完全相同的 sibling。其中 204 条会映射到当前 wheel 随附的
 canonical 工件。其余 7 个是 WordPiece 条目，对应 canonical 工件尚未打包，
 因而使用 HF。13 个源码级 `kimi_k3` 条目已在这 204 个之内：其 canonical
-工件由钉死的上游字节在本机推导得到，因此比对仍在 `tiktoken.model` 层面
+工件由固定的上游字节在本机推导得到，因此比对仍在 `tiktoken.model` 层面
 进行，而载入的对象是那份已认证的转换件。`toktier inspect` 仍是随包 family
 列表的权威来源。
 

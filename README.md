@@ -32,10 +32,10 @@ offers a certified GPU path for fresh or large requests. Both fast paths return 
        src="docs/figures/hero_session_vs_reencode.svg">
 </picture>
 
-Every bar is a measured median. The 1.68 ms reading above is the
-`toktier repair (HF tokenizers window)` lane, which is the repair window that
-cell measured; the corrected-Gigatoken window is a separate lane in the same
-figure (2.39 ms on the 65,536-character append). Both are bounded repairs
+Every bar is a measured median. The 1.68 ms reading above comes from the
+`toktier repair (HF tokenizers window)` lane, which is the repair window
+measured in that cell; the corrected-Gigatoken window is a separate lane in the
+same figure (2.39 ms on the 65,536-character append). Both are bounded repairs
 under the routing table below, and the figure data names the lane of each bar.
 A native Rust serving integration can avoid the full-sequence materialization
 by retaining session state and consuming only the repaired suffix. Exact
@@ -47,18 +47,18 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
 
 - **2026.08.TBD** 🚀 **toktier 0.2.6** released — Rust certification now
   speaks for the certified core (TokTier's own crates, the packages they call
-  directly, and the text-semantics libraries beneath them); drift elsewhere in
+  directly, and the text-semantics libraries beneath them). Drift elsewhere in
   the compiled closure is reported as an advisory with alignment commands and
-  no longer withholds acceleration; the whole-closure reading stays available
+  no longer withholds acceleration. The whole-closure reading stays available
   as `dependency_closure`. The libraries whose Unicode tables decide where
   text is cut are compared by the version of those tables rather than by their
   package version, and `doctor` reports each one. The property data the fast
   CPU pre-tokenizer reads is pinned to the Unicode version the reference
   engine carries, with an exhaustive gate that keeps the two equal. On the
-  GPU side, driver and CUDA versions are reported as environment facts, a
-  device architecture or compiler toolchain no campaign judged now runs
+  GPU side, driver and CUDA versions are reported as environment facts. A
+  device architecture or compiler toolchain unjudged by any campaign now runs
   under the new default `supported` policy and is labelled
-  `supported_untested`, and `verify-local` (the same command on both
+  `supported_untested`. `verify-local` (the same command on both
   faces) compares such a route with the reference engine on your own
   text and records the answer as `locally_verified`. Served
   IDs, the store format, and the kernel ABI are unchanged. See the
@@ -72,8 +72,8 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
   feature change does not reach it. What does reach it is `Session.revision`,
   which is durable from this release: a conversation resumed in a later
   process reports the revision its record carries, and
-  `Tokenizer.store_session_revision()` returns that number where it
-  returned `None`. Diagnostics gain an execution `reason` and a
+  `Tokenizer.store_session_revision()` returns that number instead of
+  `None`. Diagnostics gain an execution `reason` and a
   `network_compiled` build fact. Served IDs, the store format, and the
   kernel ABI are unchanged. See the
   [v0.2.5 release notes](docs/releases/v0.2.5.md).
@@ -133,8 +133,8 @@ tok = toktier.from_pretrained("Qwen/Qwen3-0.6B")
 
 `from_pretrained()` downloads the audited immutable revision for a recorded
 sibling or canonical repository, hashes the exact file, and consults the
-sibling registry -- 210 audited repositories plus one canonical self-row --
-which is itself covered by a root digest.
+sibling registry, which contains 210 audited repositories plus one canonical
+self-row and is itself covered by a root digest.
 For an unknown repository, `from_pretrained()` resolves `main` unless
 `revision=` is passed.
 Byte-identical, canonicalization-equivalent, and serialization-equivalent
@@ -143,7 +143,7 @@ CPU/GPU router. A known repository whose bytes have changed — and any
 unregistered content — stays on HF under policies that permit
 the reference fallback; `REQUIRE_ACCELERATED` raises an error instead. See
 `explain()["model_resolution"]` for both the source identity and the
-canonical identity actually executed. `load(family)` remains the direct
+canonical identity used for execution. `load(family)` remains the direct
 family API and the air-gap-friendly path.
 
 ### Sessions
@@ -169,7 +169,7 @@ Use `lookup="off"` to skip that lookup. A failed byte check is a miss, never a
 trusted hit; cache eviction changes latency, not output. Long sessions whose
 stable prefix has been sealed remain reusable after restart: TokTier binds the
 record to the caller-presented historical prefix before restoring it, and a
-missing or corrupt binding becomes a cold encode.
+missing or corrupt binding results in a cold encode.
 
 ### Routing and policies
 
@@ -368,12 +368,12 @@ The prebuilt fatbin contains `sm_75/80/86/89/90/100/120` images and a
 `sm_80`, `sm_89`, `sm_90` and `sm_120`; the other embedded architectures are marked `experimental`. With
 the default facade, `toktier[gpu]` selects this prebuilt delivery and
 `toktier[gpu-jit]` selects JIT from the detected profile; an explicit
-`gpu_delivery=` argument can override that detection. Under prebuilt delivery
-the GPU engine opens lazily, on the first request that routes to the GPU at or
+`gpu_delivery=` argument can override that detection. Under prebuilt delivery,
+the GPU engine opens lazily on the first request that routes to the GPU at or
 above the crossover, so `explain()["gpu_backend"]["loaded"]` stays `false`
 while only short requests have run; the crossover decides per input which
 backend executes. JIT delivery keeps the Python host, whose GPU backend opens
-the same way at the first input that routes to the GPU. The
+the same way on the first input that routes to the GPU. The
 JIT delivery is `certified_source` on `sm_89` and `sm_120`, meaning its
 certificate binds source, class tables, flags, and toolchain constraints rather
 than a machine-local binary. See [`docs/gpu-jit.md`](docs/gpu-jit.md) for the
@@ -422,7 +422,7 @@ tokenizer or compiling anything:
 | `directory_roots_usable` / `directory_roots_problem` | whether the three resolved roots above can hold what they are for, and what stands in the way when they cannot — the same judgement the next command would answer with `CONFIG_INVALID`, read without creating anything |
 
 Those fields describe the installation. `toktier doctor --family FAMILY`
-adds a `family` section that answers for one family on it — its
+adds a `family` section that answers for one family on that installation — its
 certification identity, its `fast_cpu` and GPU statuses, and two effective
 backends, one at or above the crossover and one below it. The second is
 where families differ: one whose CPU lane is the reference engine reads
@@ -490,10 +490,10 @@ Those readings describe a source revision rather than a binary. The
 built from the same sources on another machine reports a different digest --
 the two patched wheels behind these numbers report `4c7e9c9f03313cc0...` and
 `24e3cccaef6d97f4...`, and the unmodified upstream comparison build reports
-`8600f509c10dc03c...`. Every build reports version `0.3.1`, so version
-separates none of them; `docs/support-matrix.md` carries the full digests. If
-your installation reports another digest, these numbers are not about it. The
-adapter's status is unchanged: still experimental, still opt-in, still never
+`8600f509c10dc03c...`. Every build reports version `0.3.1`, so the version
+does not distinguish them; `docs/support-matrix.md` carries the full digests.
+If your installation reports another digest, these numbers are not about it.
+The adapter's status is unchanged: still experimental, still opt-in, still never
 chosen automatically.
 
 ## Correctness and evidence
@@ -503,13 +503,13 @@ settings. Certification is bound to exact artifact bytes and that oracle
 version. If the installed HF version is outside the certified set, accelerated
 routing is disabled and the request remains on the installed reference path.
 
-Four different counts appear in this document and each answers a different
+Four different counts appear in this document, and each answers a different
 question: **15 packaged artifacts** (what `toktier inspect` lists), **15+3
 model families** (byte-level BPE plus WordPiece, since families can share an
 artifact), **11 artifacts with a certified CPU fast path** (12 families by
 exact-artifact inheritance), and **211 registry rows** (210 audited sibling
-repositories plus one canonical self-row). A number that looks inconsistent
-with another usually belongs to a different one of those axes.
+repositories plus one canonical self-row). Numbers that appear inconsistent
+usually belong to different axes.
 
 | Campaign | Scale | Recorded divergence |
 |---|---:|---:|
@@ -559,11 +559,11 @@ python tools/generate_sibling_aliases.py --check
 python tools/dev.py test-packaging
 ```
 
-Five of these run from the published Rust source archive as well, which
+Five of these commands also run from the published Rust source archive, which
 carries `evidence/`, `data/`, and this README's translation alongside the
-sources. Two are repository-only. There they decline rather than fail
-mysteriously: each prints a line beginning `declined:`, says that nothing
-was checked, and exits `3` — neither a pass nor a finding.
+sources. Two are repository-only. In the archive, they decline rather than
+fail without explanation: each prints a line beginning `declined:`, says that
+nothing was checked, and exits `3` — neither a pass nor a finding.
 `generate_registry.py --release-check` reads the repository's own sources
 and its built extension, and the archive has neither; the copy of the
 registry it carries is verified by `validate_registry.py`, which does run
@@ -593,15 +593,15 @@ fresh checkout, populate the local Cargo cache once with
 `cargo fetch --locked` (network required; a plain `cargo build` is not
 enough, since the legal closure covers every target) — the check
 itself then runs offline.
-`generate_registry.py` reads the native host's compile-time identity out
-of the built extension: it uses this tree's `src/toktier/_native` when
-one has been built, and otherwise the extension of an installed
-`toktier` wheel, saying on stderr which it read; the identity must equal
-the current source set either way. That second reading is a convenience
-of a repository checkout only — in the published source archive the
+`generate_registry.py` reads the native host's compile-time identity from
+the built extension. It uses this tree's `src/toktier/_native` when one has
+been built; otherwise, it uses the extension of an installed `toktier` wheel
+and says on stderr which one it read. The identity must equal the current
+source set either way. That second reading is available only as a convenience
+in a repository checkout — in the published source archive the
 command declines instead, rather than answering about an extension that
-belongs to some other installation on the machine. `pytest tests/gpu` follows the same
-rule: the two tests that assert on that identity read whichever
+belongs to some other installation on the machine. `pytest tests/gpu` follows
+the same rule: the two tests that assert on that identity read whichever
 extension is available and skip with a stated reason only when neither
 is.
 
@@ -620,16 +620,16 @@ This pair uses 2.2 GB of RAM-resident real web text and reports UTF-8 bytes over
 wall clock with host ID arrays materialized. Full protocols, all cells, and
 provenance are in [`docs/benchmarks.md`](docs/benchmarks.md).
 
-The primary study used an RTX PRO 6000 Blackwell, but a same-protocol consumer
-RTX 5090 sweep was **11–17% faster** (4.24–5.50 GB/s across the reported
-families). Consumer hardware is therefore a practical target, not a reduced
-mode: the RTX 4090 also passed the `sm_89` correctness and prebuilt-delivery
+The primary study used an RTX PRO 6000 Blackwell, but a consumer RTX 5090
+sweep using the same protocol was **11–17% faster** (4.24–5.50 GB/s across the
+reported families). Consumer hardware is therefore a practical target, not a
+reduced mode: the RTX 4090 also passed the `sm_89` correctness and prebuilt-delivery
 battery. These observations do not promise the same speedup for every GPU;
 architecture, workload, and host delivery still matter.
 
-The figures name Hugging Face (HF) `tokenizers` explicitly and link to their
-machine-readable `docs/figures/*.data.json` files. The benchmark document also
-shows the regimes where direct use of another engine is faster.
+The figures name Hugging Face (HF) `tokenizers` explicitly and link to the
+corresponding machine-readable `docs/figures/*.data.json` files. The benchmark
+document also shows the regimes where direct use of another engine is faster.
 
 ![Single-request latency](docs/figures/f1_single_request_latency.svg)
 

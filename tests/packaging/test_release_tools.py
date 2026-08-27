@@ -77,6 +77,23 @@ def test_release_artifact_gate_requires_the_pinned_fastokens_extra() -> None:
     assert extra == [f"{pinned['name']}=={pinned['version']}"]
 
 
+def test_requirement_key_reads_both_marker_spellings() -> None:
+    """A marker quoted either way has to compare equal.
+
+    PEP 508 leaves the quoting to whoever writes the metadata, and the wheel
+    builder picks single quotes. Matching one spelling literally once read a
+    correct wheel as one that had lost the pinned extra.
+    """
+    verifier = _artifact_verifier()
+    single = "toktier-fastokens==0.3.1.1 ; extra == 'fastokens'"
+    double = 'toktier-fastokens==0.3.1.1 ; extra == "fastokens"'
+    assert verifier._requirement_key(single) == verifier._requirement_key(double)
+    for spelling in (single, double):
+        key = verifier._requirement_key(spelling)
+        assert key.startswith("toktier-fastokens==0.3.1.1")
+        assert 'extra=="fastokens"' in key
+
+
 @pytest.mark.parametrize("representation", ["hex", "bytes"])
 def test_release_artifact_gate_rejects_identity_sentinel(
     tmp_path: Path, representation: str

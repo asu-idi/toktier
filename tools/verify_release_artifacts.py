@@ -34,6 +34,18 @@ def _one(names: list[str], suffix: str) -> str:
     return matches[0]
 
 
+def _requirement_key(item: str) -> str:
+    """Return one Requires-Dist line in a form two spellings agree on.
+
+    PEP 508 lets an environment marker quote its value either way, and the
+    spelling is the wheel builder's choice rather than something this project
+    states: our own wheels carry ``extra == 'fastokens'``. Comparing against a
+    single spelling therefore reads a correct wheel as a broken one, so the
+    quoting and the spacing are both made uniform before any comparison.
+    """
+    return item.replace(" ", "").replace("'", '"').lower()
+
+
 def _verify_no_identity_sentinel(
     archive: zipfile.ZipFile, names: list[str]
 ) -> None:
@@ -162,8 +174,8 @@ def verify(wheel: Path) -> None:
         if any(upstream_name.match(item) for item in requirements):
             _fail("wheel metadata requires the upstream fastokens distribution")
         if not any(
-            item.replace(" ", "").lower().startswith(pinned_requirement.lower())
-            and 'extra=="fastokens"' in item.replace(" ", "").lower()
+            _requirement_key(item).startswith(pinned_requirement.lower())
+            and 'extra=="fastokens"' in _requirement_key(item)
             for item in requirements
         ):
             _fail(f"the fastokens extra does not require {pinned_requirement}")

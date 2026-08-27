@@ -227,14 +227,34 @@ def import_bundle(
         try:
             os.replace(staging, target)
         except OSError as exc:
-            raise ArtifactNotFound(
-                f"cannot install bundle alias {manifest.alias!r} into the cache",
-                details={
-                    "family": manifest.alias,
-                    "searched": [str(target)],
-                    "offline": True,
-                },
-            ) from exc
+            # The common cause is not a missing artifact: os.replace
+            # refuses a directory target the cache already holds, which
+            # is what a second import into the same cache root hits.
+            # Naming that case keeps the message from sending a reader
+            # to look for something that is already there.
+            already_present = target.is_dir() and any(target.iterdir())
+            details: dict[str, object] = {
+                "family": manifest.alias,
+                "searched": [str(target)],
+            }
+            if already_present:
+                message = (
+                    f"the cache already holds the bundle alias "
+                    f"{manifest.alias!r}"
+                )
+                details["cause"] = "alias_already_present"
+                details["remedy"] = (
+                    f"import into another cache root, or remove {target} "
+                    f"first; the bundle itself verified"
+                )
+            else:
+                message = (
+                    f"cannot install bundle alias {manifest.alias!r} "
+                    f"into the cache"
+                )
+                details["cause"] = "install_failed"
+                details["cause_message"] = str(exc)
+            raise ArtifactNotFound(message, details=details) from exc
         installed = True
         _sync_directory(target.parent)
         return target

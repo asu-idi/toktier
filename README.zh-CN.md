@@ -344,16 +344,28 @@ JIT；显式 `gpu_delivery=` 参数可覆盖该检测结果。预编译交付下
 ### tokenizer 工件、镜像与气隙主机
 
 tokenizer 工件不打包在 wheel 中，而是从固定的上游 revision 获取并用
-SHA-256 验证。CLI 同时支持联网、镜像和气隙环境：
+SHA-256 验证。CLI 同时支持联网、镜像和气隙环境。
+
+在联网主机上取回固定 revision 的工件并打包：
 
 ```bash
 toktier artifacts fetch qwen3_8b
 toktier artifacts export qwen3_8b --out qwen3_8b.tar
+```
+
+把 `qwen3_8b.tar` 拷贝过去，然后在气隙主机上解包并核对：
+
+```bash
 toktier artifacts import qwen3_8b.tar
 toktier artifacts verify qwen3_8b
 toktier inspect qwen3_8b
 toktier doctor --json
 ```
+
+这两半分属两台机器，至少也要分属两个缓存：`import` 会把别名装进它解析到的
+那个缓存，而已经持有该别名的缓存——例如刚刚由 `fetch` 写入的联网主机缓存
+——会被拒绝，而不是被覆盖。把这条拒绝读成搬运失败是最常见的第一次意外；
+bundle 本身是验证通过的。
 
 这套流程搬运的只是 tokenizer 工件。真正断网的主机还需要另行准备 TokTier
 wheel 及其全部依赖 wheel（wheelhouse 或本地索引）；bundle 格式本身不携带

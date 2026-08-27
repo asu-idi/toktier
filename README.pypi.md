@@ -390,16 +390,29 @@ automatic facade, explicit engine API, and delivery diagnostics.
 
 Tokenizer artifacts are fetched from pinned upstream revisions and verified by
 SHA-256; they are not bundled in the wheel. The CLI supports connected,
-mirrored, and air-gapped environments:
+mirrored, and air-gapped environments.
+
+On the connected host, fetch the pinned artifact and pack it:
 
 ```bash
 toktier artifacts fetch qwen3_8b
 toktier artifacts export qwen3_8b --out qwen3_8b.tar
+```
+
+Copy `qwen3_8b.tar` across, then on the air-gapped host unpack and check it:
+
+```bash
 toktier artifacts import qwen3_8b.tar
 toktier artifacts verify qwen3_8b
 toktier inspect qwen3_8b
 toktier doctor --json
 ```
+
+The two halves belong on two machines, or at least on two caches: `import`
+installs the alias into the cache it resolves, and a cache that already holds
+that alias — the connected host's, where `fetch` just placed it — is refused
+rather than overwritten. Reading that refusal as a transport failure is the
+usual first surprise; the bundle verified.
 
 This recipe transports tokenizer artifacts, and only those. A genuinely
 disconnected host also needs the TokTier wheel and every dependency wheel

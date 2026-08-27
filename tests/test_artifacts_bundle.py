@@ -25,7 +25,11 @@ from toktier.artifacts.bundle import (
     MAX_BUNDLE_UNCOMPRESSED_SIZE,
 )
 from toktier.config import Config
-from toktier.errors import ArtifactHashMismatch, BundleInvalid
+from toktier.errors import (
+    ArtifactHashMismatch,
+    ArtifactNotFound,
+    BundleInvalid,
+)
 
 FAMILY = "bundle_demo"
 REVISION = "c" * 40
@@ -96,6 +100,36 @@ def _artifact_manifest(payloads: dict[str, bytes]) -> ArtifactManifest:
 
 def _assert_no_trace(cache: Path) -> None:
     assert not cache.exists() or list(cache.iterdir()) == []
+
+
+def test_a_second_import_says_the_alias_is_already_there(tmp_path: Path) -> None:
+    """The recipe read as if this were a missing artifact.
+
+    Running the printed commands twice against one cache reaches this
+    path, and the old message named the alias as something that could not
+    be found. The bundle verified; the cache simply already holds it.
+    """
+    source_directory = tmp_path / "verified"
+    source_directory.mkdir()
+    (source_directory / "tokenizer.json").write_bytes(GOOD)
+    bundle = export_bundle(
+        tmp_path / "artifact.tar",
+        ALIAS,
+        {"tokenizer.json": source_directory / "tokenizer.json"},
+    )
+    cache = artifact_cache_dir(Config(home=tmp_path / "home", offline=True))
+
+    assert import_bundle(bundle, cache) == cache / ALIAS
+
+    with pytest.raises(ArtifactNotFound) as caught:
+        import_bundle(bundle, cache)
+
+    assert "already holds the bundle alias" in str(caught.value)
+    assert caught.value.details["cause"] == "alias_already_present"
+    assert str(cache / ALIAS) in str(caught.value.details["remedy"])
+    # The first import is intact and no staging directory was left behind.
+    assert (cache / ALIAS / "tokenizer.json").read_bytes() == GOOD
+    assert not list(cache.glob(".toktier-bundle-import-*"))
 
 
 def test_export_import_and_airgap_source_happy_paths(tmp_path: Path) -> None:

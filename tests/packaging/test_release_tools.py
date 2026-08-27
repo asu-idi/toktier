@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import re
 import subprocess
 import sys
 import zipfile
@@ -15,6 +16,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 VERIFY_IDENTITY = ROOT / "tools" / "verify_release_identity.py"
 VERIFY_ARTIFACTS = ROOT / "tools" / "verify_release_artifacts.py"
+SMOKE_SCRIPT = ROOT / "tools" / "run_packaging_smoke.sh"
 
 
 def _artifact_verifier() -> ModuleType:
@@ -56,6 +58,36 @@ def test_release_artifact_set_is_one_abi3_linux_wheel() -> None:
     assert (
         'EXPECTED_WHEEL = "toktier-0.2.7-cp310-abi3-manylinux_2_34_x86_64.whl"'
         in source
+    )
+
+
+def test_the_packaging_smoke_counts_match_the_shipped_table(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The smoke script's row counts have to be the table's own counts.
+
+    The script runs on the release path (the publish workflow calls it in
+    the build job), and nothing used to read its two sibling-registry
+    assertions, so a wave that carried a new count into the prose left the
+    script asserting the old one. Reading the literals back and comparing
+    them with the shipped table keeps the two in step.
+    """
+    monkeypatch.syspath_prepend(str(ROOT / "src"))
+    from toktier.artifacts import shipped_sibling_aliases
+
+    source = SMOKE_SCRIPT.read_text(encoding="utf-8")
+    total = re.search(r"assert len\(aliases\.records\) == (\d+)", source)
+    packaged = re.search(
+        r"assert sum\(record\.canonical_packaged for record in aliases\.records\)"
+        r" == (\d+)",
+        source,
+    )
+    assert total is not None and packaged is not None, source
+
+    registry = shipped_sibling_aliases()
+    assert int(total.group(1)) == len(registry.records)
+    assert int(packaged.group(1)) == sum(
+        record.canonical_packaged for record in registry.records
     )
 
 

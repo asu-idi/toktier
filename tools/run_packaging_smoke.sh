@@ -48,8 +48,11 @@ assert importlib.util.find_spec("gigatoken") is None
 assert ENGINE_MODULE not in sys.modules
 assert callable(toktier.from_pretrained)
 aliases = shipped_sibling_aliases()
-assert len(aliases.records) == 211
-assert sum(record.canonical_packaged for record in aliases.records) == 204
+# Counted rows, kept in step with the shipped table by
+# tests/packaging/test_release_tools.py so a table that grows cannot leave
+# this release-path assertion behind.
+assert len(aliases.records) == 213
+assert sum(record.canonical_packaged for record in aliases.records) == 206
 
 facts = fast_cpu_engine_facts()
 binding = json.loads(

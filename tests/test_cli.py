@@ -144,11 +144,27 @@ def _set_doctor_probes(monkeypatch: pytest.MonkeyPatch) -> None:
             toolchain="rustc 1.93.1 (test fixture)",
         ),
     )
-    monkeypatch.setattr(
-        fastokens,
-        "fastokens_distribution_identity",
-        lambda: (importlib.metadata.version("fastokens"), "d" * 64),
-    )
+    # The adapter resolves the engine by its import package; the doctor
+    # fixture stands in for an environment where the upstream distribution
+    # owns the bytes on disk and the registry lists no published wheel.
+    def identity() -> fastokens.FastokensIdentity:
+        owner = fastokens.DistributionOwner(
+            name="fastokens",
+            version=importlib.metadata.version("fastokens"),
+            recorded=4,
+            matching=4,
+            missing=0,
+            package_dir=Path("/site-packages/fastokens"),
+        )
+        return fastokens.FastokensIdentity(
+            package_dir=Path("/site-packages/fastokens"),
+            engine_digest="d" * 64,
+            owners=(owner,),
+            owner=owner,
+        )
+
+    monkeypatch.setattr(fastokens, "fastokens_identity", identity)
+    monkeypatch.setattr(fastokens, "pinned_engine_entry", lambda: None)
     # The JIT judgement asks the installed torch for its two version
     # facts and asks the build system which compiler it would select.
     # Both are supplied here so the outcome does not depend on whether
@@ -294,10 +310,15 @@ def test_doctor_human(
         "gigatoken_toolchain: rustc 1.93.1 (test fixture)\n"
         f"gigatoken_repair_config_digest: {'e' * 64}\n"
         "fastokens_available: true\n"
+        "fastokens_distribution: fastokens\n"
         "fastokens_version: 1.2.3\n"
         f"fastokens_distribution_digest: {'d' * 64}\n"
-        "fastokens_policy: experimental\n"
+        "fastokens_known_wheel: none\n"
+        "fastokens_engine_assurance: upstream_build\n"
         "fastokens_exact_id_guarantee: false\n"
+        "fastokens_policy: experimental\n"
+        "fastokens_coinstalled: none\n"
+        "fastokens_orphaned: none\n"
         "nvcc_available: true\n"
         "nvcc_path: /opt/cuda/bin/nvcc\n"
         "nvcc_resolved_path: /opt/cuda/bin/nvcc\n"
@@ -426,10 +447,15 @@ def test_doctor_json(
         "gigatoken_toolchain": "rustc 1.93.1 (test fixture)",
         "gigatoken_repair_config_digest": "e" * 64,
         "fastokens_available": True,
+        "fastokens_distribution": "fastokens",
         "fastokens_version": "2.0.0",
         "fastokens_distribution_digest": "d" * 64,
-        "fastokens_policy": "experimental",
+        "fastokens_known_wheel": None,
+        "fastokens_engine_assurance": "upstream_build",
         "fastokens_exact_id_guarantee": False,
+        "fastokens_policy": "experimental",
+        "fastokens_coinstalled": None,
+        "fastokens_orphaned": None,
         "nvcc_available": True,
         "nvcc_path": "/opt/cuda/bin/nvcc",
         "nvcc_resolved_path": "/opt/cuda/bin/nvcc",

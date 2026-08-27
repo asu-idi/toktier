@@ -1394,6 +1394,33 @@ def test_fastokens_version_changes_the_persistent_fingerprint(
     assert first != second
 
 
+def test_fastokens_config_id_v2_retires_v1_sessions(rig: Rig) -> None:
+    """U13: the guard changed what the adapter does, so the fingerprint moved."""
+    tokenizer = rig.tokenizer()
+
+    class Repair:
+        def __init__(self, config_id: str) -> None:
+            self.config_id = config_id
+
+        def stats(self) -> dict[str, object]:
+            return {
+                "backend": "fastokens",
+                "engine_version": "0.3.1.1",
+                "engine_digest": "e" * 64,
+            }
+
+    assert FastokensFullRepair.config_id.fget(None) == (  # type: ignore[union-attr]
+        "toktier-fastokens-full-experimental-v2"
+    )
+    v1 = tokenizer._semantic_fingerprint(
+        Repair("toktier-fastokens-full-experimental-v1")  # type: ignore[arg-type]
+    )
+    v2 = tokenizer._semantic_fingerprint(
+        Repair("toktier-fastokens-full-experimental-v2")  # type: ignore[arg-type]
+    )
+    assert v1 != v2
+
+
 def test_a_repair_that_falls_back_headlines_the_reference_execution(
     rig: Rig, monkeypatch: pytest.MonkeyPatch
 ) -> None:

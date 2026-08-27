@@ -392,6 +392,11 @@ def _verify_adapter(binding: dict[str, Any]) -> None:
     guard = _require_mapping(binding.get("guard"), label="guard")
     if adapter.get("guard_set_sha256") != guard.get("set_sha256"):
         raise GenerationError("adapter.guard_set_sha256 differs from guard.set_sha256")
+    source = (REPOSITORY_ROOT / str(adapter.get("path"))).read_text(encoding="utf-8")
+    if f'"{adapter.get("config_id")}"' not in source:
+        raise GenerationError("the adapter source does not carry the bound config id")
+    if f'"{guard.get("id")}"' not in source:
+        raise GenerationError("the adapter source does not name the bound guard id")
 
 
 def verify_binding(registry: dict[str, Any], binding: dict[str, Any]) -> None:

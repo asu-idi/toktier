@@ -34,6 +34,8 @@ crates/toktier/examples/session.rs
 crates/toktier/tests/lifecycle.rs
 crates/toktier-store-core/tests/store_behavior.rs
 crates/toktier-store-sqlite/tests/roundtrip.rs
+# The pinned Fastokens adapter tests probe the Unicode guard with combining marks.
+tests/repair/test_fastokens_identity.py
 # RFC 8785 conformance vectors use non-ASCII text as test data.
 tests/test_jcs.py
 # Facade GIL and persistence regressions intentionally exercise Unicode input.

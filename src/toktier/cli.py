@@ -10,7 +10,7 @@ import platform
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn, cast
+from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 from . import __version__
 from .artifacts import (
@@ -322,9 +322,12 @@ def _doctor_report(
 
     fast_cpu = fast_cpu_engine_facts()
     native_host = native_host_build_facts()
-    from .repair.fastokens import fastokens_distribution_identity
+    from .repair import fastokens as fastokens_adapter
 
-    fastokens_version, fastokens_digest = fastokens_distribution_identity()
+    # The adapter's environment-level answer: which bytes ``import fastokens``
+    # would run, whose distribution they are, and what the shipped registry
+    # knows about them. The family premise is applied only with --family.
+    fastokens_identity = fastokens_adapter.fastokens_identity()
     torch_available = importlib.util.find_spec("torch") is not None
     transformers_available = importlib.util.find_spec("transformers") is not None
     ninja_available = importlib.util.find_spec("ninja") is not None
@@ -396,6 +399,16 @@ def _doctor_report(
         and jit_satisfied is not False
     )
     directory_roots_problem = _directory_roots_problem(config)
+    family_artifact_sha256: str | None = None
+    if family is not None:
+        family_artifact_sha256 = next(
+            (
+                item.sha256
+                for item in _artifact_manifest().get(family).files
+                if item.name == "tokenizer.json"
+            ),
+            None,
+        )
     automatic_effective_backend = (
         "gpu"
         if automatic_gpu_eligible
@@ -479,11 +492,13 @@ def _doctor_report(
         "gigatoken_build_flags": list(fast_cpu.build_flags),
         "gigatoken_toolchain": fast_cpu.toolchain,
         "gigatoken_repair_config_digest": fast_cpu.config_digest,
-        "fastokens_available": fastokens_version is not None,
-        "fastokens_version": fastokens_version,
-        "fastokens_distribution_digest": fastokens_digest,
-        "fastokens_policy": "experimental",
-        "fastokens_exact_id_guarantee": False,
+        **_fastokens_doctor_facts(
+            fastokens_adapter,
+            fastokens_identity,
+            tokenizers_version=tokenizers_version,
+            family=family,
+            family_artifact=family_artifact_sha256,
+        ),
         "nvcc_available": nvcc.path is not None,
         "nvcc_path": nvcc.path,
         "nvcc_resolved_path": nvcc.resolved_path,
@@ -491,6 +506,62 @@ def _doctor_report(
         "nvcc_build": nvcc.build,
         "nvcc_error": nvcc.error,
         "nvcc_checked": list(nvcc.checked),
+    }
+
+
+def _fastokens_doctor_facts(
+    adapter: Any,
+    identity: Any,
+    *,
+    tokenizers_version: str | None,
+    family: str | None,
+    family_artifact: str | None,
+) -> dict[str, object]:
+    """The ``fastokens_*`` doctor keys: admission word plus engine assurance."""
+    entry = adapter.pinned_engine_entry()
+    guard = adapter.compile_unicode_guard(entry)
+    orphaned = "; ".join(owner.label for owner in identity.orphaned) or None
+    if not identity.available:
+        return {
+            "fastokens_available": False,
+            "fastokens_distribution": None,
+            "fastokens_version": None,
+            "fastokens_distribution_digest": None,
+            "fastokens_known_wheel": None,
+            "fastokens_engine_assurance": None,
+            "fastokens_exact_id_guarantee": False,
+            "fastokens_policy": "experimental",
+            "fastokens_coinstalled": None,
+            "fastokens_orphaned": orphaned,
+        }
+    report = adapter.assess(
+        identity,
+        entry=entry,
+        guard=guard,
+        oracle_version=tokenizers_version,
+        family=family,
+        artifact_sha256=family_artifact,
+    )
+    coinstalled = identity.coinstalled
+    return {
+        "fastokens_available": True,
+        "fastokens_distribution": identity.distribution,
+        "fastokens_version": identity.version,
+        "fastokens_distribution_digest": identity.engine_digest,
+        "fastokens_known_wheel": (
+            report.known_wheel["filename"] if report.known_wheel else None
+        ),
+        "fastokens_engine_assurance": report.assurance,
+        "fastokens_exact_id_guarantee": report.exact_id_guarantee,
+        "fastokens_policy": "experimental",
+        "fastokens_coinstalled": (
+            ", ".join(owner.label for owner in coinstalled)
+            + " (its files were overwritten; uninstalling either removes the "
+            "shared files)"
+            if coinstalled
+            else None
+        ),
+        "fastokens_orphaned": orphaned,
     }
 
 
@@ -502,6 +573,15 @@ def _doctor_report(
 _DOCTOR_QUALIFIERS: dict[str, str] = {
     "driver_version": "environment fact; not a certificate premise",
     "cuda_available": "environment fact; not a certificate premise",
+}
+
+#: Qualifiers printed only when the value is ``true``: a guarantee that
+#: holds says in the same line what it means.
+_DOCTOR_TRUE_QUALIFIERS: dict[str, str] = {
+    "fastokens_exact_id_guarantee": (
+        "guarded: ids equal the pinned reference or the request is routed "
+        "to it; families and evidence in explain()"
+    ),
 }
 
 
@@ -542,6 +622,8 @@ def _print_doctor_human(report: dict[str, object]) -> None:
         else:
             rendered = str(value)
         qualifier = _DOCTOR_QUALIFIERS.get(name)
+        if qualifier is None and value is True:
+            qualifier = _DOCTOR_TRUE_QUALIFIERS.get(name)
         if qualifier is not None:
             rendered = f"{rendered} ({qualifier})"
         print(f"{name}: {rendered}")

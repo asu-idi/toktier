@@ -135,10 +135,16 @@ fn unchanged(unit: &str, version: &str) -> String {
 /// The command takes the measurement and records it; it is the same one
 /// the `supported_untested` label points at, and it is the only thing
 /// this crate offers here, because whether a particular text is affected
-/// is a question about that text and nobody else can answer it.
+/// is a question about that text and nobody else can answer it. A crate
+/// consumer has the library and not the binary, since Cargo does not
+/// install a dependency's binaries, so the line says where the CLI comes
+/// from and names the Python package's command of the same name as well.
 const COMPARE_HINT: &str = "To compare the accelerated engine with this binary's reference \
-                            engine on your own text, run: toktier-rust verify-local --engine \
-                            cpu --family <family> --input <path>";
+                            engine on your own text, run `toktier-rust verify-local --engine \
+                            cpu --family <family> --input <path>` where that CLI is \
+                            installed (`cargo install --locked toktier` builds it; a crate \
+                            dependency alone brings no binary), or `toktier verify-local` \
+                            with the same options from the Python package";
 
 /// What to offer where the certified core itself is mismatched.
 ///
@@ -146,14 +152,18 @@ const COMPARE_HINT: &str = "To compare the accelerated engine with this binary's
 /// the reference route, so this release admits no accelerated cpu route
 /// for `verify-local --engine cpu` to compare, and pointing at it would
 /// send the reader to an answer of "there is nothing here". What is
-/// actionable is putting the library back where the evidence was taken,
-/// so this names the alignment command in the same form the dependency
-/// advisory uses.
+/// actionable is putting the library back where the evidence was taken.
+/// The runnable command for that is not repeated here with placeholders:
+/// the `dependency_closure` line of the same report already carries a
+/// `cargo update --precise` command for each package it names, with the
+/// judged version filled in, so this points at that line.
 const AFFECTED_HINT: &str = "This build admits no accelerated cpu route while the core is \
                              mismatched, so `verify-local --engine cpu` has nothing to \
                              compare here; put the library back on the judged behaviour \
-                             version instead, in the workspace that owns the governing \
-                             lockfile: cargo update --precise <judged version> <package>";
+                             version instead: the `dependency_closure` line of this same \
+                             report carries the `cargo update --precise` command for each \
+                             package it names, to run in the workspace that owns the \
+                             governing lockfile";
 
 fn readings() -> &'static Vec<Reading> {
     static READINGS: OnceLock<Vec<Reading>> = OnceLock::new();
@@ -318,8 +328,9 @@ mod tests {
              tokenize differently; the accelerated engines are held on the reference route. \
              This build admits no accelerated cpu route while the core is mismatched, so \
              `verify-local --engine cpu` has nothing to compare here; put the library back \
-             on the judged behaviour version instead, in the workspace that owns the \
-             governing lockfile: cargo update --precise <judged version> <package>"
+             on the judged behaviour version instead: the `dependency_closure` line of this \
+             same report carries the `cargo update --precise` command for each package it \
+             names, to run in the workspace that owns the governing lockfile"
         );
         // A unit that cannot be read falls back to the package
         // comparison the build script made, and only refuses when that
@@ -336,8 +347,9 @@ mod tests {
              the package versions are compared instead: regex 1.13.1 -> 1.14.0. This build \
              admits no accelerated cpu route while the core is mismatched, so `verify-local \
              --engine cpu` has nothing to compare here; put the library back on the judged \
-             behaviour version instead, in the workspace that owns the governing lockfile: \
-             cargo update --precise <judged version> <package>"
+             behaviour version instead: the `dependency_closure` line of this same report \
+             carries the `cargo update --precise` command for each package it names, to run \
+             in the workspace that owns the governing lockfile"
         );
         // Everything agreeing.
         assert_eq!(

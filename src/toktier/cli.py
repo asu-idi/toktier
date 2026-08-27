@@ -1086,6 +1086,16 @@ def _verify_one_engine(
             "mismatches": 0,
             "first_mismatch": None,
             "served_by_engine": comparison.served,
+            # Which of two states this is: a route the plan did not
+            # admit, answered by ``doctor``, or one it admitted that
+            # every document left for a per-input reason, answered by
+            # ``explain()`` on the same input. The paths those
+            # documents took are listed so the reason is in the report.
+            "route_admitted": comparison.admitted,
+            "unserved_paths": [
+                {"path": path, "documents": count}
+                for path, count in comparison.unserved_paths
+            ],
             "input": source,
             "record_path": None,
             "record_readable": False,
@@ -1198,12 +1208,29 @@ def _print_verify_human(payload: Mapping[str, object]) -> None:
         documents = item["documents"]
         if status == "not_measured":
             served = item["served_by_engine"]
-            if served == 0:
+            if served == 0 and item.get("route_admitted") is False:
                 print(
-                    f"{engine}: the {engine} route served none of the "
-                    f"{documents} documents, so this run measured nothing "
-                    "about it and no record was written; `toktier doctor "
-                    "--family <family>` says why the route did not run"
+                    f"{engine}: the plan did not admit the {engine} route, so "
+                    f"it served none of the {documents} documents, this run "
+                    "measured nothing about it and no record was written; "
+                    "`toktier doctor --family <family>` says why"
+                )
+            elif served == 0:
+                paths = cast(
+                    Sequence[Mapping[str, object]], item.get("unserved_paths", [])
+                )
+                recorded = (
+                    ", ".join(f"{p['path']} x{p['documents']}" for p in paths)
+                    or "no path was recorded"
+                )
+                print(
+                    f"{engine}: the {engine} route was admitted and served "
+                    f"none of the {documents} documents: each one left it for "
+                    f"a per-input reason ({recorded}), so this run measured "
+                    "nothing about it and no record was written; `explain()` "
+                    "on a tokenizer for the same input names the reason, and "
+                    "`toktier doctor` answers about the plan rather than "
+                    "about one input"
                 )
             else:
                 print(

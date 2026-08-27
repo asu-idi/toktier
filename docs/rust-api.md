@@ -389,7 +389,11 @@ A record is written only when the route served every document. A run it
 served in part is reported and not recorded: those documents were
 compared and agreed, but the run does not cover the route. A run it
 served not at all measured nothing, because both sides were then the
-reference engine.
+reference engine, and the note says which of two things happened: a route
+the plan did not admit, which `doctor` explains, or a route the plan
+admitted that every document left for a per-input reason, where the note
+lists the reason codes the ledger recorded and `explain()` on a tokenizer
+names the reason for the same input.
 
 What it writes is a record, not a certificate. The record is filed under
 the device, delivery, image digest, compiler triple, driver, the two

@@ -1380,9 +1380,77 @@ def test_verify_local_records_nothing_when_the_route_never_ran(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "served none of the 3 documents" in captured.out
+    assert "was admitted and served none of the 3 documents" in captured.out
     assert "measured nothing about it and no record was written" in captured.out
+    # The fake reports no execution path, and the sentence says so
+    # rather than inventing one.
+    assert "per-input reason (no path was recorded)" in captured.out
+    assert "`explain()` on a tokenizer for the same input" in captured.out
+    assert "says why the route did not run" not in captured.out
     assert "locally_verified" not in captured.out
+
+
+def test_verify_local_points_a_route_the_plan_did_not_admit_at_doctor(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Zero coverage has two causes and the report says which.
+
+    A route the plan did not admit is a fact about the plan and
+    ``doctor`` explains it; a route the plan admitted and every document
+    left again is a per-input matter, and pointing that reader at
+    ``doctor`` sent them to an answer about something else. The first
+    state is recognised from the plan's fallback chain.
+    """
+    from toktier import facade
+
+    class _NotAdmitted(_FakeVerifyTokenizer):
+        def __init__(self) -> None:
+            super().__init__({}, "hf")
+
+        def explain(self, *, summary: bool = False) -> dict[str, object]:
+            if summary:
+                return {
+                    "last_execution_backend": "hf",
+                    "last_execution_path": "hf_full",
+                }
+            return {"fallback_chain": ["hf"]}
+
+    class _AddedTokens(_FakeVerifyTokenizer):
+        def __init__(self) -> None:
+            super().__init__({}, "hf")
+
+        def explain(self, *, summary: bool = False) -> dict[str, object]:
+            if summary:
+                return {
+                    "last_execution_backend": "hf",
+                    "last_execution_path": "hf_added_token",
+                }
+            return {"fallback_chain": ["fast_cpu", "hf"]}
+
+    subjects: list[_FakeVerifyTokenizer] = [_NotAdmitted(), _AddedTokens()]
+
+    def fake_load(_family: str, **keywords: object) -> _FakeVerifyTokenizer:
+        if keywords.get("policy") == "reference":
+            return _FakeVerifyTokenizer({}, "hf")
+        return subjects.pop(0)
+
+    monkeypatch.setattr(facade, "load", fake_load)
+    arguments = ["verify-local", "--family", "qwen3_8b", "--engine", "cpu"]
+
+    assert cli.main([*arguments, "--synthetic", "2"]) == 0
+    not_admitted = capsys.readouterr().out
+    assert "the plan did not admit the cpu route" in not_admitted
+    assert "served none of the 2 documents" in not_admitted
+    assert "`toktier doctor --family <family>` says why" in not_admitted
+    assert "explain()" not in not_admitted
+
+    assert cli.main([*arguments, "--synthetic", "2", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    (item,) = payload["engines"]
+    assert item["status"] == "not_measured"
+    assert item["route_admitted"] is True
+    assert item["unserved_paths"] == [{"path": "hf_added_token", "documents": 2}]
 
 
 def test_verify_local_says_what_a_partly_served_run_did_compare(

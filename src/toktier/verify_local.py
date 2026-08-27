@@ -425,6 +425,15 @@ class Comparison:
     #: silently fell back to the reference would otherwise compare the
     #: judge with itself and report agreement it never measured.
     served: int
+    #: Whether the plan admitted the route at all. ``False`` is answered
+    #: about the plan and ``doctor`` says why; a route the plan admitted
+    #: and still served nothing was left, document by document, for a
+    #: per-input reason, which ``explain()`` names for the same input.
+    admitted: bool = True
+    #: The execution paths the documents the route did not serve took,
+    #: with a count each, so the report can name the per-input reason
+    #: rather than point away from it.
+    unserved_paths: tuple[tuple[str, int], ...] = ()
 
     @property
     def passed(self) -> bool:
@@ -463,6 +472,7 @@ def compare(
     total_bytes = 0
     mismatches = 0
     served = 0
+    unserved: dict[str, int] = {}
     first: tuple[int, int] | None = None
     for index, document in enumerate(documents):
         total_bytes += len(document.encode("utf-8"))
@@ -471,6 +481,10 @@ def compare(
         summary = explain_subject(summary=True)
         if summary.get("last_execution_backend") == expected_backend:
             served += 1
+        else:
+            path = summary.get("last_execution_path")
+            if isinstance(path, str):
+                unserved[path] = unserved.get(path, 0) + 1
         if mine != theirs:
             mismatches += 1
             if first is None:
@@ -484,12 +498,19 @@ def compare(
                     shared,
                 )
                 first = (index, position)
+    # Whether the plan admits the route is a fact about the plan, read
+    # once after the run; a report that does not carry the chain leaves
+    # it at the default, which is the per-input reading.
+    chain = explain_subject().get("fallback_chain")
+    admitted = True if not isinstance(chain, list) else expected_backend in chain
     return Comparison(
         documents=len(documents),
         bytes=total_bytes,
         mismatches=mismatches,
         first_mismatch=first,
         served=served,
+        admitted=admitted,
+        unserved_paths=tuple(unserved.items()),
     )
 
 

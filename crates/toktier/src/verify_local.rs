@@ -340,15 +340,25 @@ mod tests {
     /// the sentence says so rather than calling it nothing.
     #[test]
     fn a_partly_served_run_says_what_it_did_compare() {
-        let none = uncovered_note("cpu", 0, 3);
+        let none = uncovered_note("cpu", 0, 3, &[("R_INPUT_ADDED_TOKEN".to_owned(), 3)]);
         assert!(
-            none.contains("served none of the 3 documents")
+            none.contains("was admitted and served none of the 3 documents")
+                && none.contains("per-input reason (R_INPUT_ADDED_TOKEN x3)")
                 && none.contains("measured nothing about it")
-                && none.contains("`doctor` says why the route did not run"),
+                && none.contains("`explain()` on a tokenizer for the same input names the reason"),
             "{none}"
         );
+        // The plan admitted the route, or the run would have been
+        // answered before any document was encoded; what `doctor` says
+        // about the plan is not what kept these documents off it.
+        assert!(!none.contains("says why the route did not run"), "{none}");
+        let unrecorded = uncovered_note("cpu", 0, 3, &[]);
+        assert!(
+            unrecorded.contains("(no reason was recorded)"),
+            "{unrecorded}"
+        );
 
-        let some = uncovered_note("cpu", 2, 3);
+        let some = uncovered_note("cpu", 2, 3, &[("R_INPUT_ADDED_TOKEN".to_owned(), 1)]);
         assert!(
             some.contains("served 2 of 3 documents")
                 && some.contains("the served ones compared equal"),
@@ -774,6 +784,26 @@ fn unavailable(engine: Engine, family: &str, note: String) -> Comparison {
     }
 }
 
+/// The ledger's own token for a routing reason, so the note names the
+/// same word `explain()` would. Codes this release has no frozen name
+/// for pass through as the router wrote them.
+fn reason_code(reason: &crate::ReasonCode) -> String {
+    use crate::ReasonCode;
+    match reason {
+        ReasonCode::InputBelowGpuThreshold => {
+            toktier_routing_core::R_INPUT_BELOW_GPU_THRESHOLD.to_owned()
+        }
+        ReasonCode::InputAddedToken => toktier_routing_core::R_INPUT_ADDED_TOKEN.to_owned(),
+        ReasonCode::InputGuardRouted => toktier_routing_core::R_INPUT_GUARD_ROUTED.to_owned(),
+        ReasonCode::ExecutionFault => toktier_routing_core::R_EXEC_FAULT.to_owned(),
+        ReasonCode::InputPostprocessRouted => {
+            toktier_routing_core::R_INPUT_POSTPROCESS_ROUTED.to_owned()
+        }
+        ReasonCode::Other(code) => code.clone(),
+        other => format!("{other:?}"),
+    }
+}
+
 /// What to say when the route did not serve every document.
 ///
 /// Two states share this branch and a reader is owed the difference. A
@@ -781,15 +811,30 @@ fn unavailable(engine: Engine, family: &str, note: String) -> Comparison {
 /// so the run says nothing about it at all. A route that served some of
 /// them did measure those, and they agreed: what the run lacks is
 /// coverage, not a result, and calling that "measured nothing" would be
-/// less than the truth. Neither writes a record, and the second is not
-/// sent to `doctor`, which answers about the plan rather than about the
-/// documents that took the reference path.
-fn uncovered_note(engine: &str, served: u64, documents: u64) -> String {
+/// less than the truth. Neither writes a record, and neither is sent to
+/// `doctor`: the plan admitted the route (a plan that did not is
+/// answered before any document is encoded, and that answer does point
+/// at `doctor`), so what kept every document off it is a per-input
+/// reason, which `explain()` on a tokenizer names for the same input.
+/// `reasons` carries the codes the ledger recorded for the documents
+/// the route did not serve, so the sentence can name them.
+fn uncovered_note(engine: &str, served: u64, documents: u64, reasons: &[(String, u64)]) -> String {
     if served == 0 {
+        let recorded = if reasons.is_empty() {
+            "no reason was recorded".to_owned()
+        } else {
+            reasons
+                .iter()
+                .map(|(code, count)| format!("{code} x{count}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
         format!(
-            "the {engine} route served none of the {documents} documents, so this \
-             run measured nothing about it and no record was written; `doctor` says \
-             why the route did not run"
+            "the {engine} route was admitted and served none of the {documents} \
+             documents: each one left it for a per-input reason ({recorded}), so this \
+             run measured nothing about it and no record was written; `explain()` on a \
+             tokenizer for the same input names the reason, and `doctor` answers about \
+             the plan rather than about one input"
         )
     } else {
         format!(
@@ -894,12 +939,19 @@ fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Compar
     let mut mismatches = 0u64;
     let mut accelerated_documents = 0u64;
     let mut first_mismatch = None;
+    let mut unserved_reasons: Vec<(String, u64)> = Vec::new();
     for (index, document) in request.documents.iter().enumerate() {
         let observed = accelerated.encode(document)?;
         let judged = reference.encode(document)?;
         bytes += document.len() as u64;
         if observed.execution().backend == expected_backend {
             accelerated_documents += 1;
+        } else if let Some(reason) = observed.execution().reason.as_ref() {
+            let code = reason_code(reason);
+            match unserved_reasons.iter_mut().find(|(seen, _)| *seen == code) {
+                Some((_, count)) => *count += 1,
+                None => unserved_reasons.push((code, 1)),
+            }
         }
         if observed.ids() != judged.ids() {
             mismatches += 1;
@@ -927,6 +979,7 @@ fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Compar
             engine.word(),
             accelerated_documents,
             request.documents.len() as u64,
+            &unserved_reasons,
         );
         return Ok(Comparison {
             engine: engine.word().to_owned(),

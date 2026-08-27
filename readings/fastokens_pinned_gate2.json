@@ -1,0 +1,50 @@
+{
+ "arms": {
+  "archived": {
+   "diverges": false
+  },
+  "matrix": {
+   "families": [
+    "deepseek_v3",
+    "glm_5_2",
+    "gpt_oss_120b",
+    "hy3",
+    "kimi_k3",
+    "llama_3_1_8b",
+    "minimax_m3",
+    "qwen3_8b"
+   ],
+   "final_drift": 0,
+   "step_drift": 0,
+   "steps": 2560,
+   "steps_per_stream": 40,
+   "streams_per_family": 8
+  },
+  "min": {
+   "diverges": false
+  },
+  "targeted": {
+   "cases": 1200,
+   "divergences": 0,
+   "families": [
+    "deepseek_v3",
+    "glm_5_2",
+    "gpt_oss_120b",
+    "hy3",
+    "kimi_k3",
+    "llama_3_1_8b",
+    "minimax_m3",
+    "qwen3_8b"
+   ]
+  }
+ },
+ "engine_digest": "0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec",
+ "gate": "stateful replay (four arms)",
+ "generated_at": "2026-08-18T23:20:22Z",
+ "imported_tree_matches_record": true,
+ "label": "0.3.1.1-p179b2-cert-0bcf3ada",
+ "schema": "toktier.fastokens_pinned.gate2.v1",
+ "source": "PLAN/179 readings/gate2_p179b2_cert.json",
+ "total_drift_events": 0,
+ "verdict": "PASS"
+}

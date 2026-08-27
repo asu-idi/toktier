@@ -16,34 +16,62 @@
     "compositions"
   ],
   "properties": {
-    "schema_version": { "const": 1 },
-    "generated_by": { "$ref": "#/$defs/generated_by" },
-    "root_digest": { "$ref": "#/$defs/sha256_prefixed" },
+    "schema_version": {
+      "const": 1
+    },
+    "generated_by": {
+      "$ref": "#/$defs/generated_by"
+    },
+    "root_digest": {
+      "$ref": "#/$defs/sha256_prefixed"
+    },
     "oracles": {
       "type": "array",
-      "items": { "$ref": "#/$defs/oracle" }
+      "items": {
+        "$ref": "#/$defs/oracle"
+      }
     },
     "pipelines": {
       "type": "array",
-      "items": { "$ref": "#/$defs/pipeline" }
+      "items": {
+        "$ref": "#/$defs/pipeline"
+      }
     },
     "added_frontends": {
       "type": "array",
-      "items": { "$ref": "#/$defs/added_frontend" }
+      "items": {
+        "$ref": "#/$defs/added_frontend"
+      }
     },
     "runtime_builds": {
       "type": "array",
       "description": "Evidence-bound native serving hosts allowed to admit accelerated routes.",
-      "items": { "$ref": "#/$defs/runtime_build" }
+      "items": {
+        "$ref": "#/$defs/runtime_build"
+      }
     },
     "artifacts": {
       "type": "array",
-      "items": { "$ref": "#/$defs/artifact_record" }
+      "items": {
+        "$ref": "#/$defs/artifact_record"
+      }
     },
     "compositions": {
       "type": "array",
       "description": "Explicit, evidence-backed composition grants. Absent an entry, pipeline + added-frontend capability matches do not grant accelerated eligibility (default-closed).",
-      "items": { "$ref": "#/$defs/composition" }
+      "items": {
+        "$ref": "#/$defs/composition"
+      }
+    },
+    "engine_distributions": {
+      "type": "object",
+      "description": "Engine distributions the project publishes for an explicitly admitted adapter. The node records which published bytes the adapter's evidence describes; it is not a backend status and grants no route.",
+      "additionalProperties": false,
+      "properties": {
+        "fastokens": {
+          "$ref": "#/$defs/engine_distribution"
+        }
+      }
     }
   },
   "$defs": {
@@ -63,25 +91,51 @@
     "generated_by": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["tool", "tool_version", "source_commit", "generated_at"],
+      "required": [
+        "tool",
+        "tool_version",
+        "source_commit",
+        "generated_at"
+      ],
       "properties": {
-        "tool": { "type": "string" },
-        "tool_version": { "type": "string" },
-        "source_commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
-        "generated_at": { "type": "string", "format": "date-time" }
+        "tool": {
+          "type": "string"
+        },
+        "tool_version": {
+          "type": "string"
+        },
+        "source_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "oracle": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["oracle_id", "package", "certified_versions", "semantic_id"],
+      "required": [
+        "oracle_id",
+        "package",
+        "certified_versions",
+        "semantic_id"
+      ],
       "properties": {
-        "oracle_id": { "$ref": "#/$defs/identifier" },
-        "package": { "type": "string" },
+        "oracle_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "package": {
+          "type": "string"
+        },
         "certified_versions": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Exact package versions this behavior class was judged against."
         },
         "semantic_id": {
@@ -93,21 +147,39 @@
     "pipeline": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["pipeline_id", "pipeline_fingerprint"],
+      "required": [
+        "pipeline_id",
+        "pipeline_fingerprint"
+      ],
       "properties": {
-        "pipeline_id": { "$ref": "#/$defs/identifier" },
-        "pipeline_fingerprint": { "$ref": "#/$defs/sha256_hex" },
-        "description": { "type": "string" }
+        "pipeline_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "pipeline_fingerprint": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "description": {
+          "type": "string"
+        }
       }
     },
     "added_frontend": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["added_frontend_id", "added_frontend_fingerprint"],
+      "required": [
+        "added_frontend_id",
+        "added_frontend_fingerprint"
+      ],
       "properties": {
-        "added_frontend_id": { "$ref": "#/$defs/identifier" },
-        "added_frontend_fingerprint": { "$ref": "#/$defs/sha256_hex" },
-        "description": { "type": "string" }
+        "added_frontend_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "added_frontend_fingerprint": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "description": {
+          "type": "string"
+        }
       }
     },
     "runtime_build": {
@@ -123,8 +195,12 @@
         "evidence_id"
       ],
       "properties": {
-        "runtime": { "const": "rust_api" },
-        "source_digest": { "$ref": "#/$defs/sha256_hex" },
+        "runtime": {
+          "const": "rust_api"
+        },
+        "source_digest": {
+          "$ref": "#/$defs/sha256_hex"
+        },
         "source_digest_v2": {
           "$ref": "#/$defs/sha256_hex",
           "description": "Version-normalized v2 identity over the runtime source set."
@@ -132,20 +208,30 @@
         "build_flags": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
-        "toolchain": { "type": "string" },
-        "fast_cpu_source_digest": { "$ref": "#/$defs/sha256_hex" },
+        "toolchain": {
+          "type": "string"
+        },
+        "fast_cpu_source_digest": {
+          "$ref": "#/$defs/sha256_hex"
+        },
         "fast_cpu_source_digest_v2": {
           "$ref": "#/$defs/sha256_hex",
           "description": "Version-normalized v2 identity over the integrated fast-CPU source set."
         },
-        "native_host_source_digest": { "$ref": "#/$defs/sha256_hex" },
+        "native_host_source_digest": {
+          "$ref": "#/$defs/sha256_hex"
+        },
         "native_host_source_digest_v2": {
           "$ref": "#/$defs/sha256_hex",
           "description": "Version-normalized v2 identity over the native-host source set."
         },
-        "evidence_id": { "$ref": "#/$defs/identifier" }
+        "evidence_id": {
+          "$ref": "#/$defs/identifier"
+        }
       }
     },
     "direct_jit_toolchain": {
@@ -159,20 +245,43 @@
         "evidence_id"
       ],
       "properties": {
-        "release": { "type": "string", "minLength": 1 },
-        "build": { "type": "string", "minLength": 1 },
-        "compiler_sha256": { "$ref": "#/$defs/sha256_hex" },
-        "architecture": { "type": "string", "pattern": "^sm_[0-9]+$" },
-        "evidence_id": { "$ref": "#/$defs/identifier" }
+        "release": {
+          "type": "string",
+          "minLength": 1
+        },
+        "build": {
+          "type": "string",
+          "minLength": 1
+        },
+        "compiler_sha256": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "architecture": {
+          "type": "string",
+          "pattern": "^sm_[0-9]+$"
+        },
+        "evidence_id": {
+          "$ref": "#/$defs/identifier"
+        }
       }
     },
     "readings": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["docs", "bytes", "mismatches"],
+      "required": [
+        "docs",
+        "bytes",
+        "mismatches"
+      ],
       "properties": {
-        "docs": { "type": "integer", "minimum": 0 },
-        "bytes": { "type": "integer", "minimum": 0 },
+        "docs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
         "mismatches": {
           "type": "integer",
           "minimum": 0,
@@ -183,10 +292,17 @@
     "backend_entry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status"],
+      "required": [
+        "status"
+      ],
       "properties": {
         "status": {
-          "enum": ["certified", "certified_source", "experimental", "unsupported"]
+          "enum": [
+            "certified",
+            "certified_source",
+            "experimental",
+            "unsupported"
+          ]
         },
         "binary_digest": {
           "$ref": "#/$defs/sha256_hex",
@@ -202,7 +318,9 @@
         },
         "build_flags": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Bound build flags for certified_source."
         },
         "toolchain": {
@@ -219,7 +337,9 @@
         },
         "host_build_flags": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Exact release build facts embedded by the native prebuilt request host."
         },
         "host_toolchain": {
@@ -241,18 +361,25 @@
         "direct_build_flags": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Exact invariant direct-NVCC flag prefix; device and path arguments are bound separately in the per-product manifest."
         },
         "direct_devices": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string", "pattern": "^sm_[0-9]+$" }
+          "items": {
+            "type": "string",
+            "pattern": "^sm_[0-9]+$"
+          }
         },
         "direct_toolchains": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "#/$defs/direct_jit_toolchain" },
+          "items": {
+            "$ref": "#/$defs/direct_jit_toolchain"
+          },
           "description": "Exact compiler-binary/architecture tuples admitted for automatic Rust-native direct JIT."
         },
         "class_table_digest": {
@@ -261,20 +388,28 @@
         },
         "devices": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Exact GPU architectures judged (for example sm_89, sm_120). An unlisted architecture is not eligible under CERTIFIED."
         },
         "devices_experimental": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Architectures the delivery ships an image for without judgment evidence. Reachable only under EXPERIMENTAL policy; reported as experimental, never as certified."
         },
         "architecture_digests": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/sha256_hex" },
+          "additionalProperties": {
+            "$ref": "#/$defs/sha256_hex"
+          },
           "description": "Digest of each embedded per-architecture image (domain-tagged sha256, bare hex), keyed by the architecture spelling."
         },
-        "driver_min": { "type": "string" },
+        "driver_min": {
+          "type": "string"
+        },
         "engine": {
           "$ref": "#/$defs/identifier",
           "description": "External engine distribution selected by this backend."
@@ -284,12 +419,18 @@
           "description": "Exact external engine version in the certified binding."
         },
         "engine_delivery": {
-          "enum": ["integrated", "vendored"],
+          "enum": [
+            "integrated",
+            "vendored"
+          ],
           "description": "How the CPU engine is delivered. 'integrated' means the corrected implementation is linked into the core TokTier extension; 'vendored' is retained only for reading the 0.1.0 lineage."
         },
         "engine_module": {
           "type": "string",
-          "enum": ["toktier._native", "toktier._vendor.gigatoken_rs"],
+          "enum": [
+            "toktier._native",
+            "toktier._vendor.gigatoken_rs"
+          ],
           "description": "Private import path of the bound CPU engine; no top-level Gigatoken package participates in routing."
         },
         "engine_unicode_data": {
@@ -312,19 +453,39 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "jit": { "$ref": "#/$defs/backend_entry" },
-            "prebuilt": { "$ref": "#/$defs/backend_entry" }
+            "jit": {
+              "$ref": "#/$defs/backend_entry"
+            },
+            "prebuilt": {
+              "$ref": "#/$defs/backend_entry"
+            }
           },
           "description": "Per-delivery refinement of this entry. 'jit' binds the kernel source digest set (certified_source); 'prebuilt' binds the shipped fatbin binary plus the source/build identity of its Rust request host (certified). The top-level fields remain the JIT-era view for readers that predate deliveries."
         }
       },
       "allOf": [
         {
-          "if": { "properties": { "status": { "const": "certified" } } },
-          "then": { "required": ["binary_digest"] }
+          "if": {
+            "properties": {
+              "status": {
+                "const": "certified"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "binary_digest"
+            ]
+          }
         },
         {
-          "if": { "properties": { "status": { "const": "certified_source" } } },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "certified_source"
+              }
+            }
+          },
           "then": {
             "required": [
               "source_digest",
@@ -335,10 +496,23 @@
         },
         {
           "if": {
-            "properties": { "status": { "const": "certified_source" } },
-            "not": { "required": ["engine"] }
+            "properties": {
+              "status": {
+                "const": "certified_source"
+              }
+            },
+            "not": {
+              "required": [
+                "engine"
+              ]
+            }
           },
-          "then": { "required": ["devices", "class_table_digest"] }
+          "then": {
+            "required": [
+              "devices",
+              "class_table_digest"
+            ]
+          }
         }
       ]
     },
@@ -357,35 +531,698 @@
         "backends"
       ],
       "properties": {
-        "artifact_sha256": { "$ref": "#/$defs/sha256_hex" },
-        "family": { "$ref": "#/$defs/identifier" },
+        "artifact_sha256": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "family": {
+          "$ref": "#/$defs/identifier"
+        },
         "aliases": {
           "type": "array",
-          "items": { "$ref": "#/$defs/identifier" }
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
         },
-        "pipeline_id": { "$ref": "#/$defs/identifier" },
-        "added_frontend_id": { "$ref": "#/$defs/identifier" },
-        "oracle_id": { "$ref": "#/$defs/identifier" },
-        "suite_version": { "type": "string" },
-        "evidence_id": { "$ref": "#/$defs/identifier" },
-        "readings": { "$ref": "#/$defs/readings" },
+        "pipeline_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "added_frontend_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "oracle_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "suite_version": {
+          "type": "string"
+        },
+        "evidence_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "readings": {
+          "$ref": "#/$defs/readings"
+        },
         "backends": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/backend_entry" },
-          "propertyNames": { "$ref": "#/$defs/identifier" }
+          "additionalProperties": {
+            "$ref": "#/$defs/backend_entry"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          }
         }
       }
     },
     "composition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["pipeline_id", "added_frontend_id", "evidence_id"],
+      "required": [
+        "pipeline_id",
+        "added_frontend_id",
+        "evidence_id"
+      ],
       "properties": {
-        "pipeline_id": { "$ref": "#/$defs/identifier" },
-        "added_frontend_id": { "$ref": "#/$defs/identifier" },
-        "evidence_id": { "$ref": "#/$defs/identifier" },
-        "note": { "type": "string" }
+        "pipeline_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "added_frontend_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "evidence_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "note": {
+          "type": "string"
+        }
       }
+    },
+    "engine_distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "const": "fastokens"
+        },
+        "admission": {
+          "const": "experimental",
+          "description": "How the adapter is selected: only by explicit request under the EXPERIMENTAL policy. Never changed by anything in this node."
+        },
+        "distribution": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "import_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requires_python": {
+              "type": "string",
+              "minLength": 1
+            },
+            "abi": {
+              "type": "string",
+              "minLength": 1
+            },
+            "index": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "name",
+            "version",
+            "import_name",
+            "requires_python",
+            "abi",
+            "index"
+          ]
+        },
+        "recognised_distributions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Distribution names whose RECORD may own the import package; the adapter resolves identity by the import package and attributes the bytes on disk to one of these."
+        },
+        "upstream": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "project": {
+              "type": "string",
+              "minLength": 1
+            },
+            "distribution": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "repository": {
+              "type": "string",
+              "minLength": 1
+            },
+            "previous_repository": {
+              "type": "string",
+              "minLength": 1
+            },
+            "tag": {
+              "type": "string",
+              "minLength": 1
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "license": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "project",
+            "distribution",
+            "version",
+            "repository",
+            "tag",
+            "commit",
+            "license"
+          ]
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "patch_series": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "$ref": "#/$defs/sha256_hex"
+                  },
+                  "changes_code": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "file",
+                  "sha256",
+                  "changes_code"
+                ]
+              }
+            },
+            "code_tree": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "noticed_tree": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "recipe": {
+              "type": "string",
+              "minLength": 1
+            },
+            "toolchain": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "rustc": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "cargo": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "maturin": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "host": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "rustc",
+                "cargo",
+                "maturin",
+                "host"
+              ]
+            }
+          },
+          "required": [
+            "patch_series",
+            "code_tree",
+            "noticed_tree",
+            "recipe",
+            "toolchain"
+          ]
+        },
+        "known_wheels": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "filename": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sha256": {
+                "$ref": "#/$defs/sha256_hex"
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "engine_digest": {
+                "$ref": "#/$defs/sha256_hex"
+              },
+              "platform": {
+                "type": "string",
+                "minLength": 1
+              },
+              "abi": {
+                "type": "string",
+                "minLength": 1
+              },
+              "built_from_tree": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "built_by": {
+                "type": "string",
+                "minLength": 1
+              },
+              "published": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "index": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "upload_time": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": [
+                  "index",
+                  "upload_time"
+                ]
+              },
+              "code_files": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "bytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "sha256": {
+                      "$ref": "#/$defs/sha256_hex"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "bytes",
+                    "sha256"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "filename",
+              "sha256",
+              "bytes",
+              "engine_digest",
+              "platform",
+              "abi",
+              "built_from_tree",
+              "built_by",
+              "published",
+              "code_files"
+            ]
+          }
+        },
+        "sdist": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "filename": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256_hex"
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "built_from_tree": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            }
+          },
+          "required": [
+            "filename",
+            "sha256",
+            "bytes",
+            "built_from_tree"
+          ]
+        },
+        "oracle": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "package": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "package",
+            "version"
+          ]
+        },
+        "families": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "family": {
+                "$ref": "#/$defs/identifier"
+              },
+              "artifact_sha256": {
+                "$ref": "#/$defs/sha256_hex"
+              }
+            },
+            "required": [
+              "family",
+              "artifact_sha256"
+            ]
+          }
+        },
+        "guard": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "codepoints": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "ranges": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "type": "string",
+                  "pattern": "^U\\+[0-9A-F]{4,6}$"
+                }
+              }
+            },
+            "set_sha256": {
+              "$ref": "#/$defs/sha256_hex"
+            },
+            "set_sha256_of": {
+              "type": "string",
+              "minLength": 1
+            },
+            "derived_against": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "judge": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "engine_digest": {
+                  "$ref": "#/$defs/sha256_hex"
+                },
+                "domain": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "probe": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "judge",
+                "engine_digest",
+                "domain",
+                "probe"
+              ]
+            },
+            "selftest_reading": {
+              "type": "string",
+              "minLength": 1
+            },
+            "behaviour": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "id",
+            "codepoints",
+            "ranges",
+            "set_sha256",
+            "set_sha256_of",
+            "derived_against",
+            "selftest_reading",
+            "behaviour"
+          ]
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "evidence_id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "suite_version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "docs_per_family": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "families": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "comparisons": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "mismatch_raw": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "mismatch_guarded": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "engine_error": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "routed_reference_per_family": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "visible_cpus": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "guard_codepoints_in_run": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "gate2": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "drift_events": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "targeted_cases": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "matrix_steps": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "drift_events",
+                "targeted_cases",
+                "matrix_steps"
+              ]
+            },
+            "gate3": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "cells": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "topologies": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "visible_cpus": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "integer",
+                      "string"
+                    ]
+                  }
+                },
+                "mechanisms": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "id_mismatch": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "cells",
+                "topologies",
+                "visible_cpus",
+                "mechanisms",
+                "id_mismatch"
+              ]
+            },
+            "gate4": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "families": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "splices": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "edits": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "failing": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "families",
+                "splices",
+                "edits",
+                "failing"
+              ]
+            },
+            "readings": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "gate1": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "gate2": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "gate3": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "gate4": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "guard": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "gate1",
+                "gate2",
+                "gate3",
+                "gate4",
+                "guard"
+              ]
+            }
+          },
+          "required": [
+            "evidence_id",
+            "suite_version",
+            "docs_per_family",
+            "families",
+            "comparisons",
+            "mismatch_raw",
+            "mismatch_guarded",
+            "engine_error",
+            "routed_reference_per_family",
+            "visible_cpus",
+            "guard_codepoints_in_run",
+            "gate2",
+            "gate3",
+            "gate4",
+            "readings"
+          ]
+        }
+      },
+      "required": [
+        "backend",
+        "admission",
+        "distribution",
+        "recognised_distributions",
+        "upstream",
+        "source",
+        "known_wheels",
+        "sdist",
+        "oracle",
+        "families",
+        "guard",
+        "evidence"
+      ]
     }
   }
 }

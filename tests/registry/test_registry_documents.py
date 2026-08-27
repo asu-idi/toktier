@@ -359,6 +359,11 @@ def test_serialisation_is_ascii_only_and_newline_terminated() -> None:
             EVIDENCE_SCHEMA,
             EVIDENCE_DOMAIN_TAG,
         ),
+        (
+            "evidence/evidence_manifest_fastokens_pinned.json",
+            EVIDENCE_SCHEMA,
+            EVIDENCE_DOMAIN_TAG,
+        ),
     ],
 )
 def test_shipped_documents_verify(

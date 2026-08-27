@@ -1,0 +1,598 @@
+{
+ "archived_guard": {
+  "codepoints": [
+   "U+07FD",
+   "U+0898",
+   "U+0899",
+   "U+089A",
+   "U+089B",
+   "U+089C",
+   "U+089D",
+   "U+089E",
+   "U+089F",
+   "U+08CA",
+   "U+08CB",
+   "U+08CC",
+   "U+08CD",
+   "U+08CE",
+   "U+08CF",
+   "U+08D0",
+   "U+08D1",
+   "U+08D2",
+   "U+08D3",
+   "U+09FE",
+   "U+0C3C",
+   "U+0D3B",
+   "U+0D3C",
+   "U+0EBA",
+   "U+10D24",
+   "U+10D25",
+   "U+10D26",
+   "U+10D27",
+   "U+10EAB",
+   "U+10EAC",
+   "U+10EFD",
+   "U+10EFE",
+   "U+10EFF",
+   "U+10F46",
+   "U+10F47",
+   "U+10F48",
+   "U+10F49",
+   "U+10F4A",
+   "U+10F4B",
+   "U+10F4C",
+   "U+10F4D",
+   "U+10F4E",
+   "U+10F4F",
+   "U+10F50",
+   "U+10F82",
+   "U+10F83",
+   "U+10F84",
+   "U+10F85",
+   "U+11070",
+   "U+1133B",
+   "U+1145E",
+   "U+11839",
+   "U+1183A",
+   "U+1193D",
+   "U+1193E",
+   "U+11943",
+   "U+119E0",
+   "U+11A34",
+   "U+11A47",
+   "U+11A99",
+   "U+11D42",
+   "U+11D44",
+   "U+11D45",
+   "U+11D97",
+   "U+11F41",
+   "U+11F42",
+   "U+16FF0",
+   "U+16FF1",
+   "U+1715",
+   "U+1ABF",
+   "U+1AC0",
+   "U+1AC1",
+   "U+1AC2",
+   "U+1AC3",
+   "U+1AC4",
+   "U+1AC5",
+   "U+1AC6",
+   "U+1AC7",
+   "U+1AC8",
+   "U+1AC9",
+   "U+1ACA",
+   "U+1ACB",
+   "U+1ACC",
+   "U+1ACD",
+   "U+1ACE",
+   "U+1DF6",
+   "U+1DF7",
+   "U+1DF8",
+   "U+1DF9",
+   "U+1DFA",
+   "U+1E08F",
+   "U+1E130",
+   "U+1E131",
+   "U+1E132",
+   "U+1E133",
+   "U+1E134",
+   "U+1E135",
+   "U+1E136",
+   "U+1E2AE",
+   "U+1E2EC",
+   "U+1E2ED",
+   "U+1E2EE",
+   "U+1E2EF",
+   "U+1E4EC",
+   "U+1E4ED",
+   "U+1E4EE",
+   "U+1E4EF",
+   "U+A82C"
+  ],
+  "derived_with": "CPython 3.12 unicodedata (Unicode 15.0.0) as the probe-domain filter",
+  "size": 108
+ },
+ "codepoints": [
+  "U+07FD",
+  "U+0897",
+  "U+0898",
+  "U+0899",
+  "U+089A",
+  "U+089B",
+  "U+089C",
+  "U+089D",
+  "U+089E",
+  "U+089F",
+  "U+08CA",
+  "U+08CB",
+  "U+08CC",
+  "U+08CD",
+  "U+08CE",
+  "U+08CF",
+  "U+08D0",
+  "U+08D1",
+  "U+08D2",
+  "U+08D3",
+  "U+09FE",
+  "U+0C3C",
+  "U+0D3B",
+  "U+0D3C",
+  "U+0EBA",
+  "U+1715",
+  "U+1ABF",
+  "U+1AC0",
+  "U+1AC1",
+  "U+1AC2",
+  "U+1AC3",
+  "U+1AC4",
+  "U+1AC5",
+  "U+1AC6",
+  "U+1AC7",
+  "U+1AC8",
+  "U+1AC9",
+  "U+1ACA",
+  "U+1ACB",
+  "U+1ACC",
+  "U+1ACD",
+  "U+1ACE",
+  "U+1ACF",
+  "U+1AD0",
+  "U+1AD1",
+  "U+1AD2",
+  "U+1AD3",
+  "U+1AD4",
+  "U+1AD5",
+  "U+1AD6",
+  "U+1AD7",
+  "U+1AD8",
+  "U+1AD9",
+  "U+1ADA",
+  "U+1ADB",
+  "U+1ADC",
+  "U+1ADD",
+  "U+1AE0",
+  "U+1AE1",
+  "U+1AE2",
+  "U+1AE3",
+  "U+1AE4",
+  "U+1AE5",
+  "U+1AE6",
+  "U+1AE7",
+  "U+1AE8",
+  "U+1AE9",
+  "U+1AEA",
+  "U+1AEB",
+  "U+1DF6",
+  "U+1DF7",
+  "U+1DF8",
+  "U+1DF9",
+  "U+1DFA",
+  "U+A82C",
+  "U+10D24",
+  "U+10D25",
+  "U+10D26",
+  "U+10D27",
+  "U+10D69",
+  "U+10D6A",
+  "U+10D6B",
+  "U+10D6C",
+  "U+10D6D",
+  "U+10EAB",
+  "U+10EAC",
+  "U+10EFA",
+  "U+10EFB",
+  "U+10EFD",
+  "U+10EFE",
+  "U+10EFF",
+  "U+10F46",
+  "U+10F47",
+  "U+10F48",
+  "U+10F49",
+  "U+10F4A",
+  "U+10F4B",
+  "U+10F4C",
+  "U+10F4D",
+  "U+10F4E",
+  "U+10F4F",
+  "U+10F50",
+  "U+10F82",
+  "U+10F83",
+  "U+10F84",
+  "U+10F85",
+  "U+11070",
+  "U+1133B",
+  "U+113CE",
+  "U+113CF",
+  "U+113D0",
+  "U+1145E",
+  "U+11839",
+  "U+1183A",
+  "U+1193D",
+  "U+1193E",
+  "U+11943",
+  "U+119E0",
+  "U+11A34",
+  "U+11A47",
+  "U+11A99",
+  "U+11D42",
+  "U+11D44",
+  "U+11D45",
+  "U+11D97",
+  "U+11F41",
+  "U+11F42",
+  "U+1612F",
+  "U+16FF0",
+  "U+16FF1",
+  "U+1E08F",
+  "U+1E130",
+  "U+1E131",
+  "U+1E132",
+  "U+1E133",
+  "U+1E134",
+  "U+1E135",
+  "U+1E136",
+  "U+1E2AE",
+  "U+1E2EC",
+  "U+1E2ED",
+  "U+1E2EE",
+  "U+1E2EF",
+  "U+1E4EC",
+  "U+1E4ED",
+  "U+1E4EE",
+  "U+1E4EF",
+  "U+1E5EE",
+  "U+1E5EF",
+  "U+1E6E3",
+  "U+1E6E6",
+  "U+1E6EE",
+  "U+1E6EF",
+  "U+1E6F5"
+ ],
+ "comparison": {
+  "archived_size": 108,
+  "full_domain_size": 154,
+  "identical": false,
+  "only_in_archived": [],
+  "only_in_full_domain": [
+   "U+0897",
+   "U+1ACF",
+   "U+1AD0",
+   "U+1AD1",
+   "U+1AD2",
+   "U+1AD3",
+   "U+1AD4",
+   "U+1AD5",
+   "U+1AD6",
+   "U+1AD7",
+   "U+1AD8",
+   "U+1AD9",
+   "U+1ADA",
+   "U+1ADB",
+   "U+1ADC",
+   "U+1ADD",
+   "U+1AE0",
+   "U+1AE1",
+   "U+1AE2",
+   "U+1AE3",
+   "U+1AE4",
+   "U+1AE5",
+   "U+1AE6",
+   "U+1AE7",
+   "U+1AE8",
+   "U+1AE9",
+   "U+1AEA",
+   "U+1AEB",
+   "U+10D69",
+   "U+10D6A",
+   "U+10D6B",
+   "U+10D6C",
+   "U+10D6D",
+   "U+10EFA",
+   "U+10EFB",
+   "U+113CE",
+   "U+113CF",
+   "U+113D0",
+   "U+1612F",
+   "U+1E5EE",
+   "U+1E5EF",
+   "U+1E6E3",
+   "U+1E6E6",
+   "U+1E6EE",
+   "U+1E6EF",
+   "U+1E6F5"
+  ],
+  "verdict": "SUPERSET"
+ },
+ "count": 154,
+ "domain": {
+  "hi": 1114112,
+  "lo": 0,
+  "python_unicodedata_used_as_filter": false,
+  "surrogates_excluded": [
+   "U+D800",
+   "U+DFFF"
+  ]
+ },
+ "engine_digest": "0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec",
+ "families": [
+  "qwen3_8b",
+  "qwen3_5_08b",
+  "minimax_m3",
+  "ling_3_0_flash"
+ ],
+ "generated_at": "2026-08-18T22:04:01Z",
+ "item": "full-domain re-derivation of the Unicode guard code-point set",
+ "judge": {
+  "library": "tokenizers",
+  "version": "0.22.2"
+ },
+ "label": "cert-candidate-2_28-engine-0bcf3ada",
+ "per_family_counts": {
+  "ling_3_0_flash": {
+   "disagree_any": 154,
+   "engine_error": 0,
+   "engine_reorders": 154,
+   "judge_error": 0,
+   "judge_reorders": 0,
+   "probed": 1112064,
+   "s1": 154,
+   "s2": 0,
+   "s3": 0,
+   "s4": 154
+  },
+  "minimax_m3": {
+   "disagree_any": 154,
+   "engine_error": 0,
+   "engine_reorders": 154,
+   "judge_error": 0,
+   "judge_reorders": 0,
+   "probed": 1112064,
+   "s1": 154,
+   "s2": 0,
+   "s3": 0,
+   "s4": 154
+  },
+  "qwen3_5_08b": {
+   "disagree_any": 154,
+   "engine_error": 0,
+   "engine_reorders": 154,
+   "judge_error": 0,
+   "judge_reorders": 0,
+   "probed": 1112064,
+   "s1": 154,
+   "s2": 0,
+   "s3": 0,
+   "s4": 154
+  },
+  "qwen3_8b": {
+   "disagree_any": 154,
+   "engine_error": 0,
+   "engine_reorders": 154,
+   "judge_error": 0,
+   "judge_reorders": 0,
+   "probed": 1112064,
+   "s1": 154,
+   "s2": 0,
+   "s3": 0,
+   "s4": 154
+  }
+ },
+ "ranges": [
+  [
+   "U+07FD",
+   "U+07FD"
+  ],
+  [
+   "U+0897",
+   "U+089F"
+  ],
+  [
+   "U+08CA",
+   "U+08D3"
+  ],
+  [
+   "U+09FE",
+   "U+09FE"
+  ],
+  [
+   "U+0C3C",
+   "U+0C3C"
+  ],
+  [
+   "U+0D3B",
+   "U+0D3C"
+  ],
+  [
+   "U+0EBA",
+   "U+0EBA"
+  ],
+  [
+   "U+1715",
+   "U+1715"
+  ],
+  [
+   "U+1ABF",
+   "U+1ADD"
+  ],
+  [
+   "U+1AE0",
+   "U+1AEB"
+  ],
+  [
+   "U+1DF6",
+   "U+1DFA"
+  ],
+  [
+   "U+A82C",
+   "U+A82C"
+  ],
+  [
+   "U+10D24",
+   "U+10D27"
+  ],
+  [
+   "U+10D69",
+   "U+10D6D"
+  ],
+  [
+   "U+10EAB",
+   "U+10EAC"
+  ],
+  [
+   "U+10EFA",
+   "U+10EFB"
+  ],
+  [
+   "U+10EFD",
+   "U+10EFF"
+  ],
+  [
+   "U+10F46",
+   "U+10F50"
+  ],
+  [
+   "U+10F82",
+   "U+10F85"
+  ],
+  [
+   "U+11070",
+   "U+11070"
+  ],
+  [
+   "U+1133B",
+   "U+1133B"
+  ],
+  [
+   "U+113CE",
+   "U+113D0"
+  ],
+  [
+   "U+1145E",
+   "U+1145E"
+  ],
+  [
+   "U+11839",
+   "U+1183A"
+  ],
+  [
+   "U+1193D",
+   "U+1193E"
+  ],
+  [
+   "U+11943",
+   "U+11943"
+  ],
+  [
+   "U+119E0",
+   "U+119E0"
+  ],
+  [
+   "U+11A34",
+   "U+11A34"
+  ],
+  [
+   "U+11A47",
+   "U+11A47"
+  ],
+  [
+   "U+11A99",
+   "U+11A99"
+  ],
+  [
+   "U+11D42",
+   "U+11D42"
+  ],
+  [
+   "U+11D44",
+   "U+11D45"
+  ],
+  [
+   "U+11D97",
+   "U+11D97"
+  ],
+  [
+   "U+11F41",
+   "U+11F42"
+  ],
+  [
+   "U+1612F",
+   "U+1612F"
+  ],
+  [
+   "U+16FF0",
+   "U+16FF1"
+  ],
+  [
+   "U+1E08F",
+   "U+1E08F"
+  ],
+  [
+   "U+1E130",
+   "U+1E136"
+  ],
+  [
+   "U+1E2AE",
+   "U+1E2AE"
+  ],
+  [
+   "U+1E2EC",
+   "U+1E2EF"
+  ],
+  [
+   "U+1E4EC",
+   "U+1E4EF"
+  ],
+  [
+   "U+1E5EE",
+   "U+1E5EF"
+  ],
+  [
+   "U+1E6E3",
+   "U+1E6E3"
+  ],
+  [
+   "U+1E6E6",
+   "U+1E6E6"
+  ],
+  [
+   "U+1E6EE",
+   "U+1E6EF"
+  ],
+  [
+   "U+1E6F5",
+   "U+1E6F5"
+  ]
+ ],
+ "schema": "toktier.fastokens_pinned.guard_full_domain.v1",
+ "set_sha256": "86bdc39a8caa57bb883be33da0cef47820006ed43a597ff36ea27edda4f50222",
+ "set_sha256_of": "sha256 over the domain tag toktier.fastokens.unicode_guard.v1 followed by NUL, then the sorted code points as U+XXXX joined by newline",
+ "shapes": {
+  "s1": "a + X + U+0334",
+  "s2": "X",
+  "s3": "a + X",
+  "s4": "X + U+0334"
+ },
+ "source": "PLAN/179 readings/guard_full_domain.json",
+ "wall_s": 181.7
+}

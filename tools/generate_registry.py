@@ -698,6 +698,26 @@ def rust_api_binding_problems(registry_path: Path) -> list[str]:
     return []
 
 
+def fastokens_binding_problems(registry_path: Path) -> list[str]:
+    """Require the pinned Fastokens node to equal the checked shipped binding."""
+    if registry_path.resolve() != DEFAULT_OUTPUT.resolve():
+        return []
+    try:
+        from update_fastokens_registry import augmented_document as fastokens_document
+
+        document = load_json(registry_path)
+        binding = load_json(REPOSITORY_ROOT / "tools" / "fastokens_binding.json")
+        expected = fastokens_document(document, binding)
+    except (GenerationError, OSError, KeyError, TypeError, ValueError) as error:
+        return [f"pinned Fastokens binding cannot be verified: {error}"]
+    if document != expected:
+        return [
+            "the engine_distributions.fastokens node differs from the checked "
+            "binding; run tools/update_fastokens_registry.py"
+        ]
+    return []
+
+
 def release_problems(registry_path: Path) -> list[str]:
     """Refusals that apply to a release, on top of ``--check``.
 
@@ -719,6 +739,16 @@ def release_problems(registry_path: Path) -> list[str]:
                 for field in digest_fields:
                     if view.get(field) == PLACEHOLDER_SHA256:
                         problems.append(f"{label}: {field} is the placeholder digest")
+    for name, node in (document.get("engine_distributions") or {}).items():
+        for index, wheel in enumerate(node.get("known_wheels") or []):
+            for field in ("sha256", "engine_digest"):
+                if wheel.get(field) in (PLACEHOLDER_SHA256, None, ""):
+                    problems.append(
+                        f"engine_distributions/{name}/known_wheels[{index}]: "
+                        f"{field} is a placeholder"
+                    )
+        if not node.get("known_wheels"):
+            problems.append(f"engine_distributions/{name}: no known wheel is recorded")
     families_document = load_json(DEFAULT_FAMILY_TABLE_PATH)
     packaged_dir = DEFAULT_FAMILY_TABLE_PATH.parent
     for table_id, spec in families_document["class_tables"].items():
@@ -840,6 +870,7 @@ def main(argv: list[str] | None = None) -> int:
         problems += prebuilt_hardware_evidence_problems(arguments.out)
         problems += fast_cpu_binding_problems(arguments.out)
         problems += rust_api_binding_problems(arguments.out)
+        problems += fastokens_binding_problems(arguments.out)
         problems += packaged_copy_problems(arguments.out)
     if arguments.release_check:
         problems = list(problems) + release_problems(arguments.out)

@@ -1,0 +1,274 @@
+{
+ "chars_per_family": 3247759706137,
+ "comparisons": 14982868215,
+ "completeness": {
+  "complete": true,
+  "partial_shard_indices": [],
+  "partial_shards": 0,
+  "shards_reported": 1333,
+  "shards_submitted": 1333,
+  "units_assigned_in_reported_shards": 4000,
+  "units_completed": 4000
+ },
+ "core_hours": 1556.8,
+ "corpus": "nvidia/Nemotron-CC-v2.1, all nine splits interleaved, files and row groups in lexicographic order; the first 998,857,881 documents of that order",
+ "docs_per_family": 998857881,
+ "families": 15,
+ "gate": "differential run, full token-id list equality per document",
+ "generated_at": "2026-08-20T02:46:00Z",
+ "guard": {
+  "codepoints_in_harness": 108,
+  "note": "the harness routed a document containing any of the 108 code points then on file to the reference; the shipped adapter compiles the 154-code-point superset from the registry, which can only route more documents"
+ },
+ "integrity": {
+  "builds": {
+   "0.3.1.1+toktier.b2.0bcf3ada9268": 1333
+  },
+  "judges": {
+   "0.22.2": 1333
+  },
+  "shard_files": 1333,
+  "units_completed": 4000,
+  "units_expected": 4000,
+  "verdict": "PASS"
+ },
+ "judge": {
+  "library": "tokenizers",
+  "version": "0.22.2"
+ },
+ "label": "gate1-b2-cert",
+ "per_family": {
+  "deepseek_v3": {
+   "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
+   "chars": 3247759706137,
+   "docs": 998857881,
+   "engine_error": 0,
+   "mismatch_guarded": 0,
+   "mismatch_raw": 0,
+   "routed_reference": 505,
+   "tokens_reference": 651280199977,
+   "verdict_guarded": "PASS",
+   "verdict_raw": "PASS"
+  },
+  "deepseek_v4_flash": {
+   "artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+   "chars": 3247759706137,
+   "docs": 998857881,
+   "engine_error": 0,
+   "mismatch_guarded": 0,
+   "mismatch_raw": 0,
+   "routed_reference": 505,
+   "tokens_reference": 651280188552,
+   "verdict_guarded": "PASS",
+   "verdict_raw": "PASS"
+  },
+  "glm_5_2": {
+   "artifact_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+   "chars": 3247759706137,
+   "docs": 998857881,
+   "engine_error": 0,
+   "mismatch_guarded": 0,
+   "mismatch_raw": 0,
+   "routed_reference": 505,
+   "tokens_reference": 653446950530,
+   "verdict_guarded": "PASS",
+   "verdict_raw": "PASS"
+  },
+  "gpt_oss_120b": {
+   "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+   "chars": 3247759706137,
+   "docs": 998857881,
+   "engine_error": 0,
+   "mismatch_guarded": 0,
+   "mismatch_raw": 0,
+   "routed_reference": 505,
+   "tokens_reference": 645407912685,
+   "verdict_guarded": "PASS",
+   "verdict_raw": "PASS"
+  },
+  "hy3": {
+   "artifact_sha256": "446e0b59cd941637c0ddfd84e12ee1f49480fd12097f86a9d2fec8ebd0c7ff6c",
+   "chars": 3247759706137,
+   "docs": 998857881,
+   "engine_error": 0,
+   "mismatch_guarded": 0,
+   "mismatch_raw": 0,
+   "routed_reference": 505,
+   "tokens_reference": 655943637797,
+   "verdict_guarded": "PASS",
+   "verdict_raw": "PASS"
+  },
+  "kimi_k3": {
+   "artifact_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
+   "chars": 3247759706137,
+   "docs": 998857881,
+   "engine_error": 0,
+   "mismatch_guarded": 0,
+   "mismatch_raw": 0,
+   "routed_reference": 505,
+   "tokens_reference": 651804962563,
+   "verdict_guarded": "PASS",
+   "verdict_raw": "PASS"
+  },
+  "laguna_s_2_1": {
+   "artifact_sha256": "809240f7a182cde859a4fc4ebc902e619a173d507e99304c1092aa04e7a6658e",
+   "chars": 3247759706137,
+   "docs": 998857881,
+   "engine_error": 0,
+   "mismatch_guarded": 0,
+   "mismatch_raw": 0,
+   "routed_reference": 505,
+   "tokens_reference": 682215972342,
+   "verdict_guarded": "PASS",
+   "verdict_raw": "PASS"
+  },
+  "ling_3_0_flash": {
+   "artifact_sha256": "40fb9d7d7795b8bd305aeff39ce9963f3f450915b9553f2938e009be9a1fed60",
+   "chars": 3247759706137,
+   "docs": 998857881,
+   "engine_error": 0,
+   "mismatch_guarded": 0,
+   "mismatch_raw": 7,
+   "routed_reference": 505,
+   "tokens_reference": 680350576854,
+   "verdict_guarded": "PASS",
+   "verdict_raw": "FAIL"
+  },
+  "llama_3_1_8b": {
+   "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
+   "chars": 3247759706137,
+   "docs": 998857881,
+   "engine_error": 0,
+   "mismatch_guarded": 0,
+   "mismatch_raw": 0,
+   "routed_reference": 505,
+   "tokens_reference": 652810623044,
+   "verdict_guarded": "PASS",
+   "verdict_raw": "PASS"
+  },
+  "minimax_m3": {
+   "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
+   "chars": 3247759706137,
+   "docs": 998857881,
+   "engine_error": 0,
+   "mismatch_guarded": 0,
+   "mismatch_raw": 7,
+   "routed_reference": 505,
+   "tokens_reference": 637806404775,
+   "verdict_guarded": "PASS",
+   "verdict_raw": "FAIL"
+  },
+  "ministral_3_8b": {
+   "artifact_sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135",
+   "chars": 3247759706137,
+   "docs": 998857881,
+   "engine_error": 0,
+   "mismatch_guarded": 0,
+   "mismatch_raw": 0,
+   "routed_reference": 505,
+   "tokens_reference": 672927120469,
+   "verdict_guarded": "PASS",
+   "verdict_raw": "PASS"
+  },
+  "nemotron_3_nano_4b": {
+   "artifact_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+   "chars": 3247759706137,
+   "docs": 998857881,
+   "engine_error": 0,
+   "mismatch_guarded": 0,
+   "mismatch_raw": 0,
+   "routed_reference": 505,
+   "tokens_reference": 672927109438,
+   "verdict_guarded": "PASS",
+   "verdict_raw": "PASS"
+  },
+  "olmo_3_7b": {
+   "artifact_sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca",
+   "chars": 3247759706137,
+   "docs": 998857881,
+   "engine_error": 0,
+   "mismatch_guarded": 0,
+   "mismatch_raw": 0,
+   "routed_reference": 505,
+   "tokens_reference": 653225695564,
+   "verdict_guarded": "PASS",
+   "verdict_raw": "PASS"
+  },
+  "qwen3_5_08b": {
+   "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+   "chars": 3247759706137,
+   "docs": 998857881,
+   "engine_error": 0,
+   "mismatch_guarded": 0,
+   "mismatch_raw": 7,
+   "routed_reference": 505,
+   "tokens_reference": 673061729797,
+   "verdict_guarded": "PASS",
+   "verdict_raw": "FAIL"
+  },
+  "qwen3_8b": {
+   "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+   "chars": 3247759706137,
+   "docs": 998857881,
+   "engine_error": 0,
+   "mismatch_guarded": 0,
+   "mismatch_raw": 7,
+   "routed_reference": 505,
+   "tokens_reference": 663697149897,
+   "verdict_guarded": "PASS",
+   "verdict_raw": "FAIL"
+  }
+ },
+ "protocol": "full token-id list equality per doc, add_special_tokens=False, same tokenizer.json both sides, one process per shard (PLAN/16: no repeated timing of the same sample)",
+ "python": "3.13.13",
+ "raw_mismatch_classification": {
+  "counts": {
+   "F043_judge_unicode_vintage": 7
+  },
+  "distinct_documents": 7,
+  "note": "every raw mismatch is the judge's Unicode data vintage (F043): the reference does not reorder a combining mark the engine reorders; none is attributed to the engine",
+  "unclassified": 0
+ },
+ "schema": "toktier.fastokens_pinned.gate1.v1",
+ "site": "SOL htc, Rocky Linux 8 compute nodes (88 hosts)",
+ "source": "PLAN/179 gate1_b2/readings/gate1_b2_aggregate.json, mismatch_classification_b2.json, shard_integrity_b2.json",
+ "subject": {
+  "code_files": [
+   {
+    "bytes": 6479,
+    "name": "fastokens/__init__.py",
+    "sha256": "306759cf3249e8db8e48a5abee24764ef7021317057f64fa37f748282ef188d5"
+   },
+   {
+    "bytes": 15354,
+    "name": "fastokens/_compat.py",
+    "sha256": "ce6bf9f7dcbca26eeff2e5d6696612cb83d68cb127304a6049caf17d4236fd24"
+   },
+   {
+    "bytes": 8978104,
+    "name": "fastokens/_native.abi3.so",
+    "sha256": "fc06944a2ec68c7b7c0b2b622b2db28a28d7a3020d4f14def0cc7470e5431681"
+   },
+   {
+    "bytes": 6615,
+    "name": "fastokens/_native.pyi",
+    "sha256": "76a857a926a63889e29c88e83bae9c8766e3dfe4e28e15a26e6ffacae4100eff"
+   }
+  ],
+  "distribution": "toktier-fastokens",
+  "engine_digest": "0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec",
+  "version": "0.3.1.1",
+  "wheel": "toktier_fastokens-0.3.1.1-cp39-abi3-manylinux_2_28_x86_64.whl",
+  "wheel_sha256": "b99f2765fa1b900afe181844a85ed8eb784ba87972ac92e22cc924322d9c5468"
+ },
+ "totals": {
+  "engine_error": 0,
+  "engine_error_guarded": 0,
+  "mismatch_guarded": 0,
+  "mismatch_raw": 28,
+  "routed_reference_per_family": 505
+ },
+ "verdict_guarded": "PASS",
+ "verdict_raw": "FAIL",
+ "visible_cpus": 8
+}

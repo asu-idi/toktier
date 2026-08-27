@@ -1,0 +1,44 @@
+{
+ "counts": {
+  "exception": 0,
+  "id_mismatch_vs_full_core": 0,
+  "ok": 150,
+  "process_died": 0
+ },
+ "engine_digest": "0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec",
+ "gate": "topology robustness (visible CPU count x throttling mechanism)",
+ "generated_at": "2026-08-18T22:00:03Z",
+ "host_cpu_count": 32,
+ "label": "0.3.1.1-p179b2-cert-0bcf3ada",
+ "matrix": {
+  "bytes": [
+   16383,
+   16384,
+   16385,
+   1048576,
+   8388608
+  ],
+  "cells": 150,
+  "families": [
+   "llama_3_1_8b",
+   "qwen3_8b",
+   "hy3"
+  ],
+  "mechanisms": [
+   "taskset",
+   "cgroup_quota"
+  ],
+  "patterns": [
+   "ascii",
+   "cjk"
+  ],
+  "visible_cpus": [
+   1,
+   2,
+   "all"
+  ]
+ },
+ "schema": "toktier.fastokens_pinned.gate3.v1",
+ "source": "PLAN/179 readings/gate3_p179b2_cert.json",
+ "verdict": "PASS"
+}

@@ -6,7 +6,7 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:7462282460462a7af49849b4f6725deaec57064b15de6265e786af5f2aba27a5",
+  "root_digest": "sha256:8cbd8ad68b0cb0b8b1e977f1cc8a5130a7ece481f6fed0de91931700b306e425",
   "oracles": [
     {
       "oracle_id": "tokenizers",
@@ -2113,5 +2113,431 @@
       "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
       "evidence_id": "ev-rust-api-plan160-jit-v1"
     }
-  ]
+  ],
+  "engine_distributions": {
+    "fastokens": {
+      "backend": "fastokens",
+      "admission": "experimental",
+      "distribution": {
+        "name": "toktier-fastokens",
+        "version": "0.3.1.1",
+        "import_name": "fastokens",
+        "requires_python": ">=3.9",
+        "abi": "cp39-abi3",
+        "index": "https://pypi.org/project/toktier-fastokens/"
+      },
+      "recognised_distributions": [
+        "toktier-fastokens",
+        "fastokens"
+      ],
+      "upstream": {
+        "project": "fastokens",
+        "distribution": "fastokens",
+        "version": "0.3.1",
+        "repository": "https://github.com/Atero-ai/fastokens",
+        "previous_repository": "https://github.com/crusoecloud/fastokens",
+        "tag": "v0.3.1",
+        "commit": "fe854299553524f2156a22036a2cb4d1f2ef4d97",
+        "license": "Apache-2.0"
+      },
+      "source": {
+        "patch_series": [
+          {
+            "file": "packaging/fastokens-pinned/PATCHES/0001-F040-fix-bpe-resolve-out-of-vocabulary-characters.patch",
+            "sha256": "41814e13e60286371ce74ec2a22ae84517a2f99fb315f7fa2044c4af3568c583",
+            "changes_code": true
+          },
+          {
+            "file": "packaging/fastokens-pinned/PATCHES/0002-F041-fix-pcre2-align-unicode-class-semantics.patch",
+            "sha256": "e780c21e03a05bc619f67f3cb0df4d12e28f03e9cf3264c4325446531af640ce",
+            "changes_code": true
+          },
+          {
+            "file": "packaging/fastokens-pinned/PATCHES/0003-F042-fix-scan-chunk-boundaries-inside-pretokens.patch",
+            "sha256": "aa724b35c3bf4da666be507cef79c9737deb3209c97d393ba5056e228c408549",
+            "changes_code": true
+          },
+          {
+            "file": "packaging/fastokens-pinned/PATCHES/0004-F045-fix-scan-accept-long-s-in-contractions.patch",
+            "sha256": "0b5fff18801cde5dc70310c3e72625c4094c0e874abe883bba9cd5898935d5ad",
+            "changes_code": true
+          },
+          {
+            "file": "packaging/fastokens-pinned/PATCHES/0005-F046-fix-split-rescan-tail-after-merge.patch",
+            "sha256": "d7b6f6e603ae0852e8d00fc6fc8a294ff87e520001a886c53e7e79fb5c557542",
+            "changes_code": true
+          },
+          {
+            "file": "packaging/fastokens-pinned/PATCHES/0006-notices-mark-modified-files.patch",
+            "sha256": "ee2bb9cfc88603a665d4d50ec916a72ea2f2bebea686104a0e9a98aba54e784b",
+            "changes_code": false
+          }
+        ],
+        "code_tree": "aa1924284ec4abaedcc8ed5823ee17e7959c55c5",
+        "noticed_tree": "aaa5fb94ea62b9379d03074640e267c8d837d649",
+        "recipe": "packaging/fastokens-pinned/build_pinned.sh",
+        "toolchain": {
+          "rustc": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+          "cargo": "cargo 1.93.1 (083ac5135 2025-12-15)",
+          "maturin": "1.14.1",
+          "host": "manylinux_2_28 (Rocky Linux 8.10, glibc 2.28, GCC 8.5.0), fixed build root /tmp/tkfb2"
+        }
+      },
+      "known_wheels": [
+        {
+          "filename": "toktier_fastokens-0.3.1.1-cp39-abi3-manylinux_2_28_x86_64.whl",
+          "sha256": "b99f2765fa1b900afe181844a85ed8eb784ba87972ac92e22cc924322d9c5468",
+          "bytes": 3500334,
+          "engine_digest": "0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec",
+          "platform": "manylinux_2_28_x86_64",
+          "abi": "cp39-abi3",
+          "built_from_tree": "aa1924284ec4abaedcc8ed5823ee17e7959c55c5",
+          "built_by": "the toktier project (SOL lightwork job 61740209, node sc001)",
+          "published": {
+            "index": "PyPI",
+            "upload_time": "2026-08-27T07:57:54Z"
+          },
+          "code_files": [
+            {
+              "name": "fastokens/__init__.py",
+              "bytes": 6479,
+              "sha256": "306759cf3249e8db8e48a5abee24764ef7021317057f64fa37f748282ef188d5"
+            },
+            {
+              "name": "fastokens/_compat.py",
+              "bytes": 15354,
+              "sha256": "ce6bf9f7dcbca26eeff2e5d6696612cb83d68cb127304a6049caf17d4236fd24"
+            },
+            {
+              "name": "fastokens/_native.abi3.so",
+              "bytes": 8978104,
+              "sha256": "fc06944a2ec68c7b7c0b2b622b2db28a28d7a3020d4f14def0cc7470e5431681"
+            },
+            {
+              "name": "fastokens/_native.pyi",
+              "bytes": 6615,
+              "sha256": "76a857a926a63889e29c88e83bae9c8766e3dfe4e28e15a26e6ffacae4100eff"
+            }
+          ]
+        }
+      ],
+      "sdist": {
+        "filename": "toktier_fastokens-0.3.1.1.tar.gz",
+        "sha256": "7c275f907d26107d2f4605821372e9104c6679e240f88b41f22a521445b86969",
+        "bytes": 770777,
+        "built_from_tree": "aa1924284ec4abaedcc8ed5823ee17e7959c55c5"
+      },
+      "oracle": {
+        "package": "tokenizers",
+        "version": "0.22.2"
+      },
+      "families": [
+        {
+          "family": "deepseek_v3",
+          "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41"
+        },
+        {
+          "family": "deepseek_v4_flash",
+          "artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf"
+        },
+        {
+          "family": "glm_5_2",
+          "artifact_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d"
+        },
+        {
+          "family": "gpt_oss_120b",
+          "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3"
+        },
+        {
+          "family": "hy3",
+          "artifact_sha256": "446e0b59cd941637c0ddfd84e12ee1f49480fd12097f86a9d2fec8ebd0c7ff6c"
+        },
+        {
+          "family": "kimi_k3",
+          "artifact_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77"
+        },
+        {
+          "family": "laguna_s_2_1",
+          "artifact_sha256": "809240f7a182cde859a4fc4ebc902e619a173d507e99304c1092aa04e7a6658e"
+        },
+        {
+          "family": "ling_3_0_flash",
+          "artifact_sha256": "40fb9d7d7795b8bd305aeff39ce9963f3f450915b9553f2938e009be9a1fed60"
+        },
+        {
+          "family": "llama_3_1_8b",
+          "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa"
+        },
+        {
+          "family": "minimax_m3",
+          "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e"
+        },
+        {
+          "family": "ministral_3_8b",
+          "artifact_sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135"
+        },
+        {
+          "family": "nemotron_3_nano_4b",
+          "artifact_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7"
+        },
+        {
+          "family": "olmo_3_7b",
+          "artifact_sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca"
+        },
+        {
+          "family": "qwen3_5_08b",
+          "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42"
+        },
+        {
+          "family": "qwen3_8b",
+          "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+        }
+      ],
+      "guard": {
+        "id": "toktier-fastokens-unicode-skew-guard-v1",
+        "codepoints": 154,
+        "ranges": [
+          [
+            "U+07FD",
+            "U+07FD"
+          ],
+          [
+            "U+0897",
+            "U+089F"
+          ],
+          [
+            "U+08CA",
+            "U+08D3"
+          ],
+          [
+            "U+09FE",
+            "U+09FE"
+          ],
+          [
+            "U+0C3C",
+            "U+0C3C"
+          ],
+          [
+            "U+0D3B",
+            "U+0D3C"
+          ],
+          [
+            "U+0EBA",
+            "U+0EBA"
+          ],
+          [
+            "U+1715",
+            "U+1715"
+          ],
+          [
+            "U+1ABF",
+            "U+1ADD"
+          ],
+          [
+            "U+1AE0",
+            "U+1AEB"
+          ],
+          [
+            "U+1DF6",
+            "U+1DFA"
+          ],
+          [
+            "U+A82C",
+            "U+A82C"
+          ],
+          [
+            "U+10D24",
+            "U+10D27"
+          ],
+          [
+            "U+10D69",
+            "U+10D6D"
+          ],
+          [
+            "U+10EAB",
+            "U+10EAC"
+          ],
+          [
+            "U+10EFA",
+            "U+10EFB"
+          ],
+          [
+            "U+10EFD",
+            "U+10EFF"
+          ],
+          [
+            "U+10F46",
+            "U+10F50"
+          ],
+          [
+            "U+10F82",
+            "U+10F85"
+          ],
+          [
+            "U+11070",
+            "U+11070"
+          ],
+          [
+            "U+1133B",
+            "U+1133B"
+          ],
+          [
+            "U+113CE",
+            "U+113D0"
+          ],
+          [
+            "U+1145E",
+            "U+1145E"
+          ],
+          [
+            "U+11839",
+            "U+1183A"
+          ],
+          [
+            "U+1193D",
+            "U+1193E"
+          ],
+          [
+            "U+11943",
+            "U+11943"
+          ],
+          [
+            "U+119E0",
+            "U+119E0"
+          ],
+          [
+            "U+11A34",
+            "U+11A34"
+          ],
+          [
+            "U+11A47",
+            "U+11A47"
+          ],
+          [
+            "U+11A99",
+            "U+11A99"
+          ],
+          [
+            "U+11D42",
+            "U+11D42"
+          ],
+          [
+            "U+11D44",
+            "U+11D45"
+          ],
+          [
+            "U+11D97",
+            "U+11D97"
+          ],
+          [
+            "U+11F41",
+            "U+11F42"
+          ],
+          [
+            "U+1612F",
+            "U+1612F"
+          ],
+          [
+            "U+16FF0",
+            "U+16FF1"
+          ],
+          [
+            "U+1E08F",
+            "U+1E08F"
+          ],
+          [
+            "U+1E130",
+            "U+1E136"
+          ],
+          [
+            "U+1E2AE",
+            "U+1E2AE"
+          ],
+          [
+            "U+1E2EC",
+            "U+1E2EF"
+          ],
+          [
+            "U+1E4EC",
+            "U+1E4EF"
+          ],
+          [
+            "U+1E5EE",
+            "U+1E5EF"
+          ],
+          [
+            "U+1E6E3",
+            "U+1E6E3"
+          ],
+          [
+            "U+1E6E6",
+            "U+1E6E6"
+          ],
+          [
+            "U+1E6EE",
+            "U+1E6EF"
+          ],
+          [
+            "U+1E6F5",
+            "U+1E6F5"
+          ]
+        ],
+        "set_sha256": "86bdc39a8caa57bb883be33da0cef47820006ed43a597ff36ea27edda4f50222",
+        "set_sha256_of": "sha256 over the domain tag toktier.fastokens.unicode_guard.v1 followed by NUL, then the sorted code points as U+XXXX joined by newline",
+        "derived_against": {
+          "judge": "tokenizers 0.22.2 (unicode-normalization-alignments 0.1.12)",
+          "engine_digest": "0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec",
+          "domain": "U+0000..U+10FFFF, surrogates excluded, no Python-side prefilter",
+          "probe": "four shapes per code point X: X, a+X, X+U+0334, a+X+U+0334; judge and engine each asked whether they reorder; four NFC-normalizing families"
+        },
+        "selftest_reading": "readings/fastokens_pinned_guard_full_domain.json",
+        "behaviour": "a request whose text contains any code point in the set is answered by the pinned reference implementation (path hf_full_fastokens_unicode_skew_guard); the guard is by document, not by the reordering position, so it is wider than the divergence it neutralises"
+      },
+      "evidence": {
+        "evidence_id": "ev-fastokens-pinned-v1",
+        "suite_version": "fastokens-pinned-differential-v1",
+        "docs_per_family": 998857881,
+        "families": 15,
+        "comparisons": 14982868215,
+        "mismatch_raw": 28,
+        "mismatch_guarded": 0,
+        "engine_error": 0,
+        "routed_reference_per_family": 505,
+        "visible_cpus": 8,
+        "guard_codepoints_in_run": 108,
+        "gate2": {
+          "drift_events": 0,
+          "targeted_cases": 1200,
+          "matrix_steps": 2560
+        },
+        "gate3": {
+          "cells": 150,
+          "topologies": 6,
+          "visible_cpus": [
+            1,
+            2,
+            "all"
+          ],
+          "mechanisms": [
+            "taskset",
+            "cgroup_quota"
+          ],
+          "id_mismatch": 0
+        },
+        "gate4": {
+          "families": 13,
+          "splices": 157872,
+          "edits": 23400,
+          "failing": 0
+        },
+        "readings": {
+          "gate1": "readings/fastokens_pinned_gate1.json",
+          "gate2": "readings/fastokens_pinned_gate2.json",
+          "gate3": "readings/fastokens_pinned_gate3.json",
+          "gate4": "readings/fastokens_pinned_gate4.json",
+          "guard": "readings/fastokens_pinned_guard_full_domain.json"
+        }
+      }
+    }
+  }
 }

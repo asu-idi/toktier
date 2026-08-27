@@ -63,14 +63,16 @@ def test_release_artifact_gate_requires_the_pinned_fastokens_extra() -> None:
     """The extra names the published distribution, never the upstream one."""
     import json
 
-    import tomllib
+    # The package targets 3.10, where the parser is the tomli backport.
+    toml_module = "tomllib" if sys.version_info >= (3, 11) else "tomli"
+    toml = importlib.import_module(toml_module)
 
     source = VERIFY_ARTIFACTS.read_text(encoding="utf-8")
     assert "tools/fastokens_binding.json" in source
     assert "requires the upstream fastokens distribution" in source
     binding = json.loads((ROOT / "tools/fastokens_binding.json").read_bytes())
     pinned = binding["distribution"]
-    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    project = toml.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     extra = project["project"]["optional-dependencies"]["fastokens"]
     assert extra == [f"{pinned['name']}=={pinned['version']}"]
 

@@ -19,7 +19,7 @@ import re
 import sys
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -343,7 +343,8 @@ def test_s1_certified_pinned_is_true_in_the_guarded_sense(
         "codepoints": 154,
         "active": True,
     }
-    assert stats["known_wheel"]["filename"].startswith("toktier_fastokens-0.3.1.1-")
+    known = cast(dict[str, str], stats["known_wheel"])
+    assert known["filename"].startswith("toktier_fastokens-0.3.1.1-")
 
 
 def test_s2_unrecognized_build_when_the_digest_is_not_listed(
@@ -359,7 +360,7 @@ def test_s2_unrecognized_build_when_the_digest_is_not_listed(
     assert "not among the wheels toktier published" in str(stats["assurance_reason"])
     assert "--only-binary toktier-fastokens" in str(stats["assurance_reason"])
     # The guard is unconditional: it is active in this state as well.
-    assert stats["unicode_guard"]["active"] is True
+    assert cast(dict[str, object], stats["unicode_guard"])["active"] is True
 
 
 def test_s2_prime_self_built_bytes_that_match_are_certified(
@@ -527,7 +528,7 @@ def test_a_missing_registry_node_is_fail_closed(
     stats = repair.stats()
     assert stats["engine_assurance"] == "unrecognized_build"
     assert stats["exact_id_guarantee"] is False
-    assert stats["unicode_guard"]["active"] is False
+    assert cast(dict[str, object], stats["unicode_guard"])["active"] is False
 
 
 def test_a_directly_constructed_adapter_carries_no_assurance() -> None:
@@ -543,7 +544,7 @@ def test_a_directly_constructed_adapter_carries_no_assurance() -> None:
     stats = repair.stats()
     assert stats["engine_assurance"] == "unrecognized_build"
     assert stats["exact_id_guarantee"] is False
-    assert stats["unicode_guard"]["active"] is False
+    assert cast(dict[str, object], stats["unicode_guard"])["active"] is False
 
 
 # ---------------------------------------------------------------------- guard

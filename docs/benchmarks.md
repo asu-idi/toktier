@@ -226,7 +226,7 @@ describes:
 | `repair (HF tokenizers win.)` | the certified session repair with the HF-window configuration |
 | `repair (gigatoken win.)` | the certified session repair with the corrected-Gigatoken window, which the shipped facade wires by default |
 | `HF tokenizers` / `reference backend` | the frozen reference route at the end of every fallback chain |
-| `fastokens` | no row: an explicit experimental comparison, outside the exact-ID guarantee |
+| `fastokens` | no row: an explicit experimental adapter; what its pinned build's readings cover is in `docs/support-matrix.md` |
 
 The README's two headline repair numbers come from this grid: **1.68 ms**
 is the `repair (HF tokenizers win.)` cell at a 4M-character context with a

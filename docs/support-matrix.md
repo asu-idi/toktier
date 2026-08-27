@@ -21,7 +21,7 @@ audit records behind this document and does not ship inside the package.
 | `certified` | Evidence on file for this artifact and this backend, with the backend identified by a binary digest. The prebuilt GPU kernel delivery in this release is in this state on its judged architectures (sm_80, sm_89, sm_90 and sm_120). |
 | `certified_source` | Evidence binds source identity, build flags, and exact toolchain rather than one platform-specific binary. The integrated corrected-Gigatoken CPU engine and the locally compiled GPU JIT use this state; each also binds its backend-specific inputs. |
 | `reference-only` | No accelerated route is offered. The reference implementation runs and the reason is reported by `explain()`. This is also the state when the installed reference version differs from the certified one. |
-| `experimental` | Available only by explicit opt-in; no certified exact-ID claim applies. Fastokens is exposed only in this state, and the measurements described below do not move it out of that state. |
+| `experimental` | Available only by explicit opt-in; no certified exact-ID claim attaches to the admission itself. Fastokens is exposed only in this state; what is known about the installed Fastokens engine is reported separately as `engine_assurance` (see [Pinned Fastokens distribution](#pinned-fastokens-distribution-toktier-fastokens)). |
 | `unsupported` | The named engine is known not to load or represent this artifact and is never planned. |
 
 Statuses are recorded per artifact **and** per backend: a family can be
@@ -89,46 +89,9 @@ independent tokenizer implementation.
 The route opens only when the integrated module, domain-separated source
 digest, Cargo release flags, exact rustc, repair-table digest, patch, oracle
 version, and tokenizer artifact all match the registry. Otherwise the facade
-runs HF and gives the failed axis in `explain()`. Fastokens 0.3.1 is a separate
-explicit experimental full-session adapter and has no TokTier exact-ID
-guarantee.
-
-That position is now backed by a measurement rather than only by a
-disclaimer. Over differential runs at increasing scale, up to 998,857,881
-documents per artifact against `tokenizers==0.22.2`, the same frozen
-reference used everywhere else here, we observed five defects in the upstream
-0.3.1 code relative to that reference: one raises an error on a rare
-character, and four are silent id divergences where nothing is raised, so the
-caller cannot tell. Each has a standalone reproduction that fails on a build
-made from unmodified upstream sources. Reports have been submitted to the
-upstream project. With five patches of our own applied to those sources, the
-final differential -- 998,857,881 documents per artifact across 15 tokenizer
-artifacts, 14,982,868,215 document-artifact comparisons -- recorded zero id
-divergences, under a 108-codepoint guard that routed 505 documents per
-artifact to the reference path.
-
-What those readings describe is a source revision, not a binary. The
-`engine_digest` the adapter reports in `explain()` covers the compiled
-extension as well as the Python files, so a wheel built from the same sources
-on another machine reports a different digest, and version separates nothing
-because every build reports `0.3.1`. The three builds behind the numbers
-above report:
-
-- patched sources, the wheel used for the 998,857,881-per-artifact run:
-  `4c7e9c9f03313cc0c262eb781e9cf3389cc802ea5bd0eee9db367b326d0c17d9`
-- patched sources, the wheel used for the supporting checks:
-  `24e3cccaef6d97f43d016a2483d1b423a0e40e4717b756ce7f47da1894f14aa2`
-- unmodified upstream sources, the comparison build:
-  `8600f509c10dc03c98013bb9b7be214e0fae4bcb3f3618b937cd5f92ccc9120a`
-
-If your installation reports some other digest, these numbers are simply not
-about it. The adapter's status in this table is unchanged either way.
-
-As with the upstream audit above, what backs these readings -- the
-differential run records, the five standalone reproductions, the patches, and
-the three wheels whose digests are listed -- lives in the audit records behind
-this document and does not ship inside the package. What ships is the summary
-in this section.
+runs HF and gives the failed axis in `explain()`. The Fastokens adapter is a
+separate, explicit experimental route; the pinned build this project publishes
+for it, and what its readings cover, have their own section below.
 
 The exact engine binding and native-equivalence record are in
 [`tools/fast_cpu_binding.json`](../tools/fast_cpu_binding.json). A focused
@@ -136,6 +99,77 @@ released-API rerun over every row is in
 [`readings/fast_cpu_focused_parity.json`](../readings/fast_cpu_focused_parity.json),
 and the one-call native-front-end rerun is in
 [`readings/fast_cpu_native_frontend_parity.json`](../readings/fast_cpu_native_frontend_parity.json).
+
+## Pinned Fastokens distribution (toktier-fastokens)
+
+toktier-fastokens 0.3.1.1 is a build of fastokens 0.3.1 with five patches
+maintained by the toktier project, published on PyPI by this project and
+installed by the `toktier[fastokens]` extra. The readings below were taken on
+the wheel named here (engine digest
+`0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec`); they do
+not apply to the upstream distribution or to a wheel built from the sdist,
+whose digests differ. The adapter itself remains an explicit experimental
+route: it is selected only with `policy="experimental"` and
+`repair_backend="fastokens"`, never automatically, and `certification` reads
+`experimental` for that reason alone. What is new is the second answer,
+`engine_assurance`.
+
+| Item | Value |
+|---|---|
+| Wheel | `toktier_fastokens-0.3.1.1-cp39-abi3-manylinux_2_28_x86_64.whl`, sha256 `b99f2765fa1b900afe181844a85ed8eb784ba87972ac92e22cc924322d9c5468` |
+| Engine digest (the `fastokens/` payload, as the adapter computes it) | `0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec` |
+| Source | upstream `v0.3.1` (`fe854299`) plus patches 0001-0005, tree `aa1924284ec4abaedcc8ed5823ee17e7959c55c5`; series and recipe in `packaging/fastokens-pinned/` |
+| Reference | `tokenizers==0.22.2`, per-token-id equality |
+| Differential run | 998,857,881 documents per artifact x 15 artifacts = 14,982,868,215 comparisons; eight visible CPUs per process |
+| Result | guarded: 0 mismatches, 0 engine errors; raw: 28 mismatches, all in the reference's own Unicode data vintage (the reference does not reorder a combining mark the engine reorders), none attributed to the engine |
+| Guard in that run | 108 code points; 505 documents per artifact routed to the reference |
+| Stateful replay | four arms, 1,200 targeted cases and 2,560 matrix steps, 0 drift events |
+| Topology | 150 cells over 1/2/all visible CPUs x two throttling mechanisms (six topologies), 0 exceptions, 0 id mismatches against the full-core run |
+| Splice and edit | 13 families, 157,872 splices and 23,400 edits, 0 failing |
+
+Three qualifications belong next to those numbers. The subject is the wheel
+above, not the source revision: a wheel built elsewhere from the same sources
+carries a different digest and is not covered. "Guarded" means ids equal the
+reference **or** the request was routed to the reference by the adapter's
+Unicode guard; the guard the shipped adapter compiles from the registry covers
+154 code points, a strict superset of the 108 the run applied, re-derived on
+this wheel over the whole code space (a wider guard routes more documents to
+the reference and cannot turn an equal result into an unequal one). The
+seam-related patches were exercised at eight visible CPUs in the large run and
+across six topologies in the topology gate.
+
+The adapter resolves the installed engine by its import package, attributes
+the bytes on disk to the distribution whose RECORD matches them, and reports
+one of these states in `explain()["session_repair"]["engine_assurance"]` and
+`toktier doctor`:
+
+| `engine_assurance` | Meaning | `exact_id_guarantee` |
+|---|---|---|
+| `certified_pinned` | the installed bytes are a published wheel listed in the shipped registry, the Unicode guard is active, the installed reference is the judged one, and the family is in the evidence | `true` (guarded) |
+| `unrecognized_build` | the pinned distribution is installed but its engine digest is not one the registry lists (a wheel built on another host or toolchain usually differs) | `false` |
+| `upstream_build` | the installed engine is the upstream fastokens distribution | `false` |
+| `guard_disabled` | the guard could not be compiled from the registry | `false` |
+| `oracle_mismatch` | the installed `tokenizers` is not the judged version | `false` |
+| `family_outside_evidence` | no pinned-build reading is on file for this family | `false` |
+| `unverifiable` | the bytes the import system would run are not the ones any installed distribution recorded (a shadowing copy on `sys.path`); the adapter refuses to open | `false` |
+
+The distribution keeps the upstream import name `fastokens`. Installing it
+beside the upstream distribution overwrites the shared files silently, and
+uninstalling either then removes them; `doctor` reports a coinstalled or
+orphaned distribution and the adapter reports an advisory with the reinstall
+command (`pip uninstall -y fastokens toktier-fastokens && pip install
+"toktier[fastokens]"`). The adapter reaches the eleven families with a repair
+table entry; the evidence covers all fifteen certified artifacts. Reports about
+the id divergences these patches address have been submitted to the upstream
+project.
+
+The registry node behind this section is `engine_distributions.fastokens` in
+[`tables/support_registry.json`](../tables/support_registry.json), generated
+from [`tools/fastokens_binding.json`](../tools/fastokens_binding.json); the
+condensed readings are `readings/fastokens_pinned_*.json` and the evidence id
+is `ev-fastokens-pinned-v1`. As with the sections above, the full run records
+live in the audit records behind this document and do not ship inside the
+package.
 
 ## Byte-level BPE families
 

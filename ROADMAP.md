@@ -121,14 +121,21 @@ the older, stricter admission.
 
 The first release ships the corrected Gigatoken engine as its certified CPU
 full-encode and session-repair path for 11 unique tokenizer artifacts covering
-12 model families. Fastokens remains an explicit experimental comparison and
-does not carry TokTier's exact-ID guarantee. A pinned distribution of the
-patched Fastokens build is planned for 0.2.7, so that a comparison can name
-the build it measured rather than only describe it. Additional third-party
-CPU engines may be admitted only behind per-input guards, exact
-artifact/engine bindings, published differential evidence, and any
-coordinated disclosure their fixes require; uncertainty continues to route
-to the HF reference implementation.
+12 model families. Fastokens remains an explicit experimental adapter, never
+an automatic route. Since 0.2.7 the `toktier[fastokens]` extra installs a
+pinned build this project publishes (`toktier-fastokens`), and the adapter
+reports `engine_assurance`: `certified_pinned`, with a guarded exact-ID
+guarantee, only on the published bytes the readings describe. That build is
+the first engine admitted under the four conditions this section names --
+per-input guards (the Unicode guard and the exception guard), exact
+artifact/engine bindings (engine digest against the registry's published
+wheels, oracle version, family), published differential evidence (the
+registry node and its readings), and reports submitted to the upstream
+project for the divergences the patches address. Additional third-party CPU
+engines may be admitted only behind the same four conditions; uncertainty
+continues to route to the HF reference implementation. Widening the
+adapter's reach from the eleven families with a repair-table entry to the
+fifteen the evidence covers is later work.
 
 ## CPU parallel BPE for long requests
 

@@ -107,9 +107,12 @@ frontend does not require a Python callback.
 - The **added-token frontend** decides whether a document contains added or
   special tokens, using byte-level lookup tables keyed by the content hash of
   the added-token table. Documents that do so are routed to the reference path.
-- **Fastokens** is a separately installed full-session adapter for comparison.
-  It can be requested only with `EXPERIMENTAL` policy, is never an automatic
-  fallback, and reports that no TokTier exact-ID guarantee applies.
+- **Fastokens** is a separately installed full-session adapter. It can be
+  requested only with `EXPERIMENTAL` policy and is never an automatic
+  fallback. It resolves the installed engine by its import package and reports
+  `engine_assurance`: a guarded exact-ID guarantee applies only when the bytes
+  are the pinned build this project publishes (`toktier-fastokens`) and the
+  shipped registry lists them; every other build reports `false`.
 
 ### 1.4 Artifacts and certification registry
 

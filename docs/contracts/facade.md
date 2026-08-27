@@ -11,7 +11,8 @@ Guiding rule, inherited from `api.md`: correctness first. Under `CERTIFIED` and
 `REFERENCE`, every facade path returns token ids equal to a from-scratch encode
 by the pinned reference oracle. Store layers accelerate; they never answer
 differently on those policies. An explicitly selected Fastokens adapter under
-`EXPERIMENTAL` is outside that guarantee and labels itself accordingly.
+`EXPERIMENTAL` is outside that guarantee and labels itself accordingly, unless
+Section 5.2 applies.
 Whenever a stored entry cannot be located, verified, or extended, the call
 degrades to the active certified full-encode route -- we prefer a miss over a
 wrong result. That route may be corrected Gigatoken or GPU, but its returned
@@ -89,8 +90,8 @@ tok.explain()                                # full plan, reasons, counters
   the immutable fallback chain always ends at the reference backend.
 - `repair_backend="reference"` disables session repair acceleration.
   `repair_backend="fastokens"` requires `policy="experimental"`, re-encodes
-  the full session, and carries no exact-ID guarantee. It is never an automatic
-  fallback.
+  the full session, and carries no exact-ID guarantee unless Section 5.2
+  applies. It is never an automatic fallback.
 - `Encoding` is immutable and carries at least `.ids`
   (`tuple[int, ...]`). Additional diagnostic attributes may appear
   within 0.x; `.ids` is stable.
@@ -387,7 +388,8 @@ adapter, or HF full re-encode fallback -- together with its
 backend/engine/configuration identity, path counters, and the last executed
 path. Corrected-Gigatoken fallback paths start with ``hf_full_`` and name the
 guard reason. Fastokens reports ``certification: experimental``,
-``mode: full_reencode``, and ``exact_id_guarantee: false``.
+``mode: full_reencode``, and ``exact_id_guarantee: false`` unless Section 5.2
+applies.
 
 Objects created by `from_pretrained` also report `model_resolution`: requested
 repository/revision, resolved file/digest/size, sibling-registry root, match
@@ -447,6 +449,51 @@ command with the same name and options as `toktier-rust verify-local`.
 The record expires when any of those facts moves, and a check that
 disagreed leaves the route labelled exactly as it would have been had
 nobody run one.
+
+### 5.2 The pinned Fastokens distribution (added in 0.2.7)
+
+From 0.2.7 the `toktier[fastokens]` extra installs `toktier-fastokens`, a
+pinned build of fastokens 0.3.1 with the toktier patch series, and the
+adapter answers two questions separately in `session_repair`:
+
+- **Admission** is unchanged. `certification` reads `experimental`: the
+  adapter is selected only by explicit request under `EXPERIMENTAL`, is
+  never an automatic route, and the routing plan never names it.
+- **Assurance** is new. `engine_assurance` reports what is known about
+  the installed engine, from machine-checked premises only: the bytes the
+  import system would run, hashed and attributed to the installed
+  distribution whose RECORD matches them; the shipped registry's list of
+  published wheels (`engine_distributions.fastokens`); the Unicode guard
+  compiled from that node; the installed reference version; and the
+  family. `certified_pinned` requires all of them; otherwise the value
+  names the premise that does not hold (`unrecognized_build`,
+  `upstream_build`, `guard_disabled`, `oracle_mismatch`,
+  `family_outside_evidence`). A missing registry node, a missing guard or
+  an unknown digest reads as the weaker state.
+
+`exact_id_guarantee` is `true` only under `certified_pinned`, and then in
+the guarded sense stated beside it in `guarantee_basis.statement`: for the
+families the evidence covers, the ids the adapter returns equal the pinned
+reference, or the request was routed to that reference by the adapter's
+Unicode guard. `unicode_guard` reports the guard's id, size and whether it
+is active; a guarded request takes the path
+`hf_full_fastokens_unicode_skew_guard`, an adapter-internal fallback of the
+same kind as the existing `hf_full_fastokens_guard`, not a routing
+fallback. `known_wheel` names the published wheel the bytes were
+recognised as, `assurance_reason` carries the sentence for a `false`
+state, and `advisory` reports a coinstalled distribution that records the
+same files, with the reinstall command.
+
+Two refusals are new, both `BackendUnavailable`: the bytes the import
+system would run are not the ones any installed distribution recorded
+(`engine_assurance: unverifiable` in the details), and metadata whose files
+were removed by uninstalling the other distribution that shared them. The
+policy gate is unchanged; its `exact_id_guarantee: false` detail describes
+what a certified policy gets from this backend (nothing), while the pinned
+build's assurance is reported by `explain()` once the adapter is opened
+under `EXPERIMENTAL`. The adapter's configuration id moved to
+`toktier-fastokens-full-experimental-v2` when the guard entered it, so
+stored sessions from the earlier meaning miss and re-encode.
 
 ## 6. Record reader
 

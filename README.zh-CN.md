@@ -41,6 +41,14 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 
 ## 最新动态
 
+- **2026.08.TBD** 🚀 **toktier 0.2.7** 发布——`pip install "toktier[fastokens]"`
+  现在安装的是 `toktier-fastokens`，即本项目发布的、附带五个补丁的 fastokens
+  0.3.1 钉住构建，这样适配器读数所描述的字节就是该 extra 实际安装的字节。适配器
+  改为按 import 包解析当前安装的引擎，并在保持不变的 `experimental` 准入词旁边
+  报告 `engine_assurance`：在已发布的 wheel 上为 `certified_pinned`，并附带守卫
+  口径的 `exact_id_guarantee: true`；否则报告不成立的那条前提。154 码位的
+  Unicode 守卫从判官侧移入适配器。对外返回的 ID、store 格式与 kernel ABI 都没有
+  变化。详见 [v0.2.7 发布说明](docs/releases/v0.2.7.md)（英文）。
 - **2026.08.27** 🚀 **toktier 0.2.6** 发布——Rust 侧认证现在仅对
   certified core 作出声明（TokTier 自有的 crate、这些 crate 直接调用的包，以及
   下层依赖中真正参与分词计算的文本语义库）；编译闭包其余部分
@@ -404,9 +412,11 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 若三个根目录均未设置，持久化会话会直接报错，而不会自行选择位置——
 状态不是缓存。参见 [`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)。
 
-### 实验性：Fastokens 对照
+### 实验性：钉住的 Fastokens 适配器
 
-Fastokens 0.3.1 只作为显式实验性对照使用：
+`pip install "toktier[fastokens]"` 安装的是 **toktier-fastokens**——由 toktier
+项目发布在 PyPI 上的 fastokens 0.3.1 钉住构建，附带本项目的五个补丁。该适配器
+仍然只能显式选择：
 
 ```python
 tok = toktier.load(
@@ -414,27 +424,30 @@ tok = toktier.load(
 )
 ```
 
-该适配器会重新编码完整会话，并报告 `exact_id_guarantee: false`；认证策略永远
-不会自动选择它，它也不在修正版 Gigatoken 的 12.4 TB（12.33 万亿字符）声明
-的覆盖范围内。
+报告中有两件事分开陈述。`certification: experimental` 说的是它如何被准入
+（只能显式选择，永远不会自动选中）；`engine_assurance` 说的是我们对当前安装的
+引擎知道什么。当安装的字节就是 toktier 发布的那只 wheel 时，`engine_assurance`
+为 `certified_pinned`，`exact_id_guarantee` 为 `true`，其含义是带守卫的：返回的
+id 与钉住的参考实现相等，或者该请求已被适配器的 Unicode 守卫改由参考实现回答。
+其他任何 fastokens 构建——上游 wheel、你自己构建的 wheel——都报告 `false`。
+钉住分发沿用上游的 import 名，因此只能安装它或上游分发之一，不能同时安装
+（`toktier doctor` 会报告当前装的是哪一个）。若已装有上游分发，请整体重装而不是
+卸掉其中一个，因为卸载任一分发都会删掉两者共享的文件：
 
-这一判断已有实测数据支撑。在以 `tokenizers==0.22.2` 为参照、测试规模逐步扩大、
-每个工件最高达到 998,857,881 篇的一系列差分测试中，我们观察到上游 0.3.1
-代码相对该参照存在五处缺陷：一处会在罕见字符上报错，另外四处是静默的 id
-不一致——不抛异常、也没有任何提示，调用方无法从返回值看出差别。每处缺陷都有
-一个独立复现用例，在由上游原始源码构建出的版本上都会失败。相关报告已提交给
-上游项目。在这些源码上应用我们自己的五个补丁后，最终一轮差分——每个工件
-998,857,881 篇、共 15 个 tokenizer 工件——录得零处 id 不一致。该轮差分采用一个
-108 码位的守卫，它会使一小部分文档改走参考实现路径。
+```bash
+pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
+```
 
-上述读数描述的是**源码修订版本**，不是某个二进制。`explain()` 报告的
-`engine_digest` 同时覆盖编译出的扩展模块，因此使用同一份源码在另一台机器上
-构建的 wheel 会报告不同的摘要——产生这些数字的两个补丁 wheel 分别报告
-`4c7e9c9f03313cc0...` 与 `24e3cccaef6d97f4...`，作为对照的上游原始源码构建
-报告 `8600f509c10dc03c...`。所有构建的版本号都是 `0.3.1`，因此无法通过版本号
-区分它们；完整摘要见 `docs/support-matrix.md`。若你的安装报告的是其他摘要，
-上述数字描述的便不是该安装。该适配器的状态没有变化：仍是显式实验性、仍需显式
-选择、仍不会被自动选中。
+若其他代码需要上游分发，请使用单独的环境；同一个 import 名下两者无法共存。
+
+`certified_pinned` 背后的读数取自已发布的那只 wheel（引擎摘要
+`0bcf3ada9268e5ae...`）：以 `tokenizers==0.22.2` 为参照，15 个 tokenizer 工件、
+每个工件 998,857,881 篇文档、可见 CPU 数为 8，守卫口径下零处 id 不一致、零次引擎
+报错；同一只 wheel 上还通过了状态性重放、六种 CPU 拓扑与拼接/编辑三道门。五个
+补丁修正了我们在上游 0.3.1 代码中观察到的五处缺陷——一处在罕见字符上报错，
+四处是静默的 id 不一致——相关报告已提交给上游项目。守卫覆盖 154 个冻结参考实现
+不做重排的组合记号；含有其中任一记号的请求改由参考实现回答，并计入“已路由”。
+完整摘要、适配器报告的各个状态及其含义见 `docs/support-matrix.md`。
 
 ## 正确性与证据
 
@@ -620,7 +633,7 @@ span，涵盖 normalization、pre-tokenization、merge 和 added-token 处理；
 
 TokTier 的 CPU Fast Pass 和 Fast Repair 建立在
 [Gigatoken](https://github.com/marcelroed/gigatoken) 与
-[Fastokens](https://github.com/crusoecloud/fastokens) 两项优秀的开源工作之上。感谢
+[Fastokens](https://github.com/Atero-ai/fastokens) 两项优秀的开源工作之上。感谢
 两项工作的作者和贡献者将这些成果开源。
 
 修正版 Gigatoken 是 11 个唯一 tokenizer 工件的默认认证 repair 窗口引擎；
@@ -630,10 +643,10 @@ TokTier 的 CPU Fast Pass 和 Fast Repair 建立在
 [Hugging Face tokenizers](https://github.com/huggingface/tokenizers) 参考实现对齐；
 该路径在 12.33 万亿字符上完成 418 亿次检查，未观察到 token ID 不一致。
 
-Fastokens 0.3.1 保留为显式实验性备选；TokTier 不声称该适配器的 ID 与参考实现
-完全一致，也不会自动选择它。Fastokens 采用 Apache-2.0，Gigatoken 采用 MIT；
-确切 revision、许可证副本、Gigatoken 补丁与修改声明见
-[`THIRD_PARTY_NOTICES`](THIRD_PARTY_NOTICES) 和 [`packaging/`](packaging/)。
+toktier 项目为其显式实验性适配器发布了 toktier-fastokens——Fastokens 0.3.1
+附带五个补丁的钉住构建；上游项目是独立的实现，并未为这一构建背书。Fastokens
+采用 Apache-2.0，Gigatoken 采用 MIT；确切 revision、许可证副本、补丁序列与修改
+声明见 [`THIRD_PARTY_NOTICES`](THIRD_PARTY_NOTICES) 和 [`packaging/`](packaging/)。
 
 ## 许可证与引用
 

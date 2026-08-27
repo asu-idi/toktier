@@ -225,6 +225,27 @@ parsed release/build, torch runtime CUDA, and PyTorch distribution version, so
 a local product cannot cross an unverified compiler boundary through cache
 reuse. The integrated CPU extension exposes one immutable embedded fact set.
 
+### 3.2 Engine distributions (added in 0.2.7)
+
+The top-level `engine_distributions` node records an engine distribution
+this project publishes for an explicitly admitted adapter; in 0.2.7 that is
+`engine_distributions.fastokens`, the pinned `toktier-fastokens` build. It
+is not a backend status and the vocabulary above does not apply to it: it
+grants no route and moves nothing out of `experimental`. What it records is
+which published bytes the adapter's evidence describes -- the published
+wheels by file name, sha256 and engine digest, the sdist, the upstream
+revision and patch series, the oracle and the families the evidence covers,
+the Unicode guard set with its digest, and the gate readings with their
+evidence id -- so that the adapter can recognise the bytes it is about to
+run and report `engine_assurance` from the same digest-verified document the
+planner reads. The node is generated from `tools/fastokens_binding.json` by
+`tools/update_fastokens_registry.py`, checked by `generate_registry.py
+--check` against the shipped readings, the evidence manifest, the packaging
+kit and the adapter source, and refused by `--release-check` while any wheel
+digest is a placeholder. An adapter that finds no node, no guard or no
+matching wheel reports the weaker state; the node never widens anything by
+its absence.
+
 ### 3.3 Single source of truth for routing data (frozen)
 
 The registry is the **only** data source for family-to-kernel and

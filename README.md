@@ -45,6 +45,17 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
 
 ## News
 
+- **2026.08.TBD** 🚀 **toktier 0.2.7** released — `pip install
+  "toktier[fastokens]"` now installs `toktier-fastokens`, a pinned build of
+  fastokens 0.3.1 with five patches that this project publishes, so the
+  bytes the adapter's readings describe are the bytes the extra installs.
+  The adapter resolves the installed engine by its import package and
+  reports `engine_assurance` beside its unchanged `experimental` admission:
+  `certified_pinned` with a guarded `exact_id_guarantee: true` on the
+  published wheel, and the premise that does not hold otherwise. The
+  154-code-point Unicode guard moved from the judge into the adapter. Served
+  IDs, the store format, and the kernel ABI are unchanged. See the
+  [v0.2.7 release notes](docs/releases/v0.2.7.md).
 - **2026.08.27** 🚀 **toktier 0.2.6** released — Rust certification now
   speaks for the certified core (TokTier's own crates, the packages they call
   directly, and the text-semantics libraries beneath them). Drift elsewhere in
@@ -459,9 +470,12 @@ sessions with no resolvable home are refused rather than placed by
 guesswork: state is not a cache. See
 [`docs/rust-lifecycle.md`](docs/rust-lifecycle.md).
 
-### Experimental: Fastokens comparison
+### Experimental: the pinned Fastokens adapter
 
-Fastokens 0.3.1 is available only as an explicit experimental comparison:
+`pip install "toktier[fastokens]"` installs **toktier-fastokens**, a pinned
+build of fastokens 0.3.1 carrying five patches from the toktier project,
+published on PyPI by this project. The adapter is still selected only
+explicitly:
 
 ```python
 tok = toktier.load(
@@ -469,33 +483,38 @@ tok = toktier.load(
 )
 ```
 
-This adapter re-encodes the full session and reports
-`exact_id_guarantee: false`; it is never selected by the certified policy and
-is not covered by the 12.4 TB (12.33 trillion characters) corrected-Gigatoken
-claim.
+Two things are reported separately. `certification: experimental` says how it
+is admitted (explicit opt-in, never automatic); `engine_assurance` says what is
+known about the installed engine. When the installed bytes are the wheel
+toktier published, `engine_assurance` is `certified_pinned` and
+`exact_id_guarantee` is `true` in the guarded sense: ids equal the pinned
+reference or the request is routed to it by the adapter's Unicode guard. Any
+other build of fastokens -- the upstream wheel, a wheel you built yourself --
+reports `false`. The pinned distribution keeps the upstream import name;
+install either it or the upstream distribution, not both (`toktier doctor`
+reports which one is present). If the upstream distribution is already
+installed, reinstall rather than remove one of the two, because uninstalling
+either removes the files they share:
 
-There is now a measurement behind that. Over differential runs at increasing
-scale, up to 998,857,881 documents per artifact against
-`tokenizers==0.22.2`, we observed five defects in the upstream 0.3.1 code
-relative to that reference: one raises an error on a rare character, and four
-are silent id divergences where nothing is raised, so the caller cannot tell.
-Each has a standalone reproduction that fails on a build made from unmodified
-upstream sources. Reports have been submitted to the upstream project. With
-five patches of our own applied to those sources, the final differential --
-998,857,881 documents per artifact across 15 tokenizer artifacts --
-recorded zero id divergences, under a 108-codepoint guard that routed a small
-set of documents to the reference path.
+```bash
+pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
+```
 
-Those readings describe a source revision rather than a binary. The
-`engine_digest` in `explain()` covers the compiled extension too, so a wheel
-built from the same sources on another machine reports a different digest --
-the two patched wheels behind these numbers report `4c7e9c9f03313cc0...` and
-`24e3cccaef6d97f4...`, and the unmodified upstream comparison build reports
-`8600f509c10dc03c...`. Every build reports version `0.3.1`, so the version
-does not distinguish them; `docs/support-matrix.md` carries the full digests.
-If your installation reports another digest, these numbers are not about it.
-The adapter's status is unchanged: still experimental, still opt-in, still never
-chosen automatically.
+If other code needs the upstream distribution, use a separate environment; the
+two cannot coexist under one import name.
+
+The readings behind `certified_pinned` were taken on the published wheel
+(engine digest `0bcf3ada9268e5ae...`): 998,857,881 documents per artifact
+across 15 tokenizer artifacts against `tokenizers==0.22.2`, at eight visible
+CPUs, with zero guarded mismatches and zero engine errors, plus a
+stateful-replay gate, a six-topology gate and a splice/edit gate on the same
+wheel. The five patches close five defects we observed in the upstream 0.3.1
+code -- one raises an error on a rare character, four are silent id
+divergences -- and reports about them have been submitted to the upstream
+project. The guard covers 154 combining marks that the frozen reference does
+not reorder; a request containing one is answered by the reference and counted
+as routed. `docs/support-matrix.md` carries the full digests, the states the
+adapter reports and what each one means.
 
 ## Correctness and evidence
 
@@ -706,7 +725,7 @@ layers together.
 
 TokTier's CPU Fast Pass and Fast Repair build on the excellent
 [Gigatoken](https://github.com/marcelroed/gigatoken) and
-[Fastokens](https://github.com/crusoecloud/fastokens) projects. We thank their
+[Fastokens](https://github.com/Atero-ai/fastokens) projects. We thank their
 authors and contributors for making this work openly available.
 
 Corrected Gigatoken is the default certified repair-window engine for 11
@@ -718,10 +737,11 @@ frozen [Hugging Face tokenizers](https://github.com/huggingface/tokenizers)
 reference; the resulting path recorded 41.8 billion checks over 12.33 trillion
 characters with zero observed token-ID divergence.
 
-Fastokens 0.3.1 remains an explicit experimental alternative. TokTier does not
-claim exact-ID equivalence for that adapter and never chooses it automatically.
+The toktier project publishes toktier-fastokens, a pinned build of Fastokens
+0.3.1 with five patches, for its explicit experimental adapter; the upstream
+project is a separate implementation and does not endorse this build.
 Fastokens is Apache-2.0 and Gigatoken is MIT; exact revisions, license copies,
-the Gigatoken patch, and modification notices are in
+patch series and modification notices are in
 [`THIRD_PARTY_NOTICES`](THIRD_PARTY_NOTICES) and [`packaging/`](packaging/).
 
 ## License and citation

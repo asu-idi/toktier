@@ -94,7 +94,10 @@ repair backend, repair configuration, engine version, native-module
 digest, and repair-table digest. This stronger 0.x key prevents state created by
 Fastokens, corrected Gigatoken, or HF-only execution from crossing engine
 meanings. It does not alter the frozen field ids above; the facade contract is
-the operative 0.x surface.
+the operative 0.x surface. The Fastokens adapter's repair configuration moved
+to `toktier-fastokens-full-experimental-v2` in 0.2.7, when its Unicode guard
+became part of what the adapter does, so sessions stored under the v1 meaning
+miss and re-encode rather than replay.
 
 The redundancy among `0x0001`, `0x0002`, and `0x0003` (the artifact hash
 already covers pipeline and added tokens) is intentional: the fingerprint

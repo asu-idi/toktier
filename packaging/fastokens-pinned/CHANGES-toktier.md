@@ -9,9 +9,11 @@ the seven modified source files, as Apache License 2.0 section 4(b) asks, and
 takes the tree to `aaa5fb94ea62b9379d03074640e267c8d837d649`.
 
 The import package name is unchanged (`import fastokens`), so this build is a
-drop-in for code written against upstream. Only the distribution metadata
-differs, which means **only one of the two distributions should be installed
-at a time**; see `README-dist.md`.
+drop-in for code written against upstream at the API level; the five code
+patches do change what the engine returns on the inputs they cover. Once
+installed, only the distribution name and metadata tell the two apart, which
+means **only one of the two distributions should be installed at a time**;
+see `README-dist.md`.
 
 ## Why the patches exist
 

@@ -76,12 +76,12 @@ the Unicode terms reproduced below travel with the wheel.
 ----------------------------------
 
 The Python dependencies declared in pyproject.toml (tokenizers,
-huggingface-hub, platformdirs, tomli, transformers, fastokens, torch,
-ninja, and numpy) are install-time requirements resolved by the user's
-package manager. They are not bundled into the toktier wheel, so each
-installed distribution carries its own license terms. The repository also
-retains Fastokens' exact Apache-2.0 and upstream notice files because its
-adapter is a documented optional integration.
+huggingface-hub, platformdirs, tomli, transformers, toktier-fastokens,
+torch, ninja, and numpy) are install-time requirements resolved by the
+user's package manager. They are not bundled into the toktier wheel, so
+each installed distribution carries its own license terms. The repository
+also retains Fastokens' exact Apache-2.0 and upstream notice files because
+its adapter is a documented optional integration.
 
 
 4. CPU fast-path acknowledgements

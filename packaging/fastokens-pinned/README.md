@@ -41,6 +41,10 @@ published beside it is `toktier_fastokens-0.3.1.1.tar.gz`, sha256
 | source tree | `aa1924284ec4abaedcc8ed5823ee17e7959c55c5` (patches 0001 to 0005 on `fe854299`) |
 | build | manylinux_2_28 host, rustc 1.93.1, maturin 1.14.1, fixed build root |
 
+Neither published file is kept in this repository; `SHA256SUMS` records
+their digests, and those digests are what tie the bytes on PyPI to the
+texts here.
+
 The engine digest is what the adapter computes over the installed
 `fastokens/` package (`src/toktier/repair/fastokens.py`); the shipped support
 registry lists the published wheels under `engine_distributions.fastokens`,

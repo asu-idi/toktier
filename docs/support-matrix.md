@@ -100,7 +100,7 @@ reference used everywhere else here, we observed five defects in the upstream
 0.3.1 code relative to that reference: one raises an error on a rare
 character, and four are silent id divergences where nothing is raised, so the
 caller cannot tell. Each has a standalone reproduction that fails on a build
-made from unmodified upstream sources. Reports have been prepared for the
+made from unmodified upstream sources. Reports have been submitted to the
 upstream project. With five patches of our own applied to those sources, the
 final differential -- 998,857,881 documents per artifact across 15 tokenizer
 artifacts, 14,982,868,215 document-artifact comparisons -- recorded zero id

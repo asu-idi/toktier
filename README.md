@@ -45,7 +45,7 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
 
 ## News
 
-- **2026.08.TBD** 🚀 **toktier 0.2.6** released — Rust certification now
+- **2026.08.27** 🚀 **toktier 0.2.6** released — Rust certification now
   speaks for the certified core (TokTier's own crates, the packages they call
   directly, and the text-semantics libraries beneath them). Drift elsewhere in
   the compiled closure is reported as an advisory with alignment commands and
@@ -480,7 +480,7 @@ scale, up to 998,857,881 documents per artifact against
 relative to that reference: one raises an error on a rare character, and four
 are silent id divergences where nothing is raised, so the caller cannot tell.
 Each has a standalone reproduction that fails on a build made from unmodified
-upstream sources. Reports have been prepared for the upstream project. With
+upstream sources. Reports have been submitted to the upstream project. With
 five patches of our own applied to those sources, the final differential --
 998,857,881 documents per artifact across 15 tokenizer artifacts --
 recorded zero id divergences, under a 108-codepoint guard that routed a small

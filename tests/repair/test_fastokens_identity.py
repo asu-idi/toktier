@@ -297,6 +297,10 @@ def test_a_shadowing_copy_is_not_verifiable(site: Path, tmp_path: Path) -> None:
     assert identity.shadowed
     assert not identity.verifiable
     assert identity.owner is None
+    # The recorded distribution is bypassed, not shared with: nothing is
+    # co-installed, and the shadow state carries the report on its own.
+    assert identity.coinstalled == ()
+    assert adapter._advisory(identity) is None
 
 
 def test_a_package_without_any_metadata_is_not_verifiable(site: Path) -> None:

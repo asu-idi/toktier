@@ -170,7 +170,14 @@ class FastokensIdentity:
 
     @property
     def coinstalled(self) -> tuple[DistributionOwner, ...]:
-        """Distributions other than the owner that also record these files."""
+        """Distributions other than the owner that also record these files.
+
+        Empty when the import is shadowed: the recorded distribution is then
+        not sharing files with another one, it is being bypassed, and the
+        assurance reason names it together with the two locations.
+        """
+        if self.shadowed:
+            return ()
         return tuple(
             candidate
             for candidate in self.owners

@@ -716,6 +716,34 @@ records a comparison made on a date, not a promise about the repository's
 current contents. What the package enforces is the digest comparison it
 performs at load time.
 
+### Examined and not certified: the Qwen3.8 tokenizer
+
+`Qwen/Qwen3.8-27B` and `Qwen/Qwen3.8-Flash-Next` ship one and the same
+tokenizer, `tokenizer.json` sha256 `0997f410c57a` (12,809,320 bytes),
+examined on 2026-08-27. It is recorded here rather than counted, because it is
+not certified in this release and the package routes it accordingly.
+
+What was established. Its `model`, `normalizer`, `pre_tokenizer`,
+`post_processor` and `decoder` sections are equal to the certified
+`qwen3_5_08b` artifact -- the two share the pipeline capability
+`pipeline.bc687a3b57eba58b` -- and its `vocab.json` and `merges.txt` are
+byte-identical to that family's. The one difference is the added-token table:
+33 entries against 26, the seven extra ones being audio and text-to-speech
+specials at ids 248070-248076. That gives it an added-token capability of its
+own, `added-frontend.6f80a43b9fe6a15f`, for which no campaign reading exists.
+
+What follows from that. Under the rule stated at the top of this page --
+coverage is decided by tokenizer content -- a differing added-token table is a
+differing artifact, and the composition of this pipeline with this added-token
+table has no evidence behind it. Both repositories therefore resolve to the
+reference route and report `R_UNCERTIFIED_ARTIFACT`, which is the same answer
+the package gives for any content it has not certified. They are not siblings
+of `qwen3_5_08b` and are not counted anywhere in this document's totals.
+
+This entry is here so that the boundary is visible: a reader looking for these
+repositories finds what was examined and what was concluded, rather than
+silence.
+
 ## Documented exclusions
 
 | Subject | Reason |

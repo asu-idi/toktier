@@ -398,7 +398,12 @@ names the reason for the same input.
 What it writes is a record, not a certificate. The record is filed under
 the device, delivery, image digest, compiler triple, driver, the two
 source identities and the family artifact, so it stops applying the
-moment any of those moves; `--forget` removes it. A check that
+moment any of those moves; `--forget` removes it. For a JIT product the
+compiler triple is the NVCC release, build and binary digest the
+compiler stage recorded; before 0.2.7 the Rust face filed JIT records
+without it, so a record taken on such a build is re-taken once. A
+prebuilt record carries no compiler: its image digest names the shipped
+bytes outright. A check that
 disagreed is kept and reported, and the route keeps the label it would
 have had if nobody had run one -- running the tool never makes a
 configuration more restricted than not running it, and nothing is

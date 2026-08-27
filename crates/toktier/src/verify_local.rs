@@ -303,7 +303,10 @@ pub(crate) fn gpu_key(
         architecture: Some(built.architecture.clone()),
         delivery: Some(built.delivery.to_owned()),
         image_digest: Some(built.image_digest.clone()),
-        toolchain: None,
+        // A JIT product is filed under the compiler that built it as
+        // well as under its source digest: the same source through
+        // another compiler is another product.
+        toolchain: built.toolchain.clone(),
         driver_api_version: Some(built.driver_api_version),
         native_host_source_digest: env!("TOKTIER_RUST_API_NATIVE_HOST_SOURCE_SHA256").to_owned(),
         rust_api_source_digest: env!("TOKTIER_RUST_API_SOURCE_SHA256").to_owned(),

@@ -69,6 +69,13 @@ pub(crate) struct BuiltGpu {
     /// The digest of the image that loaded, so a local verification
     /// record can say which kernel it was taken over.
     pub(crate) image_digest: String,
+    /// The compiler that produced the image, for a JIT product: the
+    /// NVCC release, build and binary digest the compiler stage
+    /// recorded. A local verification record is filed under it, so a
+    /// product another compiler builds from the same source does not
+    /// read a record taken over this one. `None` under the prebuilt
+    /// delivery, whose image digest names the shipped bytes outright.
+    pub(crate) toolchain: Option<String>,
 }
 
 pub(crate) fn build_prebuilt(
@@ -210,6 +217,7 @@ pub(crate) fn build_prebuilt(
         PREBUILT_FATBIN,
         &registry.prebuilt.fatbin.digest,
         "prebuilt",
+        None,
     )
 }
 
@@ -268,6 +276,12 @@ pub(crate) fn build_jit(
         &product.image,
         &product.domain_digest,
         "jit",
+        Some(format!(
+            "NVCC {} ({}; sha256 {})",
+            product.facts.compiler.release,
+            product.facts.compiler.build,
+            product.facts.compiler.compiler_sha256
+        )),
     )
 }
 
@@ -283,6 +297,7 @@ fn build_image(
     image: &[u8],
     image_digest: &str,
     delivery: &str,
+    toolchain: Option<String>,
 ) -> Result<BuiltGpu> {
     let family = &artifact.identity().family;
 
@@ -393,6 +408,7 @@ fn build_image(
         assurance,
         delivery: if delivery == "jit" { "jit" } else { "prebuilt" },
         image_digest: image_digest.to_owned(),
+        toolchain,
     })
 }
 

@@ -154,6 +154,7 @@ that may accompany them is not a machine interface.
 | `R_SESSION_NO_SAFE_CUT` | A session append found no certified safe cut point; the accumulated text was fully re-encoded. Correctness preserved by construction. |
 | `R_EXEC_FAULT` | An accelerated engine failed to open or raised an internal error while executing; execution continued at the next eligible backend in the fallback chain, and the reference runs when the chain reaches it. Returned certified IDs remain reference-equal. |
 | `R_INPUT_POSTPROCESS_ROUTED` | A core-stream-only accelerated backend was bypassed before execution because the request asked for postprocessing that can change the ID stream. The reference backend produced the postprocessed result. This is a capability route, not an execution fault. |
+| `R_INVALID_PRIOR_STATE` | A stored session tail did not describe itself consistently, so the accumulated text was re-encoded from the reference. Both repair adapters name this outcome in their path (`hf_full_invalid_prior_state`). Added in 0.2.7: the Rust face reported it as an unnamed string before, which was in neither vocabulary. Correctness preserved by construction. |
 
 ### 5.3 Interaction with `REQUIRE_ACCELERATED`
 
@@ -180,9 +181,13 @@ behind that one execution, as `toktier::ReasonCode`. It is the code the
 router recorded for the input, not a second reading of the path string,
 so the two cannot come to disagree. `R_INPUT_ADDED_TOKEN`,
 `R_INPUT_BELOW_GPU_THRESHOLD`, `R_INPUT_GUARD_ROUTED`, `R_EXEC_FAULT`,
-`R_INPUT_POSTPROCESS_ROUTED`, and `R_SESSION_NO_SAFE_CUT` have named
-variants; a code without one arrives as `ReasonCode::Other` carrying the
-code itself, which is how Section 5.4 asks consumers to treat it.
+`R_INPUT_POSTPROCESS_ROUTED`, `R_SESSION_NO_SAFE_CUT` and, from 0.2.7,
+`R_INVALID_PRIOR_STATE` have named variants; a code without one arrives
+as `ReasonCode::Other` carrying the code itself, which is how Section 5.4
+asks consumers to treat it. `ReasonCode::Other` carries a code from this
+namespace and nothing else: a Rust session used to report
+`Other("invalid_prior_state")`, a string in neither vocabulary, and that
+outcome now has the named code above.
 `reason` is `None` when the admitted route ran the input and there was
 nothing to record; plan-time reasons stay on `RoutePlan::reasons`.
 

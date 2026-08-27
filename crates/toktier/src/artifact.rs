@@ -529,14 +529,11 @@ impl ArtifactManager {
         }
 
         if self.inner.offline || matches!(self.inner.source, ArtifactSource::None) {
-            return Err(Error::new(
-                ErrorCode::ArtifactNotFound,
-                format!(
-                    "artifact {family:?} is not verified in {} and artifact acquisition is offline",
-                    self.inner.cache.display()
-                ),
-            )
-            .with_family(family));
+            return Err(self.say_where_the_bytes_come_from(
+                family,
+                &directory,
+                Error::new(ErrorCode::ArtifactNotFound, "the cache does not hold it"),
+            ));
         }
 
         ensure_private_directory(&directory)?;
@@ -549,6 +546,63 @@ impl ArtifactManager {
         Ok(directory)
     }
 
+    /// The missing-artifact answer a reader is owed, on the Rust face.
+    ///
+    /// The code and the exit status were always right; `No such file or
+    /// directory (os error 2)` was not an answer a reader could act on.
+    /// The Python package says which family was asked for, which
+    /// directory was searched, whether acquisition is offline and by
+    /// which condition, and the two commands that put the bytes there.
+    /// This says the same four things in this face's own command names,
+    /// so a reader of one face is not told less than a reader of the
+    /// other. Anything but a missing artifact -- a digest or size that
+    /// did not verify -- already names itself and travels unchanged.
+    fn say_where_the_bytes_come_from(&self, family: &str, directory: &Path, error: Error) -> Error {
+        if error.code() != ErrorCode::ArtifactNotFound {
+            return error;
+        }
+        let mut reasons: Vec<&str> = Vec::new();
+        if self.inner.offline {
+            reasons.push("configured_offline");
+        }
+        if matches!(self.inner.source, ArtifactSource::None) {
+            reasons.push("no_source");
+        }
+        let offline = if reasons.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "; artifact acquisition is offline here ({})",
+                reasons.join(", ")
+            )
+        };
+        let ways = if cfg!(feature = "network") {
+            format!(
+                "To place the bytes here, run `toktier-rust artifacts fetch {family}` \
+                 where the network is reachable, or stage them with `toktier-rust \
+                 artifacts import <bundle>`, written by `toktier-rust artifacts export \
+                 {family} --out <bundle>` where a verified copy already is."
+            )
+        } else {
+            format!(
+                "This build carries no `network` feature, so it acquires nothing over \
+                 the network itself. Stage the bytes with `toktier-rust artifacts import \
+                 <bundle>`, written by `toktier-rust artifacts export {family} --out \
+                 <bundle>` where a verified copy already is."
+            )
+        };
+        Error::new(
+            ErrorCode::ArtifactNotFound,
+            format!(
+                "artifact {family:?} is not verified in {} ({}){offline}. {ways}",
+                directory.display(),
+                error.message(),
+            ),
+        )
+        .with_family(family)
+        .with_path(directory)
+    }
+
     fn inspect_with_registry(
         &self,
         family: &str,
@@ -556,7 +610,8 @@ impl ArtifactManager {
     ) -> Result<ArtifactInspection> {
         let row = registry.artifact(family)?;
         let directory = self.inner.cache.join(directory_name(family, &row.revision));
-        verify_directory(&directory, row)?;
+        verify_directory(&directory, row)
+            .map_err(|error| self.say_where_the_bytes_come_from(family, &directory, error))?;
         let tokenizer = row.files.get("tokenizer.json").ok_or_else(|| {
             Error::new(ErrorCode::RegistryInvalid, "artifact has no tokenizer.json")
         })?;
@@ -1411,5 +1466,42 @@ mod tests {
         std::thread::sleep(Duration::from_millis(2));
         prune_stale_temporary_files(&object, Duration::from_millis(1)).expect("prune");
         assert!(!stale.exists());
+    }
+
+    /// A missing artifact says the four things the Python face says.
+    ///
+    /// `inspect` used to answer with the raw `os error 2` and nothing
+    /// else, which named neither the family, the directory, the offline
+    /// setting, nor a way forward.
+    #[test]
+    fn a_missing_artifact_names_the_family_the_place_and_the_way_forward() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let cache = temporary.path().join("cache");
+        let manager = ArtifactManager::builder()
+            .cache(&cache)
+            .offline(true)
+            .source(ArtifactSource::None)
+            .build()
+            .expect("manager");
+
+        for refusal in [
+            manager.inspect("qwen3_8b").expect_err("nothing staged"),
+            manager.fetch("qwen3_8b").expect_err("nothing staged"),
+        ] {
+            let message = refusal.to_string();
+            assert_eq!(refusal.code(), ErrorCode::ArtifactNotFound);
+            assert_eq!(refusal.family(), Some("qwen3_8b"));
+            assert!(message.contains(&cache.display().to_string()), "{message}");
+            assert!(
+                message.contains("configured_offline") && message.contains("no_source"),
+                "{message}"
+            );
+            assert!(
+                message.contains("toktier-rust artifacts import <bundle>")
+                    && message.contains("toktier-rust artifacts export qwen3_8b --out"),
+                "{message}"
+            );
+            assert!(!message.starts_with("No such file"), "{message}");
+        }
     }
 }

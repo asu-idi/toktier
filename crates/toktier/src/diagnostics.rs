@@ -106,6 +106,13 @@ pub enum ReasonCode {
     InputPostprocessRouted,
     /// `R_SESSION_NO_SAFE_CUT`
     SessionNoSafeCut,
+    /// `R_INVALID_PRIOR_STATE`
+    ///
+    /// A stored session tail did not describe itself consistently, so
+    /// the accumulated text was re-encoded from the reference. Named in
+    /// the frozen namespace since 0.2.7; before that it travelled as an
+    /// `Other` string that was in neither vocabulary.
+    InvalidPriorState,
     GpuUnavailable,
     GpuUncertified,
     CpuUncertified,
@@ -116,6 +123,15 @@ pub enum ReasonCode {
     /// than mapped onto a code that does not mean it.
     Other(String),
 }
+
+/// The frozen codes for the two reasons the session repair names in its
+/// path rather than in a ledger entry.
+///
+/// The router's crate carries no constant for either, because no router
+/// path records them; these are the spelling on the Rust face, and they
+/// are the same strings `docs/contracts/routing.md` Section 5.2 lists.
+pub(crate) const R_SESSION_NO_SAFE_CUT: &str = "R_SESSION_NO_SAFE_CUT";
+pub(crate) const R_INVALID_PRIOR_STATE: &str = "R_INVALID_PRIOR_STATE";
 
 impl ReasonCode {
     /// The reason behind one routed execution, from the code the router
@@ -128,6 +144,8 @@ impl ReasonCode {
             toktier_routing_core::R_INPUT_GUARD_ROUTED => Self::InputGuardRouted,
             toktier_routing_core::R_EXEC_FAULT => Self::ExecutionFault,
             toktier_routing_core::R_INPUT_POSTPROCESS_ROUTED => Self::InputPostprocessRouted,
+            R_SESSION_NO_SAFE_CUT => Self::SessionNoSafeCut,
+            R_INVALID_PRIOR_STATE => Self::InvalidPriorState,
             other => Self::Other(other.to_owned()),
         }
     }
@@ -366,6 +384,10 @@ mod tests {
         ] {
             assert_eq!(ReasonCode::from_ledger_code(code), expected, "for {code}");
         }
+        assert_eq!(
+            ReasonCode::from_ledger_code(R_INVALID_PRIOR_STATE),
+            ReasonCode::InvalidPriorState
+        );
         assert_eq!(
             ReasonCode::from_ledger_code("R_SOMETHING_LATER"),
             ReasonCode::Other("R_SOMETHING_LATER".to_owned())

@@ -189,6 +189,13 @@ class ReasonCode(enum.Enum):
     #: A core-stream-only accelerated backend was bypassed before execution
     #: because the request asked for postprocessing; routed to reference.
     R_INPUT_POSTPROCESS_ROUTED = "R_INPUT_POSTPROCESS_ROUTED"
+    #: A stored session tail did not describe itself consistently, so the
+    #: accumulated text was re-encoded from the reference. Both repair
+    #: adapters name this outcome in their path
+    #: (``hf_full_invalid_prior_state``); the Rust face reports it as
+    #: ``ReasonCode::InvalidPriorState``. Registered here in 0.2.7 so the
+    #: two faces name it from one vocabulary.
+    R_INVALID_PRIOR_STATE = "R_INVALID_PRIOR_STATE"
 
 
 @dataclass(frozen=True)

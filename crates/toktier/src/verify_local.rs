@@ -834,6 +834,8 @@ fn reason_code(reason: &crate::ReasonCode) -> String {
         ReasonCode::InputPostprocessRouted => {
             toktier_routing_core::R_INPUT_POSTPROCESS_ROUTED.to_owned()
         }
+        ReasonCode::SessionNoSafeCut => crate::diagnostics::R_SESSION_NO_SAFE_CUT.to_owned(),
+        ReasonCode::InvalidPriorState => crate::diagnostics::R_INVALID_PRIOR_STATE.to_owned(),
         ReasonCode::Other(code) => code.clone(),
         other => format!("{other:?}"),
     }

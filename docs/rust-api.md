@@ -53,8 +53,12 @@ complete table, including the `jit` feature's `TOKTIER_JIT_CACHE`, is in
 [Rust lifecycle and distribution](rust-lifecycle.md).
 
 `Runtime::doctor()` returns typed build and CUDA-probe facts. Device probing
-does not load a kernel. `Tokenizer::plan()` is the immutable admitted route;
-every result carries `ExecutionFacts` naming the backend that actually ran.
+does not load a kernel. `toktier-rust doctor` prints those facts, and
+`toktier-rust doctor --json` prints them as JSON under the same field names,
+for a control plane that would otherwise parse the debug rendering; the
+command refuses an option it does not implement rather than ignoring it.
+`Tokenizer::plan()` is the immutable admitted route; every result carries
+`ExecutionFacts` naming the backend that actually ran.
 
 Since 0.2.5 those facts also carry `reason: Option<ReasonCode>`: the
 routing decision that moved this input off the first admitted backend,
@@ -66,7 +70,12 @@ build with no accelerated route admitted reports `None` per execution
 while the plan explains itself once. The codes are the frozen `R_*`
 namespace of `docs/contracts/routing.md` Section 5; a code this release
 has no variant for arrives as `ReasonCode::Other` carrying the code
-itself, which is what that contract asks consumers to expect. Because a
+itself, which is what that contract asks consumers to expect. What
+`Other` carries is a code from that namespace and nothing else: through
+0.2.6 a session that re-encoded an inconsistent stored tail reported
+`Other("invalid_prior_state")`, a string in neither face's vocabulary,
+and 0.2.7 registers that outcome as `R_INVALID_PRIOR_STATE` with the
+named variant `ReasonCode::InvalidPriorState`. Because a
 reason describes a departure from the admitted route, a session append
 that re-encodes its whole window reports a reason on a certified build,
 where the admitted engine is the repaired CPU one, and none on an
@@ -400,18 +409,23 @@ note sends a reader to one; the Python package's `verify-local` names its
 own `toktier doctor --family` and `explain()` for the same two states.
 
 What it writes is a record, not a certificate. The record is filed under
-the device, delivery, image digest, compiler triple, driver, the two
-source identities and the family artifact, so it stops applying the
-moment any of those moves; `--forget` removes it. For a JIT product the
-compiler triple is the NVCC release, build and binary digest the
-compiler stage recorded; before 0.2.7 the Rust face filed JIT records
-without it, so a record taken on such a build is re-taken once. A
-prebuilt record carries no compiler: its image digest names the shipped
-bytes outright. A check that
-disagreed is kept and reported, and the route keeps the label it would
-have had if nobody had run one -- running the tool never makes a
-configuration more restricted than not running it, and nothing is
-changed on the caller's behalf.
+the engine it measured, the device architecture, the delivery, the image
+digest, the compiler triple, the driver, the two source identities, the
+family artifact and the version of the tool that wrote it, so it stops
+applying the moment any of those moves; `--forget` removes it. The
+architecture rather than the device index: two devices of one
+architecture share a record, which is what the campaigns measure as
+well. For a JIT product the compiler triple is the NVCC release, build
+and binary digest the compiler stage recorded; before 0.2.7 the Rust
+face filed JIT records without it, so a record taken on such a build is
+filed under a key this release does not look up. It is ignored rather
+than re-taken -- nothing re-measures a route on its own -- and running
+`verify-local` again files one under the new key. A prebuilt record
+carries no compiler: its image digest names the shipped bytes outright.
+A check that disagreed is kept and reported, and the route keeps the
+label it would have had if nobody had run one -- running the tool never
+makes a configuration more restricted than not running it, and nothing
+is changed on the caller's behalf.
 
 ## Buffers, batches, and decode
 

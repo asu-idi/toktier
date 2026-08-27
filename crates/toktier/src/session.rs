@@ -659,10 +659,12 @@ fn reason_for_repair_path(path: &str) -> Option<ReasonCode> {
     match path {
         "hf_full_engine_guard" => Some(ReasonCode::InputGuardRouted),
         "hf_full_no_safe_cut" | "hf_full_window_covers_all" => Some(ReasonCode::SessionNoSafeCut),
-        // Named by the repair engine, with no frozen code of its own:
-        // the stored tail did not describe itself consistently, so the
-        // accumulated text was re-encoded from the reference.
-        "hf_full_invalid_prior_state" => Some(ReasonCode::Other("invalid_prior_state".to_owned())),
+        // The stored tail did not describe itself consistently, so the
+        // accumulated text was re-encoded from the reference. Registered
+        // in the frozen namespace as `R_INVALID_PRIOR_STATE` in 0.2.7;
+        // it used to travel as an `Other` string that appeared in
+        // neither face's vocabulary.
+        "hf_full_invalid_prior_state" => Some(ReasonCode::InvalidPriorState),
         _ => None,
     }
 }
@@ -762,7 +764,7 @@ mod tests {
         }
         assert_eq!(
             reason_for_repair_path("hf_full_invalid_prior_state"),
-            Some(ReasonCode::Other("invalid_prior_state".to_owned()))
+            Some(ReasonCode::InvalidPriorState)
         );
         for path in [
             "gigatoken_repair",

@@ -3,24 +3,24 @@
   "generated_by": {
     "tool": "tools/generate_sibling_aliases.py",
     "tool_version": "1.0.0",
-    "source_commit": "0e82b22e420df2dc1dd5368277c889c3845f0449",
-    "generated_at": "2026-08-13T00:22:56Z"
+    "source_commit": "299274ea0ff16fb1fade028915d9b2a10bb9a51d",
+    "generated_at": "2026-08-27T07:54:33Z"
   },
-  "root_digest": "sha256:1b5a2f483ef1dda8d1325b7ed44e5584196f930bc5231e973416026a75d3b317",
+  "root_digest": "sha256:94cc427f4e99deb3b26936dd1caaa324b99a4be3d66ea52cc355525fc1a62639",
   "provenance": {
     "audit_date": "2026-08-04",
     "audit_rows": 470,
     "audit_sha256": "f3cc273898e7604a7d3b947be95bbf24dc6fa1df082aa55cf777c0c83d6a3fd2",
     "support_matrix_sha256": "c17c3091b3c0ced929383b7d4c5507a09ed5dee3fde690496aa85da39a25cb9a",
-    "selection": "verified repositories enumerated in docs/support-matrix.md, plus the canonical repository of each family whose upstream source file is not tokenizer.json"
+    "selection": "verified repositories enumerated in docs/support-matrix.md, plus the canonical repository of each family whose upstream source file is not tokenizer.json, plus repositories published after the audit snapshot whose upstream file was compared byte for byte against the shipped anchor on the date recorded beside them in docs/support-matrix.md"
   },
   "counts": {
-    "identical": 150,
+    "identical": 152,
     "identical_source": 13,
     "equivalent_canonicalisation": 10,
     "equivalent_serialisation": 38,
-    "total": 211,
-    "packaged": 204,
+    "total": 213,
+    "packaged": 206,
     "reference_only": 7
   },
   "aliases": [
@@ -181,6 +181,17 @@
     {
       "repo_id": "deepseek-ai/DeepSeek-V4-Pro",
       "revision": "b5968e9190ef611bbf34a7229255be88a0e937c1",
+      "source_file": "tokenizer.json",
+      "source_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+      "source_size": 6367146,
+      "canonical_family": "deepseek_v4_flash",
+      "canonical_anchor_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+      "basis": "identical",
+      "canonical_packaged": true
+    },
+    {
+      "repo_id": "deepseek-ai/DeepSeek-V4-Pro-0813",
+      "revision": "72e1d3230f6c080a530b0a1d46f8eb4602340597",
       "source_file": "tokenizer.json",
       "source_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
       "source_size": 6367146,
@@ -2337,6 +2348,17 @@
     {
       "repo_id": "zai-org/GLM-5.2-FP8",
       "revision": "ba978f7d347eaf65d22f1a86833408afdb953541",
+      "source_file": "tokenizer.json",
+      "source_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+      "source_size": 20217442,
+      "canonical_family": "glm_5_2",
+      "canonical_anchor_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+      "basis": "identical",
+      "canonical_packaged": true
+    },
+    {
+      "repo_id": "zai-org/GLM-5.3-Flash",
+      "revision": "3f1971b7b5f7a528c9c4ef6212c8785298a8c24a",
       "source_file": "tokenizer.json",
       "source_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
       "source_size": 20217442,

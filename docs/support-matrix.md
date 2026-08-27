@@ -685,6 +685,37 @@ observed on 2026-08-04, not a promise about the repository's current contents:
 what the package actually enforces is the digest comparison it performs at load
 time, which is unaffected by anything upstream does afterwards.
 
+## Repositories admitted after the snapshot
+
+The audit above is dated 2026-08-04. Repositories published later are added
+one at a time, on the same basis and with the same bookkeeping: the upstream
+file is fetched at a pinned commit, hashed, and compared byte for byte against
+the anchor artifact of an already certified family. Nothing new is certified
+here -- a row in this section is the reasoning chain of step 2 under
+[Verified model repositories](#verified-model-repositories), applied to one
+repository on a later date.
+
+| Repository | Revision | `tokenizer.json` sha256 | Size | Family | Basis | Compared on |
+|---|---|---|---|---|---|---|
+| `deepseek-ai/DeepSeek-V4-Pro-0813` | `72e1d3230f6c` | `8f9f37ca37fd` | 6,367,146 | `deepseek_v4_flash` | identical | 2026-08-27 |
+| `zai-org/GLM-5.3-Flash` | `3f1971b7b5f7` | `19e773648cb4` | 20,217,442 | `glm_5_2` | identical | 2026-08-27 |
+
+Both files are byte-identical to the anchor their family was certified on, so
+the certificate carries over unchanged and no campaign was run for either. The
+`tokenizer_config.json` of each repository was hashed alongside its
+`tokenizer.json` and is equal to the anchor's as well, which is recorded
+because the loaded tokenizer object depends on both.
+
+These rows are in the shipped registry, so the packaged counts include them:
+`identical` reads 152 and `total` reads 213 there, with 206 rows pointing at a
+packaged family. Counted as siblings, the verified total is 212, and the two
+families concerned hold seven sub-versions each.
+
+A repository listed here is subject to the same caveat as every other row: it
+records a comparison made on a date, not a promise about the repository's
+current contents. What the package enforces is the digest comparison it
+performs at load time.
+
 ## Documented exclusions
 
 | Subject | Reason |

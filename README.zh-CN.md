@@ -50,6 +50,7 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
   `doctor` 会逐一报告。快速 CPU 预分词器读取的属性数据已固定为参考引擎
   所携带的同一 Unicode 版本，并通过穷举对拍门禁确保二者一致。
   GPU 方面：驱动与 CUDA 版本改为以“环境事实”的形式如实报告，不再作为证书前提；
+  `sm_80` 与 `sm_90` 依据一次有界抽查进入预编译交付的认证名单；
   认证活动未测试过的设备架构或编译工具链，在新的默认 `supported` 策略下会
   照常运行并标注为 `supported_untested`；`toktier-rust verify-local` /
   `toktier verify-local` 可以用你自己的文本，逐一核对该路径和参考引擎返回的 id，
@@ -77,7 +78,7 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 - **2026.08.11** 🚀 **toktier 0.2.1** 发布——维护版本：诊断信息更完整
   （`doctor` 会报告 JIT 工具链是否合格，`explain()` 摘要逐项标明所指的时间
   范围），并修正了文档；对外返回的 ID、store 格式与 kernel ABI 都没有变化。
-  详见 [v0.2.1 发布说明](docs/releases/v0.2.1.md)。
+  详见 [v0.2.1 发布说明](docs/releases/v0.2.1.md)（英文）。
 - **2026.08.10** 🚀 **toktier 0.2.0** 发布——首个公开版本：提供采用有界
   CPU repair、ID 精确性已获认证的会话，以及预编译 GPU 路径和 Rust
   serving API；分别以 Python wheel（[PyPI](https://pypi.org/project/toktier/)）
@@ -292,9 +293,9 @@ CPU 原生模块。基础 wheel 还固定了启用这条认证路径所需的 HF
 构建：
 
 ```bash
-python tools/fast_cpu_source_identity.py
-python tools/compute_identity_v2.py
-python tools/compute_identity_v2.py --show-diff
+python3 tools/fast_cpu_source_identity.py
+python3 tools/compute_identity_v2.py
+python3 tools/compute_identity_v2.py --show-diff
 maturin build --locked --release
 ```
 
@@ -483,13 +484,13 @@ fallback 仍是系统契约的一部分。
 
 ```bash
 pip install pytest==9.1.1 jsonschema==4.26.0    # 或：pip install --group test
-python tools/generate_evidence.py --check
-python tools/verify_carryover.py --check
-python tools/generate_native_legal.py --check    # 需要 cargo
-python tools/validate_registry.py tables/support_registry.json
-python tools/generate_registry.py --release-check
-python tools/generate_sibling_aliases.py --check
-python tools/dev.py test-packaging
+python3 tools/generate_evidence.py --check
+python3 tools/verify_carryover.py --check
+python3 tools/generate_native_legal.py --check    # 需要 cargo
+python3 tools/validate_registry.py tables/support_registry.json
+python3 tools/generate_registry.py --release-check
+python3 tools/generate_sibling_aliases.py --check
+python3 tools/dev.py test-packaging
 ```
 
 其中五条同样可以在发布的 Rust 源码归档中正常运行——该归档随源码包含了
@@ -541,7 +542,8 @@ README 顶部的图比较了对同一文本执行自动 GPU/repair 路由与完�
 信息见 [`docs/benchmarks.md`](docs/benchmarks.md)。
 
 主要实验使用 RTX PRO 6000 Blackwell，但消费级 RTX 5090 在相同协议下的一轮
-测试反而**快 11–17%**（所报告 family 的吞吐量为 4.24–5.50 GB/s）。因此，
+测试反而**快 11–17%**（所报告 family 的吞吐量为 4.24–5.50 GB/s）；这一轮测的是
+kernel 的批量吞吐，与上表的端到端数据回答的是不同问题，两者不宜逐格比较。因此，
 消费级硬件是实际可行的部署目标，并非降级模式：RTX 4090 也通过了针对 `sm_89`
 的整套正确性与预编译交付测试。这些观察结果并不保证每张 GPU 都有相同比例的
 提升；实际性能仍取决于架构、负载和主机端交付方式。

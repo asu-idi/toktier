@@ -367,10 +367,12 @@ toktier-rust verify-local --engine both --family qwen3_8b --input my-text.txt
 ```
 
 The Python package carries the same command under the same name and the
-same options (`toktier verify-local --engine both --family qwen3_8b
---input my-text.txt`), so a machine with both installed has one thing to
-remember. Each face keeps its own records: they describe different
-engines.
+same options for the same job (`toktier verify-local --engine both --family
+qwen3_8b --input my-text.txt`); the Rust face adds `--delivery` and
+`--device`, and the two faces default `--synthetic` and `--seed`
+differently, so a machine with both installed has one command to remember
+and two small differences to know about. Each face keeps its own records:
+they describe different engines.
 
 It encodes your documents on the accelerated route and on this binary's
 reference engine and compares every id. `--synthetic N` builds documents

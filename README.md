@@ -55,9 +55,10 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
   package version, and `doctor` reports each one. The property data the fast
   CPU pre-tokenizer reads is pinned to the Unicode version the reference
   engine carries, with an exhaustive gate that keeps the two equal. On the
-  GPU side, driver and CUDA versions are reported as environment facts. A
-  device architecture or compiler toolchain unjudged by any campaign now runs
-  under the new default `supported` policy and is labelled
+  GPU side, driver and CUDA versions are reported as environment facts, and
+  `sm_80` and `sm_90` join the certified prebuilt list on a bounded spot
+  check. A device architecture or compiler toolchain unjudged by any campaign
+  now runs under the new default `supported` policy and is labelled
   `supported_untested`. `verify-local` (the same command on both
   faces) compares such a route with the reference engine on your own
   text and records the answer as `locally_verified`. Served
@@ -331,9 +332,9 @@ For provenance, a source checkout can independently recompute the active source
 identity and build the same release profile:
 
 ```bash
-python tools/fast_cpu_source_identity.py
-python tools/compute_identity_v2.py
-python tools/compute_identity_v2.py --show-diff
+python3 tools/fast_cpu_source_identity.py
+python3 tools/compute_identity_v2.py
+python3 tools/compute_identity_v2.py --show-diff
 maturin build --locked --release
 ```
 
@@ -550,13 +551,13 @@ Repository self-checks:
 
 ```bash
 pip install pytest==9.1.1 jsonschema==4.26.0    # or: pip install --group test
-python tools/generate_evidence.py --check
-python tools/verify_carryover.py --check
-python tools/generate_native_legal.py --check    # needs cargo
-python tools/validate_registry.py tables/support_registry.json
-python tools/generate_registry.py --release-check
-python tools/generate_sibling_aliases.py --check
-python tools/dev.py test-packaging
+python3 tools/generate_evidence.py --check
+python3 tools/verify_carryover.py --check
+python3 tools/generate_native_legal.py --check    # needs cargo
+python3 tools/validate_registry.py tables/support_registry.json
+python3 tools/generate_registry.py --release-check
+python3 tools/generate_sibling_aliases.py --check
+python3 tools/dev.py test-packaging
 ```
 
 Five of these commands also run from the published Rust source archive, which
@@ -622,7 +623,9 @@ provenance are in [`docs/benchmarks.md`](docs/benchmarks.md).
 
 The primary study used an RTX PRO 6000 Blackwell, but a consumer RTX 5090
 sweep using the same protocol was **11–17% faster** (4.24–5.50 GB/s across the
-reported families). Consumer hardware is therefore a practical target, not a
+reported families); that sweep measures the kernel's batched throughput rather
+than the end-to-end figure in the table above, so the two are not comparable
+cell by cell. Consumer hardware is therefore a practical target, not a
 reduced mode: the RTX 4090 also passed the `sm_89` correctness and prebuilt-delivery
 battery. These observations do not promise the same speedup for every GPU;
 architecture, workload, and host delivery still matter.

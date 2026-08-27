@@ -122,10 +122,13 @@ the older, stricter admission.
 The first release ships the corrected Gigatoken engine as its certified CPU
 full-encode and session-repair path for 11 unique tokenizer artifacts covering
 12 model families. Fastokens remains an explicit experimental comparison and
-does not carry TokTier's exact-ID guarantee. Additional third-party CPU engines
-may be admitted only behind per-input guards, exact artifact/engine bindings,
-published differential evidence, and any coordinated disclosure their fixes
-require; uncertainty continues to route to the HF reference implementation.
+does not carry TokTier's exact-ID guarantee. A pinned distribution of the
+patched Fastokens build is planned for 0.2.7, so that a comparison can name
+the build it measured rather than only describe it. Additional third-party
+CPU engines may be admitted only behind per-input guards, exact
+artifact/engine bindings, published differential evidence, and any
+coordinated disclosure their fixes require; uncertainty continues to route
+to the HF reference implementation.
 
 ## CPU parallel BPE for long requests
 
@@ -162,9 +165,10 @@ no feature enabled. Such refusals are safe and exact and ask the reader to
 align packages that have no bearing on what ran.
 
 0.2.4 judges the set Cargo compiled for the certified build, taken from
-Cargo's own account of that build and shipped with the crate. On this
-workspace that is 165 packages where the reachable set is 227, and a fresh
-consumer resolution diverges in six packages rather than fourteen -- each of
+Cargo's own account of that build and shipped with the crate. As of 0.2.6
+that is 148 packages on this workspace, where the set reachable from the
+lockfile is 226; at 0.2.4 the same two counts were 165 and 227, and a fresh
+consumer resolution diverged in six packages rather than fourteen -- each of
 which really is compiled, so each command that aligns it changes the bytes
 that run.
 

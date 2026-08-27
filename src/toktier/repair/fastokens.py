@@ -99,6 +99,7 @@ _GUARD_SET_DOMAIN = b"toktier.fastokens.unicode_guard.v1\0"
 _REINSTALL_COMMAND = (
     'pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"'
 )
+#: What to print when the registry names no distribution to install.
 _PUBLISHED_WHEEL_COMMAND = (
     'pip install --only-binary toktier-fastokens "toktier[fastokens]"'
 )
@@ -176,13 +177,37 @@ class FastokensIdentity:
         Empty when the import is shadowed: the recorded distribution is then
         not sharing files with another one, it is being bypassed, and the
         assurance reason names it together with the two locations.
+
+        Empty as well when no distribution owns the bytes on disk. Two
+        distributions sharing one package is a statement about a second
+        installation, and "the RECORD here does not describe what is on
+        disk" is a different one; calling the only installed distribution
+        co-installed with itself would report the first where the second
+        holds. :attr:`unowned` is the answer for that state.
         """
-        if self.shadowed:
+        if self.shadowed or self.owner is None:
             return ()
         return tuple(
             candidate
             for candidate in self.owners
             if candidate is not self.owner and not candidate.orphaned
+        )
+
+    @property
+    def unowned(self) -> tuple[DistributionOwner, ...]:
+        """Distributions whose RECORD names these files but does not match them.
+
+        Non-empty exactly in the state where the files are present, no
+        installed distribution's RECORD describes them completely, and
+        the import is not shadowed: the metadata is here and the bytes
+        are here, and they disagree. The engine digest still speaks for
+        the bytes that would run, so this is reported as an advisory
+        rather than folded into the assurance value.
+        """
+        if self.shadowed or self.owner is not None:
+            return ()
+        return tuple(
+            candidate for candidate in self.owners if not candidate.orphaned
         )
 
     @property
@@ -410,6 +435,29 @@ def pinned_engine_entry() -> Mapping[str, Any] | None:
     return _shipped_entry()
 
 
+def _published_wheel_command(entry: Mapping[str, Any] | None) -> str:
+    """The command that puts the published wheel in place of what is here.
+
+    A plain ``pip install`` is satisfied by any distribution already
+    carrying the requested version, which is the usual way of arriving
+    in ``unrecognized_build``: a wheel built here from the sdist carries
+    the same version string as the published one, so pip reports the
+    requirement as already satisfied and nothing moves. The command
+    therefore asks for the replacement outright, and reads the name and
+    version from the registry node rather than repeating them here.
+    """
+    distribution = (entry or {}).get("distribution")
+    if isinstance(distribution, Mapping):
+        name = distribution.get("name")
+        version = distribution.get("version")
+        if isinstance(name, str) and isinstance(version, str):
+            return (
+                "pip install --force-reinstall --no-deps --only-binary :all: "
+                f'"{name}=={version}"'
+            )
+    return _PUBLISHED_WHEEL_COMMAND
+
+
 def _parse_codepoint(text: object) -> int | None:
     if not isinstance(text, str) or not text.startswith("U+") or len(text) < 6:
         return None
@@ -522,24 +570,42 @@ def _basis(entry: Mapping[str, Any], wheel: Mapping[str, Any]) -> dict[str, Any]
     }
 
 
+def _named(owners: Sequence[DistributionOwner]) -> str:
+    return ", ".join(f"'{owner.label}'" for owner in owners)
+
+
 def _advisory(identity: FastokensIdentity) -> str | None:
+    """What else a reader of this state should know, in its own number.
+
+    Two states reach here and they are counted, not assumed: one or more
+    distributions installed beside the one that owns the bytes, and one
+    or more whose RECORD names the files without describing them. The
+    sentence agrees with the number of distributions it is about.
+    """
     others = identity.coinstalled
-    if not others:
-        return None
-    named = ", ".join(f"'{other.label}'" for other in others)
-    if identity.owner is not None:
+    if others and identity.owner is not None:
+        plural = len(others) > 1
         return (
-            f"the distribution {named} is also installed and its RECORD names the "
+            f"the distribution{'s' if plural else ''} {_named(others)} "
+            f"{'are' if plural else 'is'} also installed and "
+            f"{'their RECORDs name' if plural else 'its RECORD names'} the "
             f"same files; the bytes on disk belong to {identity.owner.label}. "
-            "Uninstalling either distribution removes the shared files; to keep "
-            f"only the pinned build, run: {_REINSTALL_COMMAND}"
+            "Uninstalling any of them removes the shared files; to keep only "
+            f"the pinned build, run: {_REINSTALL_COMMAND}"
         )
-    return (
-        f"the distributions {named} are installed and their RECORDs name the same "
-        "files; the bytes on disk match neither completely. Uninstalling either "
-        "distribution removes the shared files; to keep only the pinned build, "
-        f"run: {_REINSTALL_COMMAND}"
-    )
+    unowned = identity.unowned
+    if unowned:
+        plural = len(unowned) > 1
+        return (
+            f"the RECORD{'s' if plural else ''} of {_named(unowned)} "
+            f"name{'' if plural else 's'} the fastokens files, but the bytes on "
+            f"disk are not the ones {'they' if plural else 'it'} recorded, so no "
+            "installed distribution is reported as owning them. The assurance "
+            "beside this line is about the bytes that would run, which are "
+            "compared by engine digest and not by the metadata; to restore the "
+            f"recorded bytes, run: {_REINSTALL_COMMAND}"
+        )
+    return None
 
 
 def assess(
@@ -603,26 +669,49 @@ def assess(
         )
     if known is None:
         if identity.owner is not None and identity.owner.name == UPSTREAM_DISTRIBUTION:
+            # Which distribution owns the bytes is observed here, not
+            # read from the registry, so this answer stands whether or
+            # not the node is present.
             return report(
-            ASSURANCE_UPSTREAM_BUILD,
-            (
+                ASSURANCE_UPSTREAM_BUILD,
+                (
                     "the installed engine is the upstream fastokens distribution; "
                     "toktier's readings were taken on its own pinned build and do "
                     "not carry over"
                 ),
-            None,
-        )
+                None,
+            )
+        if entry is None:
+            # The premise that failed is this build's own registry, not
+            # the installed engine: with no node there is no list of
+            # published wheels to compare a digest against, and no guard
+            # to compile either. Printing an install command here would
+            # name a remedy for a state the installed engine is not in --
+            # it may well be the published wheel already.
+            return report(
+                ASSURANCE_UNRECOGNIZED_BUILD,
+                (
+                    "this build's shipped registry carries no engine_distributions "
+                    "node for fastokens, so no published wheel is on file to "
+                    "compare the installed engine against and the Unicode guard "
+                    "cannot be compiled either (unicode_guard.active reads false "
+                    "for the same reason); the pinned readings do not apply, "
+                    "whatever is installed"
+                ),
+                None,
+            )
         return report(
             ASSURANCE_UNRECOGNIZED_BUILD,
             (
                 "the engine digest of the installed fastokens package is not among "
                 "the wheels toktier published for this release (a wheel built on "
                 "another host or toolchain usually differs), so the pinned readings "
-                "do not apply; install the published wheel "
-                f"({_PUBLISHED_WHEEL_COMMAND}) to run the certified bytes"
+                "do not apply; to run the certified bytes, replace what is "
+                f"installed: {_published_wheel_command(entry)}"
             ),
             None,
         )
+    # A known wheel was found in the node, so there is a node.
     assert entry is not None
     if guard is None:
         return report(

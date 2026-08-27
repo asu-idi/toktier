@@ -480,9 +480,14 @@ is active; a guarded request takes the path
 `hf_full_fastokens_unicode_skew_guard`, an adapter-internal fallback of the
 same kind as the existing `hf_full_fastokens_guard`, not a routing
 fallback. `known_wheel` names the published wheel the bytes were
-recognised as, `assurance_reason` carries the sentence for a `false`
-state, and `advisory` reports a coinstalled distribution that records the
-same files, with the reinstall command.
+recognised as, and `assurance_reason` carries the sentence for a `false`
+state. `advisory` reports one of two states beside the assurance, in the
+number of distributions it is actually about: a distribution installed
+beside the one whose bytes are on disk and recording the same files, or a
+RECORD that names those files without describing them, which is why no
+distribution is reported as owning them. Both carry the reinstall
+command. `toktier doctor` prints the same sentence as
+`fastokens_advisory`, so neither face says less than the other.
 
 The family premise has two halves and they are not the same question.
 Whether the adapter can be opened for a family at all is the certified

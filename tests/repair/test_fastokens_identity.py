@@ -272,7 +272,54 @@ def test_mixed_bytes_have_no_owner_but_stay_verifiable(site: Path) -> None:
     identity = adapter.fastokens_identity()
     assert identity.owner is None
     assert identity.verifiable
-    assert len(identity.coinstalled) == 2
+    # Nothing owns the bytes, so nothing is co-installed *with* an
+    # owner; the state is that both RECORDs describe other bytes.
+    assert identity.coinstalled == ()
+    assert len(identity.unowned) == 2
+
+
+def test_one_distribution_whose_record_does_not_match_is_not_coinstalled(
+    site: Path,
+) -> None:
+    """D1: a single installation is never reported as sharing with itself.
+
+    A RECORD entry that no longer describes the file beside it is the
+    metadata disagreeing with the bytes. Reporting the one installed
+    distribution as co-installed said a second installation was here,
+    and phrased one distribution as several.
+    """
+    install(site, PINNED, PINNED_VERSION, flavour="pinned")
+    record = next((site).glob(f"{PINNED.replace('-', '_')}-*.dist-info/RECORD"))
+    lines = record.read_text(encoding="utf-8").splitlines()
+    first, _, size = lines[0].rpartition(",")
+    name, _, _digest = first.rpartition(",")
+    record.write_text(
+        "\n".join([f"{name},sha256=" + "A" * 43 + f",{size}", *lines[1:]]) + "\n",
+        encoding="utf-8",
+    )
+
+    identity = adapter.fastokens_identity()
+
+    assert identity.owner is None
+    assert identity.verifiable
+    assert identity.coinstalled == ()
+    assert [owner.label for owner in identity.unowned] == [
+        f"{PINNED} {PINNED_VERSION}"
+    ]
+    advisory = adapter.assess(
+        identity,
+        entry=make_entry(tree_digest(site / "fastokens")),
+        guard=None,
+        oracle_version="0.22.2",
+        family=None,
+        artifact_sha256=None,
+    ).advisory
+    assert advisory is not None
+    assert "the RECORD of 'toktier-fastokens 0.3.1.1' names" in advisory
+    # One distribution is spoken of in the singular, and the sentence
+    # does not claim two of anything.
+    for plural in ("the RECORDs", "the distributions", "neither"):
+        assert plural not in advisory
 
 
 def test_a_shadowing_copy_is_not_verifiable(site: Path, tmp_path: Path) -> None:
@@ -361,8 +408,15 @@ def test_s2_unrecognized_build_when_the_digest_is_not_listed(
     assert stats["exact_id_guarantee"] is False
     assert stats["guarantee_basis"] is None
     assert stats["known_wheel"] is None
-    assert "not among the wheels toktier published" in str(stats["assurance_reason"])
-    assert "--only-binary toktier-fastokens" in str(stats["assurance_reason"])
+    reason = str(stats["assurance_reason"])
+    assert "not among the wheels toktier published" in reason
+    # The remedy has to move a same-version installation, which a plain
+    # `pip install` leaves in place, and it names the distribution the
+    # registry records rather than a version written here.
+    assert (
+        'pip install --force-reinstall --no-deps --only-binary :all: '
+        '"toktier-fastokens==0.3.1.1"' in reason
+    )
     # The guard is unconditional: it is active in this state as well.
     assert cast(dict[str, object], stats["unicode_guard"])["active"] is True
 
@@ -423,7 +477,9 @@ def test_s4c_mixed_bytes_are_unrecognized_with_an_advisory(
     stats = repair.stats()
     assert stats["engine_assurance"] == "unrecognized_build"
     assert stats["engine_distribution"] is None
-    assert "match neither completely" in str(stats["advisory"])
+    advisory = str(stats["advisory"])
+    assert "the RECORDs of" in advisory and "name the fastokens files" in advisory
+    assert "are not the ones they recorded" in advisory
 
 
 def test_s5_not_installed_refuses_as_before(
@@ -533,6 +589,13 @@ def test_a_missing_registry_node_is_fail_closed(
     assert stats["engine_assurance"] == "unrecognized_build"
     assert stats["exact_id_guarantee"] is False
     assert cast(dict[str, object], stats["unicode_guard"])["active"] is False
+    # D5: the premise that failed is this build's registry, so the
+    # sentence names it and prints no command for the installed engine,
+    # which is the published wheel and needs no replacing.
+    reason = str(stats["assurance_reason"])
+    assert "carries no engine_distributions node" in reason
+    assert "unicode_guard.active reads false" in reason
+    assert "pip install" not in reason
 
 
 def test_a_directly_constructed_adapter_carries_no_assurance() -> None:

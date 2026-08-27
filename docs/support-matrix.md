@@ -146,7 +146,7 @@ one of these states in `explain()["session_repair"]["engine_assurance"]` and
 | `engine_assurance` | Meaning | `exact_id_guarantee` |
 |---|---|---|
 | `certified_pinned` | the installed bytes are a published wheel listed in the shipped registry, the Unicode guard is active, the installed reference is the judged one, and the family is in the evidence | `true` (guarded) |
-| `unrecognized_build` | the pinned distribution is installed but its engine digest is not one the registry lists (a wheel built on another host or toolchain usually differs) | `false` |
+| `unrecognized_build` | the engine digest of the installed package is not one the registry lists (a wheel built on another host or toolchain usually differs), or this build's registry carries no `engine_distributions` node at all, in which case there is nothing to compare a digest against; `assurance_reason` says which of the two | `false` |
 | `upstream_build` | the installed engine is the upstream fastokens distribution | `false` |
 | `guard_disabled` | the guard could not be compiled from the registry | `false` |
 | `oracle_mismatch` | the installed `tokenizers` is not the judged version | `false` |

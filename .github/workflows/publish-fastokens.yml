@@ -1,0 +1,100 @@
+# Publish the pinned Fastokens distribution (toktier-fastokens) to PyPI via
+# trusted publishing (OIDC), from the assets attached to a release whose tag
+# is toktier-fastokens-v<version>.
+#
+# This workflow uploads; it does not build. The certified subject of the
+# pinned distribution is the engine digest of one specific wheel, and that
+# digest reproduces only under the fixed build root the wheel was built
+# with (packaging/fastokens-pinned/README.md). A wheel rebuilt here would
+# carry a different digest than the one the shipped registry lists, so the
+# release assets are downloaded as built, checked against the digests
+# recorded in packaging/fastokens-pinned/SHA256SUMS, and uploaded as they
+# are. Attestations are off for the same reason: this workflow is not the
+# builder.
+#
+# 0.3.1.1 was uploaded by hand before this workflow existed; its digests are
+# the first two distribution lines in SHA256SUMS. The first release this
+# workflow publishes is the next one.
+name: Publish toktier-fastokens
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-fastokens-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: >-
+      ${{ !github.event.release.draft
+          && !github.event.release.prerelease
+          && startsWith(github.event.release.tag_name, 'toktier-fastokens-v') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Download the release assets as built
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          mkdir -p dist
+          gh release download "$TAG" --dir dist \
+            --pattern 'toktier_fastokens-*.whl' \
+            --pattern 'toktier_fastokens-*.tar.gz'
+          ls -l dist
+          test "$(ls dist/*.whl | wc -l)" -ge 1
+          test "$(ls dist/*.tar.gz | wc -l)" -eq 1
+      - name: Check the assets against the recorded digests
+        # Every downloaded file must appear in SHA256SUMS with the same
+        # digest; a file the record does not name is refused as well.
+        run: |
+          cd dist
+          for file in *; do
+            grep -F -q "  $file" ../packaging/fastokens-pinned/SHA256SUMS \
+              || { echo "no recorded digest for $file"; exit 1; }
+          done
+          sha256sum --check --ignore-missing --strict \
+            ../packaging/fastokens-pinned/SHA256SUMS
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: "3.10"
+      - name: Check the distribution metadata
+        run: |
+          python -m pip install --disable-pip-version-check twine==7.0.0
+          twine check --strict dist/*
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pypi-fastokens-${{ github.event.release.tag_name }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: check
+    runs-on: ubuntu-24.04
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pypi-fastokens-${{ github.event.release.tag_name }}
+          path: dist
+      - name: Publish to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist
+          attestations: false
+          verbose: true

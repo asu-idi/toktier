@@ -72,9 +72,14 @@ dependencies = [
 
 [project.optional-dependencies]
 # Explicit experimental alternative.  It is never selected by the certified
-# policy and carries no TokTier exact-ID guarantee.
+# policy; the adapter is admitted only under EXPERIMENTAL.  From 0.2.7 the
+# extra resolves to toktier-fastokens, the pinned build of fastokens 0.3.1
+# with the toktier patch series that the toktier project publishes, so that
+# the engine bytes the readings describe are the ones this extra installs.
+# It keeps the upstream import name `fastokens`; install either it or the
+# upstream distribution, not both (packaging/fastokens-pinned/README.md).
 fastokens = [
-    "fastokens==0.3.1",
+    "toktier-fastokens==0.3.1.1",
 ]
 # Prebuilt delivery mode for the GPU backend: the shipped fatbin is loaded
 # through the CUDA driver API (bound via the standard library's ctypes over

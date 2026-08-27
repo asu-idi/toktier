@@ -150,6 +150,23 @@ def verify(wheel: Path) -> None:
         requirements = metadata.get_all("Requires-Dist", failobj=[])
         if any(re.match(r"(?i)^gigatoken(?:\s|\[|;|$)", item) for item in requirements):
             _fail("wheel metadata requires a second Gigatoken distribution")
+        # The fastokens extra resolves to the pinned distribution this
+        # project publishes, at the version the registry binding names, and
+        # never to the upstream distribution of the same import name.
+        fastokens_binding = json.loads(
+            (ROOT / "tools/fastokens_binding.json").read_bytes()
+        )
+        pinned = fastokens_binding["distribution"]
+        pinned_requirement = f"{pinned['name']}=={pinned['version']}"
+        upstream_name = re.compile(r"(?i)^fastokens(?:\s|\[|=|<|>|!|~|;|$)")
+        if any(upstream_name.match(item) for item in requirements):
+            _fail("wheel metadata requires the upstream fastokens distribution")
+        if not any(
+            item.replace(" ", "").lower().startswith(pinned_requirement.lower())
+            and 'extra=="fastokens"' in item.replace(" ", "").lower()
+            for item in requirements
+        ):
+            _fail(f"the fastokens extra does not require {pinned_requirement}")
         extras = set(metadata.get_all("Provides-Extra", failobj=[]))
         if "fast" in extras:
             _fail("wheel metadata still exposes the obsolete fast extra")

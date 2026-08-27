@@ -59,6 +59,22 @@ def test_release_artifact_set_is_one_abi3_linux_wheel() -> None:
     )
 
 
+def test_release_artifact_gate_requires_the_pinned_fastokens_extra() -> None:
+    """The extra names the published distribution, never the upstream one."""
+    import json
+
+    import tomllib
+
+    source = VERIFY_ARTIFACTS.read_text(encoding="utf-8")
+    assert "tools/fastokens_binding.json" in source
+    assert "requires the upstream fastokens distribution" in source
+    binding = json.loads((ROOT / "tools/fastokens_binding.json").read_bytes())
+    pinned = binding["distribution"]
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    extra = project["project"]["optional-dependencies"]["fastokens"]
+    assert extra == [f"{pinned['name']}=={pinned['version']}"]
+
+
 @pytest.mark.parametrize("representation", ["hex", "bytes"])
 def test_release_artifact_gate_rejects_identity_sentinel(
     tmp_path: Path, representation: str

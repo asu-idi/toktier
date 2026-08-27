@@ -484,6 +484,17 @@ recognised as, `assurance_reason` carries the sentence for a `false`
 state, and `advisory` reports a coinstalled distribution that records the
 same files, with the reinstall command.
 
+The family premise has two halves and they are not the same question.
+Whether the adapter can be opened for a family at all is the certified
+repair table's answer: a family and artifact with no entry there is
+refused with `UNSUPPORTED_CONFIG` when a session asks for it, and
+`toktier doctor --family <family>` reports that half as
+`fastokens_family_admitted` with `fastokens_exact_id_guarantee: false`.
+Whether the pinned readings cover a family is the evidence's answer, and
+that is the one `engine_assurance: family_outside_evidence` states. The
+readings cover more families than the repair table reaches, so a family
+can be admitted by neither, by the evidence only, or by both.
+
 Two refusals are new, both `BackendUnavailable`: the bytes the import
 system would run are not the ones any installed distribution recorded
 (`engine_assurance: unverifiable` in the details), and metadata whose files

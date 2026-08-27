@@ -389,11 +389,15 @@ A record is written only when the route served every document. A run it
 served in part is reported and not recorded: those documents were
 compared and agreed, but the run does not cover the route. A run it
 served not at all measured nothing, because both sides were then the
-reference engine, and the note says which of two things happened: a route
-the plan did not admit, which `doctor` explains, or a route the plan
-admitted that every document left for a per-input reason, where the note
-lists the reason codes the ledger recorded and `explain()` on a tokenizer
-names the reason for the same input.
+reference engine, and the note says which of two things happened. A route
+the plan did not admit: the note carries the plan's own reason codes, the
+same ones `Tokenizer::plan().reasons` holds in typed form, and
+`toktier-rust doctor` reports the build facts they rest on. Or a route the
+plan admitted that every document left for a per-input reason: the note
+lists the codes the ledger recorded, which is what each encode's
+`ExecutionFacts::reason` carried. This crate has no `explain()`, so no
+note sends a reader to one; the Python package's `verify-local` names its
+own `toktier doctor --family` and `explain()` for the same two states.
 
 What it writes is a record, not a certificate. The record is filed under
 the device, delivery, image digest, compiler triple, driver, the two

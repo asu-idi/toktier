@@ -317,8 +317,11 @@ def test_doctor_human(
         "fastokens_engine_assurance: upstream_build\n"
         "fastokens_exact_id_guarantee: false\n"
         "fastokens_policy: experimental\n"
+        "fastokens_family_admitted: none\n"
+        "fastokens_family_admission_reason: none\n"
         "fastokens_coinstalled: none\n"
         "fastokens_orphaned: none\n"
+        "fastokens_advisory: none\n"
         "nvcc_available: true\n"
         "nvcc_path: /opt/cuda/bin/nvcc\n"
         "nvcc_resolved_path: /opt/cuda/bin/nvcc\n"
@@ -454,8 +457,11 @@ def test_doctor_json(
         "fastokens_engine_assurance": "upstream_build",
         "fastokens_exact_id_guarantee": False,
         "fastokens_policy": "experimental",
+        "fastokens_family_admitted": None,
+        "fastokens_family_admission_reason": None,
         "fastokens_coinstalled": None,
         "fastokens_orphaned": None,
+        "fastokens_advisory": None,
         "nvcc_available": True,
         "nvcc_path": "/opt/cuda/bin/nvcc",
         "nvcc_resolved_path": "/opt/cuda/bin/nvcc",
@@ -1442,7 +1448,10 @@ def test_verify_local_points_a_route_the_plan_did_not_admit_at_doctor(
     not_admitted = capsys.readouterr().out
     assert "the plan did not admit the cpu route" in not_admitted
     assert "served none of the 2 documents" in not_admitted
-    assert "`toktier doctor --family <family>` says why" in not_admitted
+    assert (
+        "`toktier doctor --family <family>` reports the plan's own reasons"
+        in not_admitted
+    )
     assert "explain()" not in not_admitted
 
     assert cli.main([*arguments, "--synthetic", "2", "--json"]) == 0
@@ -1769,6 +1778,115 @@ def test_doctor_answers_for_one_family_when_asked(
     assert family["fast_cpu_status"] == "certified_source"
     assert family["automatic_effective_backend"] == "gpu"
     assert family["automatic_effective_backend_below_gpu_threshold"] == "fast_cpu"
+
+
+def test_doctor_applies_the_family_premise_the_adapter_actually_has(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--family`` answers about the family, not only about the engine.
+
+    The adapter reaches the families with a repair-table entry. A family
+    outside that table is refused when a session asks for it, so the
+    report may not print the same guarantee for it as for a family the
+    adapter can open; ``engine_assurance`` keeps stating the
+    engine-level fact either way.
+    """
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    _set_doctor_probes(monkeypatch)
+    from toktier.repair import fastokens
+
+    # A pinned engine whose bytes the registry lists: the engine-level
+    # answer is `certified_pinned`, so the family premise is the only
+    # thing that can move `exact_id_guarantee`.
+    monkeypatch.setattr(
+        fastokens,
+        "assess",
+        lambda identity, **kwargs: fastokens.AssuranceReport(
+            assurance=fastokens.ASSURANCE_CERTIFIED_PINNED,
+            reason=None,
+            known_wheel={"filename": "toktier_fastokens-0.3.1.1.whl"},
+            guard_active=True,
+            guard_codepoints=154,
+            basis={"statement": "guarded"},
+            advisory=None,
+            distribution="toktier-fastokens",
+            version="0.3.1.1",
+            engine_digest="d" * 64,
+        ),
+    )
+
+    assert cli.main(["doctor", "--json", "--family", "qwen3_8b"]) == 0
+    admitted = json.loads(capsys.readouterr().out)
+    assert admitted["fastokens_family_admitted"] is True
+    assert admitted["fastokens_exact_id_guarantee"] is True
+    assert admitted["fastokens_family_admission_reason"] is None
+
+    assert cli.main(["doctor", "--json", "--family", "hy3"]) == 0
+    outside = json.loads(capsys.readouterr().out)
+    assert outside["fastokens_family_admitted"] is False
+    assert outside["fastokens_exact_id_guarantee"] is False
+    reason = outside["fastokens_family_admission_reason"]
+    assert isinstance(reason, str) and "repair-table entry" in reason
+    # The engine-level fact is not rewritten by a family premise.
+    assert outside["fastokens_engine_assurance"] == "certified_pinned"
+
+    # Without a family the premise does not apply and says so.
+    assert cli.main(["doctor", "--json"]) == 0
+    generic = json.loads(capsys.readouterr().out)
+    assert generic["fastokens_family_admitted"] is None
+    assert generic["fastokens_exact_id_guarantee"] is True
+
+
+def test_doctor_family_reports_the_plan_reasons_verify_local_points_at(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``verify-local`` sends a reader here, so the answer has to be here.
+
+    A plan that admitted no accelerated route says why in its reasons,
+    and the family block carries them with the detail the planner
+    recorded -- the axis of a binding that did not verify included.
+    """
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    certified = {"tokenizers": "0.22.2", "transformers": "4.57.6"}
+    monkeypatch.setattr(
+        importlib.metadata, "version", lambda name: certified.get(name, "1.2.3")
+    )
+    _set_doctor_probes(monkeypatch)
+    # The planner reads the engine facts through its own probe module,
+    # so the fixture's fast-CPU facts are placed where the planner looks
+    # for them: a source digest that is not the bound one is exactly the
+    # state the sentence under test is about.
+    from toktier.backends.fast_cpu import FastCpuEngineFacts
+
+    routing_probe = importlib.import_module("toktier.routing.probe")
+    monkeypatch.setattr(
+        routing_probe,
+        "fast_cpu_engine_facts",
+        lambda: FastCpuEngineFacts(
+            version="0.10.0+toktier.pinned.1",
+            source_digest="f" * 64,
+            build_flags=("profile=release", "opt-level=3"),
+            toolchain="rustc 1.93.1 (test fixture)",
+            config_digest="e" * 64,
+        ),
+    )
+
+    assert cli.main(["doctor", "--json", "--family", "qwen3_8b"]) == 0
+    family = json.loads(capsys.readouterr().out)["family"]
+    reasons = family["plan_reasons"]
+
+    assert isinstance(reasons, list)
+    binding = [
+        item for item in reasons if item["code"] == "R_ENGINE_BINDING_MISMATCH"
+    ]
+    assert binding, reasons
+    # The doctor fixture reports a fast-CPU engine whose source digest is
+    # not the bound one, which is the state the sentence is about.
+    assert binding[0]["backend"] == "fast_cpu"
+    assert binding[0]["detail"]["axis"] == "source_digest"
+    assert binding[0]["detail"]["observed_digest"] == "f" * 64
+    assert binding[0]["detail"]["expected_digest"] != "f" * 64
 
 
 def test_doctor_refuses_a_family_the_package_does_not_ship(

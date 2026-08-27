@@ -348,7 +348,8 @@ mod tests {
             none.contains("was admitted and served none of the 3 documents")
                 && none.contains("per-input reason (R_INPUT_ADDED_TOKEN x3)")
                 && none.contains("measured nothing about it")
-                && none.contains("`explain()` on a tokenizer for the same input names the reason"),
+                && none.contains("`ExecutionFacts::reason`")
+                && none.contains("`Tokenizer::plan().reasons`"),
             "{none}"
         );
         // The plan admitted the route, or the run would have been
@@ -374,6 +375,35 @@ mod tests {
             assert!(!some.contains(word), "{some}");
         }
         assert!(some.contains("no record was written"), "{some}");
+    }
+
+    /// This crate has no `explain()`, so no message may send a reader
+    /// to one: a consumer who follows that sentence gets a compile
+    /// error, not an answer.
+    #[test]
+    fn no_note_points_at_a_python_only_surface() {
+        for note in [
+            uncovered_note("cpu", 0, 3, &[("R_INPUT_ADDED_TOKEN".to_owned(), 3)]),
+            uncovered_note("cpu", 0, 3, &[]),
+            uncovered_note("gpu", 2, 3, &[("R_EXEC_FAULT".to_owned(), 1)]),
+        ] {
+            assert!(!note.contains("explain()"), "{note}");
+        }
+    }
+
+    /// A reader at a prompt gets wrapped lines that end in a full stop,
+    /// not one physical line of several hundred characters.
+    #[test]
+    fn the_uncovered_notes_are_wrapped_and_punctuated() {
+        for note in [
+            uncovered_note("cpu", 0, 3, &[("R_INPUT_ADDED_TOKEN".to_owned(), 3)]),
+            uncovered_note("gpu", 2, 3, &[]),
+        ] {
+            assert!(note.ends_with('.'), "{note}");
+            for line in note.lines() {
+                assert!(line.chars().count() <= 100, "{line}");
+            }
+        }
     }
 
     fn key() -> VerificationKey {
@@ -787,9 +817,11 @@ fn unavailable(engine: Engine, family: &str, note: String) -> Comparison {
     }
 }
 
-/// The ledger's own token for a routing reason, so the note names the
-/// same word `explain()` would. Codes this release has no frozen name
-/// for pass through as the router wrote them.
+/// The ledger's own token for a routing reason, so a note names the
+/// code the router recorded rather than a second reading of the path.
+/// Codes this release has no frozen name for pass through as the router
+/// wrote them, and the plan-time variants render as this crate's own
+/// names for them.
 fn reason_code(reason: &crate::ReasonCode) -> String {
     use crate::ReasonCode;
     match reason {
@@ -816,11 +848,18 @@ fn reason_code(reason: &crate::ReasonCode) -> String {
 /// coverage, not a result, and calling that "measured nothing" would be
 /// less than the truth. Neither writes a record, and neither is sent to
 /// `doctor`: the plan admitted the route (a plan that did not is
-/// answered before any document is encoded, and that answer does point
-/// at `doctor`), so what kept every document off it is a per-input
-/// reason, which `explain()` on a tokenizer names for the same input.
-/// `reasons` carries the codes the ledger recorded for the documents
-/// the route did not serve, so the sentence can name them.
+/// answered before any document is encoded, and that answer carries the
+/// plan's own reasons), so what kept every document off it is a per-input
+/// reason. `reasons` carries the codes the ledger recorded for the
+/// documents the route did not serve, so the sentence can name them,
+/// and it points at the Rust surfaces that carry the same answer:
+/// `ExecutionFacts::reason` per encode, `Tokenizer::plan().reasons` for
+/// the plan. This crate has no `explain()`, so it does not send anyone
+/// there.
+///
+/// The sentence is wrapped at a terminal width and ends in a full stop:
+/// it is read by a person at a prompt, and one 300-character physical
+/// line is not.
 fn uncovered_note(engine: &str, served: u64, documents: u64, reasons: &[(String, u64)]) -> String {
     if served == 0 {
         let recorded = if reasons.is_empty() {
@@ -833,18 +872,20 @@ fn uncovered_note(engine: &str, served: u64, documents: u64, reasons: &[(String,
                 .join(", ")
         };
         format!(
-            "the {engine} route was admitted and served none of the {documents} \
-             documents: each one left it for a per-input reason ({recorded}), so this \
-             run measured nothing about it and no record was written; `explain()` on a \
-             tokenizer for the same input names the reason, and `doctor` answers about \
-             the plan rather than about one input"
+            "the {engine} route was admitted and served none of the {documents} documents:\n\
+             each one left it for a per-input reason ({recorded}).\n\
+             This run measured nothing about it and no record was written.\n\
+             Those codes are what each document's `ExecutionFacts::reason` carried;\n\
+             `Tokenizer::plan().reasons` says why the admitted route is what it is, and\n\
+             `toktier-rust doctor` answers about this build rather than about one input."
         )
     } else {
         format!(
-            "the {engine} route served {served} of {documents} documents; the served \
-             ones compared equal, but the run does not cover the route and no record \
-             was written; the rest went to the reference path document by document, \
-             so a record needs an input the route serves throughout"
+            "the {engine} route served {served} of {documents} documents; \
+             the served ones compared equal,\n\
+             but the run does not cover the route and no record was written.\n\
+             The rest went to the reference path document by document, so a record needs\n\
+             an input the route serves throughout."
         )
     }
 }
@@ -921,6 +962,23 @@ fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Compar
         Engine::Gpu => crate::Backend::Gpu,
     };
     if !plan.backends.contains(&expected_backend) {
+        // The plan already recorded why, so the note carries those codes
+        // rather than sending the reader to a command that answers a
+        // different question. `Tokenizer::plan().reasons` is the same
+        // list in typed form, and `toktier-rust doctor` reports the
+        // build facts the plan-time codes rest on.
+        let recorded = if plan.reasons.is_empty() {
+            "the plan recorded no reason".to_owned()
+        } else {
+            format!(
+                "the plan recorded {}",
+                plan.reasons
+                    .iter()
+                    .map(reason_code)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        };
         return Ok(Comparison {
             engine: engine.word().to_owned(),
             family: family.to_owned(),
@@ -932,8 +990,10 @@ fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Compar
             first_mismatch: None,
             record: None,
             note: Some(format!(
-                "this build admitted no {} route for {family}, so there is nothing to compare; \
-                 `doctor` says why",
+                "this build admitted no {} route for {family}, so there is nothing to compare.\n\
+                 {recorded}.\n\
+                 `Tokenizer::plan().reasons` carries the same codes in typed form, and\n\
+                 `toktier-rust doctor` reports the build facts they rest on.",
                 engine.word()
             )),
         });

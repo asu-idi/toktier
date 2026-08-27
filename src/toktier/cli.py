@@ -47,6 +47,7 @@ from .policy import BACKEND_FAST_CPU, BACKEND_GPU
 
 if TYPE_CHECKING:
     from .engine.gpu.toolchain import NvccFacts
+    from .routing.probe import DeviceInfo, KernelCacheState
 
 _USAGE_ERROR = 64
 _TOKTIER_ERROR = 2
@@ -195,6 +196,76 @@ def _prebuilt_facts() -> tuple[bool, str | None]:
     return shipped_prebuilt_facts()
 
 
+class _PlanProbe:
+    """The devices this command observed, in the shape the planner takes.
+
+    ``doctor`` inspects and loads no kernel, so the kernel slot carries
+    the shipped, read-only facts of the installation -- the same ones
+    this command prints under ``prebuilt_*`` -- rather than the loader
+    state of a process that has built or loaded one. Device and driver
+    facts are the ones already probed for this report, so the plan is
+    read against the machine, not against an empty stand-in.
+    """
+
+    def __init__(
+        self, devices: Sequence[DeviceInfo], driver_version: str | None
+    ) -> None:
+        self._devices = tuple(devices)
+        self._driver_version = driver_version
+
+    def devices(self) -> tuple[DeviceInfo, ...]:
+        return self._devices
+
+    def driver_version(self) -> str | None:
+        return self._driver_version
+
+    def kernel_cache(self) -> KernelCacheState:
+        from .routing.probe import NoDevices
+
+        return NoDevices().kernel_cache()
+
+
+def _plan_reasons(
+    family: str,
+    *,
+    artifact_sha256: str | None,
+    config: Config,
+    devices: Sequence[DeviceInfo],
+    driver_version: str | None,
+) -> list[dict[str, object]] | None:
+    """The planner's own reasons for this family, as ``explain()`` gives them.
+
+    ``verify-local`` sends a reader here when the plan admitted no
+    accelerated route, so the report has to carry what the plan
+    recorded -- the reason code and its detail, including the axis and
+    the expected and observed values of an engine binding that did not
+    verify. Read-only, like the rest of this command: it plans against
+    the facts already gathered for this report and loads nothing.
+
+    ``None`` when the planner cannot answer at all (the reference
+    package is not installed, or the registry cannot be read); the plan
+    is then not a fact this command can report, and saying nothing is
+    better than printing an empty list as "no reasons".
+    """
+    from .routing.explain import reason_to_dict
+    from .routing.plan import plan as build_plan
+    from .routing.probe import probe
+    from .routing.registry_load import shipped_registry
+
+    try:
+        registry = shipped_registry()
+        snapshot = probe(
+            family=family,
+            registry=registry,
+            artifact_sha256=artifact_sha256,
+            device_probe=_PlanProbe(devices, driver_version),
+        )
+        route = build_plan(snapshot, config.routing_policy, registry, config)
+    except ToktierError:
+        return None
+    return [reason_to_dict(reason) for reason in route.reasons]
+
+
 def _family_report(
     family: str,
     *,
@@ -202,6 +273,9 @@ def _family_report(
     observed_architectures: Sequence[str],
     gpu_eligible: bool,
     cpu_profile_ready: bool,
+    config: Config,
+    devices: Sequence[DeviceInfo] = (),
+    driver_version: str | None = None,
 ) -> dict[str, object]:
     """What this machine would do with one named family.
 
@@ -259,6 +333,18 @@ def _family_report(
         ),
         "automatic_effective_backend_below_gpu_threshold": (
             "fast_cpu" if family_cpu_ready else "hf"
+        ),
+        # Why the planner admitted what it did. The two keys above say
+        # what would run; this one says what the planner recorded on the
+        # way there, which is where a binding that did not verify names
+        # its axis and its expected and observed values. ``verify-local``
+        # points at this command for exactly that answer.
+        "plan_reasons": _plan_reasons(
+            entry.family,
+            artifact_sha256=artifact_sha256,
+            config=config,
+            devices=devices,
+            driver_version=driver_version,
         ),
     }
 
@@ -432,6 +518,9 @@ def _doctor_report(
                 cpu_profile_ready=(
                     certified_cpu_profile_ready and gigatoken_runtime_ready
                 ),
+                config=config,
+                devices=probed_devices,
+                driver_version=driver_version,
             )
         ),
         "artifact_cache_dir": str(artifact_cache_dir(config)),
@@ -517,10 +606,31 @@ def _fastokens_doctor_facts(
     family: str | None,
     family_artifact: str | None,
 ) -> dict[str, object]:
-    """The ``fastokens_*`` doctor keys: admission word plus engine assurance."""
+    """The ``fastokens_*`` doctor keys: admission word plus engine assurance.
+
+    With ``--family`` the family premise is applied as well, and it has
+    two halves that are not the same question. Whether the adapter can
+    be opened for the family at all is the repair table's answer
+    (``fastokens_family_admitted``); whether the pinned readings cover
+    it is the evidence's (``engine_assurance``). A family the adapter
+    cannot open carries no guarantee here whatever the engine is, so
+    ``fastokens_exact_id_guarantee`` reads ``false`` for it while
+    ``fastokens_engine_assurance`` keeps stating the engine-level fact.
+    """
     entry = adapter.pinned_engine_entry()
     guard = adapter.compile_unicode_guard(entry)
     orphaned = "; ".join(owner.label for owner in identity.orphaned) or None
+    admitted: bool | None = None
+    admission_reason: str | None = None
+    if family is not None:
+        admitted = adapter.family_admitted(family, family_artifact)
+        if not admitted:
+            admission_reason = (
+                "the adapter has no repair-table entry for this family and "
+                "artifact, so a session that requests it is refused with "
+                "UnsupportedConfig; the engine assurance beside this line is "
+                "about the installed engine, not about this family"
+            )
     if not identity.available:
         return {
             "fastokens_available": False,
@@ -531,8 +641,11 @@ def _fastokens_doctor_facts(
             "fastokens_engine_assurance": None,
             "fastokens_exact_id_guarantee": False,
             "fastokens_policy": "experimental",
+            "fastokens_family_admitted": admitted,
+            "fastokens_family_admission_reason": admission_reason,
             "fastokens_coinstalled": None,
             "fastokens_orphaned": orphaned,
+            "fastokens_advisory": None,
         }
     report = adapter.assess(
         identity,
@@ -552,16 +665,28 @@ def _fastokens_doctor_facts(
             report.known_wheel["filename"] if report.known_wheel else None
         ),
         "fastokens_engine_assurance": report.assurance,
-        "fastokens_exact_id_guarantee": report.exact_id_guarantee,
+        "fastokens_exact_id_guarantee": (
+            report.exact_id_guarantee and admitted is not False
+        ),
         "fastokens_policy": "experimental",
+        "fastokens_family_admitted": admitted,
+        "fastokens_family_admission_reason": admission_reason,
         "fastokens_coinstalled": (
             ", ".join(owner.label for owner in coinstalled)
-            + " (its files were overwritten; uninstalling either removes the "
-            "shared files)"
+            + (
+                " (their files were overwritten; uninstalling any of them "
+                "removes the shared files)"
+                if len(coinstalled) > 1
+                else " (its files were overwritten; uninstalling either "
+                "removes the shared files)"
+            )
             if coinstalled
             else None
         ),
         "fastokens_orphaned": orphaned,
+        # The same sentence ``explain()`` carries, so a reader of one
+        # face is not told less than a reader of the other.
+        "fastokens_advisory": report.advisory,
     }
 
 
@@ -1213,7 +1338,8 @@ def _print_verify_human(payload: Mapping[str, object]) -> None:
                     f"{engine}: the plan did not admit the {engine} route, so "
                     f"it served none of the {documents} documents, this run "
                     "measured nothing about it and no record was written; "
-                    "`toktier doctor --family <family>` says why"
+                    "`toktier doctor --family <family>` reports the plan's own "
+                    "reasons for it under `family.plan_reasons`"
                 )
             elif served == 0:
                 paths = cast(

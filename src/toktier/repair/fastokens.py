@@ -66,6 +66,7 @@ __all__ = [
     "FastokensIdentity",
     "assess",
     "compile_unicode_guard",
+    "family_admitted",
     "fastokens_distribution_identity",
     "fastokens_identity",
     "pinned_engine_entry",
@@ -378,6 +379,25 @@ def _shipped_entry() -> dict[str, Any] | None:
     if not isinstance(entry, dict) or entry.get("backend") != BACKEND_FASTOKENS:
         return None
     return entry
+
+
+def family_admitted(family: str, artifact_sha256: str | None) -> bool:
+    """Whether the adapter can be opened for this family at all.
+
+    A session names a family and an artifact, and the adapter runs the
+    certified repair table's parameters for that exact pair, so a pair
+    with no entry in that table is one the adapter refuses to open
+    (``UnsupportedConfig``) rather than one it answers about. This is a
+    narrower question than the evidence premise behind
+    ``family_outside_evidence``: the readings cover fifteen families,
+    the repair table reaches eleven, and the difference is the set this
+    answer is about.
+    """
+    from .registry import family_spec
+
+    if artifact_sha256 is None:
+        return False
+    return family_spec(family, artifact_sha256) is not None
 
 
 def pinned_engine_entry() -> Mapping[str, Any] | None:

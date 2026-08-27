@@ -48,14 +48,17 @@ binding is installed; `cuda_hardware_present` is the separate device-presence
 answer.
 
 Under the JIT delivery it also reports the toolchain judgement itself, so the
-refusal below is visible before a build is attempted:
+judgement below is visible before a build is attempted:
 `jit_toolchain_observed` is this machine's compiler/runtime triple,
 `jit_toolchain_constraint` is the judged set it is compared against, and
 `jit_toolchain_satisfied` is the shared judgement (`null` under the prebuilt
 delivery, which has no compiler premise). `automatic_gpu_eligible` combines
 that with candidacy, the observed architectures, and the delivery's own
-materials, and `automatic_effective_backend` names what an at-or-above-
-crossover automatic request would then use. `automatic_gpu_candidate` remains
+materials, applying the same rule the plan applies: under the default
+`SUPPORTED` policy an unjudged compiler or an unjudged architecture is a
+coverage gap the route is admitted and labelled `supported_untested` for,
+while `CERTIFIED` refuses it. `automatic_effective_backend` names what an
+at-or-above-crossover automatic request would then use. `automatic_gpu_candidate` remains
 the installation-level fact -- torch importable, GPU not disabled -- and is
 not an eligibility answer.
 

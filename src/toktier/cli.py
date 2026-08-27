@@ -43,7 +43,7 @@ from .paths import (
     private_dir_problem,
     store_state_dir,
 )
-from .policy import BACKEND_FAST_CPU, BACKEND_GPU
+from .policy import BACKEND_FAST_CPU, BACKEND_GPU, RoutingPolicy
 
 if TYPE_CHECKING:
     from .engine.gpu.toolchain import NvccFacts
@@ -266,6 +266,25 @@ def _plan_reasons(
     return [reason_to_dict(reason) for reason in route.reasons]
 
 
+def _policy_admits_coverage_gaps(policy: RoutingPolicy) -> bool:
+    """Whether this policy proceeds past a gap nobody has measured.
+
+    The planner has exactly two such refusals -- a device architecture and
+    a compiler/runtime pair no campaign judged (``docs/contracts/routing.md``
+    checks 9 and 13). Everything the record binds still has to verify; what
+    is missing is coverage. ``SUPPORTED``, the default since 0.2.6, admits
+    both and labels the route ``supported_untested``; ``EXPERIMENTAL``
+    waives them along with everything else waivable; ``CERTIFIED`` refuses
+    them as it always has.
+
+    ``doctor`` answers "what will actually run here?", so it has to apply
+    the same rule the plan applies. Reading the certified-era conjunction
+    on a machine running the default policy reported an ineligible GPU
+    beside a request that went straight to it.
+    """
+    return policy.admits_unjudged_device() or policy is RoutingPolicy.EXPERIMENTAL
+
+
 def _family_report(
     family: str,
     *,
@@ -310,8 +329,18 @@ def _family_report(
                 architecture: statuses.get(architecture, "uncertified")
                 for architecture in observed_architectures
             }
-    family_gpu_eligible = gpu_eligible and any(
+    # The plan refuses a record whose GPU entry is absent or carries a
+    # status outside the eligible set under every policy, and treats an
+    # architecture no campaign judged as a coverage gap the policy in
+    # effect may admit.
+    architecture_admitted = any(
         status in certified for status in architecture_certification.values()
+    )
+    coverage_admitted = _policy_admits_coverage_gaps(config.routing_policy)
+    family_gpu_eligible = (
+        gpu_eligible
+        and gpu_status in certified
+        and (architecture_admitted or coverage_admitted)
     )
     family_cpu_ready = cpu_profile_ready and fast_cpu_status in certified
     return {
@@ -474,15 +503,19 @@ def _doctor_report(
         ninja_available if automatic_delivery == "jit" else prebuilt_native_host_ready
     )
     # The conjunction a caller actually wants: candidacy, an observed
-    # device whose architecture the selected delivery judges, that
-    # delivery's own materials, and the toolchain premise where one
-    # applies (``None`` is "not applicable", not a refusal).
+    # device, that delivery's own materials, and -- where the policy in
+    # effect insists on them -- the two coverage premises, a judged
+    # architecture and a judged compiler/runtime pair (``None`` is "not
+    # applicable", not a refusal). The default policy admits both and
+    # labels such a route ``supported_untested``, so requiring them here
+    # would describe a stricter installation than the next request gets.
+    coverage_admitted = _policy_admits_coverage_gaps(config.routing_policy)
     automatic_gpu_eligible = (
         automatic_gpu_candidate
         and bool(probed_devices)
-        and architecture_admitted
         and delivery_ready
-        and jit_satisfied is not False
+        and (architecture_admitted or coverage_admitted)
+        and (jit_satisfied is not False or coverage_admitted)
     )
     directory_roots_problem = _directory_roots_problem(config)
     family_artifact_sha256: str | None = None

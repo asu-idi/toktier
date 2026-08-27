@@ -375,7 +375,7 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 | `automatic_gpu_candidate` | 仅反映安装层面：`torch` 可导入，且配置未禁用 GPU；并非合格性判定 |
 | `jit_toolchain_satisfied` | JIT 交付下，本机检测到的编译器/运行时三元组是否属于注册表已评审的组合；预编译交付没有这项前提，因此报告 `null` |
 | `jit_toolchain_observed` / `jit_toolchain_constraint` | 本机检测到的三元组，以及用于对照的已评审集合 |
-| `automatic_gpu_eligible` | 以下条件的合取结果：候选条件成立；至少检测到一台设备，且其架构已通过所选交付方式的评审；该交付方式自身的材料齐备；工具链前提成立 |
+| `automatic_gpu_eligible` | 当前生效策略所用的合取结果：候选条件成立；至少检测到一台设备；该交付方式自身的材料齐备；在 `CERTIFIED` 下还要求架构与工具链均已评审。默认的 `SUPPORTED` 策略把后两项视为覆盖面缺口，照常运行并把该路径标为 `supported_untested`，本字段随之给出同样的结论 |
 | `automatic_effective_backend` | 对具备 CPU 快路径认证的 family，达到或超过 crossover 的自动请求实际使用的后端：`gpu`、`fast_cpu` 或 `hf` |
 | `directory_roots_usable` / `directory_roots_problem` | 上述三个已解析目录根能否承载其用途，以及无法承载时的原因——与下一条命令会以 `CONFIG_INVALID` 作答的判断相同，且只读取、不创建任何目录 |
 
@@ -387,9 +387,12 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 字段（同样属实）为 `fast_cpu`。
 
 因此，在未经评审的编译器上安装 `toktier[gpu-jit]`，会同时报告
-`automatic_gpu_candidate: true`、`jit_toolchain_satisfied: false`、
-`automatic_gpu_eligible: false` 与 `automatic_effective_backend: fast_cpu`
-——其结论与 `toktier gpu compile` 一致，而且无需先运行该命令。
+`automatic_gpu_candidate: true` 与 `jit_toolchain_satisfied: false`，随后按当前
+生效的策略作答：在默认的 `SUPPORTED` 策略下为 `automatic_gpu_eligible: true`
+与 `automatic_effective_backend: gpu`——该策略会运行这一未经评审的组合，并把
+它标为 `supported_untested`；在 `CERTIFIED` 下，同一台机器则读到 `false` 与
+`fast_cpu`。两种情形下，这个结论都与 `toktier gpu compile` 以及下一次请求所走
+的路一致，而且无需先运行它们。
 
 ### 缓存、状态与目录布局
 

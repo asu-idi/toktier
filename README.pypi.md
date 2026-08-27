@@ -424,7 +424,7 @@ tokenizer or compiling anything:
 | `automatic_gpu_candidate` | installation level only: `torch` is importable and the GPU is not disabled by configuration; it is not an eligibility result |
 | `jit_toolchain_satisfied` | under JIT delivery, whether the observed compiler/runtime triple is one the registry judged; `null` under prebuilt delivery, which has no such premise |
 | `jit_toolchain_observed` / `jit_toolchain_constraint` | the triple this machine presents, and the judged set it is compared against |
-| `automatic_gpu_eligible` | the conjunction: candidate, an observed device whose architecture the selected delivery judges, that delivery's own materials, and the toolchain premise |
+| `automatic_gpu_eligible` | the conjunction the policy in effect applies: candidate, an observed device, and that delivery's own materials, plus — under `CERTIFIED` — a judged architecture and a judged toolchain. The default `SUPPORTED` policy treats those last two as coverage gaps, runs them, and labels the route `supported_untested`, so the field follows suit |
 | `automatic_effective_backend` | what an at-or-above-crossover automatic request would use for a CPU-fast-certified family: `gpu`, `fast_cpu`, or `hf` |
 | `directory_roots_usable` / `directory_roots_problem` | whether the three resolved roots above can hold what they are for, and what stands in the way when they cannot — the same judgement the next command would answer with `CONFIG_INVALID`, read without creating anything |
 
@@ -437,9 +437,13 @@ where families differ: one whose CPU lane is the reference engine reads
 reads `fast_cpu`.
 
 So a `toktier[gpu-jit]` install on an unjudged compiler reports
-`automatic_gpu_candidate: true` beside `jit_toolchain_satisfied: false`,
-`automatic_gpu_eligible: false`, and `automatic_effective_backend: fast_cpu` —
-the same conclusion `toktier gpu compile` reaches, before you run it.
+`automatic_gpu_candidate: true` beside `jit_toolchain_satisfied: false`, and
+then answers for the policy in effect: under the default `SUPPORTED` policy
+`automatic_gpu_eligible: true` and `automatic_effective_backend: gpu`, because
+that policy runs the unjudged combination and labels it `supported_untested`;
+under `CERTIFIED` the same machine reads `false` and `fast_cpu`. Either way it
+is the conclusion `toktier gpu compile` and the next request reach, before you
+run them.
 
 ### Caches, state, and directory layout
 

@@ -555,24 +555,8 @@ def test_doctor_reports_a_judged_jit_toolchain_as_eligible(
     assert report["automatic_effective_backend"] == "gpu"
 
 
-def test_doctor_reports_an_unjudged_jit_toolchain_as_ineligible(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """The case a new user hit: architecture judged, compiler not.
-
-    ``automatic_gpu_candidate`` stays true because torch is installed and
-    the architecture is in the source certificate. The new fields say
-    what the next ``toktier gpu compile`` would say: this exact compiler
-    release was never judged, so automatic requests run on the CPU.
-    """
-    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
-    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
-    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
-    _set_doctor_probes(monkeypatch)
-    _select_jit_profile(monkeypatch)
-    _set_certified_oracle_versions(monkeypatch)
+def _select_unjudged_jit_compiler(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A compiler release no campaign has judged, beside a judged device."""
     monkeypatch.setattr(
         cli,
         "_jit_nvcc_report",
@@ -585,6 +569,28 @@ def test_doctor_reports_an_unjudged_jit_toolchain_as_ineligible(
             checked=("torch CUDA_HOME: /usr/local/cuda/bin/nvcc (found)",),
         ),
     )
+
+
+def test_doctor_reports_an_unjudged_jit_toolchain_as_eligible_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Architecture judged, compiler not: a coverage gap the default admits.
+
+    ``SUPPORTED`` proceeds past an unjudged compiler/runtime pair and
+    labels the route ``supported_untested``, so a request here does reach
+    the GPU. The observation stays visible -- ``jit_toolchain_satisfied``
+    is still ``false`` -- while the conclusion follows the plan the next
+    request will get.
+    """
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    _set_doctor_probes(monkeypatch)
+    _select_jit_profile(monkeypatch)
+    _set_certified_oracle_versions(monkeypatch)
+    _select_unjudged_jit_compiler(monkeypatch)
 
     exit_code = cli.main(["doctor", "--json"])
 
@@ -601,8 +607,89 @@ def test_doctor_reports_an_unjudged_jit_toolchain_as_ineligible(
         "/ torch 2.13.0+cu130"
     )
     assert report["jit_toolchain_constraint"] == JIT_TOOLCHAIN_CONSTRAINT
+    assert report["automatic_gpu_eligible"] is True
+    assert report["automatic_effective_backend"] == "gpu"
+
+
+def test_doctor_reports_an_unjudged_jit_toolchain_as_ineligible_under_certified(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The same machine under ``CERTIFIED``: the compiler premise refuses.
+
+    This is the other half of the same rule. ``CERTIFIED`` has always
+    refused a coverage gap, so the report has to say ``fast_cpu`` here,
+    and the two answers have to differ only because the policy differs.
+    """
+    home = tmp_path / "toktier-home"
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "config.toml").write_text(
+        "routing_policy = 'certified'\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("TOKTIER_HOME", str(home))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    _set_doctor_probes(monkeypatch)
+    _select_jit_profile(monkeypatch)
+    _set_certified_oracle_versions(monkeypatch)
+    _select_unjudged_jit_compiler(monkeypatch)
+
+    exit_code = cli.main(["doctor", "--json"])
+
+    report = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert report["automatic_gpu_candidate"] is True
+    assert report["jit_toolchain_satisfied"] is False
     assert report["automatic_gpu_eligible"] is False
     assert report["automatic_effective_backend"] == "fast_cpu"
+
+
+def test_doctor_reports_an_unjudged_architecture_the_way_the_policy_reads_it(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The other coverage gap: a device no campaign judged.
+
+    The installation-level and the family-level answers both follow the
+    policy in effect. Under the default the shipped kernel runs there and
+    the route is labelled rather than refused; under ``CERTIFIED`` the
+    same machine reads ``fast_cpu``.
+    """
+    home = tmp_path / "toktier-home"
+    monkeypatch.setenv("TOKTIER_HOME", str(home))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    certified = {"tokenizers": "0.22.2", "transformers": "4.57.6"}
+    monkeypatch.setattr(
+        importlib.metadata, "version", lambda name: certified.get(name, "1.2.3")
+    )
+    _set_doctor_probes(monkeypatch)
+    _set_doctor_device_probe(
+        monkeypatch, devices=((0, "Unjudged device", "sm_61"),)
+    )
+
+    assert cli.main(["doctor", "--json", "--family", "qwen3_8b"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["automatic_gpu_delivery_certification"] == {
+        "sm_61": "uncertified"
+    }
+    assert report["automatic_gpu_eligible"] is True
+    assert report["automatic_effective_backend"] == "gpu"
+    assert report["family"]["automatic_gpu_eligible"] is True
+    assert report["family"]["automatic_effective_backend"] == "gpu"
+
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "config.toml").write_text(
+        "routing_policy = 'certified'\n", encoding="utf-8"
+    )
+
+    assert cli.main(["doctor", "--json", "--family", "qwen3_8b"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["automatic_gpu_eligible"] is False
+    assert report["automatic_effective_backend"] == "fast_cpu"
+    assert report["family"]["automatic_gpu_eligible"] is False
+    assert report["family"]["automatic_effective_backend"] == "fast_cpu"
 
 
 def test_doctor_reports_the_reference_backend_without_a_certified_cpu_profile(

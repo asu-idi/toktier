@@ -677,7 +677,27 @@ def test_the_shipped_guard_is_the_full_domain_set() -> None:
 
 
 def test_the_widened_domain_explains_the_46_new_code_points() -> None:
-    """The 46 additions are exactly those Python's Unicode tables do not know."""
+    """The 46 additions are exactly those Python's Unicode tables do not know.
+
+    "Python's Unicode tables" carries a version, and the reading says which
+    one it means: the archived probe domain was filtered through CPython
+    3.12's tables, Unicode 15.0.0. An interpreter carrying a different
+    edition draws the assigned/unassigned line elsewhere -- under Unicode
+    13.0.0, the edition CPython 3.10 ships, 50 of the 108 archived code
+    points are not assigned yet -- so the exact correspondence belongs to
+    the tables the reading names. This cell reads that version back out of
+    the reading and asks for the full 46/46 and 108/108 match only when the
+    running tables are those. On any other edition it keeps the half that
+    holds in both directions -- whatever these tables do know of the
+    archived set, they still give a reordering combining class -- and counts
+    the ones they do not know.
+
+    The product does not depend on any of this: the shipped guard is
+    compiled from the 154 code points the registry carries, and the hot path
+    never consults ``unicodedata``. What follows corroborates how the
+    archived set came to be the smaller one, rather than standing in for the
+    guarantee itself.
+    """
     import unicodedata
 
     reading = json.loads(
@@ -685,13 +705,34 @@ def test_the_widened_domain_explains_the_46_new_code_points() -> None:
             encoding="utf-8"
         )
     )
+    derived_with = reading["archived_guard"]["derived_with"]
+    named = re.search(r"Unicode (\d+\.\d+\.\d+)", derived_with)
+    assert named is not None, derived_with
+    same_tables = unicodedata.unidata_version == named.group(1)
+
     added = [int(cp[2:], 16) for cp in reading["comparison"]["only_in_full_domain"]]
     assert len(added) == 46
-    for cp in added:
-        # Unassigned in CPython's tables, hence outside the archived probe
-        # domain; combining class 0 there, while the engine reorders them.
-        assert unicodedata.category(chr(cp)) == "Cn"
-        assert unicodedata.combining(chr(cp)) == 0
+    if same_tables:
+        for cp in added:
+            # Unassigned in CPython's tables, hence outside the archived probe
+            # domain; combining class 0 there, while the engine reorders them.
+            assert unicodedata.category(chr(cp)) == "Cn"
+            assert unicodedata.combining(chr(cp)) == 0
+
     archived = [int(cp[2:], 16) for cp in reading["archived_guard"]["codepoints"]]
-    for cp in archived:
-        assert unicodedata.combining(chr(cp)) > 1
+    assert len(archived) == 108
+    unknown = [cp for cp in archived if unicodedata.category(chr(cp)) == "Cn"]
+    known = [cp for cp in archived if unicodedata.category(chr(cp)) != "Cn"]
+    assert len(known) + len(unknown) == len(archived)
+    for cp in known:
+        assert unicodedata.combining(chr(cp)) > 1, (
+            f"U+{cp:04X} is assigned under Unicode "
+            f"{unicodedata.unidata_version} yet its combining class is "
+            f"{unicodedata.combining(chr(cp))}"
+        )
+    if same_tables:
+        assert unknown == [], (
+            f"{len(unknown)} of the archived code points are unassigned under "
+            "the tables the reading names"
+        )
+        assert len(known) == 108

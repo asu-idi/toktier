@@ -41,7 +41,7 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 
 ## 最新动态
 
-- **2026.08.TBD** 🚀 **toktier 0.2.7** 发布——`pip install "toktier[fastokens]"`
+- **2026.08.27** 🚀 **toktier 0.2.7** 发布——`pip install "toktier[fastokens]"`
   现在安装的是 `toktier-fastokens`，即本项目发布的 fastokens 0.3.1 钉住构建，
   附带五个补丁；因此，适配器读数所描述的字节就是该 extra 实际安装的字节。适配器
   改为按 import 包解析当前安装的引擎，并在保持 `experimental` 准入词不变的同时

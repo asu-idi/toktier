@@ -45,7 +45,7 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
 
 ## News
 
-- **2026.08.TBD** 🚀 **toktier 0.2.7** released — `pip install
+- **2026.08.27** 🚀 **toktier 0.2.7** released — `pip install
   "toktier[fastokens]"` now installs `toktier-fastokens`, a pinned build of
   fastokens 0.3.1 with five patches from this project. The project publishes
   the build, so the extra installs the same bytes described by the adapter's

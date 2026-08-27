@@ -12,12 +12,17 @@ import copy
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import generate_registry
 import pytest
 import update_fastokens_registry as tool
-from registry_common import GenerationError, load_json, schema_violations
+from registry_common import (
+    PLACEHOLDER_SHA256,
+    GenerationError,
+    load_json,
+    schema_violations,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -27,11 +32,11 @@ def _json(relative: str) -> Any:
 
 
 def _registry() -> dict[str, Any]:
-    return _json("tables/support_registry.json")
+    return cast(dict[str, Any], _json("tables/support_registry.json"))
 
 
 def _binding() -> dict[str, Any]:
-    return _json("tools/fastokens_binding.json")
+    return cast(dict[str, Any], _json("tools/fastokens_binding.json"))
 
 
 def test_shipped_registry_carries_the_bound_node() -> None:
@@ -148,7 +153,7 @@ def test_the_release_check_refuses_a_placeholder_wheel_digest(tmp_path: Path) ->
     registry = _registry()
     edited = copy.deepcopy(registry)
     wheel = edited["engine_distributions"]["fastokens"]["known_wheels"][0]
-    wheel["engine_digest"] = generate_registry.PLACEHOLDER_SHA256
+    wheel["engine_digest"] = PLACEHOLDER_SHA256
     path = tmp_path / "support_registry.json"
     path.write_text(json.dumps(edited), encoding="utf-8")
     problems = generate_registry.release_problems(path)
@@ -207,5 +212,7 @@ def test_the_document_check_helper_sees_the_node(tmp_path: Path) -> None:
     from toktier.routing.registry_load import load_registry_document
     from toktier.routing.tables import SUPPORT_REGISTRY
 
-    document = load_registry_document(SUPPORT_REGISTRY)
+    # The typed document names the frozen v1 keys; the optional node is
+    # read the way the adapter reads it, as an untyped member.
+    document = cast(dict[str, Any], load_registry_document(SUPPORT_REGISTRY))
     assert document["engine_distributions"]["fastokens"]["backend"] == "fastokens"

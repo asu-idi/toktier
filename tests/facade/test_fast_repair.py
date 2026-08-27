@@ -1409,9 +1409,9 @@ def test_fastokens_config_id_v2_retires_v1_sessions(rig: Rig) -> None:
                 "engine_digest": "e" * 64,
             }
 
-    assert FastokensFullRepair.config_id.fget(None) == (  # type: ignore[union-attr]
-        "toktier-fastokens-full-experimental-v2"
-    )
+    from toktier.repair.fastokens import CONFIG_ID
+
+    assert CONFIG_ID == "toktier-fastokens-full-experimental-v2"
     v1 = tokenizer._semantic_fingerprint(
         Repair("toktier-fastokens-full-experimental-v1")  # type: ignore[arg-type]
     )

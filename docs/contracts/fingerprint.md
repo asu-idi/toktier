@@ -96,8 +96,11 @@ Fastokens, corrected Gigatoken, or HF-only execution from crossing engine
 meanings. It does not alter the frozen field ids above; the facade contract is
 the operative 0.x surface. The Fastokens adapter's repair configuration moved
 to `toktier-fastokens-full-experimental-v2` in 0.2.7, when its Unicode guard
-became part of what the adapter does, so sessions stored under the v1 meaning
-miss and re-encode rather than replay.
+became part of what the adapter does. In-process state carrying the v1 meaning
+misses and is re-encoded; a persistent store, which is written as a whole under
+one fingerprint, is refused with `SESSION_STATE_MISMATCH` when it is opened
+under the new one, rather than re-encoded record by record. The refusal names
+both fingerprints and leaves the store's bytes untouched.
 
 The redundancy among `0x0001`, `0x0002`, and `0x0003` (the artifact hash
 already covers pipeline and added tokens) is intentional: the fingerprint

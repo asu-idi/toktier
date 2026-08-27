@@ -639,7 +639,7 @@ A build without it keeps every offline lifecycle surface and answers
 `NETWORK_DISABLED` when acquisition is actually required;
 `Runtime::doctor()` reports it as `network_compiled`. Because the judged
 build recipe records this crate's feature list, the certified default build
-for 0.2.6 is the one without `network`, and a build that enables it
+of this release is the one without `network`, and a build that enables it
 diverges from that recipe on the `features` key. The feature list is a
 build flag rather than a package, so the tier rules above do not reach it:
 a build that turns `network` on is not certified even though the two

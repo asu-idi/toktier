@@ -42,13 +42,15 @@ the complete sweeps are in [`docs/benchmarks.md`](https://github.com/asu-idi/tok
 
 - **2026.08.TBD** 🚀 **toktier 0.2.7** released — `pip install
   "toktier[fastokens]"` now installs `toktier-fastokens`, a pinned build of
-  fastokens 0.3.1 with five patches that this project publishes, so the
-  bytes the adapter's readings describe are the bytes the extra installs.
+  fastokens 0.3.1 with five patches from this project. The project publishes
+  the build, so the extra installs the same bytes described by the adapter's
+  readings.
   The adapter resolves the installed engine by its import package and
-  reports `engine_assurance` beside its unchanged `experimental` admission:
-  `certified_pinned` with a guarded `exact_id_guarantee: true` on the
-  published wheel, and the premise that does not hold otherwise. The
-  154-code-point Unicode guard moved from the judge into the adapter. Served
+  reports `engine_assurance`, while its admission remains `experimental`.
+  For the published wheel, the report shows `certified_pinned`
+  with a guarded `exact_id_guarantee: true`; otherwise, it identifies the
+  premise that does not hold. The 154-code-point Unicode guard moved from
+  the judge into the adapter. Served
   IDs, the store format, and the kernel ABI are unchanged. See the
   [v0.2.7 release notes](https://github.com/asu-idi/toktier/blob/v0.2.7/docs/releases/v0.2.7.md).
 - **2026.08.27** 🚀 **toktier 0.2.6** released — Rust certification now
@@ -298,32 +300,42 @@ TokTier's — the base `toktier` wheel needs none of it.
 
 ### JIT toolchain certification
 
-JIT is fail-closed at the toolchain boundary. Certification checks the actual
-`nvcc` selected by PyTorch's extension builder, `torch.version.cuda`, and the
-PyTorch distribution version as independent axes. If that exact triple is not
-recorded in the registry, automatic routing emits a prominent warning and keeps
-using the corrected Gigatoken → HF fallback chain; an explicit CUDA request
-fails with the observed compiler/runtime triple, certified constraint, and a
-copyable remedy. For example, torch CUDA 13.0 with NVCC 13.2 is not treated as
-the judged NVCC 13.0 combination. A judged combination can be compiled ahead of
-first use with:
+JIT is fail-closed on every binding the registry records — sources, class
+tables, build flags. Certification additionally checks the actual `nvcc`
+selected by PyTorch's extension builder, `torch.version.cuda`, and the PyTorch
+distribution version as independent axes; for example, torch CUDA 13.0 with
+NVCC 13.2 is not treated as the judged NVCC 13.0 combination.
+
+That triple is the one premise where a miss is a coverage gap rather than a
+failed check: the sources and flags are the judged ones and no campaign has
+compiled them with this pair. The default `SUPPORTED` policy therefore compiles
+and runs it and labels the route `supported_untested`, with the gap reported
+rather than warned about: `toktier doctor` and `explain()` both show the
+observed triple beside `jit_toolchain_satisfied: false`. `CERTIFIED` refuses it
+as it always has — automatic routing keeps to the corrected Gigatoken → HF
+fallback chain and records the reason, and an explicit CUDA request fails with
+the observed compiler/runtime triple, the certified constraint, and a copyable
+remedy.
+
+Under either policy, a combination can be compiled ahead of first use with:
 
 ```bash
 toktier gpu compile qwen3_8b
 ```
 
-For evaluation only, an unjudged toolchain combination can be compiled with
-explicit risk acceptance:
+Under the stricter policies, an unjudged combination can still be compiled for
+evaluation with explicit risk acceptance:
 
 ```bash
 toktier gpu compile qwen3_8b --accept-uncertified-jit
 ```
 
-**This does not certify the resulting kernel.** The command runs under
+**This does not certify the resulting kernel.** That form runs under
 `EXPERIMENTAL`, prints an `UNCERTIFIED JIT OPT-IN` warning, and records every
-waived premise. Application code must also opt in explicitly with
-`policy="experimental", gpu_delivery="jit"`; the acceptance is deliberately
-not persisted or inherited by later certified processes. Inspect
+waived premise; under the default policy it is not needed, and the command
+waives nothing. Application code reaches the same treatment by opting in
+explicitly with `policy="experimental", gpu_delivery="jit"`; the acceptance is
+deliberately not persisted or inherited by later certified processes. Inspect
 `explain()["experimental_waivers"]` before using those results.
 
 ### CPU engine provenance and build identity
@@ -485,9 +497,9 @@ guesswork: state is not a cache. See
 ### Experimental: the pinned Fastokens adapter
 
 `pip install "toktier[fastokens]"` installs **toktier-fastokens**, a pinned
-build of fastokens 0.3.1 carrying five patches from the toktier project,
-published on PyPI by this project. The adapter is still selected only
-explicitly:
+build of fastokens 0.3.1 with five patches from the toktier project. The
+project publishes this build on PyPI. The adapter still requires explicit
+selection:
 
 ```python
 tok = toktier.load(
@@ -497,19 +509,19 @@ tok = toktier.load(
 
 Two things are reported separately. `certification: experimental` says how it
 is admitted (explicit opt-in, never automatic); `engine_assurance` says what is
-known about the installed engine. When the installed bytes are the wheel
-toktier published, `engine_assurance` is `certified_pinned` and
-`exact_id_guarantee` is `true` in the guarded sense: ids equal the pinned
-reference or the request is routed to it by the adapter's Unicode guard. What
-is compared is the engine digest, not who built the wheel: a build whose
-digest is not among the published ones -- the upstream wheel, or one built
-from the sdist, which another host or toolchain usually makes different --
-reports `false`, and a build whose digest is identical reads exactly as the
-published one does. The pinned distribution keeps the upstream import name;
-install either it or the upstream distribution, not both (`toktier doctor`
-reports which one is present). If the upstream distribution is already
-installed, reinstall rather than remove one of the two, because uninstalling
-either removes the files they share:
+known about the installed engine. When the installed engine's bytes match those
+in the wheel toktier published, `engine_assurance` is `certified_pinned` and
+`exact_id_guarantee` is `true` in the guarded sense: the IDs equal those from
+the pinned reference, or the adapter's Unicode guard routes the request to it.
+The comparison uses the engine digest, not the wheel builder's identity. A
+build whose digest is not among the published ones reports `false`. This
+includes the upstream wheel and, usually, a build from the sdist produced on
+another host or with another toolchain. A build with an identical digest reads
+exactly as the published one does. The pinned distribution keeps the upstream
+import name; install either it or the upstream distribution, not both
+(`toktier doctor` reports which one is present). If the upstream distribution
+is already installed, reinstall rather than remove one of the two, because
+uninstalling either removes the files they share:
 
 ```bash
 pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
@@ -519,15 +531,16 @@ If other code needs the upstream distribution, use a separate environment; the
 two cannot coexist under one import name.
 
 The readings behind `certified_pinned` were taken on the published wheel
-(engine digest `0bcf3ada9268e5ae...`): 998,857,881 documents per artifact
-across 15 tokenizer artifacts against `tokenizers==0.22.2`, at eight visible
-CPUs, with zero guarded mismatches and zero engine errors, plus a
-stateful-replay gate, a six-topology gate and a splice/edit gate on the same
-wheel. The five patches close five defects we observed in the upstream 0.3.1
-code -- one raises an error on a rare character, four are silent id
-divergences -- and reports about them have been submitted to the upstream
-project. The guard covers 154 combining marks that the frozen reference does
-not reorder; a request containing one is answered by the reference and counted
+(engine digest `0bcf3ada9268e5ae...`). Across 15 tokenizer artifacts,
+998,857,881 documents per artifact were checked against
+`tokenizers==0.22.2`, using eight visible CPUs, with zero guarded mismatches
+and zero engine errors. The same wheel was also used for a stateful-replay
+gate, a six-topology gate, and a splice/edit gate. The five patches close five
+defects we observed in the upstream 0.3.1 code. Of these defects, one raises
+an error on a rare character, and four are silent ID divergences. Reports on
+these defects have been submitted to the upstream project. The guard covers
+154 combining marks that the frozen reference does not reorder; a request
+containing one is answered by the reference and counted
 as routed. `docs/support-matrix.md` carries the full digests, the states the
 adapter reports and what each one means.
 
@@ -538,12 +551,12 @@ settings. Certification is bound to exact artifact bytes and that oracle
 version. If the installed HF version is outside the certified set, accelerated
 routing is disabled and the request remains on the installed reference path.
 
-One boundary belongs beside that: an artifact is identified by its
-`tokenizer.json`, and for an input containing an added-token literal that only
-`tokenizer_config.json` declares, the accelerated route and the reference route
-can return different ids today. The certified corpora contain no such input;
+There is one related boundary: an artifact is identified by its
+`tokenizer.json`. For an input containing an added-token literal declared only
+in `tokenizer_config.json`, the accelerated and reference routes can return
+different IDs today. The certified corpora contain no such input;
 [`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.2.7/docs/support-matrix.md#configuration-only-added-tokens)
-records which artifact it is reachable on.
+records the artifact on which such an input is reachable.
 
 Four different counts appear in this document, and each answers a different
 question: **15 packaged artifacts** (what `toktier inspect` lists), **15+3
@@ -760,10 +773,10 @@ reference; the resulting path recorded 41.8 billion checks over 12.33 trillion
 characters with zero observed token-ID divergence.
 
 The toktier project publishes toktier-fastokens, a pinned build of Fastokens
-0.3.1 with five patches, for its explicit experimental adapter; the upstream
-project is a separate implementation and does not endorse this build.
-Fastokens is Apache-2.0 and Gigatoken is MIT; exact revisions, license copies,
-patch series and modification notices are in
+0.3.1 with five patches, for use with its explicitly selected experimental
+adapter. The upstream project is a separate implementation and does not
+endorse this build. Fastokens is Apache-2.0 and Gigatoken is MIT; exact
+revisions, license copies, patch series, and modification notices are in
 [`THIRD_PARTY_NOTICES`](https://github.com/asu-idi/toktier/blob/v0.2.7/THIRD_PARTY_NOTICES) and [`packaging/`](https://github.com/asu-idi/toktier/tree/v0.2.7/packaging).
 
 ## License and citation

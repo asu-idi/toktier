@@ -9,8 +9,11 @@ an accident.
 
 Guiding rule, inherited from `api.md`: correctness first. Under `CERTIFIED` and
 `REFERENCE`, every facade path returns token ids equal to a from-scratch encode
-by the pinned reference oracle. Store layers accelerate; they never answer
-differently on those policies. An explicitly selected Fastokens adapter under
+by the pinned reference oracle, with the one boundary Section 5 states and
+`docs/support-matrix.md` records: an input carrying an added-token literal that
+only `tokenizer_config.json` declares, which the certified corpora contain no
+instance of. Store layers accelerate; they never answer differently on those
+policies. An explicitly selected Fastokens adapter under
 `EXPERIMENTAL` is outside that guarantee and labels itself accordingly, unless
 Section 5.2 applies.
 Whenever a stored entry cannot be located, verified, or extended, the call

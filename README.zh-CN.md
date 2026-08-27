@@ -42,12 +42,12 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 ## 最新动态
 
 - **2026.08.TBD** 🚀 **toktier 0.2.7** 发布——`pip install "toktier[fastokens]"`
-  现在安装的是 `toktier-fastokens`，即本项目发布的、附带五个补丁的 fastokens
-  0.3.1 钉住构建，这样适配器读数所描述的字节就是该 extra 实际安装的字节。适配器
-  改为按 import 包解析当前安装的引擎，并在保持不变的 `experimental` 准入词旁边
+  现在安装的是 `toktier-fastokens`，即本项目发布的 fastokens 0.3.1 钉住构建，
+  附带五个补丁；因此，适配器读数所描述的字节就是该 extra 实际安装的字节。适配器
+  改为按 import 包解析当前安装的引擎，并在保持 `experimental` 准入词不变的同时
   报告 `engine_assurance`：在已发布的 wheel 上为 `certified_pinned`，并附带守卫
-  口径的 `exact_id_guarantee: true`；否则报告不成立的那条前提。154 码位的
-  Unicode 守卫从判官侧移入适配器。对外返回的 ID、store 格式与 kernel ABI 都没有
+  口径的 `exact_id_guarantee: true`；否则会报告哪一项前提不成立。涵盖 154 个码位的
+  Unicode 守卫已从判官侧移入适配器。对外返回的 ID、store 格式与 kernel ABI 都没有
   变化。详见 [v0.2.7 发布说明](docs/releases/v0.2.7.md)（英文）。
 - **2026.08.27** 🚀 **toktier 0.2.6** 发布——Rust 侧认证现在仅对
   certified core 作出声明（TokTier 自有的 crate、这些 crate 直接调用的包，以及
@@ -267,26 +267,36 @@ Python 包不受 Rust crate feature 的影响，仍通过 `huggingface-hub`
 
 ### JIT 工具链认证
 
-JIT 在工具链边界采用严格的 fail-closed 策略。认证会将 PyTorch 扩展构建器
-实际选择的 `nvcc`、`torch.version.cuda` 和 PyTorch 发行版版本作为独立维度
-分别核对。如果注册表未记录这个精确三元组，自动路由会给出醒目警告，并继续使用
-修正版 Gigatoken → HF fallback 链；显式请求 CUDA 则会直接失败，同时列出观测到的
-编译器/运行时三元组、认证约束和可直接复制的处理命令。例如，torch CUDA 13.0
-配 NVCC 13.2 不会被视为经评审的 NVCC 13.0 组合。经评审的组合可在首次使用前编译：
+JIT 对注册表记录的每一项绑定——源码、类别表、编译参数——都采用严格的
+fail-closed 策略。认证还会将 PyTorch 扩展构建器实际选择的 `nvcc`、
+`torch.version.cuda` 和 PyTorch 发行版版本作为独立维度分别核对；例如，
+torch CUDA 13.0 配 NVCC 13.2 不会被视为经评审的 NVCC 13.0 组合。
+
+这个三元组是唯一一处“未命中”属于覆盖面缺口、而非核对失败的前提：源码与编译
+参数都是经评审的那一套，只是还没有任何一次战役用这一对编译器/运行时编译过
+它们。因此默认的 `SUPPORTED` 策略会照常编译并运行，并把该路径标为
+`supported_untested`；这一缺口以读数而非警告的形式呈现——`toktier doctor` 与
+`explain()` 都会在 `jit_toolchain_satisfied: false` 旁给出观测到的三元组。
+`CERTIFIED` 则一如既往地拒绝它：自动路由继续使用修正版 Gigatoken → HF
+fallback 链并记录原因，显式请求 CUDA 则直接失败，同时列出观测到的编译器/
+运行时三元组、认证约束和可直接复制的处理命令。
+
+两种策略下，都可以在首次使用前先行编译：
 
 ```bash
 toktier gpu compile qwen3_8b
 ```
 
-如果只是评估未经评审的组合，必须显式确认风险：
+在更严格的策略下，如果只是评估未经评审的组合，仍需显式确认风险：
 
 ```bash
 toktier gpu compile qwen3_8b --accept-uncertified-jit
 ```
 
-**这不会让生成的 kernel 获得认证。** 该命令在 `EXPERIMENTAL` 策略下运行，打印
-`UNCERTIFIED JIT OPT-IN` 警告，并记录所有获豁免的前提。应用代码也必须显式
-传入 `policy="experimental", gpu_delivery="jit"`；这项风险确认有意不持久化，
+**这不会让生成的 kernel 获得认证。** 这种形式在 `EXPERIMENTAL` 策略下运行，
+打印 `UNCERTIFIED JIT OPT-IN` 警告，并记录所有获豁免的前提；在默认策略下则
+用不上它，该命令也不会豁免任何前提。应用代码显式传入
+`policy="experimental", gpu_delivery="jit"` 时同理；这项风险确认有意不持久化，
 也不会被后续认证进程继承。使用结果前请检查
 `explain()["experimental_waivers"]`。
 
@@ -429,8 +439,9 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 
 ### 实验性：钉住的 Fastokens 适配器
 
-`pip install "toktier[fastokens]"` 安装的是 **toktier-fastokens**——由 toktier
-项目发布在 PyPI 上的 fastokens 0.3.1 钉住构建，附带本项目的五个补丁。该适配器
+`pip install "toktier[fastokens]"` 安装的是 **toktier-fastokens**，即
+fastokens 0.3.1 的钉住构建；该构建由 toktier 项目在 PyPI 上发布，
+并附带本项目的五个补丁。该适配器
 仍然只能显式选择：
 
 ```python
@@ -439,17 +450,18 @@ tok = toktier.load(
 )
 ```
 
-报告中有两件事分开陈述。`certification: experimental` 说的是它如何被准入
-（只能显式选择，永远不会自动选中）；`engine_assurance` 说的是我们对当前安装的
-引擎知道什么。当安装的字节就是 toktier 发布的那只 wheel 时，`engine_assurance`
-为 `certified_pinned`，`exact_id_guarantee` 为 `true`，其含义是带守卫的：返回的
-id 与钉住的参考实现相等，或者该请求已被适配器的 Unicode 守卫改由参考实现回答。
-这里比较的是引擎摘要，而不是由谁构建：摘要不在已发布之列的构建——上游 wheel，
-或从 sdist 自行构建的 wheel（换一台主机或一套工具链通常就会得到不同摘要）——
-报告 `false`；摘要与已发布 wheel 完全相同的构建，读数也与它相同。
+报告分别说明两件事。`certification: experimental` 表示该适配器的准入方式
+（只能显式选择，永远不会自动选中）；`engine_assurance` 表示我们对当前安装的
+引擎掌握了哪些信息。当实际安装的字节与 toktier 所发布的 wheel 中的字节一致时，
+`engine_assurance` 为 `certified_pinned`，`exact_id_guarantee` 为 `true`；这里的保证
+带有守卫条件：返回的 id 与钉住的参考实现所得结果相同，或者该请求已在适配器的
+Unicode 守卫作用下改由参考实现回答。这里比较的是引擎摘要，而不是构建者：
+如果某个构建的摘要不在已发布摘要之列——无论该构建是上游 wheel，
+还是从 sdist 自行构建的 wheel（换一台主机或一套工具链通常就会得到不同摘要）——
+就会报告 `false`；如果其摘要与已发布 wheel 完全相同，读数也相同。
 钉住分发沿用上游的 import 名，因此只能安装它或上游分发之一，不能同时安装
-（`toktier doctor` 会报告当前装的是哪一个）。若已装有上游分发，请整体重装而不是
-卸掉其中一个，因为卸载任一分发都会删掉两者共享的文件：
+（`toktier doctor` 会报告当前装的是哪一个）。若已安装上游分发，请整体重装，不要
+单独卸载其中一个分发，因为卸载任一分发都会删除两者共享的文件：
 
 ```bash
 pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
@@ -457,13 +469,14 @@ pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
 
 若其他代码需要上游分发，请使用单独的环境；同一个 import 名下两者无法共存。
 
-`certified_pinned` 背后的读数取自已发布的那只 wheel（引擎摘要
-`0bcf3ada9268e5ae...`）：以 `tokenizers==0.22.2` 为参照，15 个 tokenizer 工件、
-每个工件 998,857,881 篇文档、可见 CPU 数为 8，守卫口径下零处 id 不一致、零次引擎
-报错；同一只 wheel 上还通过了状态性重放、六种 CPU 拓扑与拼接/编辑三道门。五个
-补丁修正了我们在上游 0.3.1 代码中观察到的五处缺陷——一处在罕见字符上报错，
-四处是静默的 id 不一致——相关报告已提交给上游项目。守卫覆盖 154 个冻结参考实现
-不做重排的组合记号；含有其中任一记号的请求改由参考实现回答，并计入“已路由”。
+`certified_pinned` 所依据的读数取自已发布的 wheel（引擎摘要
+`0bcf3ada9268e5ae...`）：以 `tokenizers==0.22.2` 为参照，覆盖 15 个 tokenizer 工件，
+每个工件 998,857,881 篇文档，可见 CPU 数为 8；守卫口径下记录到零处 id 不一致、
+零次引擎报错。同一 wheel 还通过了三道门禁：有状态重放、六种 CPU 拓扑和拼接/编辑。
+五个补丁修正了我们在上游 0.3.1 代码中观察到的五处缺陷——其中一处表现为遇到
+罕见字符时报错，另外四处表现为静默的 id 不一致——相关报告已提交给上游项目。
+守卫覆盖 154 个不会被冻结参考实现重排的组合记号；含有其中任一记号的请求
+改由参考实现回答，并计入“已路由”。
 完整摘要、适配器报告的各个状态及其含义见 `docs/support-matrix.md`。
 
 ## 正确性与证据
@@ -665,8 +678,8 @@ TokTier 的 CPU Fast Pass 和 Fast Repair 建立在
 [Hugging Face tokenizers](https://github.com/huggingface/tokenizers) 参考实现对齐；
 该路径在 12.33 万亿字符上完成 418 亿次检查，未观察到 token ID 不一致。
 
-toktier 项目为其显式实验性适配器发布了 toktier-fastokens——Fastokens 0.3.1
-附带五个补丁的钉住构建；上游项目是独立的实现，并未为这一构建背书。Fastokens
+toktier 项目为其需显式选择的实验性适配器发布了 toktier-fastokens——即附带五个
+补丁的 Fastokens 0.3.1 钉住构建；上游项目是独立的实现，并未为这一构建背书。Fastokens
 采用 Apache-2.0，Gigatoken 采用 MIT；确切 revision、许可证副本、补丁序列与修改
 声明见 [`THIRD_PARTY_NOTICES`](THIRD_PARTY_NOTICES) 和 [`packaging/`](packaging/)。
 

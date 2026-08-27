@@ -1,0 +1,449 @@
+From c4acaa2bfcaab5e8467a937c1fef2ffc79503130 Mon Sep 17 00:00:00 2001
+From: ae86zhizhi <550149470@qq.com>
+Date: Sat, 15 Aug 2026 14:47:44 -0700
+Subject: [PATCH 1/2] fix(pcre2): align Unicode class semantics with the
+ reference engine
+
+PCRE2 denotes different sets than `regex`/`fancy-regex` for two classes
+that appear in pre-tokenization patterns, so a Split compiled for PCRE2
+produced different pretokens than both the reference tokenizer and this
+crate's own scanner.
+
+`\s`: under PCRE2_UCP this compiles to PT_SPACE, evaluated as
+HSPACE u VSPACE u general category Z rather than the White_Space property.
+PCRE2's HSPACE_LIST still contains U+180E MONGOLIAN VOWEL SEPARATOR, which
+was Zs/White_Space through Unicode 6.2 and became Cf in 6.3; PCRE2 keeps it
+for \h compatibility, so this is a definition difference, not a stale
+table (still present in 10.46). Effect: " " + U+180E + a letter lands on a
+different pretoken boundary and silently changes token ids.
+
+`\p{<script>}`: PCRE2 reads a bare script name as Script_Extensions while
+`regex` reads it as Script. For Han that is 308 codepoints, including CJK
+punctuation in everyday use.
+
+Both are fixed by spelling the class out when compiling for PCRE2. Patterns
+using constructs that cannot be rewritten faithfully (\S inside a class,
+POSIX [:space:]) now fall back to the non-PCRE2 engine, which already
+agrees with the reference -- a performance fallback, not a correctness one.
+
+Tests sweep every scalar value and assert the rewritten pattern denotes
+exactly the reference set.
+---
+ src/pre_tokenizers.rs               |   1 +
+ src/pre_tokenizers/pcre2_classes.rs | 356 ++++++++++++++++++++++++++++
+ src/pre_tokenizers/split.rs         |  19 +-
+ 3 files changed, 375 insertions(+), 1 deletion(-)
+ create mode 100644 src/pre_tokenizers/pcre2_classes.rs
+
+diff --git a/src/pre_tokenizers.rs b/src/pre_tokenizers.rs
+index 34be2db..d08e68e 100644
+--- a/src/pre_tokenizers.rs
++++ b/src/pre_tokenizers.rs
+@@ -1,4 +1,5 @@
+ pub(crate) mod byte_level;
++pub(crate) mod pcre2_classes;
+ pub(crate) mod scan;
+ mod split;
+ pub(crate) mod unicode_class;
+diff --git a/src/pre_tokenizers/pcre2_classes.rs b/src/pre_tokenizers/pcre2_classes.rs
+new file mode 100644
+index 0000000..c09537f
+--- /dev/null
++++ b/src/pre_tokenizers/pcre2_classes.rs
+@@ -0,0 +1,356 @@
++//! Make PCRE2 mean the same thing as the reference engine for the Unicode
++//! classes that appear in pre-tokenization patterns.
++//!
++//! Two of PCRE2's Unicode classes denote different sets than the same
++//! spelling does in `regex`/`fancy-regex` — which is what the reference
++//! tokenizer uses, and what this crate's own scanner tables
++//! ([`super::unicode_class`]) are built from. A `Split` pattern compiled
++//! for PCRE2 therefore has to spell those classes out to keep the same
++//! meaning.
++//!
++//! **`\s`.** Under `PCRE2_UCP`, `\s` compiles to PCRE2's `PT_SPACE`, which
++//! is evaluated as `HSPACE ∪ VSPACE ∪ general category Z` — not the
++//! `White_Space` property. PCRE2's `HSPACE_LIST` still contains U+180E
++//! MONGOLIAN VOWEL SEPARATOR, which was `Zs`/`White_Space` through Unicode
++//! 6.2 but became `Cf` and lost `White_Space` in 6.3. PCRE2 keeps it for
++//! `\h` compatibility, so this is a deliberate definition difference and
++//! not a stale table: it is still present in PCRE2 10.46. The practical
++//! effect is that ` ` + U+180E + a letter lands on a different pretoken
++//! boundary than the reference produces, silently changing token ids.
++//!
++//! **`\p{<script>}`.** PCRE2 reads a bare script name as *Script_Extensions*
++//! (`PT_SCX`), while `regex` reads it as `Script` (`PT_SC`). For Han that is
++//! a 308-codepoint difference and includes CJK punctuation in everyday use
++//! (`·`, `、`, `。`, `「`, `」`, `・`). Naming the script property explicitly
++//! (`\p{sc:Han}`) removes the difference.
++//!
++//! Both rewrites are exact: sweeping every scalar value, the rewritten
++//! pattern and the reference agree on the whole of Unicode (see the tests
++//! at the bottom of this file).
++//!
++//! Anything this module cannot rewrite faithfully makes it return `None`,
++//! which drops the Split back to the non-PCRE2 engine. That path is slower
++//! but already agrees with the reference, so the failure mode is a
++//! performance one rather than a correctness one.
++
++/// Unicode `White_Space`, as a character-class body (no enclosing `[]`).
++const WHITE_SPACE_BODY: &str = r"\x{09}-\x{0D}\x{20}\x{85}\x{A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}";
++
++/// Property names that denote a general category (or one of the two
++/// catch-alls), where PCRE2 and `regex` already agree. Everything else in
++/// `\p{...}` is treated as a script name and gets an explicit `sc:`.
++const NON_SCRIPT_PROPERTIES: &[&str] = &[
++    "C", "Cc", "Cf", "Cn", "Co", "Cs", "L", "L&", "Lc", "Ll", "Lm", "Lo", "Lt", "Lu", "M", "Mc",
++    "Me", "Mn", "N", "Nd", "Nl", "No", "P", "Pc", "Pd", "Pe", "Pf", "Pi", "Po", "Ps", "S", "Sc",
++    "Sk", "Sm", "So", "Z", "Zl", "Zp", "Zs", "Any", "Assigned",
++];
++
++/// True when `name` already carries an explicit property prefix, so it
++/// means what it says and must be left alone.
++fn has_explicit_prefix(name: &str) -> bool {
++    let lower = name.to_ascii_lowercase();
++    ["sc:", "sc=", "scx:", "scx=", "script:", "script=", "gc:", "gc=", "general_category:",
++     "general_category=", "bidi", "bpt", "block:", "block=", "blk:", "blk="]
++        .iter()
++        .any(|p| lower.starts_with(p))
++}
++
++fn is_non_script_property(name: &str) -> bool {
++    NON_SCRIPT_PROPERTIES.iter().any(|p| p.eq_ignore_ascii_case(name))
++}
++
++/// Rewrite `source` so PCRE2 gives it the same meaning the reference engine
++/// does. Returns `None` when some construct cannot be rewritten faithfully.
++pub(crate) fn align_unicode_classes(source: &str) -> Option<String> {
++    let chars: Vec<char> = source.chars().collect();
++    let mut out = String::with_capacity(source.len() + 96);
++    let mut i = 0usize;
++    let mut in_class = false;
++    // position within the current class, to recognise a leading `]`/`^`
++    let mut class_pos = 0usize;
++
++    while i < chars.len() {
++        let c = chars[i];
++
++        if c == '\\' {
++            let Some(&next) = chars.get(i + 1) else {
++                // a trailing backslash is not a pattern we should guess at
++                return None;
++            };
++            match next {
++                's' => {
++                    if in_class {
++                        out.push_str(WHITE_SPACE_BODY);
++                    } else {
++                        out.push('[');
++                        out.push_str(WHITE_SPACE_BODY);
++                        out.push(']');
++                    }
++                    i += 2;
++                    class_pos += 1;
++                    continue;
++                }
++                'S' => {
++                    if in_class {
++                        // `[\S…]` is a union with a complement; a class body
++                        // cannot express that, and quietly leaving `\S` in
++                        // place would keep the very divergence this module
++                        // exists to remove.
++                        return None;
++                    }
++                    out.push_str("[^");
++                    out.push_str(WHITE_SPACE_BODY);
++                    out.push(']');
++                    i += 2;
++                    continue;
++                }
++                'Q' => {
++                    // literal run: copy through the closing \E untouched
++                    out.push('\\');
++                    out.push('Q');
++                    i += 2;
++                    while i < chars.len() {
++                        if chars[i] == '\\' && chars.get(i + 1) == Some(&'E') {
++                            out.push_str("\\E");
++                            i += 2;
++                            break;
++                        }
++                        out.push(chars[i]);
++                        i += 1;
++                    }
++                    class_pos += 1;
++                    continue;
++                }
++                'p' | 'P' => {
++                    let (rewritten, consumed) = rewrite_property(&chars, i)?;
++                    out.push_str(&rewritten);
++                    i += consumed;
++                    class_pos += 1;
++                    continue;
++                }
++                _ => {
++                    out.push('\\');
++                    out.push(next);
++                    i += 2;
++                    class_pos += 1;
++                    continue;
++                }
++            }
++        }
++
++        if !in_class && c == '[' {
++            in_class = true;
++            class_pos = 0;
++            out.push('[');
++            i += 1;
++            continue;
++        }
++
++        if in_class {
++            // POSIX classes carry the same UCP definition problem as `\s`
++            // (`[:space:]` compiles to PT_PXSPACE); rather than leave a
++            // known divergence in place, decline the pattern.
++            if c == '[' && chars.get(i + 1) == Some(&':') {
++                return None;
++            }
++            if c == ']' && class_pos > 0 {
++                in_class = false;
++                out.push(']');
++                i += 1;
++                continue;
++            }
++            if c == '^' && class_pos == 0 {
++                out.push('^');
++                i += 1;
++                continue; // `^` does not count as a class member
++            }
++            out.push(c);
++            class_pos += 1;
++            i += 1;
++            continue;
++        }
++
++        out.push(c);
++        i += 1;
++    }
++
++    if in_class {
++        return None; // unbalanced class; let the other engine deal with it
++    }
++    Some(out)
++}
++
++/// Rewrite one `\p…`/`\P…` property at `start`, returning the replacement
++/// and how many chars of the input it consumed.
++fn rewrite_property(chars: &[char], start: usize) -> Option<(String, usize)> {
++    let kind = chars[start + 1]; // 'p' or 'P'
++    match chars.get(start + 2) {
++        // `\pL` shorthand: single-letter general category, always fine
++        Some(&ch) if ch != '{' => Some((format!("\\{kind}{ch}"), 3)),
++        Some(&'{') => {
++            let mut j = start + 3;
++            let mut name = String::new();
++            while j < chars.len() && chars[j] != '}' {
++                name.push(chars[j]);
++                j += 1;
++            }
++            if j >= chars.len() {
++                return None; // unterminated
++            }
++            let inner = name.trim();
++            let (neg, bare) = match inner.strip_prefix('^') {
++                Some(rest) => ("^", rest.trim()),
++                None => ("", inner),
++            };
++            let replacement = if has_explicit_prefix(bare) || is_non_script_property(bare) {
++                format!("\\{kind}{{{inner}}}")
++            } else {
++                // a script name: say so, so PCRE2 uses Script and not
++                // Script_Extensions
++                format!("\\{kind}{{{neg}sc:{bare}}}")
++            };
++            Some((replacement, j - start + 1))
++        }
++        _ => None,
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn set_of(build: &dyn Fn() -> Vec<bool>) -> Vec<bool> {
++        build()
++    }
++
++    fn pcre2_set(pat: &str) -> Vec<bool> {
++        let mut b = pcre2::bytes::RegexBuilder::new();
++        b.utf(true).ucp(true);
++        let re = b.build(&format!("^(?:{pat})$")).expect("pcre2 compiles");
++        let mut out = vec![false; 0x110000];
++        let mut buf = [0u8; 4];
++        for cp in 0u32..0x110000 {
++            if (0xD800..=0xDFFF).contains(&cp) {
++                continue;
++            }
++            let Some(c) = char::from_u32(cp) else { continue };
++            out[cp as usize] = re.is_match(c.encode_utf8(&mut buf).as_bytes()).unwrap_or(false);
++        }
++        out
++    }
++
++    fn fancy_set(pat: &str) -> Vec<bool> {
++        let re = fancy_regex::Regex::new(&format!("^(?:{pat})$")).expect("fancy compiles");
++        let mut out = vec![false; 0x110000];
++        let mut buf = [0u8; 4];
++        for cp in 0u32..0x110000 {
++            if (0xD800..=0xDFFF).contains(&cp) {
++                continue;
++            }
++            let Some(c) = char::from_u32(cp) else { continue };
++            out[cp as usize] = re.is_match(c.encode_utf8(&mut buf)).unwrap_or(false);
++        }
++        out
++    }
++
++    /// The rewritten pattern must denote exactly the set the reference
++    /// engine denotes, over the whole of Unicode.
++    fn assert_same_set(pattern: &str) {
++        let aligned = align_unicode_classes(pattern)
++            .unwrap_or_else(|| panic!("should rewrite {pattern:?}"));
++        let got = set_of(&|| pcre2_set(&aligned));
++        let want = set_of(&|| fancy_set(pattern));
++        let diff: Vec<u32> = (0u32..0x110000)
++            .filter(|cp| !(0xD800..=0xDFFF).contains(cp))
++            .filter(|cp| got[*cp as usize] != want[*cp as usize])
++            .collect();
++        assert!(
++            diff.is_empty(),
++            "{pattern:?} -> {aligned:?} differs from the reference on {} codepoints, first {:04X?}",
++            diff.len(),
++            &diff[..diff.len().min(8)]
++        );
++    }
++
++    #[test]
++    fn backslash_s_matches_reference_everywhere() {
++        assert_same_set(r"\s");
++        assert_same_set(r"\S");
++        assert_same_set(r"[\s]");
++        assert_same_set(r"[^\s\p{L}\p{N}]");
++        assert_same_set(r"[^\r\n\p{L}\p{N}]");
++    }
++
++    /// U+180E is the one codepoint PCRE2's `\s` adds; pin it directly so a
++    /// regression is unmistakable.
++    #[test]
++    fn u180e_is_not_whitespace() {
++        let aligned = align_unicode_classes(r"\s").unwrap();
++        let mut b = pcre2::bytes::RegexBuilder::new();
++        b.utf(true).ucp(true);
++        let re = b.build(&format!("^(?:{aligned})$")).unwrap();
++        assert!(!re.is_match("\u{180E}".as_bytes()).unwrap());
++        assert!(re.is_match("\u{2000}".as_bytes()).unwrap());
++        assert!(re.is_match(" ".as_bytes()).unwrap());
++        assert!(re.is_match("\n".as_bytes()).unwrap());
++        // and the unrewritten spelling is what we are protecting against
++        let raw = b.build(r"^(?:\s)$").unwrap();
++        assert!(raw.is_match("\u{180E}".as_bytes()).unwrap());
++    }
++
++    /// A bare script name means Script_Extensions to PCRE2; make sure the
++    /// rewrite pins it to Script, and that this stays true even though no
++    /// artifact reaches it through PCRE2 today.
++    #[test]
++    fn bare_script_name_is_pinned_to_script() {
++        assert_eq!(align_unicode_classes(r"\p{Han}").unwrap(), r"\p{sc:Han}");
++        assert_eq!(align_unicode_classes(r"\p{^Han}").unwrap(), r"\p{^sc:Han}");
++        assert_same_set(r"\p{Han}");
++        assert_same_set(r"[\p{Han}]");
++    }
++
++    /// General categories already agree and must be passed through
++    /// untouched, or we would break patterns that are already correct.
++    #[test]
++    fn general_categories_are_left_alone() {
++        for pat in [r"\p{L}", r"\p{N}", r"\p{Lu}", r"\p{Ll}", r"\p{M}", r"\p{Lo}", r"\p{Zs}"] {
++            assert_eq!(align_unicode_classes(pat).unwrap(), pat, "{pat} should pass through");
++            assert_same_set(pat);
++        }
++        assert_eq!(align_unicode_classes(r"\pL").unwrap(), r"\pL");
++    }
++
++    #[test]
++    fn constructs_we_cannot_rewrite_are_declined() {
++        assert!(align_unicode_classes(r"[a\S]").is_none());
++        assert!(align_unicode_classes(r"[[:space:]]").is_none());
++        assert!(align_unicode_classes(r"[abc").is_none());
++        assert!(align_unicode_classes(r"abc\").is_none());
++    }
++
++    #[test]
++    fn literal_runs_and_escapes_survive() {
++        assert_eq!(align_unicode_classes(r"\Q\s\E").unwrap(), r"\Q\s\E");
++        assert_eq!(align_unicode_classes(r"\\s").unwrap(), r"\\s");
++        assert_eq!(align_unicode_classes(r"a\.b").unwrap(), r"a\.b");
++        // `]` first in a class is a literal, not the terminator
++        assert_eq!(align_unicode_classes(r"[]a]").unwrap(), r"[]a]");
++    }
++
++    /// The whole point: the tiktoken-family patterns must come out meaning
++    /// what the reference means.
++    #[test]
++    fn production_patterns_match_reference() {
++        let cl100k = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+";
++        // `\s+(?!\S)` has `\S` outside a class, so it is rewritable
++        assert!(align_unicode_classes(cl100k).is_some());
++        for piece in [
++            r" ?[^\s\p{L}\p{N}]+[\r\n]*",
++            r"\s*[\r\n]+",
++            r"\s+",
++            r"[^\r\n\p{L}\p{N}]?\p{L}+",
++        ] {
++            assert_same_set(piece);
++        }
++    }
++}
+diff --git a/src/pre_tokenizers/split.rs b/src/pre_tokenizers/split.rs
+index f50f271..e308f1d 100644
+--- a/src/pre_tokenizers/split.rs
++++ b/src/pre_tokenizers/split.rs
+@@ -10,6 +10,7 @@ use serde_json::Value;
+ use crate::pre_tokenized::{PreTokenizedString, Split as PtSplit};
+ 
+ use super::Error;
++use super::pcre2_classes;
+ use super::scan::{self, ScanKind};
+ 
+ // Thread-local cache of previous Split results for incremental re-use.
+@@ -225,7 +226,23 @@ fn try_compile_pcre2_regexes(
+         }
+         return Ok(None);
+     }
+-    let source = limits.apply_to_source(source);
++    // PCRE2 reads some Unicode classes differently than the reference
++    // engine does (`\s` includes U+180E; a bare script name means
++    // Script_Extensions). Spell those out so this path produces the same
++    // pretokens as the scanner and the reference; if the pattern uses
++    // something we cannot rewrite faithfully, fall back to the non-PCRE2
++    // engine rather than keep a known divergence.
++    let Some(source) = pcre2_classes::align_unicode_classes(source) else {
++        if limits.has_any() {
++            return Err(Error::Unsupported(
++                "PCRE2 limits require a pattern whose Unicode classes can be \
++                 aligned with the reference engine"
++                    .into(),
++            ));
++        }
++        return Ok(None);
++    };
++    let source = limits.apply_to_source(&source);
+     let mut regexes = Vec::with_capacity(n);
+     for _ in 0..n {
+         let mut builder = pcre2::bytes::RegexBuilder::new();
+-- 
+2.43.0
+

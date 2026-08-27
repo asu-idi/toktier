@@ -1,0 +1,170 @@
+NOTICE: pinned fastokens build (toktier-fastokens)
+=================================================
+
+This distribution redistributes a modified build of the fastokens project.
+
+  Upstream:   https://github.com/Atero-ai/fastokens
+              (earlier published as https://github.com/crusoecloud/fastokens;
+              the same project under its previous name)
+              tag v0.3.1, commit fe854299553524f2156a22036a2cb4d1f2ef4d97
+  License:    Apache-2.0 (the upstream text is reproduced in LICENSE)
+
+Statement of modification (Apache-2.0 section 4(b))
+---------------------------------------------------
+
+The redistributed build is not the upstream release. It was produced by
+applying the patch series below, in order, to the upstream commit named
+above. Each patch is carried verbatim in PATCHES/ so that anyone can
+reproduce the tree; CHANGES-toktier.md records what each one does and how
+it was checked. Patches 0001 to 0005 change code. Patch 0006 changes no
+code: it adds one comment line at the top of each modified source file so
+that the file itself states that it was changed.
+
+  PATCHES/0001-F040-fix-bpe-resolve-out-of-vocabulary-characters.patch
+    changed files: src/models/bpe.rs
+    subject: resolve out-of-vocabulary characters the way the reference
+             tokenizer does, instead of failing the encode
+
+  PATCHES/0002-F041-fix-pcre2-align-unicode-class-semantics.patch
+    changed files: src/pre_tokenizers.rs
+                   src/pre_tokenizers/pcre2_classes.rs
+                   src/pre_tokenizers/split.rs
+    subject: compile the Unicode classes used in pre-tokenization patterns
+             so that the PCRE2 path denotes the same sets as the reference
+             engine
+
+  PATCHES/0003-F042-fix-scan-chunk-boundaries-inside-pretokens.patch
+    changed files: src/lib.rs
+                   src/pre_tokenized.rs
+                   src/pre_tokenizers/scan.rs
+    subject: place parallel chunk boundaries so that they cannot fall inside
+             a pre-token whose trailing class runs past a newline
+
+  PATCHES/0004-F045-fix-scan-accept-long-s-in-contractions.patch
+    changed files: src/pre_tokenizers/scan.rs
+    subject: let the fused scanner treat U+017F as `s` when matching
+             contractions, as case-insensitive matching in the reference
+             pattern does
+
+  PATCHES/0005-F046-fix-split-rescan-tail-after-merge.patch
+    changed files: src/pre_tokenizers/split.rs
+    subject: rescan the text after the last accepted match when merging
+             per-chunk match lists, so the tail is never left unscanned
+
+  PATCHES/0006-notices-mark-modified-files.patch
+    changed files: src/lib.rs
+                   src/models/bpe.rs
+                   src/pre_tokenized.rs
+                   src/pre_tokenizers.rs
+                   src/pre_tokenizers/pcre2_classes.rs
+                   src/pre_tokenizers/scan.rs
+                   src/pre_tokenizers/split.rs
+    subject: one comment line at the top of each file the series modifies,
+             pointing at this NOTICE and at CHANGES-toktier.md
+
+The seven files named above are the complete list of source files this
+distribution changes relative to upstream v0.3.1.
+
+Applying patches 0001 to 0005 to the upstream commit yields a source tree
+whose git tree hash is aa1924284ec4abaedcc8ed5823ee17e7959c55c5; that is
+the tree the toktier-fastokens 0.3.1.1 wheel and every reading quoted for
+it were built from. Applying patch 0006 on top yields tree
+aaa5fb94ea62b9379d03074640e267c8d837d649, which differs from the former
+only by the seven comment lines. A build from the second tree does not
+reproduce the first build's compiled bytes, because source line numbers
+reach the binary through diagnostics metadata; toktier recognises the
+builds it publishes by content digest, so which tree a wheel came from is
+always visible through that digest (see CHANGES-toktier.md).
+
+The patches are downstream work carried by the toktier project. The
+upstream project is a separate implementation; it is not responsible for
+this build and does not endorse it or any results produced with it.
+Reports about the id divergences the patch series addresses have been
+submitted to the upstream project; CHANGES-toktier.md records that
+status.
+
+Upstream NOTICES.txt, reproduced verbatim
+------------------------------------------
+
+PCRE LICENCE
+------------
+
+PCRE is a library of functions to support regular expressions whose syntax
+and semantics are as close as possible to those of the Perl 5 language.
+Release 8 of PCRE is distributed under the terms of the "BSD" licence, as
+specified below. The documentation for PCRE, supplied in the "doc"
+directory, is distributed under the same terms as the software itself.
+The basic library functions are written in C and are freestanding. Also
+included in the distribution is a set of C++ wrapper functions, and a
+just-in-time compiler that can be used to optimize pattern matching. These
+are both optional features that can be omitted when the library is built.
+
+THE BASIC LIBRARY FUNCTIONS
+---------------------------
+Written by:       Philip Hazel
+Email local part: ph10
+Email domain:     cam.ac.uk
+
+University of Cambridge Computing Service,
+Cambridge, England.
+
+Copyright (c) 1997-2014 University of Cambridge
+All rights reserved.
+
+PCRE JUST-IN-TIME COMPILATION SUPPORT
+-------------------------------------
+
+Written by:       Zoltan Herczeg
+Email local part: hzmester
+Emain domain:     freemail.hu
+
+Copyright(c) 2010-2014 Zoltan Herczeg
+All rights reserved.
+
+STACK-LESS JUST-IN-TIME COMPILER
+--------------------------------
+
+Written by:       Zoltan Herczeg
+Email local part: hzmester
+Emain domain:     freemail.hu
+
+Copyright(c) 2009-2014 Zoltan Herczeg
+All rights reserved.
+
+THE C++ WRAPPER FUNCTIONS
+-------------------------
+
+Contributed by:   Google Inc.
+Copyright (c) 2007-2012, Google Inc.
+All rights reserved.
+
+THE "BSD" LICENCE
+-----------------
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+
+    * Neither the name of the University of Cambridge nor the name of Google
+      Inc. nor the names of their contributors may be used to endorse or
+      promote products derived from this software without specific prior
+      written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+End

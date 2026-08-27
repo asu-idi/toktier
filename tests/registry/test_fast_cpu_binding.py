@@ -133,9 +133,71 @@ def test_native_frontend_parity_covers_every_certified_artifact() -> None:
 
 
 def test_fastokens_v031_license_materials_are_exact_upstream_files() -> None:
-    assert _sha256_without_terminal_newline("packaging/fastokens/LICENSE") == (
-        "0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9"
+    assert _sha256_without_terminal_newline(
+        "packaging/fastokens-pinned/LICENSE-fastokens"
+    ) == ("0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9")
+    assert _sha256_without_terminal_newline(
+        "packaging/fastokens-pinned/NOTICES-fastokens-upstream.txt"
+    ) == ("22ad47758c67a1ed81791611b6095d59b93d1bfa8cad6476cdbf2e7524191cf0")
+
+
+def test_pinned_fastokens_notice_carries_the_upstream_notices_verbatim() -> None:
+    """Apache-2.0 section 4(d): the NOTICE the wheel ships reproduces upstream's."""
+    notice = (ROOT / "packaging/fastokens-pinned/NOTICE-fastokens-pinned").read_text(
+        encoding="utf-8"
     )
-    assert _sha256_without_terminal_newline("packaging/fastokens/NOTICES.txt") == (
-        "22ad47758c67a1ed81791611b6095d59b93d1bfa8cad6476cdbf2e7524191cf0"
+    upstream = (
+        ROOT / "packaging/fastokens-pinned/NOTICES-fastokens-upstream.txt"
+    ).read_text(encoding="utf-8")
+    assert notice.endswith(upstream)
+    # Section 4(b): the statement of modification names every file the
+    # series touches, and the notice patch marks exactly those files.
+    notice_patch = (
+        ROOT / "packaging/fastokens-pinned/PATCHES"
+        / "0006-notices-mark-modified-files.patch"
+    ).read_text(encoding="utf-8")
+    for path in (
+        "src/models/bpe.rs",
+        "src/lib.rs",
+        "src/pre_tokenized.rs",
+        "src/pre_tokenizers.rs",
+        "src/pre_tokenizers/pcre2_classes.rs",
+        "src/pre_tokenizers/scan.rs",
+        "src/pre_tokenizers/split.rs",
+    ):
+        assert path in notice
+        assert f"+++ b/{path}\n" in notice_patch
+
+
+def test_pinned_fastokens_patch_series_is_the_certified_one() -> None:
+    """The five code patches are byte-identical to the ones the readings used."""
+    expected = {
+        "0001-F040-fix-bpe-resolve-out-of-vocabulary-characters.patch": (
+            "41814e13e60286371ce74ec2a22ae84517a2f99fb315f7fa2044c4af3568c583"
+        ),
+        "0002-F041-fix-pcre2-align-unicode-class-semantics.patch": (
+            "e780c21e03a05bc619f67f3cb0df4d12e28f03e9cf3264c4325446531af640ce"
+        ),
+        "0003-F042-fix-scan-chunk-boundaries-inside-pretokens.patch": (
+            "aa724b35c3bf4da666be507cef79c9737deb3209c97d393ba5056e228c408549"
+        ),
+        "0004-F045-fix-scan-accept-long-s-in-contractions.patch": (
+            "0b5fff18801cde5dc70310c3e72625c4094c0e874abe883bba9cd5898935d5ad"
+        ),
+        "0005-F046-fix-split-rescan-tail-after-merge.patch": (
+            "d7b6f6e603ae0852e8d00fc6fc8a294ff87e520001a886c53e7e79fb5c557542"
+        ),
+        "0006-notices-mark-modified-files.patch": (
+            "ee2bb9cfc88603a665d4d50ec916a72ea2f2bebea686104a0e9a98aba54e784b"
+        ),
+    }
+    patches = ROOT / "packaging/fastokens-pinned/PATCHES"
+    assert {path.name for path in patches.iterdir()} == set(expected)
+    for name, digest in expected.items():
+        assert hashlib.sha256((patches / name).read_bytes()).hexdigest() == digest
+    recipe = (ROOT / "packaging/fastokens-pinned/build_pinned.sh").read_text(
+        encoding="utf-8"
     )
+    for name, digest in expected.items():
+        assert f'"{name}"' in recipe
+        assert f'"{digest}"' in recipe

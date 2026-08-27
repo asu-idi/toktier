@@ -1,0 +1,318 @@
+From 42d5c5cb6dca39f6926c9d271119f57c758ddcd1 Mon Sep 17 00:00:00 2001
+From: ae86zhizhi <550149470@qq.com>
+Date: Sat, 15 Aug 2026 14:56:34 -0700
+Subject: [PATCH 2/2] fix(scan): keep chunk boundaries out of pretokens that
+ trail past a newline
+
+The punctuation-run alternative of the recognized patterns ends with a
+trailing class after its [^\s\p{L}\p{N}]+ run: [\r\n]* for Kimi and
+[\r\n/]* for o200k. scan_core consumed that class when deciding where a
+pretoken ends, but newline_chunk_bounds placed the chunk boundary straight
+after the last newline of the surrounding whitespace run. For o200k the two
+disagree whenever a newline is followed by '/', so a pretoken such as
+'@@\n//' was cut across two chunks and both halves got different ids --
+silently, with no length change to notice, and only on inputs long enough
+to be chunked.
+
+The two were the same rule written twice, so they are now one:
+newline_tail_byte(kind, byte) is shared by scan_core and the chunker.
+newline_chunk_bounds asks whether the newline sits inside a punctuation run
+-- by walking back over \r/\n only, never over the rest of the trailing
+class, which would run into the punctuation run itself and misread it --
+and if so ends the chunk at the end of the whole trailing class.
+
+Tests: chunked scanning must equal whole-buffer scanning for both kinds
+across 13 needle shapes, 3 input sizes, 5 placements and 7 chunk counts;
+the trailing class is pinned against the pattern constants.
+---
+ src/lib.rs                 |   5 +-
+ src/pre_tokenized.rs       |  16 +++--
+ src/pre_tokenizers/scan.rs | 138 +++++++++++++++++++++++++++++++++++--
+ 3 files changed, 147 insertions(+), 12 deletions(-)
+
+diff --git a/src/lib.rs b/src/lib.rs
+index 58a5a55..1bdd0ca 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1005,6 +1005,7 @@ impl Tokenizer {
+                         if r.tail_start < buffer.len() {
+                             let tail = crate::pre_tokenized::tokenize_scanned(
+                                 &buffer[r.tail_start..],
++                                kind,
+                                 scan_seg,
+                             )
+                             .map_err(Error::Model)?;
+@@ -1021,7 +1022,7 @@ impl Tokenizer {
+                         Ok((ids, b))
+                     };
+                     let (ids, bounds) =
+-                        crate::pre_tokenized::tokenize_scanned_with_bounds(buffer, scan_seg_rec)
++                        crate::pre_tokenized::tokenize_scanned_with_bounds(buffer, kind, scan_seg_rec)
+                             .map_err(Error::Model)?;
+                     cache
+                         .lock()
+@@ -1030,7 +1031,7 @@ impl Tokenizer {
+                     return Ok(self.post_process(ids, add_special_tokens));
+                 }
+ 
+-                let ids = crate::pre_tokenized::tokenize_scanned(buffer, scan_seg)
++                let ids = crate::pre_tokenized::tokenize_scanned(buffer, kind, scan_seg)
+                     .map_err(Error::Model)?;
+                 return Ok(self.post_process(ids, add_special_tokens));
+             }
+diff --git a/src/pre_tokenized.rs b/src/pre_tokenized.rs
+index 3ce8081..429074e 100644
+--- a/src/pre_tokenized.rs
++++ b/src/pre_tokenized.rs
+@@ -261,7 +261,11 @@ const SCAN_FUSED_PARALLEL_MIN: usize = 64 * 1024;
+ /// This is a single pass over the buffer — each segment's bytes are scanned and
+ /// tokenized while still hot in cache — and never materializes a whole-document
+ /// range list, unlike scanning to a `Vec<(u32,u32)>` then tokenizing it.
+-pub fn tokenize_scanned<F>(buffer: &str, per_chunk: F) -> Result<Vec<u32>, String>
++pub fn tokenize_scanned<F>(
++    buffer: &str,
++    kind: crate::pre_tokenizers::scan::ScanKind,
++    per_chunk: F,
++) -> Result<Vec<u32>, String>
+ where
+     F: Fn(&str) -> Result<Vec<u32>, String> + Sync,
+ {
+@@ -273,7 +277,7 @@ where
+     }
+ 
+     let n_chunks = threads.min(bytes.len() / (32 * 1024)).max(2);
+-    let segments = crate::pre_tokenizers::scan::newline_chunk_bounds(buffer, n_chunks);
++    let segments = crate::pre_tokenizers::scan::newline_chunk_bounds(buffer, n_chunks, kind);
+     if segments.len() <= 1 {
+         return per_chunk(buffer);
+     }
+@@ -303,7 +307,11 @@ type IdsWithBounds = (Vec<u32>, Vec<(u32, u32)>);
+ /// ascending, where `ids[..token_index]` is exactly the encoding of
+ /// `buffer[..byte_offset]`. These are the offsets the prefix cache may cut a
+ /// reused prefix at.
+-pub fn tokenize_scanned_with_bounds<F>(buffer: &str, per_chunk: F) -> Result<IdsWithBounds, String>
++pub fn tokenize_scanned_with_bounds<F>(
++    buffer: &str,
++    kind: crate::pre_tokenizers::scan::ScanKind,
++    per_chunk: F,
++) -> Result<IdsWithBounds, String>
+ where
+     F: Fn(&str) -> Result<IdsWithBounds, String> + Sync,
+ {
+@@ -315,7 +323,7 @@ where
+     }
+ 
+     let n_chunks = threads.min(bytes.len() / (32 * 1024)).max(2);
+-    let segments = crate::pre_tokenizers::scan::newline_chunk_bounds(buffer, n_chunks);
++    let segments = crate::pre_tokenizers::scan::newline_chunk_bounds(buffer, n_chunks, kind);
+     if segments.len() <= 1 {
+         return per_chunk(buffer);
+     }
+diff --git a/src/pre_tokenizers/scan.rs b/src/pre_tokenizers/scan.rs
+index 973dcbb..91c5ab3 100644
+--- a/src/pre_tokenizers/scan.rs
++++ b/src/pre_tokenizers/scan.rs
+@@ -102,6 +102,21 @@ fn run_member(t: &Tables, c: char, kimi: bool) -> bool {
+ fn is_prefix(t: &Tables, c: char) -> bool {
+     c != '\r' && c != '\n' && !is_letter(t, c) && !is_number(t, c)
+ }
++/// Bytes that may trail a newline *inside* a pretoken.
++///
++/// The punctuation-run alternative of the recognized patterns ends with a
++/// trailing class after its `[^\s\p{L}\p{N}]+` run: `[\r\n]*` for the Kimi
++/// pattern and `[\r\n/]*` for o200k, which is the only place `/` appears.
++/// Both [`scan_core`] (deciding where a pretoken ends) and
++/// [`newline_chunk_bounds`] (deciding where a chunk may end) have to agree on
++/// this set — they are the same rule seen from two sides, and when only one of
++/// them knew about `/` a chunk boundary could land inside a pretoken and
++/// silently change its ids.
++#[inline(always)]
++pub(crate) fn newline_tail_byte(kind: ScanKind, b: u8) -> bool {
++    b == b'\r' || b == b'\n' || (kind == ScanKind::O200k && b == b'/')
++}
++
+ /// The punctuation class `[^\s\p{L}\p{N}]`.
+ #[inline(always)]
+ fn is_punct(t: &Tables, c: char) -> bool {
+@@ -185,7 +200,7 @@ fn ascii_lower_run_end(b: &[u8], mut pos: usize) -> usize {
+ /// a preceding `[^\s\p{L}\p{N}]+[\r\n]*` likewise ends at a newline. Splitting
+ /// merely after the *first* newline run — as this once did — can fall inside
+ /// such a pretoken and split it across two chunks, changing the tokenization.
+-pub(crate) fn newline_chunk_bounds(text: &str, n_chunks: usize) -> Vec<(usize, usize)> {
++pub(crate) fn newline_chunk_bounds(text: &str, n_chunks: usize, kind: ScanKind) -> Vec<(usize, usize)> {
+     let bytes = text.as_bytes();
+     let n = bytes.len();
+     if n_chunks < 2 {
+@@ -213,7 +228,7 @@ pub(crate) fn newline_chunk_bounds(text: &str, n_chunks: usize) -> Vec<(usize, u
+             }
+             e += l;
+         }
+-        let boundary = last_nl + 1;
++        let boundary = pretoken_end_at_newline(text, bytes, t, kind, last_nl);
+         if boundary < n && boundary > *splits.last().unwrap() {
+             splits.push(boundary);
+         }
+@@ -222,6 +237,47 @@ pub(crate) fn newline_chunk_bounds(text: &str, n_chunks: usize) -> Vec<(usize, u
+     splits.windows(2).map(|w| (w[0], w[1])).collect()
+ }
+ 
++/// End of the pretoken that contains the newline at `last_nl`.
++///
++/// Most alternatives cannot hold a newline at all, and the whitespace ones
++/// (`\s*[\r\n]+`, `\s+(?!\S)`, `\s+`) end at their last newline — for those
++/// the byte after the newline is already a pretoken boundary. The exception is
++/// the punctuation-run alternative ` ?[^\s\p{L}\p{N}]+<tail>`, whose trailing
++/// class keeps going past the newline (see [`newline_tail_byte`]); ending a
++/// chunk there would cut that pretoken across two chunks and change its ids.
++///
++/// Telling the two apart only needs the character in front of the newline run:
++/// walk back over `\r`/`\n` (never over the rest of the trailing class, which
++/// would run into the punctuation run itself and misread it) and look at what
++/// precedes it. Punctuation means we are inside the punctuation-run
++/// alternative, so the pretoken ends at the end of the whole trailing class.
++fn pretoken_end_at_newline(
++    text: &str,
++    b: &[u8],
++    t: &Tables,
++    kind: ScanKind,
++    last_nl: usize,
++) -> usize {
++    let n = b.len();
++    let mut s = last_nl;
++    while s > 0 && (b[s - 1] == b'\r' || b[s - 1] == b'\n') {
++        s -= 1;
++    }
++    let in_punct_run = s > 0
++        && text[..s]
++            .chars()
++            .next_back()
++            .is_some_and(|c| is_punct(t, c));
++    if !in_punct_run {
++        return last_nl + 1;
++    }
++    let mut e = last_nl + 1;
++    while e < n && newline_tail_byte(kind, b[e]) {
++        e += 1;
++    }
++    e
++}
++
+ /// Core single-pass scan: call `emit(start, end)` for each covering pretoken
+ /// byte range, in order. [`scan_seq`] collects these into a `Vec`; the fused
+ /// encode path BPEs each pretoken inline (no range list is materialized). Any
+@@ -234,7 +290,6 @@ where
+     let b = text.as_bytes();
+     let n = b.len();
+     let kimi = kind == ScanKind::Kimi;
+-    let slash = kind == ScanKind::O200k;
+     let mut i = 0usize;
+ 
+     while i < n {
+@@ -389,7 +444,7 @@ where
+                         break;
+                     }
+                 }
+-                while e < n && (b[e] == b'\r' || b[e] == b'\n' || (slash && b[e] == b'/')) {
++                while e < n && newline_tail_byte(kind, b[e]) {
+                     e += 1;
+                 }
+                 emit(start, e)?;
+@@ -476,7 +531,7 @@ mod tests {
+             "run should be one pretoken: {whole:?}"
+         );
+ 
+-        let bounds = newline_chunk_bounds(&text, 2);
++        let bounds = newline_chunk_bounds(&text, 2, ScanKind::Kimi);
+         assert!(bounds.len() >= 2, "expected a split: {bounds:?}");
+         let chunked: Vec<String> = bounds
+             .iter()
+@@ -485,6 +540,77 @@ mod tests {
+         assert_eq!(chunked, whole, "chunked scan diverged from whole scan");
+     }
+ 
++    /// A chunk boundary must never fall inside a pretoken, for any pattern
++    /// kind, any needle, any placement and any chunk count.
++    ///
++    /// The o200k punctuation-run alternative ends with `[\r\n/]*`, so a
++    /// pretoken like `@@\n//` continues past its newline. Placing the boundary
++    /// straight after the last newline cut it in two and silently changed the
++    /// ids of both halves — invisible to a length check, and only reachable on
++    /// inputs long enough to be chunked at all.
++    #[test]
++    fn chunk_bounds_never_split_a_pretoken() {
++        // shapes that do and do not continue past the newline
++        let needles = [
++            "@@\n//", "@@\n/x", "@@\r\n//", "@@\n\n//", "@@\n \n//", "@@\ny", "@@\n..",
++            "a//\n//b", "@@//\n///x", "..\n/", " @@\n//", "@@\n/", "@@\n////////x",
++        ];
++        let filler = "The quick brown fox jumps over the lazy dog. ";
++        for kind in [ScanKind::O200k, ScanKind::Kimi] {
++            for needle in needles {
++                for total in [4_000usize, 40_000, 200_000] {
++                    for frac in [0.1, 0.25, 0.5, 0.75, 0.9] {
++                        let body = filler.repeat(total / filler.len() + 1);
++                        let cut = ((total as f64) * frac) as usize;
++                        let text = format!("{}{needle}{}", &body[..cut], &body[..total - cut]);
++                        let whole = scan(kind, &text);
++                        for n_chunks in [1usize, 2, 3, 4, 8, 16, 32] {
++                            let bounds = newline_chunk_bounds(&text, n_chunks, kind);
++                            let chunked: Vec<String> = bounds
++                                .iter()
++                                .flat_map(|&(s, e)| scan(kind, &text[s..e]))
++                                .collect();
++                            assert_eq!(
++                                chunked, whole,
++                                "kind={kind:?} needle={needle:?} total={total} \
++                                 frac={frac} n_chunks={n_chunks}: chunked scan \
++                                 diverged from whole scan"
++                            );
++                        }
++                    }
++                }
++            }
++        }
++    }
++
++    /// The trailing class is shared between the scanner and the chunker; pin
++    /// it so the two cannot drift apart again.
++    #[test]
++    fn newline_tail_class_matches_the_patterns() {
++        // o200k's punctuation alternative ends `[\r\n/]*`
++        assert!(newline_tail_byte(ScanKind::O200k, b'\r'));
++        assert!(newline_tail_byte(ScanKind::O200k, b'\n'));
++        assert!(newline_tail_byte(ScanKind::O200k, b'/'));
++        assert!(!newline_tail_byte(ScanKind::O200k, b'x'));
++        assert!(!newline_tail_byte(ScanKind::O200k, b' '));
++        // Kimi's ends `[\r\n]*` — no slash
++        assert!(newline_tail_byte(ScanKind::Kimi, b'\r'));
++        assert!(newline_tail_byte(ScanKind::Kimi, b'\n'));
++        assert!(!newline_tail_byte(ScanKind::Kimi, b'/'));
++        // and the pattern constants really do say that
++        assert!(crate::tiktoken::O200K_BASE_PATTERN.contains(r"[\r\n/]*"));
++        assert!(crate::tiktoken::KIMI_PATTERN.contains(r"[\r\n]*"));
++        assert!(!crate::tiktoken::KIMI_PATTERN.contains(r"[\r\n/]*"));
++    }
++
++    #[test]
++    fn punct_run_tail_is_one_pretoken() {
++        assert_eq!(scan(ScanKind::O200k, "@@\n//x"), vec!["@@\n//", "x"]);
++        assert_eq!(scan(ScanKind::Kimi, "@@\n//x"), vec!["@@\n", "//", "x"]);
++        // a newline that is not part of a punctuation run stays on its own
++        assert_eq!(scan(ScanKind::O200k, "a\n//x"), vec!["a", "\n", "//", "x"]);
++    }
++
+     #[test]
+     fn words_case_split() {
+         assert_eq!(scan(ScanKind::O200k, "HTTPRequest"), vec!["HTTPRequest"]);
+@@ -553,7 +679,7 @@ mod tests {
+             let whole = scan_seq(kind, &big);
+             for n_chunks in [1usize, 2, 3, 7, 16, 64] {
+                 let mut combined = Vec::new();
+-                for (s, e) in newline_chunk_bounds(&big, n_chunks) {
++                for (s, e) in newline_chunk_bounds(&big, n_chunks, ScanKind::O200k) {
+                     let base = s as u32;
+                     for (a, b) in scan_seq(kind, &big[s..e]) {
+                         combined.push((a + base, b + base));
+-- 
+2.43.0
+

@@ -1,0 +1,155 @@
+From: (PLAN/178 differential certification)
+Subject: [PATCH] fix(split): rescan the tail after merging chunk matches
+
+When a Split pre-tokenizer runs over several chunks, `merge_chunk_matches`
+stitches the per-chunk match lists back together. The gap repair that
+re-scans serially across a seam is guarded by `idx < flat.len()`: it only
+runs while there is a later parallel match to converge on.
+
+At the *last* seam that guard can be false. A ghost match there triggers
+the truncation repair, whose inner loop consumes the remaining entries;
+the loop then exits with `idx == flat.len()`, so the gap repair is skipped
+entirely and the text after `prev_end` is never scanned by anyone. The
+final match is not truncated -- it is dropped, and the orphaned span is
+re-split by whatever pre-tokenizer runs next, yielding more (and
+different) tokens. Bounded repetitions such as `\p{N}{1,3}` hide it best,
+because a truncated `3` is shaped exactly like a legitimate `3`, but the
+bounded repetition is what conceals the bug rather than what causes it.
+
+The fix drains `find_from` from `prev_end` once the merge loop is done.
+Past the last accepted match the merge is the serial scan, call for call,
+so the tail cannot come out differently; the cost when nothing was lost is
+one extra `find_from` that returns `None`. The regression test sweeps seam
+position x digit-run shape x chunk count, and it fails if the drain is
+removed.
+
+diff --git a/src/pre_tokenizers/split.rs b/src/pre_tokenizers/split.rs
+index e308f1d..d614ba0 100644
+--- a/src/pre_tokenizers/split.rs
++++ b/src/pre_tokenizers/split.rs
+@@ -953,6 +953,32 @@ fn merge_chunk_matches(
+         }
+     }
+ 
++    // Tail repair.
++    //
++    // The gap repair above can only run while there is a *following* parallel
++    // match to converge onto (`idx < flat.len()`). When the misalignment lands
++    // on the last matches in the list -- a ghost at the final seam whose
++    // truncation repair consumes the remaining entries -- the loop exits with
++    // `idx == flat.len()` and whatever the serial scan would still have found
++    // after `prev_end` is silently dropped. That is invisible downstream: the
++    // lost span simply stops being a match, and a later pre-tokenizer re-splits
++    // it into different tokens.
++    //
++    // Draining `find_from` here closes it, and closes it provably: past the
++    // last accepted match the merge just *is* the serial scan, so the result
++    // cannot differ from serial matching on the tail. It costs one extra
++    // `find_from` call (returning `None`) when nothing was lost.
++    loop {
++        match find_from(prev_end - base)? {
++            Some((ms, me)) => {
++                debug_assert!(ms >= prev_end, "find_from went backwards");
++                result.push((ms, me));
++                prev_end = me;
++            }
++            None => break,
++        }
++    }
++
+     Ok(result)
+ }
+ 
+@@ -1043,7 +1069,91 @@ mod tests {
+ 
+     use super::*;
+ 
+-    // ── Behavior tests ──────────────────────────────────
++    /// A chunk seam must never lose a match, including when the affected
++    /// match is the last one in the document.
++    ///
++    /// The gap repair can only run while a following parallel match exists to
++    /// converge onto. When a ghost at the final seam triggers the truncation
++    /// repair and consumes the remaining entries, the merge used to exit with
++    /// nothing left to converge on and silently dropped the tail. Nothing
++    /// downstream can notice: the span simply stops being a match and a later
++    /// pre-tokenizer re-splits it, changing the ids without changing anything
++    /// that looks like an error.
++    ///
++    /// Swept over seam positions so the ghost lands at every offset inside a
++    /// bounded-repetition run, which is the shape that hides the loss: a
++    /// truncated `\p{N}{1,3}` match is indistinguishable from a legitimate
++    /// short one.
++    #[test]
++    fn chunk_seam_never_loses_the_trailing_match() {
++        let regs = try_compile_pcre2_regexes(r"\p{N}{1,3}", 4, Pcre2Limits::default())
++            .unwrap()
++            .expect("pcre2 compiles");
++
++        for tail_pad in 0..8usize {
++            for digits in ["11234", "1234567", "42", "999999"] {
++                let head = "a".repeat(600);
++                let tail = "b".repeat(600 + tail_pad);
++                let text = format!("{head}{digits}{tail}");
++                let serial = find_matches_pcre2(&text, 0, &regs[0]).unwrap();
++
++                for n_chunks in [2usize, 3, 4, 5, 8] {
++                    let nominal = text.len() / n_chunks;
++                    let mut auth = vec![0usize];
++                    for i in 1..n_chunks {
++                        let b = snap_char_ceil(&text, i * nominal);
++                        if b > *auth.last().unwrap() && b < text.len() {
++                            auth.push(b);
++                        }
++                    }
++                    auth.push(text.len());
++                    let actual = auth.len() - 1;
++                    if actual < 2 {
++                        continue;
++                    }
++                    let mut chunks = Vec::new();
++                    for i in 0..actual {
++                        let (a0, a1) = (auth[i], auth[i + 1]);
++                        let ce = snap_char_ceil(&text, (a1 + CHUNK_OVERLAP).min(text.len()));
++                        let all =
++                            find_matches_pcre2(&text[a0..ce], a0, &regs[i % regs.len()]).unwrap();
++                        chunks.push(
++                            all.into_iter().filter(|&(st, _)| st < a1).collect::<Vec<_>>(),
++                        );
++                    }
++                    let bytes = text.as_bytes();
++                    let reg0 = &regs[0];
++                    let merged = merge_chunk_matches(chunks, 0, |pos_rel| {
++                        let mut p = pos_rel;
++                        loop {
++                            if p >= bytes.len() {
++                                return Ok(None);
++                            }
++                            match reg0.regex.find_at(bytes, p) {
++                                Ok(Some(m)) => {
++                                    if m.start() == m.end() {
++                                        p = m.end() + 1;
++                                        continue;
++                                    }
++                                    return Ok(Some((m.start(), m.end())));
++                                }
++                                Ok(None) => return Ok(None),
++                                Err(e) => {
++                                    return Err(Error::Unsupported(format!("PCRE2: {e}")))
++                                }
++                            }
++                        }
++                    })
++                    .unwrap();
++                    assert_eq!(
++                        merged, serial,
++                        "digits={digits:?} tail_pad={tail_pad} n_chunks={n_chunks}: \
++                         parallel merge diverged from serial matching"
++                    );
++                }
++            }
++        }
++    }
+ 
+     #[test]
+     fn split_removed() {

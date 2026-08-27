@@ -1,0 +1,99 @@
+From: (PLAN/178 differential certification)
+Subject: [PATCH] fix(scan): treat U+017F as `s` when matching contractions
+
+The fused scanner decides whether an apostrophe starts a contraction by
+looking at the next byte, and only ever accepts ASCII. The reference
+pre-tokenizer matches the contraction alternatives case-insensitively,
+which under Unicode simple case folding also accepts U+017F LATIN SMALL
+LETTER LONG S, since it folds to `s`. So `I'{U+017F}` is one pre-token
+for the reference and three for the scanner, and the result is a
+different, silently wrong id list.
+
+U+017F is the *only* codepoint this can affect. Iterating every scalar
+value, it is the single non-ASCII codepoint whose simple fold lands on
+any of the contraction letters {s,t,r,e,v,m,l,d}. The near misses are
+multi-character folds -- U+00DF and U+1E9E fold to `ss`, U+FB05 and
+U+FB06 to `st` -- and the reference does not treat those as contractions
+either, so they must keep being rejected. The added test asserts this by
+sweeping the whole scalar range rather than by listing cases, so it stays
+true if the folding tables ever move.
+
+diff --git a/src/pre_tokenizers/scan.rs b/src/pre_tokenizers/scan.rs
+index 91c5ab3..a9a8472 100644
+--- a/src/pre_tokenizers/scan.rs
++++ b/src/pre_tokenizers/scan.rs
+@@ -125,11 +125,24 @@ fn is_punct(t: &Tables, c: char) -> bool {
+ 
+ /// Length of a contraction suffix at `bs[0]` (which must be `'`), or 0.
+ /// Reproduces `(?i:'s|'t|'re|'ve|'m|'ll|'d)`.
++///
++/// `(?i:)` in the reference engine is Unicode simple case folding, not ASCII
++/// folding, so `'ſ` (U+017F LATIN SMALL LETTER LONG S) matches `'s`. U+017F is
++/// the *only* non-ASCII scalar value that can appear here: sweeping all of
++/// Unicode, it is the sole codepoint whose simple case folding lands on any of
++/// the contraction letters s/t/r/e/v/m/l/d. The near misses -- ß U+00DF,
++/// ẞ U+1E9E, ﬅ U+FB05, ﬆ U+FB06 -- fold to *two* characters, which simple
++/// folding does not apply and which no alternative here spells anyway; the
++/// reference agrees, and `long_s_is_the_only_non_ascii_contraction` pins that.
+ #[inline]
+ fn contraction_len(bs: &[u8]) -> usize {
+-    if bs.len() < 2 || bs[1] >= 0x80 {
++    if bs.len() < 2 {
+         return 0;
+     }
++    if bs[1] >= 0x80 {
++        // U+017F is C5 BF in UTF-8; it stands in for `s`.
++        return if bs.len() >= 3 && bs[1] == 0xC5 && bs[2] == 0xBF { 3 } else { 0 };
++    }
+     match bs[1] | 0x20 {
+         b's' | b't' | b'm' | b'd' => 2,
+         b'r' | b'v' if bs.len() >= 3 && (bs[2] | 0x20) == b'e' => 3,
+@@ -611,6 +624,48 @@ mod tests {
+         assert_eq!(scan(ScanKind::O200k, "a\n//x"), vec!["a", "\n", "//", "x"]);
+     }
+ 
++    /// U+017F is the only non-ASCII codepoint the contraction matcher may
++    /// accept. Checked exhaustively rather than by example, because the claim
++    /// is what keeps the one-codepoint fix honest.
++    #[test]
++    fn long_s_is_the_only_non_ascii_contraction() {
++        let mut buf = [0u8; 8];
++        for cp in 0x80u32..0x11_0000 {
++            if (0xD800..=0xDFFF).contains(&cp) {
++                continue;
++            }
++            let Some(c) = char::from_u32(cp) else { continue };
++            let mut bytes = vec![b'\''];
++            bytes.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
++            let got = contraction_len(&bytes);
++            if cp == 0x017F {
++                assert_eq!(got, 3, "U+017F must be accepted as 's'");
++            } else {
++                assert_eq!(got, 0, "U+{cp:04X} must not be a contraction");
++            }
++        }
++        // the ASCII set is unchanged
++        assert_eq!(contraction_len(b"'s"), 2);
++        assert_eq!(contraction_len(b"'S"), 2);
++        assert_eq!(contraction_len(b"'re"), 3);
++        assert_eq!(contraction_len(b"'LL"), 3);
++        assert_eq!(contraction_len(b"'x"), 0);
++    }
++
++    /// The pretoken shape the reference produces for `" I'\u{17F}"`.
++    #[test]
++    fn long_s_contraction_joins_the_word() {
++        assert_eq!(scan(ScanKind::O200k, " I'\u{17F}"), vec![" I'\u{17F}"]);
++        assert_eq!(scan(ScanKind::Kimi, " I'\u{17F}"), vec![" I'\u{17F}"]);
++        // The two-character folds are *not* contractions, so the word ends at
++        // `I` and the apostrophe instead becomes the optional prefix of the
++        // following letter run -- which is what the reference does too.
++        assert_eq!(scan(ScanKind::O200k, " I'\u{DF}"), vec![" I", "'\u{DF}"]);
++        assert_eq!(scan(ScanKind::O200k, " I'\u{FB05}"), vec![" I", "'\u{FB05}"]);
++        // contrast: with the contraction, the apostrophe stays with the word
++        assert_eq!(scan(ScanKind::O200k, " I'\u{17F}x"), vec![" I'\u{17F}", "x"]);
++    }
++
+     #[test]
+     fn words_case_split() {
+         assert_eq!(scan(ScanKind::O200k, "HTTPRequest"), vec!["HTTPRequest"]);

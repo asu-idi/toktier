@@ -14,7 +14,13 @@ concurrency:
 
 jobs:
   build:
-    if: ${{ !github.event.release.draft && !github.event.release.prerelease }}
+    # The tag prefix keeps this workflow to the core toktier releases; the
+    # pinned Fastokens distribution is released under its own tag prefix and
+    # is published by .github/workflows/publish-fastokens.yml.
+    if: >-
+      ${{ !github.event.release.draft
+          && !github.event.release.prerelease
+          && startsWith(github.event.release.tag_name, 'v') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read

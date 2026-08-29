@@ -126,6 +126,105 @@ def test_requirement_key_reads_both_marker_spellings() -> None:
         assert 'extra=="fastokens"' in key
 
 
+#: The `METADATA` a real release wheel carries, taken verbatim from one
+#: `maturin build --release` produced for this tree. The header block is
+#: trimmed to what the gate reads; every `Requires-Dist` and
+#: `Provides-Extra` line is exactly as the builder wrote it, single-quoted
+#: markers and all. It is a literal on purpose: rebuilding these lines
+#: from `pyproject.toml` would test the gate against the same source the
+#: gate already reads, which is how the marker-quoting defect survived
+#: having a test. When a release moves a pin, this fixture is refreshed
+#: from the new wheel and the failure here is the reminder.
+REAL_WHEEL_METADATA = b"""\
+Metadata-Version: 2.4
+Name: toktier
+Version: 0.2.7
+Classifier: Programming Language :: Rust
+Requires-Dist: tokenizers==0.22.2
+Requires-Dist: transformers==4.57.6
+Requires-Dist: huggingface-hub>=0.30
+Requires-Dist: platformdirs>=3.0
+Requires-Dist: tomli>=2.0 ; python_full_version < '3.11'
+Requires-Dist: toktier-fastokens==0.3.1.1 ; extra == 'fastokens'
+Requires-Dist: torch~=2.11 ; extra == 'gpu'
+Requires-Dist: numpy>=1.24 ; extra == 'gpu'
+Requires-Dist: torch~=2.11 ; extra == 'gpu-jit'
+Requires-Dist: ninja~=1.11 ; extra == 'gpu-jit'
+Requires-Dist: numpy>=1.24 ; extra == 'gpu-jit'
+Provides-Extra: fastokens
+Provides-Extra: gpu
+Provides-Extra: gpu-jit
+Summary: Correctness-first tokenization with a certified fast path.
+
+Long description.
+"""
+
+
+def test_the_gate_accepts_a_real_wheels_metadata() -> None:
+    """The fixture the fastokens check never had.
+
+    Its test read this tool's source and the pyproject table, both of
+    which said the right thing while the matching logic read a correct
+    wheel as one that had lost the pinned extra. Feeding the builder's
+    own text through the matching logic is what tells the two apart.
+    """
+    import json
+
+    verifier = _artifact_verifier()
+
+    verifier.verify_metadata(REAL_WHEEL_METADATA)
+
+    # The fixture is a snapshot, so it says out loud which release it is
+    # a snapshot of; a moved pin fails here with a reason rather than
+    # inside the matcher.
+    binding = json.loads((ROOT / "tools/fastokens_binding.json").read_bytes())
+    pinned = binding["distribution"]
+    assert (
+        f"{pinned['name']}=={pinned['version']} ; extra == 'fastokens'".encode()
+        in REAL_WHEEL_METADATA
+    ), "refresh REAL_WHEEL_METADATA from a wheel built after the pin moved"
+
+
+@pytest.mark.parametrize(
+    ("edit", "complaint"),
+    [
+        (
+            (
+                b"Requires-Dist: toktier-fastokens==0.3.1.1 ; extra == 'fastokens'",
+                b"Requires-Dist: fastokens==0.3.1 ; extra == 'fastokens'",
+            ),
+            "requires the upstream fastokens distribution",
+        ),
+        (
+            (
+                b"Requires-Dist: toktier-fastokens==0.3.1.1 ; extra == 'fastokens'",
+                b"Requires-Dist: toktier-fastokens ; extra == 'fastokens'",
+            ),
+            "the fastokens extra does not require",
+        ),
+        (
+            (b"Requires-Dist: tokenizers==0.22.2\n", b""),
+            "does not pin tokenizers==0.22.2",
+        ),
+        (
+            (b"Provides-Extra: gpu-jit\n", b""),
+            "does not expose both GPU delivery profiles",
+        ),
+    ],
+)
+def test_the_gate_refuses_a_real_wheels_metadata_once_edited(
+    edit: tuple[bytes, bytes], complaint: str
+) -> None:
+    """Each refusal is exercised against the same real text."""
+    verifier = _artifact_verifier()
+    before, after = edit
+    assert before in REAL_WHEEL_METADATA
+    damaged = REAL_WHEEL_METADATA.replace(before, after)
+
+    with pytest.raises(ValueError, match=complaint):
+        verifier.verify_metadata(damaged)
+
+
 @pytest.mark.parametrize("representation", ["hex", "bytes"])
 def test_release_artifact_gate_rejects_identity_sentinel(
     tmp_path: Path, representation: str
@@ -150,6 +249,69 @@ def test_release_artifact_gate_accepts_normal_identity(tmp_path: Path) -> None:
 
     with zipfile.ZipFile(wheel) as archive:
         verifier._verify_no_identity_sentinel(archive, archive.namelist())
+
+
+def _recorded_refresh(
+    monkeypatch: pytest.MonkeyPatch, argv: list[str]
+) -> list[list[str]]:
+    """Run the refresh tool with every subprocess replaced by a record."""
+    refresh = _tools_module("refresh_dependency_judgement")
+    ran: list[list[str]] = []
+
+    def record(command: list[str]) -> int:
+        ran.append(command)
+        return 0
+
+    monkeypatch.setattr(refresh, "run", record)
+    monkeypatch.setattr(refresh, "legal_digest_problems", lambda *, rewrite: [])
+    assert refresh.main(argv) == 0
+    return ran
+
+
+def test_the_refresh_updates_the_lock_offline_unless_told_otherwise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The write mode's first step is a lockfile edit, and its scope matters.
+
+    An unrestricted ``cargo update`` reaches the network and moves every
+    transitive third-party version that has published since. A 0.2.7
+    release wave met that: twelve unrelated packages lifted, a seven-line
+    lock diff turned into thirty-seven, and the version-normalised source
+    identities moved with them. The narrow operation this tool is for is
+    the workspace's own members against what is already cached.
+    """
+    ran = _recorded_refresh(monkeypatch, [])
+
+    assert ran[0] == ["cargo", "update", "--workspace", "--offline"]
+    assert ran[1] == ["cargo", "fetch", "--locked"]
+
+
+def test_the_refresh_reaches_the_network_only_when_asked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wide update is still available, by name."""
+    ran = _recorded_refresh(monkeypatch, ["--allow-network-update"])
+
+    assert ran[0] == ["cargo", "update"]
+
+
+def test_the_refresh_checks_without_touching_the_lock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ran = _recorded_refresh(monkeypatch, ["--check"])
+
+    assert not any(command[:2] == ["cargo", "update"] for command in ran)
+    assert all("--check" in command for command in ran)
+
+
+def test_the_refresh_refuses_a_flag_pair_that_means_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``--check`` writes nothing, so widening its writes is not a request."""
+    refresh = _tools_module("refresh_dependency_judgement")
+
+    with pytest.raises(SystemExit):
+        refresh.main(["--check", "--allow-network-update"])
 
 
 def _archive_builder() -> ModuleType:

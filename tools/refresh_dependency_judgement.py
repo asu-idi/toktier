@@ -2,13 +2,26 @@
 """Refresh lock-derived judgement data early in a release cycle.
 
 Run this before the release certification battery so that the battery judges
-the dependency resolution intended for the release. The default mode updates
+the dependency resolution intended for the release. The write mode updates
 the lockfile, populates Cargo's all-target cache, regenerates every record that
 consumes the lockfile, and finishes by running the corresponding checks.
+
+**The write mode's first step edits `Cargo.lock`, and by default it edits it
+offline.** `cargo update --workspace --offline` re-resolves this workspace's
+own members against the packages already in the local cache. It is the
+narrow operation this tool exists for. An unrestricted `cargo update` is a
+different operation: it reaches the network and moves every transitive
+third-party version that has published since the lockfile was written. A
+0.2.7 release wave met that difference the hard way -- twelve unrelated
+packages were lifted, `Cargo.lock` went from a seven-line diff to a
+thirty-seven-line one, and the version-normalised source identities moved
+with it. Ask for it explicitly with `--allow-network-update` when a release
+really is meant to take new upstream versions.
 
 Usage::
 
     python3 tools/refresh_dependency_judgement.py
+    python3 tools/refresh_dependency_judgement.py --allow-network-update
     python3 tools/refresh_dependency_judgement.py --check
 """
 
@@ -82,18 +95,40 @@ def legal_digest_problems(*, rewrite: bool) -> list[str]:
     return problems
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Refresh lock-derived judgement data early in a release cycle."
+    )
     parser.add_argument(
         "--check",
         action="store_true",
         help="verify the lock-derived records without updating or rewriting them",
     )
-    arguments = parser.parse_args()
+    parser.add_argument(
+        "--allow-network-update",
+        action="store_true",
+        help=(
+            "let the lock update reach the network and move transitive "
+            "third-party versions, instead of re-resolving this workspace "
+            "against the packages already cached. Say this only when the "
+            "release is meant to take new upstream versions: it moves the "
+            "source identities with them."
+        ),
+    )
+    arguments = parser.parse_args(argv)
+    if arguments.check and arguments.allow_network_update:
+        parser.error("--check writes nothing, so --allow-network-update means nothing")
 
     commands: list[list[str]] = []
     if not arguments.check:
-        commands.extend((["cargo", "update"], ["cargo", "fetch", "--locked"]))
+        # Offline and workspace-scoped unless asked otherwise; see the
+        # module docstring for what the unrestricted form does.
+        update = (
+            ["cargo", "update"]
+            if arguments.allow_network_update
+            else ["cargo", "update", "--workspace", "--offline"]
+        )
+        commands.extend((update, ["cargo", "fetch", "--locked"]))
         commands.extend([[sys.executable, generator] for generator in GENERATORS])
     commands.extend(verification_commands())
 

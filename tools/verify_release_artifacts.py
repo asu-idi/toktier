@@ -46,6 +46,49 @@ def _requirement_key(item: str) -> str:
     return item.replace(" ", "").replace("'", '"').lower()
 
 
+def verify_metadata(raw: bytes) -> None:
+    """Check one wheel's ``METADATA`` bytes.
+
+    Separated from :func:`verify` so that a test can feed it the real
+    text a real wheel carries. The lesson this closes is that the
+    fastokens check had a test which only read this file's source and
+    the ``pyproject`` table, and so could not see that the matching
+    logic read a correct wheel as a broken one: a gate having a test and
+    a gate being tested are two different things.
+    """
+    metadata = BytesParser(policy=default).parsebytes(raw)
+    if metadata["Name"] != "toktier" or metadata["Version"] != "0.2.7":
+        _fail("wheel metadata has the wrong distribution identity")
+    requirements = metadata.get_all("Requires-Dist", failobj=[])
+    if any(re.match(r"(?i)^gigatoken(?:\s|\[|;|$)", item) for item in requirements):
+        _fail("wheel metadata requires a second Gigatoken distribution")
+    # The fastokens extra resolves to the pinned distribution this
+    # project publishes, at the version the registry binding names, and
+    # never to the upstream distribution of the same import name.
+    fastokens_binding = json.loads((ROOT / "tools/fastokens_binding.json").read_bytes())
+    pinned = fastokens_binding["distribution"]
+    pinned_requirement = f"{pinned['name']}=={pinned['version']}"
+    upstream_name = re.compile(r"(?i)^fastokens(?:\s|\[|=|<|>|!|~|;|$)")
+    if any(upstream_name.match(item) for item in requirements):
+        _fail("wheel metadata requires the upstream fastokens distribution")
+    if not any(
+        _requirement_key(item).startswith(pinned_requirement.lower())
+        and 'extra=="fastokens"' in _requirement_key(item)
+        for item in requirements
+    ):
+        _fail(f"the fastokens extra does not require {pinned_requirement}")
+    extras = set(metadata.get_all("Provides-Extra", failobj=[]))
+    if "fast" in extras:
+        _fail("wheel metadata still exposes the obsolete fast extra")
+    if not {"gpu", "gpu-jit"}.issubset(extras):
+        _fail("wheel metadata does not expose both GPU delivery profiles")
+    normalized = [item.replace(" ", "").lower() for item in requirements]
+    if "tokenizers==0.22.2" not in normalized:
+        _fail("base metadata does not pin tokenizers==0.22.2")
+    if "transformers==4.57.6" not in normalized:
+        _fail("base metadata does not pin transformers==4.57.6")
+
+
 def _verify_no_identity_sentinel(
     archive: zipfile.ZipFile, names: list[str]
 ) -> None:
@@ -156,39 +199,7 @@ def verify(wheel: Path) -> None:
                 _fail("wheel registry carries another integrated CPU identity")
 
         metadata_name = _one(names, ".dist-info/METADATA")
-        metadata = BytesParser(policy=default).parsebytes(archive.read(metadata_name))
-        if metadata["Name"] != "toktier" or metadata["Version"] != "0.2.7":
-            _fail("wheel metadata has the wrong distribution identity")
-        requirements = metadata.get_all("Requires-Dist", failobj=[])
-        if any(re.match(r"(?i)^gigatoken(?:\s|\[|;|$)", item) for item in requirements):
-            _fail("wheel metadata requires a second Gigatoken distribution")
-        # The fastokens extra resolves to the pinned distribution this
-        # project publishes, at the version the registry binding names, and
-        # never to the upstream distribution of the same import name.
-        fastokens_binding = json.loads(
-            (ROOT / "tools/fastokens_binding.json").read_bytes()
-        )
-        pinned = fastokens_binding["distribution"]
-        pinned_requirement = f"{pinned['name']}=={pinned['version']}"
-        upstream_name = re.compile(r"(?i)^fastokens(?:\s|\[|=|<|>|!|~|;|$)")
-        if any(upstream_name.match(item) for item in requirements):
-            _fail("wheel metadata requires the upstream fastokens distribution")
-        if not any(
-            _requirement_key(item).startswith(pinned_requirement.lower())
-            and 'extra=="fastokens"' in _requirement_key(item)
-            for item in requirements
-        ):
-            _fail(f"the fastokens extra does not require {pinned_requirement}")
-        extras = set(metadata.get_all("Provides-Extra", failobj=[]))
-        if "fast" in extras:
-            _fail("wheel metadata still exposes the obsolete fast extra")
-        if not {"gpu", "gpu-jit"}.issubset(extras):
-            _fail("wheel metadata does not expose both GPU delivery profiles")
-        normalized = [item.replace(" ", "").lower() for item in requirements]
-        if "tokenizers==0.22.2" not in normalized:
-            _fail("base metadata does not pin tokenizers==0.22.2")
-        if "transformers==4.57.6" not in normalized:
-            _fail("base metadata does not pin transformers==4.57.6")
+        verify_metadata(archive.read(metadata_name))
 
         wheel_metadata_name = _one(names, ".dist-info/WHEEL")
         wheel_metadata = archive.read(wheel_metadata_name).decode("utf-8")

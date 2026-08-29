@@ -5,6 +5,22 @@
 artifacts, corrected CPU repair, prebuilt CUDA delivery, routing policy, and
 state store without a GIL or Python-shaped token collection.
 
+The crate is published on crates.io from 0.2.0 onward and tracks the package
+version, so `cargo add toktier` resolves it from the registry; a local
+checkout can also be consumed as a workspace/path dependency. Rust can
+verify and mirror an artifact, export/import the Python-v1 air-gap format,
+and operate with network access disabled. Fetching an immutable revision
+over TLS is the optional `network` feature, which is not enabled by
+default from 0.2.5 on:
+
+```toml
+toktier = { version = "0.2.6", features = ["network"] }
+```
+
+The example below acquires an artifact on its first call, so it is written
+for a dependency declared that way; everything after acquisition works
+without the feature.
+
 ```rust,no_run
 use toktier::{ArtifactManager, Device, Revision, Runtime};
 
@@ -12,7 +28,7 @@ fn main() -> toktier::Result<()> {
     // Any directory this process can write. A shared location such as
     // /var/cache/toktier serves a whole machine, once it exists and the
     // process may write it; the first call below acquires the artifact,
-    // which needs the optional `network` feature described further down.
+    // which needs the optional `network` feature declared above.
     let cache = format!(
         "{}/.cache/toktier/artifacts",
         std::env::var("HOME").unwrap_or_else(|_| ".".to_owned())
@@ -41,22 +57,9 @@ fn main() -> toktier::Result<()> {
 }
 ```
 
-The crate is published on crates.io from 0.2.0 onward and tracks the package
-version, so `cargo add toktier` resolves it from the registry; a local
-checkout can also be consumed as a workspace/path dependency. Rust can
-verify and mirror an artifact, export/import the Python-v1 air-gap format,
-and operate with network access disabled. Fetching an immutable revision
-over TLS is the optional `network` feature, which is not enabled by
-default from 0.2.5 on:
-
-```toml
-toktier = { version = "0.2.6", features = ["network"] }
-```
-
-The optional `jit`
-feature invokes an exact `nvcc` directly and loads its authenticated product
-through the same Rust CUDA Driver host as prebuilt delivery; no shell, Python,
-PyTorch, or Ninja participates.
+A second optional feature, `jit`, invokes an exact `nvcc` directly and loads
+its authenticated product through the same Rust CUDA Driver host as prebuilt
+delivery; no shell, Python, PyTorch, or Ninja participates.
 
 The API returns immutable continuous `u32` buffers, a continuous
 values/offsets representation for batches, and suffix-replacement patches for

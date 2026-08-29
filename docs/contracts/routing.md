@@ -192,6 +192,30 @@ outcome now has the named code above.
 `reason` is `None` when the admitted route ran the input and there was
 nothing to record; plan-time reasons stay on `RoutePlan::reasons`.
 
+### 5.6 The Rust face's own plan-time variants
+
+`RoutePlan::reasons` carries `ReasonCode` values too, but the plan-time
+ones are **not** the `R_*` codes of Section 5.1. They are this crate's
+own names for admission decisions it makes for itself, they have no
+`R_*` spelling, and `toktier-rust verify-local` prints them as the
+variant name when a plan admitted no route to compare. The vocabulary is
+this, and it is append-only on the same terms as Section 5.4:
+
+| Variant | Recorded when |
+|---|---|
+| `ReferenceRequested` | `Policy::Reference` was asked for, so no accelerated option was considered. The nearest Python code is `R_POLICY_REFERENCE`. |
+| `RuntimeBuildUncertified` | This build's own identity is not in the shipped `runtime_builds` register, or its certified core does not verify, so no accelerated route is admitted whatever the artifact is. There is no Python code for it: the Python facade does not certify a Rust build. |
+| `GpuUnavailable` | A GPU route was wanted and the runtime could not offer one here: no `prebuilt-gpu` feature in this build, or the GPU runtime failed to open on this machine. |
+| `GpuUncertified` | A GPU route was wanted, and either this build is not certified for one or the artifact has no eligible GPU identity. The nearest Python codes are `R_UNCERTIFIED_ARTIFACT` and `R_SM_UNCERTIFIED`. |
+| `CpuUncertified` | The fast CPU route was refused: the artifact has no certified repair row, or the engine's status, artifact, source or toolchain binding does not match the registry. The nearest Python code is `R_ENGINE_BINDING_MISMATCH`. |
+
+Two of the five have no Python counterpart at all, which is why they are
+named here rather than folded into Section 5.1: a Rust build certifies
+its own compiled closure, and the Python facade has no such premise. A
+consumer that switches on `RoutePlan::reasons` needs a catch-all arm for
+the same reason Section 5.4 gives, and `ReasonCode` is
+`#[non_exhaustive]` accordingly.
+
 ## 6. Telemetry boundary
 
 Reason codes cover routing and execution fallback. Session store

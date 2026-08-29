@@ -89,7 +89,9 @@ impl Backend {
 /// those codes in its own ledger, and the ones reachable from a Rust
 /// execution are named here rather than in a second vocabulary. The
 /// plan-time variants describe admission decisions this crate makes for
-/// itself and are not claimed to be the same codes.
+/// itself and are not claimed to be the same codes; they are documented
+/// as their own vocabulary in `docs/contracts/routing.md` Section 5.6,
+/// two of them having no Python counterpart at all.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
@@ -113,10 +115,24 @@ pub enum ReasonCode {
     /// the frozen namespace since 0.2.7; before that it travelled as an
     /// `Other` string that was in neither vocabulary.
     InvalidPriorState,
+    /// A GPU route was wanted and this runtime could not offer one
+    /// here: the build carries no `prebuilt-gpu` feature, or the GPU
+    /// runtime failed to open on this machine.
     GpuUnavailable,
+    /// A GPU route was wanted and is not certified: either this build
+    /// is not certified for one, or the artifact has no eligible GPU
+    /// identity.
     GpuUncertified,
+    /// The fast CPU route was refused: no certified repair row for this
+    /// artifact, or an engine status, artifact, source or toolchain
+    /// binding that does not match the registry.
     CpuUncertified,
+    /// This build's own identity is not in the shipped `runtime_builds`
+    /// register, or its certified core does not verify, so no
+    /// accelerated route is admitted whatever the artifact is.
     RuntimeBuildUncertified,
+    /// [`Policy::Reference`] was asked for, so no accelerated option
+    /// was considered.
     ReferenceRequested,
     /// A reason the router named that this release has no frozen code
     /// for. The string is the router's own token, passed through rather

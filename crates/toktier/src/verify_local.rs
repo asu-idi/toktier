@@ -336,7 +336,8 @@ pub(crate) fn cpu_key(family: &str, artifact_sha256: &str) -> VerificationKey {
 #[cfg(test)]
 mod tests {
     use super::{
-        generate, input_digest, split_documents, uncovered_note, VerificationKey, TOOL_VERSION,
+        generate, input_digest, split_documents, unavailable, uncovered_note, unserved_rows,
+        Comparison, Engine, VerificationKey, TOOL_VERSION,
     };
 
     /// A run that served part of its documents measured that part, and
@@ -404,6 +405,45 @@ mod tests {
                 assert!(line.chars().count() <= 100, "{line}");
             }
         }
+    }
+
+    /// The `--json` report is the only way a downstream sees these
+    /// answers, so its key set is pinned here rather than left to the
+    /// struct's field order. `route_admitted` and `unserved_paths` were
+    /// added in 0.2.8 to say in fields what the prose note said, which
+    /// is what the Python face's report has always done.
+    #[test]
+    fn the_json_report_names_every_answer_it_has() {
+        let comparison = Comparison {
+            unserved_paths: unserved_rows(&[("R_INPUT_ADDED_TOKEN".to_owned(), 3)]),
+            ..unavailable(Engine::Cpu, "qwen3_8b", "nothing opened".to_owned())
+        };
+        let rendered = serde_json::to_value(&comparison).expect("comparison serializes");
+        let object = rendered.as_object().expect("one object per comparison");
+        let mut keys: Vec<&str> = object.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "accelerated_documents",
+                "bytes",
+                "documents",
+                "engine",
+                "family",
+                "first_mismatch",
+                "mismatches",
+                "note",
+                "record",
+                "route",
+                "route_admitted",
+                "unserved_paths",
+            ]
+        );
+        assert_eq!(object["route_admitted"], serde_json::json!(false));
+        assert_eq!(
+            object["unserved_paths"],
+            serde_json::json!([{"reason": "R_INPUT_ADDED_TOKEN", "documents": 3}])
+        );
     }
 
     fn key() -> VerificationKey {
@@ -582,6 +622,18 @@ pub(crate) struct Request {
     pub forget: bool,
 }
 
+/// One reason the documents a route did not serve left it, with a count.
+///
+/// The Python face names an **execution path** in the same place, because
+/// its ledger records path names; this one records the router's reason
+/// code, so the field says what it is rather than borrowing the other
+/// face's word for a different thing.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct UnservedPath {
+    pub reason: String,
+    pub documents: u64,
+}
+
 /// What one comparison found, for one engine and one family.
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct Comparison {
@@ -589,6 +641,13 @@ pub(crate) struct Comparison {
     pub family: String,
     /// The route the accelerated runtime admitted, as its label.
     pub route: String,
+    /// Whether the plan admitted this route at all. `false` is an answer
+    /// about the plan, and `toktier-rust doctor` says why; a route the
+    /// plan admitted and that still served nothing was left document by
+    /// document, for the per-input reasons below. The `--json` report
+    /// used to carry both facts only inside the prose `note`, which the
+    /// Python face's report has always exposed as fields.
+    pub route_admitted: bool,
     /// Documents compared, and how many of them the accelerated backend
     /// actually ran. A document a per-input guard sent to the reference
     /// engine is not a disagreement: it is the fallback working, and it
@@ -598,6 +657,10 @@ pub(crate) struct Comparison {
     pub bytes: u64,
     pub mismatches: u64,
     pub first_mismatch: Option<(u64, u64)>,
+    /// Where the documents this route did not serve went, with a count
+    /// each. Empty when the route served every document, and when the
+    /// plan admitted no route to leave them.
+    pub unserved_paths: Vec<UnservedPath>,
     /// Whether a record was written, and where.
     pub record: Option<String>,
     /// Why no record was written, when none was.
@@ -807,11 +870,13 @@ fn unavailable(engine: Engine, family: &str, note: String) -> Comparison {
         engine: engine.word().to_owned(),
         family: family.to_owned(),
         route: "not opened".to_owned(),
+        route_admitted: false,
         documents: 0,
         accelerated_documents: 0,
         bytes: 0,
         mismatches: 0,
         first_mismatch: None,
+        unserved_paths: Vec::new(),
         record: None,
         note: Some(note),
     }
@@ -915,6 +980,14 @@ fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Compar
         .load(family)?;
     let plan = accelerated.plan().clone();
     let route = format!("{:?}", plan.certification);
+    let expected_backend = match engine {
+        Engine::Cpu => crate::Backend::FastCpu,
+        Engine::Gpu => crate::Backend::Gpu,
+    };
+    // Read once, before the early returns: every shape of this report
+    // answers the same question about the plan, including the ones that
+    // return before a document is encoded.
+    let route_admitted = plan.backends.contains(&expected_backend);
     let key = match engine {
         Engine::Cpu => cpu_key(family, &plan.artifact_sha256),
         Engine::Gpu => match accelerated.verification_key() {
@@ -924,11 +997,13 @@ fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Compar
                     engine: engine.word().to_owned(),
                     family: family.to_owned(),
                     route,
+                    route_admitted,
                     documents: 0,
                     accelerated_documents: 0,
                     bytes: 0,
                     mismatches: 0,
                     first_mismatch: None,
+                    unserved_paths: Vec::new(),
                     record: None,
                     note: Some(
                         "this device and delivery are in the judged list, so there is nothing \
@@ -946,11 +1021,13 @@ fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Compar
             engine: engine.word().to_owned(),
             family: family.to_owned(),
             route,
+            route_admitted,
             documents: 0,
             accelerated_documents: 0,
             bytes: 0,
             mismatches: 0,
             first_mismatch: None,
+            unserved_paths: Vec::new(),
             record: None,
             note: Some(if existed {
                 "the record for this combination was forgotten".to_owned()
@@ -959,11 +1036,7 @@ fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Compar
             }),
         });
     }
-    let expected_backend = match engine {
-        Engine::Cpu => crate::Backend::FastCpu,
-        Engine::Gpu => crate::Backend::Gpu,
-    };
-    if !plan.backends.contains(&expected_backend) {
+    if !route_admitted {
         // The plan already recorded why, so the note carries those codes
         // rather than sending the reader to a command that answers a
         // different question. `Tokenizer::plan().reasons` is the same
@@ -985,11 +1058,13 @@ fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Compar
             engine: engine.word().to_owned(),
             family: family.to_owned(),
             route,
+            route_admitted,
             documents: 0,
             accelerated_documents: 0,
             bytes: 0,
             mismatches: 0,
             first_mismatch: None,
+            unserved_paths: Vec::new(),
             record: None,
             note: Some(format!(
                 "this build admitted no {} route for {family}, so there is nothing to compare.\n\
@@ -1050,11 +1125,13 @@ fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Compar
             engine: engine.word().to_owned(),
             family: family.to_owned(),
             route,
+            route_admitted,
             documents: request.documents.len() as u64,
             accelerated_documents,
             bytes,
             mismatches,
             first_mismatch,
+            unserved_paths: unserved_rows(&unserved_reasons),
             record: None,
             note: Some(note),
         });
@@ -1076,12 +1153,25 @@ fn compare_one(engine: Engine, family: &str, request: &Request) -> Result<Compar
         engine: engine.word().to_owned(),
         family: family.to_owned(),
         route,
+        route_admitted,
         documents: record.documents,
         accelerated_documents,
         bytes,
         mismatches,
         first_mismatch,
+        unserved_paths: unserved_rows(&unserved_reasons),
         record: Some(path.display().to_string()),
         note: None,
     })
+}
+
+/// The accumulated reasons as report rows, in the order they were met.
+fn unserved_rows(reasons: &[(String, u64)]) -> Vec<UnservedPath> {
+    reasons
+        .iter()
+        .map(|(reason, documents)| UnservedPath {
+            reason: reason.clone(),
+            documents: *documents,
+        })
+        .collect()
 }

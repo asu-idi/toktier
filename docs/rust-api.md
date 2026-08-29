@@ -225,6 +225,24 @@ Also outside: development dependencies, dependencies of a target this build is
 not for, and cross-compilation, where the build dependencies compiled for the
 host are not the set recorded for the judged target.
 
+**Which of the three answers which question.** On a build where nothing
+has drifted the report reads `dependency_closure: verified`,
+`core_closure: verified` and `dependency_advisory: null`, and those three
+lines look interchangeable. They are not, and the difference only becomes
+visible when something moves, so it is stated here instead:
+
+| Field | The question it answers | Gates `certified` |
+|---|---|---|
+| `dependency_closure` | Is every package this build compiled the judged one? | no |
+| `core_closure` | Is every package in the **certified core** the judged one? | **yes** |
+| `dependency_advisory` | Which packages **outside** the core differ, and the command that aligns each | no; `null` means nothing outside the core differs |
+
+So `dependency_closure: mismatched` beside `core_closure: verified` is
+the expected reading for a consumer who resolved the graph today, and the
+route is admitted; `core_closure: mismatched` is the one that withholds
+it. The advisory is never a refusal: it is the list the first row is
+summarising, restated where a reader can act on it.
+
 **What each answer is worth.** `verified` says the third-party code linked
 into this build is the code the certification campaigns ran. `mismatched`
 says at least one package that really does enter the artifact is not the
@@ -421,6 +439,36 @@ lists the codes the ledger recorded, which is what each encode's
 note sends a reader to one; the Python package's `verify-local` names its
 own `toktier doctor --family` and `explain()` for the same two states.
 
+**The `--json` report.** With `--json` the command prints one array, one
+object per (engine, family) comparison, and nothing around it. Every key
+is always present; `null` is a real answer rather than an omission.
+
+| Key | Type | What it holds |
+|---|---|---|
+| `engine` | string | `cpu` or `gpu`. |
+| `family` | string | The family id compared. |
+| `route` | string | The certification label the accelerated runtime admitted, or `not opened` when the engine could not be opened at all. |
+| `route_admitted` | bool | Whether the plan admitted this route. `false` is an answer about the plan; `doctor` says why. |
+| `documents` | integer | Documents in the input. |
+| `accelerated_documents` | integer | How many of them the accelerated backend actually ran. |
+| `bytes` | integer | Input bytes compared. |
+| `mismatches` | integer | Documents whose ids differed. |
+| `first_mismatch` | `[document, position]` or null | Where the first difference was. |
+| `unserved_paths` | array | One `{"reason", "documents"}` row per reason the documents this route did not serve left it. Empty when it served them all, and when no route was admitted to leave them. |
+| `record` | string or null | Where the record was written, when one was. |
+| `note` | string or null | Why none was, when none was. |
+
+`route_admitted` and `unserved_paths` were added in 0.2.8. Both facts
+were already in the report, inside the prose `note`, where a machine
+could only find them by reading English; the Python face has carried them
+as fields since it grew the flag. Two differences between the faces are
+worth knowing rather than papering over: `unserved_paths` rows say
+`reason` here and `path` there, because this ledger records the router's
+reason code while the Python one records an execution path name; and this
+face returns before encoding anything when the plan admitted no route, so
+its `documents` and `bytes` read `0` in that state where the Python face
+reports what it read.
+
 What it writes is a record, not a certificate. The record is filed under
 the engine it measured, the device architecture, the delivery, the image
 digest, the compiler triple, the driver, the two source identities, the
@@ -581,6 +629,17 @@ materialization separately.
 Independent sessions can move between worker threads. A single `Session` can
 move but has one mutable owner; duplicate processes still meet the store's
 revision and integrity gates.
+
+**Fastokens is a Python-side facility.** `docs/support-matrix.md`
+describes the pinned Fastokens engine in unqualified product terms, and a
+Rust reader should know that none of it is reachable from here. The
+crate's embedded registry data carries the
+`engine_distributions.fastokens` node, because the registry travels whole
+and its root digest covers it, and no Rust code path reads that node or
+admits any route through it. The experimental adapter, its assurance
+states, and its `exact_id_guarantee` are the Python facade's
+(`docs/contracts/facade.md` Section 5.2). This crate's CPU route is the
+integrated corrected engine described above, and nothing else.
 
 Errors expose a stable `ErrorCode`; display messages are diagnostic and are
 not a compatibility interface. `docs/contracts/errors.md` is the Python

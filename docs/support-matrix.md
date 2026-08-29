@@ -778,17 +778,35 @@ What was established. Its `model`, `normalizer`, `pre_tokenizer`,
 `post_processor` and `decoder` sections are equal to the certified
 `qwen3_5_08b` artifact -- the two share the pipeline capability
 `pipeline.bc687a3b57eba58b` -- and its `vocab.json` and `merges.txt` are
-byte-identical to that family's. The one difference is the added-token table:
-33 entries against 26, the seven extra ones being audio and text-to-speech
-specials at ids 248070-248076. That gives it an added-token capability of its
-own, `added-frontend.6f80a43b9fe6a15f`, for which no campaign reading exists.
+byte-identical to that family's. The two `tokenizer.json` documents differ in
+one array: the added-token table, 33 entries here against 26 there, the seven
+extra ones being audio and text-to-speech specials at ids 248070-248076.
 
-What follows from that. Under the rule stated at the top of this page --
-coverage is decided by tokenizer content -- a differing added-token table is a
-differing artifact, and the composition of this pipeline with this added-token
-table has no evidence behind it. No accelerated route is therefore eligible
-for either repository: wherever an accelerated backend is installed to be
-assessed, the plan records `R_UNCERTIFIED_ARTIFACT`, and
+Those same seven are what `qwen3_5_08b` declares in its `tokenizer_config.json`
+and does not carry in its `tokenizer.json`. Every field of all seven rows --
+id, content, `single_word`, `lstrip`, `rstrip`, `normalized`, `special` -- is
+equal on the two sides. So under the subject this release certifies, which is
+the artifact file plus the added tokens the configuration declares beyond it,
+**the two artifacts materialize the same loader face**: the pinned loader
+serializes them to byte-equal tokenizer JSON, and the resulting tokenizers
+answer identically. The difference between the two artifacts is where the
+seven rows are written, not what the object is.
+
+What follows from that, and what does not. What the reader can rely on is the
+equality just stated: on the loader face these two artifacts are one function,
+and this page's `qwen3_5_08b` readings describe that function. What does not
+follow is a coverage claim for `Qwen3.8`. Coverage is recorded per artifact
+and keyed by the artifact file, and every machine record that would have to
+name this one -- the capability fingerprints, which are still computed from
+the artifact file and so differ; the composition the registry requires behind
+an eligible route; the roster the hardware parity readings, the repair table
+and the evidence node are each checked against -- names only the fifteen
+certified artifacts. Certifying a sixteenth is a registry change with its own
+evidence and its own gates, not a consequence of this paragraph.
+
+So the routing answer is unchanged in this release. No accelerated route is
+eligible for either repository: wherever an accelerated backend is installed
+to be assessed, the plan records `R_UNCERTIFIED_ARTIFACT`, and
 `policy="require_accelerated"` refuses with that reason. Both repositories
 load and return the reference engine's ids, which is the same answer the
 package gives for any content it has not certified. (The unconditional form
@@ -796,8 +814,8 @@ this paragraph carried in 0.2.7 -- that the two "report
 `R_UNCERTIFIED_ARTIFACT`" -- is not what a machine with no accelerated
 backend installed reads: there the first premise to fail is
 `R_BACKEND_UNAVAILABLE`, and the artifact is never reached.) They are not
-siblings of `qwen3_5_08b` and are not counted anywhere in this document's
-totals.
+siblings of `qwen3_5_08b`, which is a statement about artifact bytes, and are
+not counted anywhere in this document's totals.
 
 This entry is here so that the boundary is visible: a reader looking for these
 repositories finds what was examined and what was concluded, rather than

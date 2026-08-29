@@ -126,3 +126,22 @@ def test_seal_guard_covers_configuration_side_literals(sidecar_rig: Rig) -> None
         assert tokenizer._seal_end_guard_chars >= len(EXTRA)
     finally:
         tokenizer.close()
+
+
+def test_certification_block_reports_the_two_annotations(
+    sidecar_rig: Rig,
+) -> None:
+    """``explain()`` carries the claim and carry-over keys, honest nulls here.
+
+    The rig artifact has no certification record, so both read ``None``:
+    the absence of a claim, not a claim of absence. The shipped-table
+    values are pinned by ``tests/registry/test_carryover_sections.py``.
+    """
+    tokenizer = sidecar_rig.tokenizer()
+    try:
+        certification = tokenizer.explain()["certification"]
+        assert isinstance(certification, dict)
+        assert certification["config_added_tokens"] is None
+        assert certification["carryover"] is None
+    finally:
+        tokenizer.close()

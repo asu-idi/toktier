@@ -115,6 +115,8 @@ def _certification_state(
             ),
             "identity": None,
             "evidence_id": None,
+            "config_added_tokens": None,
+            "carryover": None,
             "backend_status": {},
             "gpu_delivery": None,
         }
@@ -173,6 +175,20 @@ def _certification_state(
             "bytes": record.bytes_judged,
             "mismatches": record.mismatches,
         },
+        # The configuration-side added-token claim and the carry-over
+        # annotation of this record, verbatim; ``None`` when the record
+        # carries neither, which is every artifact whose loader face and
+        # artifact file agree (registry.md Section 1).
+        "config_added_tokens": (
+            dict(claim)
+            if (claim := getattr(record, "config_added_tokens", None))
+            else None
+        ),
+        "carryover": (
+            dict(carried)
+            if (carried := getattr(record, "carryover", None))
+            else None
+        ),
         "backend_status": statuses,
         # Which GPU delivery the ``gpu`` status above describes; ``None``
         # when no delivery is loaded or selected, or when the record has

@@ -151,7 +151,9 @@ Import rejects absolute/traversing paths, duplicates, links, special files,
 undeclared files, oversized archives, and digest changes. It verifies into a
 private staging tree, fsyncs every directory from leaves to root, and publishes
 the alias with one rename. Re-import is idempotent only when the visible tree
-still authenticates exactly. Since 0.2.8 that is the rule on both faces: the
+still authenticates exactly; the cache's own `.toktier-verified.json` marker is
+not counted against that, so an artifact that has been used since it was
+imported still authenticates. Since 0.2.8 that is the rule on both faces: the
 Python `import_bundle` used to refuse every alias its cache already held, and
 now re-reads the installed tree against the manifest and answers the same way
 this one does. A tree that holds the alias and does not authenticate is

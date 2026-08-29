@@ -28,6 +28,12 @@ SHA-256, and no undeclared file -- and only then is the freshly staged copy
 discarded and the existing directory returned untouched.  A tree that does
 not authenticate is a conflict, not a success, and is reported as one.
 
+The verified marker the cache writes beside an installed artifact
+(:data:`VERIFIED_MARKER_NAME`) is toktier's own sidecar, not bundle
+content, so it is passed over by that check and left as it is.  Using an
+imported artifact once is what puts it there, and a re-import after that
+is still the same tree.
+
 Error mapping (``docs/contracts/errors.md``, decision 0004): violations
 of the bundle archive format -- the tar container and the embedded
 bundle manifest -- raise ``BundleInvalid`` (``BUNDLE_INVALID``);
@@ -70,6 +76,14 @@ __all__ = ["AirgapBundleSource", "export_bundle", "import_bundle"]
 
 BUNDLE_MANIFEST_NAME = "bundle_manifest.json"
 BUNDLE_ROOT_DOMAIN = b"toktier.bundle.v1\0"
+
+#: Name of the verified marker the artifact cache writes beside an
+#: installed artifact; :mod:`toktier.artifacts.store` writes it under
+#: this name.  It lives here because the import path is where the name
+#: has to be recognised, and one string in one place is what keeps the
+#: writer and the reader from drifting apart.
+VERIFIED_MARKER_NAME = ".toktier-verified.json"
+
 MAX_BUNDLE_MEMBERS = 4096
 MAX_BUNDLE_UNCOMPRESSED_SIZE = 8 * 1024 * 1024 * 1024
 
@@ -227,7 +241,9 @@ def import_bundle(
     A second import of the same bundle into the same cache is idempotent
     when the installed tree still authenticates as exactly these
     contents; the already installed directory is returned and its bytes
-    are not touched.  A tree that holds the alias but does not
+    are not touched.  The cache's own verified marker is not counted
+    against that, so an artifact that has been used since the first
+    import still authenticates.  A tree that holds the alias but does not
     authenticate is reported instead of overwritten.
     """
     bundle_path = Path(bundle)
@@ -283,9 +299,11 @@ def _authenticate_installed_alias(
     The check mirrors the Rust ``verify_installed``: nothing in the tree
     is a symbolic or special file, every file in it is declared, every
     declared file is present, and each one still has its declared byte
-    count and SHA-256.  The first path that does not authenticate is
-    named, in sorted order, so a reader is told which file to look at
-    rather than only that something differs.
+    count and SHA-256.  The one file it passes over is
+    :data:`VERIFIED_MARKER_NAME`, which the cache writes there itself and
+    which is not bundle content.  The first path that does not
+    authenticate is named, in sorted order, so a reader is told which
+    file to look at rather than only that something differs.
     """
     if target.is_symlink() or not target.is_dir():
         raise _alias_conflict(
@@ -310,6 +328,15 @@ def _authenticate_installed_alias(
                 unexpected.append((relative, "special_file", path))
             elif relative in declared:
                 observed.add(relative)
+            elif relative == VERIFIED_MARKER_NAME:
+                # toktier's own sidecar, written beside an installed
+                # artifact by the cache that verified it.  It is not
+                # part of the bundle, so neither its presence nor its
+                # contents make this a different tree, and it is left
+                # exactly as it is for the next verification to judge.
+                # Only this name, and only at the top of the tree:
+                # anything else, at any depth, is undeclared as before.
+                continue
             else:
                 unexpected.append((relative, "undeclared_file", path))
     if unexpected:

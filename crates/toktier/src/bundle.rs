@@ -12,6 +12,12 @@ use crate::fsutil::{hex, set_private_file, sync_directory};
 use crate::{Error, ErrorCode, Result};
 
 const MANIFEST_NAME: &str = "bundle_manifest.json";
+/// Name of the verified marker the artifact cache writes beside an
+/// installed artifact; [`crate::ArtifactManager`] writes it under this
+/// name. It lives here because the import path is where the name has to
+/// be recognised, and one string in one place is what keeps the writer
+/// and the reader from drifting apart.
+pub(crate) const VERIFIED_MARKER_NAME: &str = ".toktier-verified.json";
 const ROOT_DOMAIN: &[u8] = b"toktier.bundle.v1\0";
 const MAX_MEMBERS: usize = 4096;
 const MAX_UNCOMPRESSED: u64 = 8 * 1024 * 1024 * 1024;
@@ -444,6 +450,11 @@ fn copy_and_hash(
 
 /// Re-read an installed alias against the manifest that claims it.
 ///
+/// The one file it passes over is [`VERIFIED_MARKER_NAME`], which the
+/// cache writes there itself and which is not bundle content: an
+/// artifact that has been used since it was imported still authenticates
+/// as the bundle it came from.
+///
 /// Everything this refuses has the same subject -- the tree the cache
 /// already holds is not the bundle being imported -- so since 0.2.8 it
 /// answers with one code, [`ErrorCode::AliasConflict`], rather than
@@ -479,6 +490,16 @@ fn verify_installed(root: &Path, manifest: &BundleManifest) -> Result<()> {
                 let name = relative
                     .to_str()
                     .ok_or_else(|| alias_conflict("installed bundle path is not UTF-8", &path))?;
+                if name == VERIFIED_MARKER_NAME {
+                    // toktier's own sidecar, written beside an installed
+                    // artifact by the cache that verified it. It is not
+                    // part of the bundle, so neither its presence nor its
+                    // contents make this a different tree, and it is left
+                    // exactly as it is for the next verification to judge.
+                    // Only this name, and only at the top of the tree:
+                    // anything else, at any depth, is undeclared as before.
+                    continue;
+                }
                 if !expected.contains(name) {
                     return Err(alias_conflict(
                         format!("installed bundle contains undeclared file {name:?}"),

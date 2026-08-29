@@ -50,6 +50,7 @@ from typing import Any
 from ..config import Config
 from ..errors import ArtifactHashMismatch, ArtifactNotFound
 from ..paths import FILE_MODE, artifact_cache_dir, ensure_private_dir
+from .bundle import VERIFIED_MARKER_NAME
 from .manifest import ArtifactEntry, ArtifactFile, ArtifactManifest
 from .sources import ArtifactSource
 
@@ -73,9 +74,6 @@ __all__ = [
 REASON_CONFIGURED_OFFLINE = "configured_offline"
 REASON_NO_SOURCE = "no_source"
 REASON_SOURCE_OFFLINE = "source_offline"
-
-#: Name of the verified marker written inside an artifact directory.
-MARKER_NAME = ".toktier-verified.json"
 
 #: Marker format version. A marker this reader does not understand is
 #: ignored, which costs a re-hash and never accepts unverified bytes.
@@ -454,7 +452,7 @@ class ArtifactStore:
         The marker is an optimization only: anything unexpected means a
         full re-hash, never an acceptance.
         """
-        marker_path = directory / MARKER_NAME
+        marker_path = directory / VERIFIED_MARKER_NAME
         try:
             raw = marker_path.read_text(encoding="utf-8")
         except OSError:
@@ -512,11 +510,11 @@ class ArtifactStore:
             "verified_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "files": files,
         }
-        temporary = directory / f"{MARKER_NAME}.{os.getpid()}.tmp"
+        temporary = directory / f"{VERIFIED_MARKER_NAME}.{os.getpid()}.tmp"
         temporary.write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
-        _install(temporary, directory / MARKER_NAME)
+        _install(temporary, directory / VERIFIED_MARKER_NAME)
 
     # -- locking -------------------------------------------------------
 

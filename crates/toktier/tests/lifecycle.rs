@@ -94,6 +94,61 @@ fn canonical_bundle_is_deterministic_and_idempotent() {
 }
 
 #[test]
+fn reimport_is_idempotent_across_the_cache_marker() {
+    // import, verify, import: the order the cache is actually used in.
+    // Verifying an installed artifact writes `.toktier-verified.json`
+    // beside its files. That marker is toktier's own sidecar rather than
+    // bundle content, so a tree carrying it -- or carrying an edited one
+    // -- is still exactly this bundle, and the next import returns it
+    // without reading or rewriting the marker. Everything else in the
+    // tree is judged as before.
+    const MARKER: &str = ".toktier-verified.json";
+    let temporary = tempfile::tempdir().unwrap();
+    let source = temporary.path().join("tokenizer.json");
+    std::fs::write(&source, b"verified bytes\n").unwrap();
+    let files = BTreeMap::from([("tokenizer.json".to_owned(), source)]);
+    let bundle = temporary.path().join("marker.tar");
+    export_bundle(&bundle, "demo-deadbeef0001", &files).unwrap();
+    let cache = temporary.path().join("cache");
+    let installed = import_bundle(&bundle, &cache).unwrap();
+
+    let marker = installed.join(MARKER);
+    std::fs::write(&marker, b"{\"format\":1}\n").unwrap();
+    assert_eq!(import_bundle(&bundle, &cache).unwrap(), installed);
+    assert_eq!(std::fs::read(&marker).unwrap(), b"{\"format\":1}\n");
+
+    // A marker this reader does not understand is the next verification's
+    // business, not the import's.
+    std::fs::write(&marker, b"not a marker\n").unwrap();
+    assert_eq!(import_bundle(&bundle, &cache).unwrap(), installed);
+    assert_eq!(std::fs::read(&marker).unwrap(), b"not a marker\n");
+    assert_eq!(
+        std::fs::read(installed.join("tokenizer.json")).unwrap(),
+        b"verified bytes\n"
+    );
+
+    // The pass is exactly that name at the top of the tree: a leftover of
+    // the marker's own write, and a file of that name further down, are
+    // undeclared like anything else.
+    let leftover = installed.join(format!("{MARKER}.4321.tmp"));
+    std::fs::write(&leftover, b"{}\n").unwrap();
+    assert_eq!(
+        import_bundle(&bundle, &cache).unwrap_err().code(),
+        ErrorCode::AliasConflict
+    );
+    std::fs::remove_file(&leftover).unwrap();
+    let nested = installed.join("nested");
+    std::fs::create_dir(&nested).unwrap();
+    std::fs::write(nested.join(MARKER), b"{}\n").unwrap();
+    assert_eq!(
+        import_bundle(&bundle, &cache).unwrap_err().code(),
+        ErrorCode::AliasConflict
+    );
+    std::fs::remove_dir_all(&nested).unwrap();
+    assert_eq!(import_bundle(&bundle, &cache).unwrap(), installed);
+}
+
+#[test]
 #[cfg(unix)]
 fn bundle_rejects_symlink_sources_and_cache_roots() {
     use std::os::unix::fs::symlink;
@@ -210,6 +265,10 @@ fn artifact_lifecycle_is_concurrent_offline_and_rust_only() {
         .offline(true)
         .build()
         .unwrap();
+    offline.import(&bundle).unwrap();
+    // The manager writes its verified marker into the alias it just
+    // installed, so running the documented import twice is the shape a
+    // reader meets first.
     offline.import(&bundle).unwrap();
     let runtime = Runtime::builder()
         .artifacts(offline)

@@ -10,12 +10,12 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::bundle::VERIFIED_MARKER_NAME;
 use crate::fsutil::{hex, monotonic_nonce, open_private_lock, set_private_file, sync_directory};
 use crate::manifest::{ArtifactFileRow, ArtifactRow, Registry};
 use crate::{export_bundle, import_bundle, BundleInspection};
 use crate::{Error, ErrorCode, Result};
 
-const MARKER_NAME: &str = ".toktier-verified.json";
 const MARKER_SCHEMA: &str = "toktier.rust.artifact_marker.v1";
 const READ_CHUNK: usize = 1024 * 1024;
 
@@ -1165,8 +1165,8 @@ fn write_marker(directory: &Path, family: &str, row: &ArtifactRow) -> Result<()>
         tokenizer_size: tokenizer.size,
     })
     .map_err(|error| Error::new(ErrorCode::Internal, error.to_string()))?;
-    let target = directory.join(MARKER_NAME);
-    let temporary = unique_temporary(directory, MARKER_NAME)?;
+    let target = directory.join(VERIFIED_MARKER_NAME);
+    let temporary = unique_temporary(directory, VERIFIED_MARKER_NAME)?;
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)

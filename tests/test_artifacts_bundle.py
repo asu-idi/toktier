@@ -23,6 +23,7 @@ from toktier.artifacts.bundle import (
     BUNDLE_ROOT_DOMAIN,
     MAX_BUNDLE_MEMBERS,
     MAX_BUNDLE_UNCOMPRESSED_SIZE,
+    VERIFIED_MARKER_NAME,
 )
 from toktier.config import Config
 from toktier.errors import (
@@ -139,6 +140,63 @@ def test_a_second_import_of_the_same_bundle_is_idempotent(
     assert not list(cache.glob(".toktier-bundle-import-*"))
 
 
+def test_a_reimport_after_the_cache_verified_the_tree_is_idempotent(
+    tmp_path: Path,
+) -> None:
+    """import, verify, import: the order a reader actually uses it in.
+
+    Using an imported artifact makes the store re-hash the directory and
+    write its verified marker beside the files. That marker is toktier's
+    own sidecar rather than bundle content, so a tree carrying it is
+    still exactly this bundle and the next import returns it.
+    """
+    bundle = _exported_bundle(tmp_path)
+    config = Config(home=tmp_path / "home", offline=True)
+    cache = artifact_cache_dir(config)
+    installed = import_bundle(bundle, cache)
+
+    store = ArtifactStore(
+        _artifact_manifest({"tokenizer.json": GOOD}),
+        config=config,
+        source=None,
+    )
+    assert store.ensure(FAMILY).directory == installed
+    marker = installed / VERIFIED_MARKER_NAME
+    assert marker.is_file()
+    before = (installed / "tokenizer.json").stat()
+    written = marker.read_text(encoding="utf-8")
+
+    assert import_bundle(bundle, cache) == installed
+
+    after = (installed / "tokenizer.json").stat()
+    assert (after.st_mtime_ns, after.st_ino) == (before.st_mtime_ns, before.st_ino)
+    # The marker is neither read nor rewritten by the import.
+    assert marker.read_text(encoding="utf-8") == written
+    assert not list(cache.glob(".toktier-bundle-import-*"))
+
+
+def test_a_changed_marker_is_not_a_conflict_and_is_left_alone(
+    tmp_path: Path,
+) -> None:
+    """The marker's contents are the store's business, not the bundle's.
+
+    An import asks whether the tree is this bundle. The marker is not
+    part of that question, so editing it neither refuses the import nor
+    provokes a rewrite; the next verification is where it is judged.
+    """
+    bundle = _exported_bundle(tmp_path)
+    cache = artifact_cache_dir(Config(home=tmp_path / "home", offline=True))
+    installed = import_bundle(bundle, cache)
+    marker = installed / VERIFIED_MARKER_NAME
+    marker.write_text("not a marker this reader understands\n", encoding="utf-8")
+
+    assert import_bundle(bundle, cache) == installed
+
+    assert marker.read_text(encoding="utf-8") == (
+        "not a marker this reader understands\n"
+    )
+
+
 def test_an_alias_holding_other_bytes_is_a_conflict(tmp_path: Path) -> None:
     """One changed byte is the difference between idempotent and refused."""
     bundle = _exported_bundle(tmp_path)
@@ -175,6 +233,23 @@ def test_an_alias_holding_an_undeclared_file_is_a_conflict(
 
     assert caught.value.details["failure"] == "undeclared_file"
     assert caught.value.details["path"] == str(installed / "extra.json")
+    (installed / "extra.json").unlink()
+
+    # The one file the check passes over is the marker itself, by that
+    # exact name at the top of the tree. A leftover of the marker's own
+    # write, and a file of that name deeper in the tree, are undeclared
+    # like anything else.
+    for extra in (
+        installed / f"{VERIFIED_MARKER_NAME}.4321.tmp",
+        installed / "nested" / VERIFIED_MARKER_NAME,
+    ):
+        extra.parent.mkdir(parents=True, exist_ok=True)
+        extra.write_bytes(b"{}\n")
+        with pytest.raises(AliasConflict) as caught:
+            import_bundle(bundle, cache)
+        assert caught.value.details["failure"] == "undeclared_file"
+        assert caught.value.details["path"] == str(extra)
+        extra.unlink()
 
 
 def test_an_alias_missing_a_declared_file_is_a_conflict(

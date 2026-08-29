@@ -666,7 +666,7 @@ span，涵盖 normalization、pre-tokenization、merge 和 added-token 处理；
 
 ## 文档
 
-- [`docs/releases/v0.2.7.md`](docs/releases/v0.2.7.md) — 本版本发布说明（英文）。
+- [`docs/releases/v0.2.8.md`](docs/releases/v0.2.8.md) — 本版本发布说明（英文）。
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — 分层、路由与 store 格式。
 - [`ROADMAP.md`](ROADMAP.md) — 发布范围与后续集成。
 - [`docs/support-matrix.md`](docs/support-matrix.md) — 工件与覆盖仓库。

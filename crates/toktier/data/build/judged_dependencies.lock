@@ -1659,7 +1659,7 @@ dependencies = [
 
 [[package]]
 name = "toktier"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "flate2",
  "fs2",
@@ -1680,14 +1680,14 @@ dependencies = [
 
 [[package]]
 name = "toktier-cuda-driver"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "libc",
 ]
 
 [[package]]
 name = "toktier-gigatoken-core"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "aho-corasick",
  "base64 0.22.1",
@@ -1711,7 +1711,7 @@ dependencies = [
 
 [[package]]
 name = "toktier-py"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "pyo3",
  "serde_json",
@@ -1723,7 +1723,7 @@ dependencies = [
 
 [[package]]
 name = "toktier-routing-core"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "aho-corasick",
  "base64 0.22.1",
@@ -1741,7 +1741,7 @@ dependencies = [
 
 [[package]]
 name = "toktier-store-core"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "blake2b_simd",
  "sha2",
@@ -1750,7 +1750,7 @@ dependencies = [
 
 [[package]]
 name = "toktier-store-sqlite"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "rusqlite",
  "tempfile",

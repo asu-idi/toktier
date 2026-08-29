@@ -41,8 +41,10 @@ where that distinction exists as documents (`qwen3_5_08b`, seven added-token
 literals declared only in `tokenizer_config.json`): on inputs holding one of
 those literals this crate answers from the artifact file while the Python
 product answers from the loader face. The certified corpora contain zero
-occurrences of every such literal (the shipped absence certificate,
-`readings/corpus_absence_qwen3_5_08b.json`), so the certification readings
+occurrences of every such literal (the absence certificate recorded with
+the release evidence as `readings/corpus_absence_qwen3_5_08b.json`, in
+the repository and the source archive rather than in the crate), so the
+certification readings
 cover both faces; on every other packaged artifact the two are the same
 function by construction.
 
@@ -710,12 +712,18 @@ one-line update; nothing else changed, and the messages are unchanged.
 
 Before 0.2.8 `import_bundle` answered for an alias the cache already held
 with three different codes, one per part of the installed tree that
-disagreed: `BUNDLE_INVALID` for an undeclared, missing or special file,
-`ARTIFACT_NOT_FOUND` for a member that was not a regular file, and
-`ARTIFACT_HASH_MISMATCH` for differing bytes. They are one condition and
-now carry one code. Code matching on any of the three for a re-import
-needs the one-line update; the messages are unchanged, and no other use
-of those three codes moved.
+disagreed. The reading walked the tree first and answered
+`BUNDLE_INVALID` for anything with no place in it -- a symlink, a special
+file, an undeclared file, a declared file that was absent -- and then
+re-read each declared member, answering `ARTIFACT_NOT_FOUND` if that
+second pass could not stat it or found it no longer a regular file, and
+`ARTIFACT_HASH_MISMATCH` for differing bytes. Because the walk came
+first, the two file-shape answers overlapped and the second was reachable
+only if the tree changed between the passes: a re-import over an
+installed tree whose member had been replaced by a special file answered
+`BUNDLE_INVALID`. They are one condition and now carry one code. Code
+matching on any of the three for a re-import needs the one-line update;
+the messages are unchanged, and no other use of those three codes moved.
 
 The current feature surface is:
 

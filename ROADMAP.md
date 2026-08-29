@@ -238,8 +238,12 @@ public.
 ## Families under evaluation
 
 Families that have been through a first structural reconnaissance and are
-candidates for a certification campaign. Reconnaissance is not coverage; none of
-these are in the support matrix yet.
+candidates for a certification campaign. Reconnaissance is not coverage: none
+of these is certified, none is counted as coverage, and none has a row in the
+support matrix's certified tables. Where a reconnaissance is worth reading it
+is written down under `docs/support-matrix.md`'s "Examined and not certified"
+heading, which records what was looked at and says in the same breath that it
+carries no coverage; the Hy4-preview row below points at one such record.
 
 | Family | Upstream repository | Note |
 |---|---|---|

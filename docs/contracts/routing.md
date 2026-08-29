@@ -205,13 +205,17 @@ this, and it is append-only on the same terms as Section 5.4:
 |---|---|
 | `ReferenceRequested` | `Policy::Reference` was asked for, so no accelerated option was considered. The nearest Python code is `R_POLICY_REFERENCE`. |
 | `RuntimeBuildUncertified` | This build's own identity is not in the shipped `runtime_builds` register, or its certified core does not verify, so no accelerated route is admitted whatever the artifact is. There is no Python code for it: the Python facade does not certify a Rust build. |
-| `GpuUnavailable` | A GPU route was wanted and the runtime could not offer one here: no `prebuilt-gpu` feature in this build, or the GPU runtime failed to open on this machine. |
+| `GpuUnavailable` | A GPU route was wanted and the runtime could not offer one here: no `prebuilt-gpu` feature in this build, or the GPU runtime failed to open on this machine. The nearest Python codes are `R_BACKEND_UNAVAILABLE` and `R_GPU_DISABLED`. |
 | `GpuUncertified` | A GPU route was wanted, and either this build is not certified for one or the artifact has no eligible GPU identity. The nearest Python codes are `R_UNCERTIFIED_ARTIFACT` and `R_SM_UNCERTIFIED`. |
 | `CpuUncertified` | The fast CPU route was refused: the artifact has no certified repair row, or the engine's status, artifact, source or toolchain binding does not match the registry. The nearest Python code is `R_ENGINE_BINDING_MISMATCH`. |
 
-Two of the five have no Python counterpart at all, which is why they are
+One of the five has no Python counterpart at all, which is why the set is
 named here rather than folded into Section 5.1: a Rust build certifies
-its own compiled closure, and the Python facade has no such premise. A
+its own compiled closure, and the Python facade has no such premise, so
+`RuntimeBuildUncertified` has nothing to point at. The other four are
+named here as well because they are recorded through a different surface
+-- `RoutePlan::reasons` rather than an `R_*` string -- not because the
+condition itself is unknown on the Python side. A
 consumer that switches on `RoutePlan::reasons` needs a catch-all arm for
 the same reason Section 5.4 gives, and `ReasonCode` is
 `#[non_exhaustive]` accordingly.

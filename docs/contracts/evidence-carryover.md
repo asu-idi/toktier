@@ -105,8 +105,11 @@ Three inputs make one carry-over, and all three must be retained:
    the divergence set occurs zero times in the judged corpus, carrying the
    corpus identity, the character total its own scan measured, per-literal
    zero counts, and positive controls that prove the scanner read the text.
-   The certificate ships under ``readings/`` and is named by path and
-   SHA-256.
+   The certificate is recorded under ``readings/`` and is named by path and
+   SHA-256. That is where the evidence set keeps it -- in the repository
+   and in the source archive published beside the release; like every
+   other reading it is not carried inside the wheel or the crate, so a
+   reader following the path reads it there.
 
    **Corpus identity** is the corpus id at its pinned revision, the document
    count, and the number of units the scan covered. The character total is
@@ -137,12 +140,15 @@ definition's answer is served; the certified readings simply never met such
 an input, which is exactly what the certificate proves.
 
 One degenerate boundary is stated here because it is the same machinery seen
-from the other side. On an artifact whose configuration names no loader
-class the pinned loader can resolve, the loader face is materialized
-file-only, and only when the configuration-side subset is empty are the
-file-only face and the loader face provably the same function -- an empty
-divergence set needs no certificate. The loading paths verify that premise
-before taking the fallback, and refuse it otherwise.
+from the other side. When the pinned loader cannot construct the loader
+object at all -- the case this exists for is a configuration naming a loader
+class it does not know -- the loader face is materialized file-only, and only
+when the configuration-side subset is empty are the file-only face and the
+loader face provably the same function: an empty divergence set needs no
+certificate. That emptiness is the premise the loading paths verify before
+taking the fallback, and they refuse it otherwise. They do not classify why
+the construction failed, and do not need to: the equivalence follows from the
+empty subset alone, whatever the cause.
 
 ## 4. Add-only record
 

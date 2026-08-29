@@ -889,20 +889,25 @@ declaration and fail closed on a mismatch, and the campaign readings on this
 page carry over unchanged under the redefined reference: a dedicated scan
 found zero occurrences of all seven literals over the full certification
 corpus (3,800,016,491 documents), so on everything the campaigns judged the
-two faces are the same function. The certificate ships as
-`readings/corpus_absence_qwen3_5_08b.json` and the annotation as the record's
-`carryover` node (`docs/contracts/evidence-carryover.md` Section 3). Every
+two faces are the same function. The certificate is recorded as
+`readings/corpus_absence_qwen3_5_08b.json` -- in the repository and in the
+source archive published beside the release, like every other reading,
+rather than inside the wheel or the crate -- and the annotation as the
+record's `carryover` node
+(`docs/contracts/evidence-carryover.md` Section 3). Every
 other artifact listed here declares its added tokens in `tokenizer.json`
 only, where the two faces coincide by construction.
 
-One degradation is part of the definition: on an artifact whose configuration
-names no loader class the pinned `transformers` can resolve (for example a
-`tokenizer_class` from a newer release), the loader face is materialized
-file-only -- taken only when the configuration declares no added token beyond
-the artifact file, which is exactly the condition under which the file-only
-face and the loader face are provably the same function. When that premise
-fails, the loading error propagates instead of the fallback silently dropping
-a token.
+One degradation is part of the definition: when the pinned `transformers`
+cannot construct the loader object at all -- the case this exists for is a
+configuration naming a loader class it does not know, for example a
+`tokenizer_class` from a newer release -- the loader face is materialized
+file-only. One condition is tested before that fallback is taken, and it is
+the one the equivalence rests on: the configuration declares no added token
+beyond the artifact file, which is exactly when the file-only face and the
+loader face are provably the same function. Why the construction failed is
+not classified; a failure over an artifact with a configuration-side added
+token propagates instead of the fallback silently dropping it.
 
 ## Documented exclusions
 

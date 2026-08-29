@@ -14,7 +14,7 @@ over TLS is the optional `network` feature, which is not enabled by
 default from 0.2.5 on:
 
 ```toml
-toktier = { version = "0.2.6", features = ["network"] }
+toktier = { version = "0.2.8", features = ["network"] }
 ```
 
 The example below acquires an artifact on its first call, so it is written

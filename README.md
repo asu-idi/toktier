@@ -460,6 +460,7 @@ tokenizer or compiling anything:
 | `automatic_gpu_candidate` | installation level only: `torch` is importable and the GPU is not disabled by configuration; it is not an eligibility result |
 | `jit_toolchain_satisfied` | under JIT delivery, whether the observed compiler/runtime triple is one the registry judged; `null` under prebuilt delivery, which has no such premise |
 | `jit_toolchain_observed` / `jit_toolchain_constraint` | the triple this machine presents, and the judged set it is compared against |
+| `automatic_routing_policy` | which policy the two answers below were computed under, since 0.2.8. The same machine reads a different effective backend under three of the five policies, so the answers only mean something beside the policy that produced them |
 | `automatic_gpu_eligible` | the conjunction the policy in effect applies: candidate, an observed device, and that delivery's own materials, plus — under `CERTIFIED` — a judged architecture and a judged toolchain. The default `SUPPORTED` policy treats those last two as coverage gaps, runs them, and labels the route `supported_untested`, so the field follows suit |
 | `automatic_effective_backend` | what an at-or-above-crossover automatic request would use for a CPU-fast-certified family: `gpu`, `fast_cpu`, or `hf` |
 | `directory_roots_usable` / `directory_roots_problem` | whether the three resolved roots above can hold what they are for, and what stands in the way when they cannot — the same judgement the next command would answer with `CONFIG_INVALID`, read without creating anything |

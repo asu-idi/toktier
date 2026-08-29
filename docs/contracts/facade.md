@@ -315,11 +315,15 @@ subject, so an input holding a configuration-side literal receives the same
 ids on every route. A certified artifact declares its configuration-side
 subset in the registry (``config_added_tokens``), and the loading paths fail
 closed when the subset on disk does not match the declared one
-(``ARTIFACT_HASH_MISMATCH``, reason ``config_added_tokens_mismatch``). On an
-artifact whose configuration names no loader class the pinned loader can
-resolve, the loader face is materialized file-only -- taken only when the
-configuration-side subset is empty, which is exactly the condition under
-which the file-only face and the loader face are provably the same function.
+(``ARTIFACT_HASH_MISMATCH``, reason ``config_added_tokens_mismatch``). When
+the pinned loader cannot construct the loader object at all -- the case this
+exists for is a configuration naming a loader class it does not know -- the
+loader face is materialized file-only. The one condition tested before that
+fallback is taken is the one the equivalence rests on: the configuration-side
+subset is empty, which is exactly when the file-only face and the loader face
+are provably the same function. The cause of the construction failure is not
+classified, so any failure over an artifact with a non-empty configuration-side
+subset propagates rather than falling back.
 ``docs/support-matrix.md`` records the one packaged artifact whose two faces
 differ as documents and how its readings carry over.
 

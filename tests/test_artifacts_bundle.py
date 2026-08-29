@@ -102,34 +102,94 @@ def _assert_no_trace(cache: Path) -> None:
     assert not cache.exists() or list(cache.iterdir()) == []
 
 
-def test_a_second_import_says_the_alias_is_already_there(tmp_path: Path) -> None:
-    """The recipe read as if this were a missing artifact.
-
-    Running the printed commands twice against one cache reaches this
-    path, and the old message named the alias as something that could not
-    be found. The bundle verified; the cache simply already holds it.
-    """
+def _exported_bundle(tmp_path: Path) -> Path:
     source_directory = tmp_path / "verified"
     source_directory.mkdir()
     (source_directory / "tokenizer.json").write_bytes(GOOD)
-    bundle = export_bundle(
+    return export_bundle(
         tmp_path / "artifact.tar",
         ALIAS,
         {"tokenizer.json": source_directory / "tokenizer.json"},
     )
+
+
+def test_a_second_import_of_the_same_bundle_is_idempotent(
+    tmp_path: Path,
+) -> None:
+    """Both faces now answer the same way, on the same condition.
+
+    The Rust face has always said re-import is idempotent while the
+    visible tree still authenticates exactly; the Python face used to
+    refuse every alias it already held. Running the printed recipe twice
+    against one cache reaches this path.
+    """
+    bundle = _exported_bundle(tmp_path)
     cache = artifact_cache_dir(Config(home=tmp_path / "home", offline=True))
 
-    assert import_bundle(bundle, cache) == cache / ALIAS
+    installed = import_bundle(bundle, cache)
+    assert installed == cache / ALIAS
+    before = (installed / "tokenizer.json").stat()
+
+    assert import_bundle(bundle, cache) == installed
+
+    # The installed bytes were re-read, not rewritten.
+    after = (installed / "tokenizer.json").stat()
+    assert (installed / "tokenizer.json").read_bytes() == GOOD
+    assert (after.st_mtime_ns, after.st_ino) == (before.st_mtime_ns, before.st_ino)
+    assert not list(cache.glob(".toktier-bundle-import-*"))
+
+
+def test_an_alias_holding_other_bytes_is_a_conflict(tmp_path: Path) -> None:
+    """One changed byte is the difference between idempotent and refused."""
+    bundle = _exported_bundle(tmp_path)
+    cache = artifact_cache_dir(Config(home=tmp_path / "home", offline=True))
+    installed = import_bundle(bundle, cache)
+    (installed / "tokenizer.json").write_bytes(TAMPERED)
 
     with pytest.raises(ArtifactNotFound) as caught:
         import_bundle(bundle, cache)
 
-    assert "already holds the bundle alias" in str(caught.value)
-    assert caught.value.details["cause"] == "alias_already_present"
-    assert str(cache / ALIAS) in str(caught.value.details["remedy"])
-    # The first import is intact and no staging directory was left behind.
-    assert (cache / ALIAS / "tokenizer.json").read_bytes() == GOOD
+    details = caught.value.details
+    assert details["cause"] == "alias_conflict"
+    assert details["failure"] == "hash_mismatch"
+    assert details["path"] == str(installed / "tokenizer.json")
+    assert details["observed_sha256"] == hashlib.sha256(TAMPERED).hexdigest()
+    assert str(installed) in str(details["remedy"])
+    # The refusal leaves the cache and the staging area as they were.
+    assert (installed / "tokenizer.json").read_bytes() == TAMPERED
     assert not list(cache.glob(".toktier-bundle-import-*"))
+
+
+def test_an_alias_holding_an_undeclared_file_is_a_conflict(
+    tmp_path: Path,
+) -> None:
+    """A tree with something extra in it is not the bundle either."""
+    bundle = _exported_bundle(tmp_path)
+    cache = artifact_cache_dir(Config(home=tmp_path / "home", offline=True))
+    installed = import_bundle(bundle, cache)
+    (installed / "extra.json").write_bytes(b"{}\n")
+
+    with pytest.raises(ArtifactNotFound) as caught:
+        import_bundle(bundle, cache)
+
+    assert caught.value.details["failure"] == "undeclared_file"
+    assert caught.value.details["path"] == str(installed / "extra.json")
+
+
+def test_an_alias_missing_a_declared_file_is_a_conflict(
+    tmp_path: Path,
+) -> None:
+    """So is a tree the bundle would fill in."""
+    bundle = _exported_bundle(tmp_path)
+    cache = artifact_cache_dir(Config(home=tmp_path / "home", offline=True))
+    installed = import_bundle(bundle, cache)
+    (installed / "tokenizer.json").unlink()
+
+    with pytest.raises(ArtifactNotFound) as caught:
+        import_bundle(bundle, cache)
+
+    assert caught.value.details["failure"] == "missing_file"
+    assert caught.value.details["path"] == str(installed / "tokenizer.json")
 
 
 def test_export_import_and_airgap_source_happy_paths(tmp_path: Path) -> None:

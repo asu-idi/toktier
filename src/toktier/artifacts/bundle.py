@@ -20,6 +20,14 @@ after every member and digest has passed is that directory fsynced and
 renamed into the artifact cache, so a rejected bundle leaves no partial
 artifact behind.
 
+Re-importing the same bundle into a cache that already holds its alias is
+idempotent, on the one condition the Rust face has always stated: the
+visible tree still authenticates as exactly these contents.  The installed
+tree is re-read against the manifest -- every declared path, byte count and
+SHA-256, and no undeclared file -- and only then is the freshly staged copy
+discarded and the existing directory returned untouched.  A tree that does
+not authenticate is a conflict, not a success, and is reported as one.
+
 Error mapping (``docs/contracts/errors.md``, decision 0004): violations
 of the bundle archive format -- the tar container and the embedded
 bundle manifest -- raise ``BundleInvalid`` (``BUNDLE_INVALID``);
@@ -210,7 +218,14 @@ def import_bundle(
     bundle: str | os.PathLike[str],
     cache_root: str | os.PathLike[str],
 ) -> Path:
-    """Verify ``bundle`` and atomically install its alias into ``cache_root``."""
+    """Verify ``bundle`` and atomically install its alias into ``cache_root``.
+
+    A second import of the same bundle into the same cache is idempotent
+    when the installed tree still authenticates as exactly these
+    contents; the already installed directory is returned and its bytes
+    are not touched.  A tree that holds the alias but does not
+    authenticate is reported instead of overwritten.
+    """
     bundle_path = Path(bundle)
     root = Path(cache_root)
     root_existed = root.is_dir()
@@ -218,52 +233,141 @@ def import_bundle(
     staging = Path(
         tempfile.mkdtemp(prefix=".toktier-bundle-import-", dir=str(root))
     )
-    installed = False
+    staging_removed = False
     try:
         manifest = _extract_verified_bundle(bundle_path, staging)
         target = root / manifest.alias
         ensure_private_dir(target.parent)
         _sync_tree(staging)
+        if target.exists() or target.is_symlink():
+            # Re-import is idempotent exactly when the visible tree still
+            # authenticates as this bundle, which is the condition the
+            # Rust face states and now the condition both faces apply.
+            _authenticate_installed_alias(target, manifest)
+            shutil.rmtree(staging, ignore_errors=True)
+            staging_removed = True
+            return target
         try:
             os.replace(staging, target)
         except OSError as exc:
-            # The common cause is not a missing artifact: os.replace
-            # refuses a directory target the cache already holds, which
-            # is what a second import into the same cache root hits.
-            # Naming that case keeps the message from sending a reader
-            # to look for something that is already there.
-            already_present = target.is_dir() and any(target.iterdir())
-            details: dict[str, object] = {
-                "family": manifest.alias,
-                "searched": [str(target)],
-            }
-            if already_present:
-                message = (
-                    f"the cache already holds the bundle alias "
-                    f"{manifest.alias!r}"
-                )
-                details["cause"] = "alias_already_present"
-                details["remedy"] = (
-                    f"import into another cache root, or remove {target} "
-                    f"first; the bundle itself verified"
-                )
-            else:
-                message = (
-                    f"cannot install bundle alias {manifest.alias!r} "
-                    f"into the cache"
-                )
-                details["cause"] = "install_failed"
-                details["cause_message"] = str(exc)
-            raise ArtifactNotFound(message, details=details) from exc
-        installed = True
+            raise ArtifactNotFound(
+                f"cannot install bundle alias {manifest.alias!r} "
+                f"into the cache",
+                details={
+                    "family": manifest.alias,
+                    "searched": [str(target)],
+                    "cause": "install_failed",
+                    "cause_message": str(exc),
+                },
+            ) from exc
+        staging_removed = True
         _sync_directory(target.parent)
         return target
     finally:
-        if not installed:
+        if not staging_removed:
             shutil.rmtree(staging, ignore_errors=True)
             if not root_existed:
                 with suppress(OSError):
                     root.rmdir()
+
+
+def _authenticate_installed_alias(
+    target: Path, manifest: _BundleManifest
+) -> None:
+    """Re-read an installed alias against the manifest that claims it.
+
+    The check mirrors the Rust ``verify_installed``: nothing in the tree
+    is a symbolic or special file, every file in it is declared, every
+    declared file is present, and each one still has its declared byte
+    count and SHA-256.  The first path that does not authenticate is
+    named, in sorted order, so a reader is told which file to look at
+    rather than only that something differs.
+    """
+    if target.is_symlink() or not target.is_dir():
+        raise _alias_conflict(
+            target, manifest, path=target, failure="not_a_directory"
+        )
+    declared = {item.path: item for item in manifest.files}
+    observed: set[str] = set()
+    unexpected: list[tuple[str, str, Path]] = []
+    pending = [target]
+    while pending:
+        directory = pending.pop()
+        with os.scandir(directory) as scan:
+            children = list(scan)
+        for child in children:
+            path = Path(child.path)
+            relative = path.relative_to(target).as_posix()
+            if child.is_symlink():
+                unexpected.append((relative, "symlink", path))
+            elif child.is_dir(follow_symlinks=False):
+                pending.append(path)
+            elif not child.is_file(follow_symlinks=False):
+                unexpected.append((relative, "special_file", path))
+            elif relative in declared:
+                observed.add(relative)
+            else:
+                unexpected.append((relative, "undeclared_file", path))
+    if unexpected:
+        relative, failure, path = min(unexpected)
+        raise _alias_conflict(target, manifest, path=path, failure=failure)
+    for item in sorted(manifest.files, key=lambda file: file.path):
+        path = target / PurePosixPath(item.path)
+        if item.path not in observed:
+            raise _alias_conflict(
+                target, manifest, path=path, failure="missing_file"
+            )
+        observed_sha256, observed_size = _sha256_file(path)
+        if observed_size != item.size:
+            raise _alias_conflict(
+                target,
+                manifest,
+                path=path,
+                failure="size_mismatch",
+                extra={
+                    "expected_size": item.size,
+                    "observed_size": observed_size,
+                },
+            )
+        if observed_sha256 != item.sha256:
+            raise _alias_conflict(
+                target,
+                manifest,
+                path=path,
+                failure="hash_mismatch",
+                extra={
+                    "expected_sha256": item.sha256,
+                    "observed_sha256": observed_sha256,
+                },
+            )
+
+
+def _alias_conflict(
+    target: Path,
+    manifest: _BundleManifest,
+    *,
+    path: Path,
+    failure: str,
+    extra: Mapping[str, object] | None = None,
+) -> ArtifactNotFound:
+    """Build the error for an alias the cache holds with other contents."""
+    details: dict[str, object] = {
+        "family": manifest.alias,
+        "searched": [str(target)],
+        "cause": "alias_conflict",
+        "failure": failure,
+        "path": str(path),
+        "remedy": (
+            f"remove {target} and import again, or import into another "
+            f"cache root; the bundle itself verified"
+        ),
+    }
+    details.update(extra or {})
+    return ArtifactNotFound(
+        f"the cache holds the bundle alias {manifest.alias!r} with other "
+        f"contents: {failure} at {path}",
+        details=details,
+    )
 
 
 def _prepare_export_files(

@@ -426,10 +426,15 @@ toktier doctor --json
 ```
 
 The two halves belong on two machines, or at least on two caches: `import`
-installs the alias into the cache it resolves, and a cache that already holds
-that alias — the connected host's, where `fetch` just placed it — is refused
-rather than overwritten. Reading that refusal as a transport failure is the
-usual first surprise; the bundle verified.
+installs the alias into the cache it resolves. A cache that already holds that
+alias is re-read rather than overwritten. If the installed tree still
+authenticates as exactly this bundle — every declared path, byte count and
+SHA-256, and nothing undeclared — the import is idempotent and returns the
+directory that is already there, which is what running the recipe twice, or
+importing on the connected host where `fetch` just placed the same bytes,
+reaches. If it holds anything else the import stops and names the first file
+that does not match, rather than replacing bytes someone else may be using.
+The bundle itself verified either way.
 
 This recipe transports tokenizer artifacts, and only those. A genuinely
 disconnected host also needs the TokTier wheel and every dependency wheel

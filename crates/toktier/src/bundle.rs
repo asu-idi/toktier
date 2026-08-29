@@ -461,6 +461,13 @@ fn copy_and_hash(
 /// spreading that one condition over the codes for a malformed archive,
 /// a missing artifact and a content-hash failure. The Python facade
 /// reports the same code for the same condition.
+///
+/// Which file a refusal names is a decision, not an accident of the
+/// filesystem: directory order is not stable across kernels or copies,
+/// so the entries that have no place in the tree are gathered and the
+/// one whose relative path sorts first is the one reported, and the
+/// declared rows are then read in sorted order too. Both faces walk the
+/// same order, so both name the same file for the same tree.
 fn verify_installed(root: &Path, manifest: &BundleManifest) -> Result<()> {
     let expected = manifest
         .files
@@ -468,6 +475,7 @@ fn verify_installed(root: &Path, manifest: &BundleManifest) -> Result<()> {
         .map(|row| row.path.as_str())
         .collect::<HashSet<_>>();
     let mut observed = HashSet::new();
+    let mut unexpected: Vec<(String, String, PathBuf)> = Vec::new();
     let mut pending = vec![root.to_path_buf()];
     while let Some(directory) = pending.pop() {
         for entry in fs::read_dir(&directory)
@@ -478,15 +486,18 @@ fn verify_installed(root: &Path, manifest: &BundleManifest) -> Result<()> {
                 .path();
             let metadata = fs::symlink_metadata(&path)
                 .map_err(|error| Error::new(ErrorCode::Io, error.to_string()).with_path(&path))?;
+            let relative = path
+                .strip_prefix(root)
+                .map_err(|_| alias_conflict("installed bundle path escaped its root", &path))?;
             if metadata.file_type().is_symlink() {
-                return Err(alias_conflict("installed bundle contains a symlink", &path));
-            }
-            if metadata.is_dir() {
+                unexpected.push((
+                    relative.to_string_lossy().into_owned(),
+                    "installed bundle contains a symlink".to_owned(),
+                    path,
+                ));
+            } else if metadata.is_dir() {
                 pending.push(path);
             } else if metadata.is_file() {
-                let relative = path
-                    .strip_prefix(root)
-                    .map_err(|_| alias_conflict("installed bundle path escaped its root", &path))?;
                 let name = relative
                     .to_str()
                     .ok_or_else(|| alias_conflict("installed bundle path is not UTF-8", &path))?;
@@ -501,28 +512,35 @@ fn verify_installed(root: &Path, manifest: &BundleManifest) -> Result<()> {
                     continue;
                 }
                 if !expected.contains(name) {
-                    return Err(alias_conflict(
-                        format!("installed bundle contains undeclared file {name:?}"),
-                        &path,
-                    ));
+                    let message = format!("installed bundle contains undeclared file {name:?}");
+                    unexpected.push((name.to_owned(), message, path));
+                    continue;
                 }
                 observed.insert(name.to_owned());
             } else {
-                return Err(alias_conflict(
-                    "installed bundle contains a special file",
-                    &path,
+                unexpected.push((
+                    relative.to_string_lossy().into_owned(),
+                    "installed bundle contains a special file".to_owned(),
+                    path,
                 ));
             }
         }
     }
-    if observed.len() != expected.len() {
-        return Err(alias_conflict(
-            "installed bundle is missing one or more declared files",
-            root,
-        ));
+    if !unexpected.is_empty() {
+        unexpected.sort();
+        let (_, message, path) = &unexpected[0];
+        return Err(alias_conflict(message.clone(), path));
     }
-    for row in &manifest.files {
+    let mut rows = manifest.files.iter().collect::<Vec<_>>();
+    rows.sort_by(|left, right| left.path.cmp(&right.path));
+    for row in rows {
         let path = safe_join(root, &row.path)?;
+        if !observed.contains(row.path.as_str()) {
+            return Err(alias_conflict(
+                "installed bundle is missing one or more declared files",
+                &path,
+            ));
+        }
         let metadata = fs::symlink_metadata(&path).map_err(|error| {
             Error::new(ErrorCode::AliasConflict, error.to_string()).with_path(&path)
         })?;

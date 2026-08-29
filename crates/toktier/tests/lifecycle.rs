@@ -149,6 +149,76 @@ fn reimport_is_idempotent_across_the_cache_marker() {
 }
 
 #[test]
+fn a_conflicting_alias_names_the_same_file_every_time() {
+    // The refusal says which file to look at, so which file it says has
+    // to be a decision rather than an artefact of the walk. Two files
+    // with no place in the tree are left in it: one at the top, one a
+    // level down under a name that sorts earlier. A walk that answers
+    // with the first entry it happens to meet answers with the top-level
+    // one, because a subdirectory is only opened after the directory
+    // holding it has been read to the end. The answer here is the one
+    // that sorts first, on every run, which is what the Python facade
+    // answers for the same tree.
+    let temporary = tempfile::tempdir().unwrap();
+    let source = temporary.path().join("tokenizer.json");
+    std::fs::write(&source, b"verified bytes\n").unwrap();
+    let files = BTreeMap::from([("tokenizer.json".to_owned(), source)]);
+    let bundle = temporary.path().join("order.tar");
+    export_bundle(&bundle, "demo-deadbeef0002", &files).unwrap();
+    let cache = temporary.path().join("cache");
+    let installed = import_bundle(&bundle, &cache).unwrap();
+
+    let nested = installed.join("aa-dir");
+    std::fs::create_dir(&nested).unwrap();
+    std::fs::write(installed.join("zz-extra.txt"), b"foreign\n").unwrap();
+    std::fs::write(nested.join("aa-extra.txt"), b"foreign\n").unwrap();
+    let sorts_first = nested.join("aa-extra.txt");
+    for _ in 0..8 {
+        let error = import_bundle(&bundle, &cache).unwrap_err();
+        assert_eq!(error.code(), ErrorCode::AliasConflict);
+        assert_eq!(error.path(), Some(sorts_first.as_path()));
+        assert!(
+            error.message().contains("aa-dir/aa-extra.txt"),
+            "message named another file: {}",
+            error.message()
+        );
+    }
+    std::fs::remove_dir_all(&nested).unwrap();
+    std::fs::remove_file(installed.join("zz-extra.txt")).unwrap();
+    assert_eq!(import_bundle(&bundle, &cache).unwrap(), installed);
+}
+
+#[test]
+fn a_missing_declared_file_is_named_by_its_own_path() {
+    // A tree missing a declared file used to be reported against the
+    // alias root, which told a reader that something was absent without
+    // telling them what. The path now names the first declared file the
+    // tree does not carry, in the same sorted order the Python facade
+    // reads.
+    let temporary = tempfile::tempdir().unwrap();
+    let first = temporary.path().join("tokenizer.json");
+    let second = temporary.path().join("special_tokens_map.json");
+    std::fs::write(&first, b"verified bytes\n").unwrap();
+    std::fs::write(&second, b"more verified bytes\n").unwrap();
+    let files = BTreeMap::from([
+        ("tokenizer.json".to_owned(), first),
+        ("special_tokens_map.json".to_owned(), second),
+    ]);
+    let bundle = temporary.path().join("missing.tar");
+    export_bundle(&bundle, "demo-deadbeef0003", &files).unwrap();
+    let cache = temporary.path().join("cache");
+    let installed = import_bundle(&bundle, &cache).unwrap();
+
+    std::fs::remove_file(installed.join("special_tokens_map.json")).unwrap();
+    let error = import_bundle(&bundle, &cache).unwrap_err();
+    assert_eq!(error.code(), ErrorCode::AliasConflict);
+    assert_eq!(
+        error.path(),
+        Some(installed.join("special_tokens_map.json").as_path())
+    );
+}
+
+#[test]
 #[cfg(unix)]
 fn bundle_rejects_symlink_sources_and_cache_roots() {
     use std::os::unix::fs::symlink;

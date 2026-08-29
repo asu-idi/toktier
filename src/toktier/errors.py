@@ -18,6 +18,7 @@ from types import MappingProxyType
 
 __all__ = [
     "ERROR_CLASSES_BY_CODE",
+    "AliasConflict",
     "ArtifactHashMismatch",
     "ArtifactNotFound",
     "BackendExecutionFault",
@@ -108,6 +109,23 @@ class ArtifactNotFound(ToktierError):
     """
 
     CODE = "ARTIFACT_NOT_FOUND"
+
+
+class AliasConflict(ToktierError):
+    """A cache holds the requested alias with contents that are not it.
+
+    Raised by :func:`toktier.artifacts.import_bundle` when the alias
+    directory is already there and the installed tree does not
+    authenticate as the bundle being imported: an undeclared or missing
+    file, something that is not a regular file, or a byte count or
+    digest that differs. An installed tree that does authenticate is not
+    an error -- the import is idempotent and returns it. Typical
+    details: ``family``, ``searched``, ``path``, ``failure``,
+    ``remedy``; for a byte difference also ``expected_sha256``,
+    ``observed_sha256`` or ``expected_size``, ``observed_size``.
+    """
+
+    CODE = "ALIAS_CONFLICT"
 
 
 class ArtifactHashMismatch(ToktierError):
@@ -286,6 +304,7 @@ ERROR_CLASSES_BY_CODE: Mapping[str, type[ToktierError]] = MappingProxyType(
         cls.CODE: cls
         for cls in (
             ArtifactNotFound,
+            AliasConflict,
             ArtifactHashMismatch,
             UncertifiedTokenizer,
             OracleVersionUnsupported,

@@ -141,7 +141,11 @@ the alias with one rename. Re-import is idempotent only when the visible tree
 still authenticates exactly. Since 0.2.8 that is the rule on both faces: the
 Python `import_bundle` used to refuse every alias its cache already held, and
 now re-reads the installed tree against the manifest and answers the same way
-this one does.
+this one does. A tree that holds the alias and does not authenticate is
+`ALIAS_CONFLICT` on both faces, with the path of the first file that does not
+match; before 0.2.8 this face answered with whichever of `BUNDLE_INVALID`,
+`ARTIFACT_NOT_FOUND` or `ARTIFACT_HASH_MISMATCH` fitted the part that
+disagreed.
 
 The Rust-only CLI mirrors these calls:
 

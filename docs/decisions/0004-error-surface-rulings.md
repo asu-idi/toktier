@@ -36,3 +36,22 @@
    contract-equivalent shim stand in; the shim
    observes the same `.code`/read-only-`.details` shape and is not a
    public surface.
+5. **The alias an import cannot install gets its own code** (added
+   2026-08-28, released in 0.2.8) - Re-importing an air-gap bundle into a
+   cache that already holds its alias is idempotent when the installed
+   tree still authenticates as that bundle, which is the rule
+   `docs/rust-lifecycle.md` has always stated for the Rust face and the
+   rule the Python `import_bundle` now applies too. The remaining
+   refusal has one subject -- the tree the cache holds is not this
+   bundle -- and raises the new `ALIAS_CONFLICT` code (class
+   `AliasConflict`), on both faces, with `path` naming the first file
+   that does not match. This supersedes item 2's sentence that
+   cache-install failures stay `ARTIFACT_NOT_FOUND` for this one
+   condition: an install that fails for any other reason still reports
+   `ARTIFACT_NOT_FOUND` with `cause: install_failed`. On the Rust face
+   the same condition previously reported `BUNDLE_INVALID`,
+   `ARTIFACT_NOT_FOUND` or `ARTIFACT_HASH_MISMATCH` depending on which
+   part of the tree disagreed; code matching on those for a re-import
+   needs the one-line update, as the 0.2.4 path-policy move did.
+   Adding a code is a permitted minor-release extension by the same
+   reasoning as item 1.

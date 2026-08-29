@@ -33,7 +33,10 @@ of the bundle archive format -- the tar container and the embedded
 bundle manifest -- raise ``BundleInvalid`` (``BUNDLE_INVALID``);
 content-hash failures of the artifact files raise
 ``ArtifactHashMismatch``; a missing bundle file or requested member
-raises ``ArtifactNotFound``.
+raises ``ArtifactNotFound``; and an alias the cache already holds with
+other contents raises ``AliasConflict`` (``ALIAS_CONFLICT``, added in
+0.2.8), which is about the installed tree rather than about a bundle
+that could not be found.
 """
 
 from __future__ import annotations
@@ -54,6 +57,7 @@ from typing import BinaryIO, cast
 
 from .._jcs import canonical_json
 from ..errors import (
+    AliasConflict,
     ArtifactHashMismatch,
     ArtifactNotFound,
     BundleInvalid,
@@ -349,7 +353,7 @@ def _alias_conflict(
     path: Path,
     failure: str,
     extra: Mapping[str, object] | None = None,
-) -> ArtifactNotFound:
+) -> AliasConflict:
     """Build the error for an alias the cache holds with other contents."""
     details: dict[str, object] = {
         "family": manifest.alias,
@@ -363,7 +367,7 @@ def _alias_conflict(
         ),
     }
     details.update(extra or {})
-    return ArtifactNotFound(
+    return AliasConflict(
         f"the cache holds the bundle alias {manifest.alias!r} with other "
         f"contents: {failure} at {path}",
         details=details,

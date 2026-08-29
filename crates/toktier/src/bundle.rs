@@ -442,6 +442,14 @@ fn copy_and_hash(
     Ok(())
 }
 
+/// Re-read an installed alias against the manifest that claims it.
+///
+/// Everything this refuses has the same subject -- the tree the cache
+/// already holds is not the bundle being imported -- so since 0.2.8 it
+/// answers with one code, [`ErrorCode::AliasConflict`], rather than
+/// spreading that one condition over the codes for a malformed archive,
+/// a missing artifact and a content-hash failure. The Python facade
+/// reports the same code for the same condition.
 fn verify_installed(root: &Path, manifest: &BundleManifest) -> Result<()> {
     let expected = manifest
         .files
@@ -460,26 +468,26 @@ fn verify_installed(root: &Path, manifest: &BundleManifest) -> Result<()> {
             let metadata = fs::symlink_metadata(&path)
                 .map_err(|error| Error::new(ErrorCode::Io, error.to_string()).with_path(&path))?;
             if metadata.file_type().is_symlink() {
-                return Err(bundle_error("installed bundle contains a symlink", &path));
+                return Err(alias_conflict("installed bundle contains a symlink", &path));
             }
             if metadata.is_dir() {
                 pending.push(path);
             } else if metadata.is_file() {
                 let relative = path
                     .strip_prefix(root)
-                    .map_err(|_| bundle_error("installed bundle path escaped its root", &path))?;
+                    .map_err(|_| alias_conflict("installed bundle path escaped its root", &path))?;
                 let name = relative
                     .to_str()
-                    .ok_or_else(|| bundle_error("installed bundle path is not UTF-8", &path))?;
+                    .ok_or_else(|| alias_conflict("installed bundle path is not UTF-8", &path))?;
                 if !expected.contains(name) {
-                    return Err(bundle_error(
+                    return Err(alias_conflict(
                         format!("installed bundle contains undeclared file {name:?}"),
                         &path,
                     ));
                 }
                 observed.insert(name.to_owned());
             } else {
-                return Err(bundle_error(
+                return Err(alias_conflict(
                     "installed bundle contains a special file",
                     &path,
                 ));
@@ -487,7 +495,7 @@ fn verify_installed(root: &Path, manifest: &BundleManifest) -> Result<()> {
         }
     }
     if observed.len() != expected.len() {
-        return Err(bundle_error(
+        return Err(alias_conflict(
             "installed bundle is missing one or more declared files",
             root,
         ));
@@ -495,22 +503,20 @@ fn verify_installed(root: &Path, manifest: &BundleManifest) -> Result<()> {
     for row in &manifest.files {
         let path = safe_join(root, &row.path)?;
         let metadata = fs::symlink_metadata(&path).map_err(|error| {
-            Error::new(ErrorCode::ArtifactNotFound, error.to_string()).with_path(&path)
+            Error::new(ErrorCode::AliasConflict, error.to_string()).with_path(&path)
         })?;
         if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err(Error::new(
-                ErrorCode::ArtifactNotFound,
+            return Err(alias_conflict(
                 "installed bundle member is not a regular file",
-            )
-            .with_path(path));
+                &path,
+            ));
         }
         let (digest, size) = hash_file(&path)?;
         if size != row.size || digest != row.sha256 {
-            return Err(Error::new(
-                ErrorCode::ArtifactHashMismatch,
+            return Err(alias_conflict(
                 format!("existing bundle target is not identical for {:?}", row.path),
-            )
-            .with_path(path));
+                &path,
+            ));
         }
     }
     Ok(())
@@ -713,4 +719,9 @@ fn sync_tree(root: &Path) -> Result<()> {
 
 fn bundle_error(message: impl Into<String>, path: &Path) -> Error {
     Error::new(ErrorCode::BundleInvalid, message).with_path(path)
+}
+
+/// The alias the cache holds is not the bundle being imported.
+fn alias_conflict(message: impl Into<String>, path: &Path) -> Error {
+    Error::new(ErrorCode::AliasConflict, message).with_path(path)
 }

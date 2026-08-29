@@ -26,8 +26,8 @@ from toktier.artifacts.bundle import (
 )
 from toktier.config import Config
 from toktier.errors import (
+    AliasConflict,
     ArtifactHashMismatch,
-    ArtifactNotFound,
     BundleInvalid,
 )
 
@@ -146,10 +146,11 @@ def test_an_alias_holding_other_bytes_is_a_conflict(tmp_path: Path) -> None:
     installed = import_bundle(bundle, cache)
     (installed / "tokenizer.json").write_bytes(TAMPERED)
 
-    with pytest.raises(ArtifactNotFound) as caught:
+    with pytest.raises(AliasConflict) as caught:
         import_bundle(bundle, cache)
 
     details = caught.value.details
+    assert caught.value.code == "ALIAS_CONFLICT"
     assert details["cause"] == "alias_conflict"
     assert details["failure"] == "hash_mismatch"
     assert details["path"] == str(installed / "tokenizer.json")
@@ -169,7 +170,7 @@ def test_an_alias_holding_an_undeclared_file_is_a_conflict(
     installed = import_bundle(bundle, cache)
     (installed / "extra.json").write_bytes(b"{}\n")
 
-    with pytest.raises(ArtifactNotFound) as caught:
+    with pytest.raises(AliasConflict) as caught:
         import_bundle(bundle, cache)
 
     assert caught.value.details["failure"] == "undeclared_file"
@@ -185,7 +186,7 @@ def test_an_alias_missing_a_declared_file_is_a_conflict(
     installed = import_bundle(bundle, cache)
     (installed / "tokenizer.json").unlink()
 
-    with pytest.raises(ArtifactNotFound) as caught:
+    with pytest.raises(AliasConflict) as caught:
         import_bundle(bundle, cache)
 
     assert caught.value.details["failure"] == "missing_file"

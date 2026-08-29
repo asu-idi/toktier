@@ -593,6 +593,21 @@ artifact that later fails to parse reports the failing stage instead
 reference-engine load). The `serde` feature serializes typed plans, execution
 facts, doctor facts, and store statistics.
 
+**`#[non_exhaustive]` is the crate's default for a public type that
+describes an answer.** Twenty of them carry it, and the reason is the same
+one the code table below states for `ErrorCode`: what this crate can
+observe grows, so a downstream that enumerates today's answers should keep
+compiling when a release names one more. Nine are enums, and a `match` on
+any of them needs a catch-all arm -- `ErrorCode`, `Policy`, `Device`,
+`GpuDelivery`, `Backend`, `ReasonCode`, `Certification`,
+`DeviceFailurePolicy` and `ArtifactSource`. Eleven are structs, and they
+are read field by field rather than built with a literal or destructured
+exhaustively -- `RoutePlan`, `ExecutionFacts`, `DoctorFacts`,
+`RuntimeBuildFacts`, `BehaviorVersion`, `CudaFacts`, `StoreStats`,
+`ServingTimings`, `ArtifactInspection`, `BundleInspection` and
+`BundleFileInspection`. A field or variant added to one of these is a
+minor-release change; removing or re-meaning one is not.
+
 ### `ErrorCode` on the Rust surface
 
 Codes are append-only: a variant is never renamed, reused, or re-meant. The
@@ -603,6 +618,7 @@ enum is `#[non_exhaustive]`, so a `match` on it needs a catch-all arm.
 | `InvalidArgument` / `INVALID_ARGUMENT` | Caller misuse the type system cannot refuse: a batch row out of range, an offset request on the ID-only batch API, a revision that is not an immutable 40-hex commit, a value that does not fit the platform. |
 | `ConfigInvalid` / `CONFIG_INVALID` | A configuration value is impossible or self-contradictory: a CPU device with GPU delivery, an empty or zero bound, a URL carrying credentials or control characters, and (since 0.2.4) a **path this crate refuses by policy** -- a parent-directory component, a symbolic-link component, a non-directory component, or a final path that is not a regular directory. Wider than the Python row, which covers configuration values only. |
 | `ArtifactNotFound` / `ARTIFACT_NOT_FOUND` | An artifact cannot be resolved: an unknown family (the message carries the closest valid ids), a missing or non-regular `tokenizer.json`, a missing bundle or bundle member, an empty cache under offline mode. |
+| `AliasConflict` / `ALIAS_CONFLICT` | An artifact cache already holds the alias a bundle is being imported under and the installed tree does not authenticate as that bundle: an undeclared or missing file, something that is not a regular file, or a differing byte count or digest. Added in 0.2.8; the Python facade reports the same code for the same condition. A tree that does authenticate is not an error, and re-import returns it. |
 | `ArtifactHashMismatch` / `ARTIFACT_HASH_MISMATCH` | Verified bytes do not match the manifest digest. Content-hash failures only. |
 | `ArtifactSizeMismatch` / `ARTIFACT_SIZE_MISMATCH` | A file's byte count differs from the manifest, including a stream that stops early or overruns. Reported before the digest so the cheaper fact is not hidden behind the expensive one. |
 | `BundleInvalid` / `BUNDLE_INVALID` | An air-gap bundle violates the frozen archive format: unsafe or duplicate members, link members, a member set that disagrees with its manifest, resource-limit violations. |
@@ -632,6 +648,15 @@ Before 0.2.4 the four path-policy refusals in the third row reported
 retry forever -- so they were moved to `CONFIG_INVALID` and named here.
 Code matching on `Io` for a refused cache, bundle, or JIT root needs the
 one-line update; nothing else changed, and the messages are unchanged.
+
+Before 0.2.8 `import_bundle` answered for an alias the cache already held
+with three different codes, one per part of the installed tree that
+disagreed: `BUNDLE_INVALID` for an undeclared, missing or special file,
+`ARTIFACT_NOT_FOUND` for a member that was not a regular file, and
+`ARTIFACT_HASH_MISMATCH` for differing bytes. They are one condition and
+now carry one code. Code matching on any of the three for a re-import
+needs the one-line update; the messages are unchanged, and no other use
+of those three codes moved.
 
 The current feature surface is:
 

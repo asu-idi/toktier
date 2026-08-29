@@ -55,11 +55,23 @@ fn canonical_bundle_is_deterministic_and_idempotent() {
     );
     assert_eq!(import_bundle(&first, &cache).unwrap(), installed);
 
+    // An alias the cache holds with other contents is its own condition and
+    // has carried its own code since 0.2.8; the Python facade reports the
+    // same one for the same tree.
     std::fs::write(installed.join("undeclared.txt"), b"foreign").unwrap();
     assert_eq!(
         import_bundle(&first, &cache).unwrap_err().code(),
-        ErrorCode::BundleInvalid
+        ErrorCode::AliasConflict
     );
+    std::fs::remove_file(installed.join("undeclared.txt")).unwrap();
+    assert_eq!(import_bundle(&first, &cache).unwrap(), installed);
+    std::fs::write(installed.join("tokenizer.json"), b"other bytes\n").unwrap();
+    assert_eq!(
+        import_bundle(&first, &cache).unwrap_err().code(),
+        ErrorCode::AliasConflict
+    );
+    std::fs::write(installed.join("tokenizer.json"), b"verified bytes\n").unwrap();
+    assert_eq!(import_bundle(&first, &cache).unwrap(), installed);
 
     let corrupt = temporary.path().join("corrupt.tar");
     let mut bytes = std::fs::read(&first).unwrap();

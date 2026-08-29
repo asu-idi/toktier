@@ -9,6 +9,7 @@ import pytest
 
 ERROR_TABLE = (
     ("ArtifactNotFound", "ARTIFACT_NOT_FOUND"),
+    ("AliasConflict", "ALIAS_CONFLICT"),
     ("ArtifactHashMismatch", "ARTIFACT_HASH_MISMATCH"),
     ("UncertifiedTokenizer", "UNCERTIFIED_TOKENIZER"),
     ("OracleVersionUnsupported", "ORACLE_VERSION_UNSUPPORTED"),

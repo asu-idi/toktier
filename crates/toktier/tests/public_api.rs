@@ -32,6 +32,9 @@ fn stable_error_codes_are_not_display_strings() {
     );
     assert_eq!(ErrorCode::RegistryInvalid.as_str(), "REGISTRY_INVALID");
     assert_eq!(ErrorCode::NetworkDisabled.as_str(), "NETWORK_DISABLED");
+    // Appended in 0.2.8 for the alias an artifact cache already holds with
+    // other contents. The string is the one the Python facade uses.
+    assert_eq!(ErrorCode::AliasConflict.as_str(), "ALIAS_CONFLICT");
 }
 
 #[test]

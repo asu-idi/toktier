@@ -7,16 +7,23 @@ Section 2 (oracle version policy).
 
 Design rules this module keeps:
 
-- **The artifact is executed as written.** The backend opens the
-  verified ``tokenizer.json`` through the ``tokenizers`` crate and
-  passes no loader flag of any kind. A loader flag that changes the
-  pipeline changes token ids, so it would silently move the artifact
-  out of the configuration every certification reading was taken
-  against. Flags are rejected at construction, not ignored -- see
-  :data:`REJECTED_LOADER_FLAGS`.
+- **The reference is the loader face.** The artifact identity covers the
+  verified ``tokenizer.json`` plus the added tokens its
+  ``tokenizer_config.json`` declares beyond that file, and the reference
+  executes exactly that subject. When the configuration declares no such
+  token, the artifact document already is the loader face and is opened
+  through the ``tokenizers`` crate directly; when it does, the backend
+  materializes the live loader object once (the same construction the
+  fast CPU backend certifies against) and executes its exact
+  serialization. Either way no caller-supplied loader flag is accepted:
+  a flag that changes the pipeline changes token ids, so it would
+  silently move the running configuration out of the one every
+  certification reading was taken against. Flags are rejected at
+  construction, not ignored -- see :data:`REJECTED_LOADER_FLAGS`.
 - **Local files only.** The crate is handed an absolute path to an
-  already-verified file. Nothing here resolves a repository id, and
-  nothing here reaches the network; missing files raise
+  already-verified file (or the serialization of a locally materialized
+  loader object over such files). Nothing here resolves a repository
+  id, and nothing here reaches the network; missing files raise
   ``ArtifactNotFound``.
 - **Verify what we open.** The manifest digest for the file we read is
   re-checked here as well. The artifacts layer verifies on fetch; this
@@ -27,9 +34,9 @@ Design rules this module keeps:
   of the system stores, so it is rejected with ``UNSUPPORTED_CONFIG``
   rather than quietly re-encoded.
 
-The module imports no accelerator runtime, and the ``tokenizers``
-import is deferred to construction so that importing ``toktier`` stays
-cheap and side-effect free.
+The module imports no accelerator runtime, and the ``tokenizers`` and
+``transformers`` imports are deferred to construction so that importing
+``toktier`` stays cheap and side-effect free.
 """
 
 from __future__ import annotations
@@ -47,6 +54,12 @@ from ..errors import (
     UnsupportedConfig,
 )
 from ..policy import BACKEND_REFERENCE
+from .loader_face import (
+    config_added_token_rows,
+    live_tokenizer_json,
+    load_live_tokenizer,
+    verify_declared_config_added_tokens,
+)
 from .protocol import TOKENIZER_FILE, ArtifactHandle
 
 __all__ = [
@@ -99,6 +112,22 @@ def _load_crate_tokenizer(path: Path) -> _CrateTokenizer:
     return cast(_CrateTokenizer, _native.ReferenceEngine(str(path)))
 
 
+def _load_crate_tokenizer_from_json(document: str) -> _CrateTokenizer:
+    """Open a materialized loader-face document through the native oracle.
+
+    Same engine, same crate version; the bytes are the exact
+    serialization of the live loader object rather than the artifact
+    file, which is how configuration-side added tokens reach the
+    reference.
+    """
+    from .. import _native
+
+    return cast(
+        _CrateTokenizer,
+        _native.ReferenceEngine.from_bytes(document.encode("utf-8")),
+    )
+
+
 class HfBackend:
     """The reference backend (backend id ``hf``).
 
@@ -115,11 +144,13 @@ class HfBackend:
         artifact_sha256: str,
         tokenizer_path: Path,
         tokenizer: _CrateTokenizer,
+        loader_face_json: str | None = None,
     ) -> None:
         self._family = family
         self._artifact_sha256 = artifact_sha256
         self._tokenizer_path = tokenizer_path
         self._tokenizer: _CrateTokenizer | None = tokenizer
+        self._loader_face_json = loader_face_json
 
     # -- construction --------------------------------------------------
 
@@ -140,16 +171,18 @@ class HfBackend:
             name = sorted(loader_flags)[0]
             note = REJECTED_LOADER_FLAGS.get(
                 name,
-                "the reference backend runs the artifact as written; loader "
-                "flags change token ids and would leave every certified "
-                "record behind.",
+                "the reference backend runs the certified subject -- the "
+                "artifact plus its declared configuration-side added tokens "
+                "-- exactly as recorded; loader flags change token ids and "
+                "would leave every certified record behind.",
             )
             raise UnsupportedConfig(
                 f"loader flag {name!r} is not available: {note}",
                 details={
                     "option": name,
                     "value": loader_flags[name],
-                    "reason": "reference backend runs the artifact as written",
+                    "reason": "reference backend runs the certified subject "
+                    "as recorded",
                 },
             )
 
@@ -179,16 +212,38 @@ class HfBackend:
                     ),
                 },
             )
-        cls._reject_rewriting_sections(path, raw)
+        document = cls._reject_rewriting_sections(path, raw)
+        config_rows = config_added_token_rows(path.parent, document)
+        verify_declared_config_added_tokens(
+            family=artifact.family,
+            observed_rows=config_rows,
+            declared=getattr(artifact, "config_added_tokens_claim", None),
+        )
+        if not config_rows:
+            # The artifact document already is the loader face's
+            # added-token vocabulary; execute the verified bytes directly.
+            return cls(
+                family=artifact.family,
+                artifact_sha256=observed,
+                tokenizer_path=path,
+                tokenizer=_load_crate_tokenizer(path),
+            )
+        # The configuration declares added tokens the artifact file does
+        # not carry: materialize the live loader object once and execute
+        # its exact serialization, the same construction the fast CPU
+        # backend certifies against.
+        live = load_live_tokenizer(path.parent)
+        loader_face = live_tokenizer_json(live)
         return cls(
             family=artifact.family,
             artifact_sha256=observed,
             tokenizer_path=path,
-            tokenizer=_load_crate_tokenizer(path),
+            tokenizer=_load_crate_tokenizer_from_json(loader_face),
+            loader_face_json=loader_face,
         )
 
     @staticmethod
-    def _reject_rewriting_sections(path: Path, raw: bytes) -> None:
+    def _reject_rewriting_sections(path: Path, raw: bytes) -> dict[str, object]:
         """Refuse artifacts that declare truncation or padding."""
         document = json.loads(raw.decode("utf-8"))
         if not isinstance(document, dict):
@@ -215,6 +270,7 @@ class HfBackend:
                         ),
                     },
                 )
+        return document
 
     # -- identity ------------------------------------------------------
 
@@ -237,6 +293,20 @@ class HfBackend:
     def tokenizer_path(self) -> Path:
         """Path of the verified artifact file in use."""
         return self._tokenizer_path
+
+    def materialized_tokenizer_json(self) -> str:
+        """The exact tokenizer JSON document this backend executes.
+
+        When the configuration sidecar contributed added tokens, this is
+        the serialization of the live loader object captured at
+        construction; otherwise it is the verified artifact document
+        itself. Consumers that build a second engine (for example the
+        facade's decode oracle) construct from this text so that every
+        reference face in one process executes the same document.
+        """
+        if self._loader_face_json is not None:
+            return self._loader_face_json
+        return self._tokenizer_path.read_text(encoding="utf-8")
 
     # -- encoding ------------------------------------------------------
 

@@ -418,6 +418,20 @@ impl NativeReferenceEngine {
         })
     }
 
+    /// Open an already materialized tokenizer JSON document.
+    ///
+    /// Used by the reference backend when the configuration sidecar
+    /// contributed added tokens to the live loader object before it was
+    /// serialized, so the reference executes the same document as the
+    /// corrected CPU route.
+    #[staticmethod]
+    fn from_bytes(data: &[u8]) -> PyResult<Self> {
+        let inner = ReferenceEngine::from_bytes(data).map_err(reference_err)?;
+        Ok(Self {
+            inner: Arc::new(inner),
+        })
+    }
+
     #[pyo3(signature = (text, add_special_tokens = true))]
     fn encode(
         &self,

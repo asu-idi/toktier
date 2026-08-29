@@ -90,6 +90,7 @@ IDENTITIES: dict[str, SourceIdentity] = {
             "crates/toktier-py/build.rs",
             "crates/toktier-py/src/lib.rs",
             "src/toktier/backends/fast_cpu.py",
+            "src/toktier/backends/loader_face.py",
             "src/toktier/repair/tables/fast_repair_families.v1.json",
             "src/toktier/repair/tables/repair_pclass.v1.zlib",
         ),

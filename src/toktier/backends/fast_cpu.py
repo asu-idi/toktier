@@ -72,6 +72,18 @@ from ..errors import (
     UnsupportedConfig,
 )
 from ..policy import BACKEND_FAST_CPU
+from .loader_face import (
+    config_added_token_rows as _config_added_token_rows,
+)
+from .loader_face import (
+    live_tokenizer_json as _live_tokenizer_json,
+)
+from .loader_face import (
+    load_live_tokenizer as _load_live_tokenizer,
+)
+from .loader_face import (
+    verify_declared_config_added_tokens as _verify_declared_config_added_tokens,
+)
 from .protocol import TOKENIZER_FILE, ArtifactHandle
 
 __all__ = [
@@ -221,34 +233,6 @@ class _EngineFactory(Protocol):
         """Construct the engine over the live object."""
 
 
-def _live_tokenizer_json(hf_tokenizer: object) -> str:
-    """Serialize the already materialized fast HF tokenizer."""
-    backend = getattr(hf_tokenizer, "backend_tokenizer", None)
-    to_str = getattr(backend, "to_str", None)
-    if not callable(to_str):
-        to_str = getattr(hf_tokenizer, "to_str", None)
-    if not callable(to_str):
-        raise UnsupportedConfig(
-            "the live fast tokenizer cannot serialize its backend",
-            details={
-                "option": "hf_tokenizer",
-                "value": type(hf_tokenizer).__name__,
-                "reason": "serializable live backend required",
-            },
-        )
-    data = to_str()
-    if not isinstance(data, str):
-        raise UnsupportedConfig(
-            "the live fast tokenizer returned a non-text serialization",
-            details={
-                "option": "hf_tokenizer",
-                "value": type(data).__name__,
-                "reason": "tokenizer JSON text required",
-            },
-        )
-    return data
-
-
 def _native_engine_factory(family: str, artifact_sha256: str) -> _EngineFactory:
     """Build the corrected engine inside TokTier's one-call Rust runtime."""
 
@@ -277,101 +261,6 @@ def _native_engine_factory(family: str, artifact_sha256: str) -> _EngineFactory:
         )
 
     return build
-
-
-#: Name of the loader-side configuration sidecar; the file that can
-#: declare added tokens the artifact itself does not carry.
-_TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
-
-
-def _config_only_added_tokens(
-    root: Path, artifact: Mapping[str, object] | None = None
-) -> list[str]:
-    """Added-token literals declared only in the configuration sidecar.
-
-    These are the tokens a ``tokenizer.json``-only construction cannot
-    see. The list gates the loading fallback below: it may only be
-    taken when this list is empty, because a fallback that silently
-    dropped an added token would encode differently from the reference.
-    """
-    config_path = root / _TOKENIZER_CONFIG_FILE
-    if not config_path.is_file():
-        return []
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    decoder = config.get("added_tokens_decoder")
-    if not isinstance(decoder, dict):
-        return []
-    declared = [
-        str(item["content"])
-        for item in decoder.values()
-        if isinstance(item, dict) and "content" in item
-    ]
-    if not declared:
-        return []
-    if artifact is None:
-        loaded = json.loads((root / TOKENIZER_FILE).read_text(encoding="utf-8"))
-        if not isinstance(loaded, Mapping):
-            return declared
-        artifact = loaded
-    raw_added_tokens = artifact.get("added_tokens")
-    added_tokens = raw_added_tokens if isinstance(raw_added_tokens, list) else ()
-    carried = {
-        token.get("content")
-        for token in added_tokens
-        if isinstance(token, dict)
-    }
-    model = artifact.get("model")
-    vocabulary = model.get("vocab", {}) if isinstance(model, Mapping) else {}
-    return [
-        content
-        for content in declared
-        if content not in carried and content not in vocabulary
-    ]
-
-
-def _load_live_tokenizer(root: Path) -> object:
-    """Materialize the live HF tokenizer from a verified directory.
-
-    Uses the base installation's pinned ``transformers`` with local files
-    only: the artifact was verified by the artifacts layer, and nothing
-    here reaches the network. Loading through ``transformers`` is what
-    makes configuration-only added tokens visible; the engine is then
-    handed the live object, never a path.
-
-    Some artifact configurations name loader classes the installed
-    ``transformers`` does not know (for example a ``tokenizer_class``
-    from a newer release). For those, the documented fallback is a
-    ``PreTrainedTokenizerFast`` over the artifact file alone -- taken
-    only after verifying that the configuration declares no added token
-    the artifact does not carry, since that is exactly what a
-    file-only construction cannot see. When the verification fails, the
-    original loading error propagates (and surfaces as a recoverable
-    fault, so the input runs on the reference backend).
-    """
-    from importlib import import_module
-
-    transformers = import_module("transformers")
-    try:
-        tokenizer = transformers.AutoTokenizer.from_pretrained(
-            str(root), use_fast=True, local_files_only=True
-        )
-    except Exception:
-        if _config_only_added_tokens(root):
-            raise
-        tokenizer = transformers.PreTrainedTokenizerFast(
-            tokenizer_file=str(root / TOKENIZER_FILE)
-        )
-    if not getattr(tokenizer, "is_fast", False):
-        raise UnsupportedConfig(
-            "the loaded tokenizer object is not a fast tokenizer; the "
-            "engine consumes the fast backend object",
-            details={
-                "option": "tokenizer",
-                "value": type(tokenizer).__name__,
-                "reason": "fast tokenizer object required",
-            },
-        )
-    return tokenizer
 
 
 def _require_live_object(candidate: object) -> object:
@@ -517,6 +406,12 @@ class FastCpuBackend:
                     "reason": "unexpected artifact shape",
                 },
             )
+        config_rows = _config_added_token_rows(path.parent, document)
+        _verify_declared_config_added_tokens(
+            family=artifact.family,
+            observed_rows=config_rows,
+            declared=getattr(artifact, "config_added_tokens_claim", None),
+        )
         inserts = document.get("post_processor") is not None
         integrated_factory = engine_factory is None
         return cls(
@@ -525,7 +420,7 @@ class FastCpuBackend:
             root=path.parent,
             artifact_json=raw,
             config_only_added_tokens=tuple(
-                _config_only_added_tokens(path.parent, document)
+                str(row["content"]) for row in config_rows
             ),
             adds_special_tokens=bool(inserts),
             hf_tokenizer=hf_tokenizer,

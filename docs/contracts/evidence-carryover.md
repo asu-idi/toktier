@@ -103,9 +103,22 @@ Three inputs make one carry-over, and all three must be retained:
    artifact pair rather than trusting the record.
 3. **The absence certificate**: a scan reading stating that every literal of
    the divergence set occurs zero times in the judged corpus, carrying the
-   corpus identity (document and character totals), per-literal zero counts,
-   and positive controls that prove the scanner read the text. The
-   certificate ships under ``readings/`` and is named by path and SHA-256.
+   corpus identity, the character total its own scan measured, per-literal
+   zero counts, and positive controls that prove the scanner read the text.
+   The certificate ships under ``readings/`` and is named by path and
+   SHA-256.
+
+   **Corpus identity** is the corpus id at its pinned revision, the document
+   count, and the number of units the scan covered. The character total is
+   recorded beside that identity as a per-scan measurement rather than as
+   part of it: two counting implementations reading the same documents can
+   report totals that differ slightly, and each states what it counted. So a
+   certificate whose character total differs from another reading's over the
+   same documents and the same files is a second measurement of one corpus,
+   not a claim about a different one. Where such a difference is known, the
+   certificate's ``provenance`` says so and names both totals; where the
+   document count or the file set differs, the corpora are different and the
+   certificate does not apply.
 
 When the three hold, the readings are annotated rather than re-taken: the
 registry artifact record carries a ``carryover`` node

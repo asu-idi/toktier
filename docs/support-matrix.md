@@ -76,8 +76,9 @@ mandatory base dependencies of that wheel -- the shipped extras are
 Gigatoken distribution or second native extension. Its route is
 certified for **11 unique
 tokenizer artifacts** after 41,800,181,401 document-artifact checks over
-3,800,016,491 documents and 12,328,592,579,973 characters, with zero observed
-token-ID divergence from Hugging Face `tokenizers==0.22.2`.
+3,800,016,491 documents and 12,328,592,579,973 characters as counted by the
+differential campaign, with zero observed token-ID divergence from Hugging
+Face `tokenizers==0.22.2`.
 
 Those artifacts cover **12 model families**. NVIDIA's Nemotron-Terminal family
 is the additional lineage: its 8B, 14B, and 32B repositories ship the

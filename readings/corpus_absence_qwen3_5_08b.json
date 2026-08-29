@@ -51,6 +51,7 @@
     "generated_at": "2026-08-27T10:10:44Z",
     "campaign_host": "SLURM array job 62244420, 200/200 COMPLETED",
     "source_reading_sha256": "a540c35dbe8a1fdcda93d4552bf34a804b6888e6bdcb3eb1138f8a04374ddbe8",
-    "note": "Summary of the maintainer-side absence scan aggregate; the archival per-shard readings remain outside the distribution, like the campaign inputs the registry readings summarize."
+    "note": "Summary of the maintainer-side absence scan aggregate; the archival per-shard readings remain outside the distribution, like the campaign inputs the registry readings summarize.",
+    "character_total_note": "Two counts of this corpus are on record and both are reported as measured. This scan counted 12,334,132,100,653 characters; the differential campaign's own finalize reading, which the evidence manifests and docs/support-matrix.md carry, counted 12,328,592,579,973, a difference of 5,539,520,680 (0.045%). The document count (3,800,016,491) and the file set are the same on both sides, so this is one corpus measured twice rather than two corpora; the difference is under investigation and is registered as deviation 4b of results/explore/plan180_families/REPORT.md section B.5.1. Corpus identity for carry-over purposes is the corpus id at its pinned revision, the document count and the unit count, and the character total is a per-scan measurement (docs/contracts/evidence-carryover.md section 3). The absence verdict rests on the per-literal counts and the controls, neither of which depends on the character total."
   }
 }

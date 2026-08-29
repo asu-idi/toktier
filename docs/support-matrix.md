@@ -794,6 +794,51 @@ This entry is here so that the boundary is visible: a reader looking for these
 repositories finds what was examined and what was concluded, rather than
 silence.
 
+### Examined and not certified: the Hy4-preview tokenizer
+
+| Repository | Revision | `tokenizer.json` sha256 | Size | Nearest certified family | Basis | Examined on |
+|---|---|---|---|---|---|---|
+| `tencent/Hy4-preview` | `705d81ee5156` | `ff67615de6e6` | 9,358,955 | `hy3` | splitter equal, model retrained | 2026-08-28 |
+
+The repository is a preview publication, so the revision above is what was
+read and what the sha256 describes; a later revision that changes these bytes
+is a different artifact and would be examined again on its own terms.
+
+What was established. Its `normalizer`, `pre_tokenizer`, `post_processor` and
+`decoder` sections are byte-equal to the certified `hy3` artifact, so the
+splitter structure an accelerated route attaches to is the one already
+certified for that family, and pre-tokenized segments agree with `hy3` on the
+probes taken, Chinese, Japanese and Korean text included. The `model` section
+is a retrain rather than an edit. Both artifacts hold 120,000 vocabulary
+entries and share 99,571 of the strings, but only 132 of the shared strings
+carry the same id; the merge lists hold 119,744 against 119,758 entries with
+91,582 in common; the added-token table holds 832 against 818.
+
+What follows from that. An artifact's capability fingerprint covers the model
+alongside the splitter sections, so different vocabulary and merges make this
+a new pipeline capability, `pipeline.bdc79624a2c5a5ce`, composed with a new
+added-token capability, `added-frontend.af450eb8cc1f3384`. Neither has a
+campaign reading behind it, nothing carries over from `hy3`, and the equal
+splitter sections are a statement about future campaign cost rather than
+present evidence. No accelerated route is therefore eligible: wherever an
+accelerated backend is installed to be assessed, the plan records
+`R_UNCERTIFIED_ARTIFACT`, and `policy="require_accelerated"` refuses with that
+reason. `from_pretrained("tencent/Hy4-preview")` loads and returns the
+reference engine's ids, which is the same answer the package gives for any
+content it has not certified.
+
+Two practical notes for a reader who tries it. There is no `hy4` family id in
+this release: the repository is reached through `from_pretrained`, while
+`load("hy4")` and `toktier doctor --family hy4` report `ARTIFACT_NOT_FOUND`,
+because a family id is what a certified artifact gets. And the repository's
+`tokenizer_config.json` names a `tokenizer_class` that
+`transformers.AutoTokenizer` does not resolve, so loading it through that
+entry point raises before any tokenization happens; this package's reference
+route reads `tokenizer.json` and is unaffected. That configuration file
+declares no added tokens of its own, so the boundary recorded under
+[Configuration-only added tokens](#configuration-only-added-tokens) does not
+arise for this artifact.
+
 ## Configuration-only added tokens
 
 An artifact's identity in this document is its `tokenizer.json`, and the

@@ -569,6 +569,130 @@
           "propertyNames": {
             "$ref": "#/$defs/identifier"
           }
+        },
+        "config_added_tokens": {
+          "$ref": "#/$defs/config_added_tokens"
+        },
+        "carryover": {
+          "$ref": "#/$defs/carryover"
+        }
+      }
+    },
+    "config_added_tokens": {
+      "description": "Configuration-side added-token subset of the certified subject: added tokens the loader face carries beyond the artifact file. sha256 is over the canonical id-ascending row form (id, content, matching-semantics flags; sorted keys, no whitespace).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sha256",
+        "count",
+        "source"
+      ],
+      "properties": {
+        "sha256": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source": {
+          "const": "tokenizer_config.json"
+        }
+      }
+    },
+    "carryover": {
+      "description": "Corpus-equivalence carry-over: the recorded readings were taken under an earlier judge definition and remain valid under the current one because every literal of the divergence set is absent from the judged corpus, per the named absence certificate.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mechanism",
+        "from_subject",
+        "to_subject",
+        "divergence_set",
+        "certificate"
+      ],
+      "properties": {
+        "mechanism": {
+          "const": "corpus_equivalence"
+        },
+        "from_subject": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to_subject": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from_artifact_sha256": {
+          "description": "For a cross-artifact carry-over: the artifact whose in-archive readings are being carried. Absent when the readings belong to this artifact and only the judge definition moved.",
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "supporting_readings": {
+          "description": "Additional shipped readings the equivalence argument rests on (for example an added-table comparison), each named by path and digest.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^readings/[^#]+\\.json$"
+              },
+              "sha256": {
+                "$ref": "#/$defs/sha256_hex"
+              }
+            }
+          }
+        },
+        "divergence_set": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "certificate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256",
+            "docs",
+            "chars",
+            "occurrences"
+          ],
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^readings/[^#]+\\.json$"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256_hex"
+            },
+            "docs": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "chars": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "occurrences": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 0
+            }
+          }
+        },
+        "note": {
+          "type": "string"
         }
       }
     },

@@ -95,6 +95,8 @@ class _ReadingsDocument(TypedDict):
 
 class _ArtifactDocumentOptional(TypedDict, total=False):
     aliases: list[str]
+    config_added_tokens: Mapping[str, object]
+    carryover: Mapping[str, object]
 
 
 class _ArtifactDocument(_ArtifactDocumentOptional):
@@ -245,6 +247,16 @@ class ArtifactRecord:
     docs: int = 0
     bytes_judged: int = 0
     mismatches: int = 0
+    #: Declared configuration-side added-token subset of this artifact
+    #: (``sha256``, ``count``, ``source``), present only when the loader
+    #: face carries added tokens beyond the artifact file. The loading
+    #: paths verify the subset they observe against this claim.
+    config_added_tokens: Mapping[str, object] | None = None
+    #: Corpus-equivalence carry-over annotation: how readings taken under
+    #: an earlier judge definition remain valid under the current one,
+    #: naming the absence certificate they rest on
+    #: (``docs/contracts/evidence-carryover.md`` Section 3).
+    carryover: Mapping[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -361,6 +373,8 @@ class RegistryView:
                         docs=readings["docs"],
                         bytes_judged=readings["bytes"],
                         mismatches=readings["mismatches"],
+                        config_added_tokens=raw.get("config_added_tokens"),
+                        carryover=raw.get("carryover"),
                     )
                 )
             oracles = [

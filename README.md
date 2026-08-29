@@ -556,12 +556,18 @@ settings. Certification is bound to exact artifact bytes and that oracle
 version. If the installed HF version is outside the certified set, accelerated
 routing is disabled and the request remains on the installed reference path.
 
-There is one related boundary: an artifact is identified by its
-`tokenizer.json`. For an input containing an added-token literal declared only
-in `tokenizer_config.json`, the accelerated and reference routes can return
-different IDs today. The certified corpora contain no such input;
+One related definition, settled in 0.2.8: the reference is the loader face.
+An artifact's identity key is its `tokenizer.json`, and the certified subject
+covers that file plus the added tokens its `tokenizer_config.json` declares
+beyond it -- the object `transformers.AutoTokenizer` materializes, which is
+what loader-based serving stacks compare against. Accelerated and reference
+routes read that one subject and return the same IDs for inputs holding such
+a literal; the existing campaign readings carry over unchanged because a
+dedicated scan found zero occurrences of every affected literal in the
+certified corpora.
 [`docs/support-matrix.md`](docs/support-matrix.md#configuration-only-added-tokens)
-records the artifact on which such an input is reachable.
+records the one artifact whose two faces differ as documents and the
+carry-over evidence.
 
 Four different counts appear in this document, and each answers a different
 question: **15 packaged artifacts** (what `toktier inspect` lists), **15+3

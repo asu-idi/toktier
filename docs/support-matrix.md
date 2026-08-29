@@ -796,22 +796,41 @@ silence.
 
 ## Configuration-only added tokens
 
-An artifact's identity in this document is its `tokenizer.json`, and the
-reference route is built from that file alone. The certified CPU fast path is
-built through `transformers.AutoTokenizer`, which reads `tokenizer_config.json`
-as well, so it also sees added-token literals that only the configuration file
-declares. For an input that contains such a literal, the two routes can
-therefore return different ids today, and which of the two faces is the
-authoritative one is a question this release does not settle.
+Settled in 0.2.8: **the reference is the loader face**. An artifact's
+identity key in this document remains its `tokenizer.json`, and the certified
+subject covers that file plus the added tokens its `tokenizer_config.json`
+declares beyond it -- the object `transformers.AutoTokenizer` materializes,
+which is also what serving stacks that take their ids from the loader (SGLang
+among them) compare against. The reference route, the decode oracle, the
+added-token router and the certified CPU fast path all read that one subject,
+so an input holding a configuration-side literal receives the same ids on
+every route and every policy. (0.2.7 left the authoritative face unsettled
+and the two certified routes could answer differently on such an input; that
+boundary is closed.)
 
-The one artifact in this matrix where the difference is reachable is
+The one artifact in this matrix whose two faces differ as documents is
 `qwen3_5_08b`: its `tokenizer.json` carries 26 added tokens and its
 `tokenizer_config.json` declares seven more, at ids 248070-248076. The
-certified corpora contain no occurrence of any of the seven, so the campaign
-readings on this page are unaffected, and every other artifact listed here
-declares its added tokens in `tokenizer.json` only. The boundary is recorded
-here so that a reader who constructs such an input knows what to expect from
-each route.
+registry record declares that subset (`config_added_tokens`: canonical digest
+and count), the loading paths verify the subset on disk against the
+declaration and fail closed on a mismatch, and the campaign readings on this
+page carry over unchanged under the redefined reference: a dedicated scan
+found zero occurrences of all seven literals over the full certification
+corpus (3,800,016,491 documents), so on everything the campaigns judged the
+two faces are the same function. The certificate ships as
+`readings/corpus_absence_qwen3_5_08b.json` and the annotation as the record's
+`carryover` node (`docs/contracts/evidence-carryover.md` Section 3). Every
+other artifact listed here declares its added tokens in `tokenizer.json`
+only, where the two faces coincide by construction.
+
+One degradation is part of the definition: on an artifact whose configuration
+names no loader class the pinned `transformers` can resolve (for example a
+`tokenizer_class` from a newer release), the loader face is materialized
+file-only -- taken only when the configuration declares no added token beyond
+the artifact file, which is exactly the condition under which the file-only
+face and the loader face are provably the same function. When that premise
+fails, the loading error propagates instead of the fallback silently dropping
+a token.
 
 ## Documented exclusions
 

@@ -9,11 +9,11 @@ an accident.
 
 Guiding rule, inherited from `api.md`: correctness first. Under `CERTIFIED` and
 `REFERENCE`, every facade path returns token ids equal to a from-scratch encode
-by the pinned reference oracle, with the one boundary Section 5 states and
-`docs/support-matrix.md` records: an input carrying an added-token literal that
-only `tokenizer_config.json` declares, which the certified corpora contain no
-instance of. Store layers accelerate; they never answer differently on those
-policies. An explicitly selected Fastokens adapter under
+by the pinned reference oracle over the loader face -- the definition Section 5
+states: the artifact identity covers `tokenizer.json` plus the added tokens its
+`tokenizer_config.json` declares beyond that file, and every route answers from
+that one subject. Store layers accelerate; they never answer differently on
+those policies. An explicitly selected Fastokens adapter under
 `EXPERIMENTAL` is outside that guarantee and labels itself accordingly, unless
 Section 5.2 applies.
 Whenever a stored entry cannot be located, verified, or extended, the call
@@ -304,13 +304,24 @@ artifact, or an installed oracle outside the certified set
 (``certification.state == "reference_only"``), where the reference that runs
 is not the pinned one.
 
-One boundary belongs beside that statement. An artifact's identity is its
-``tokenizer.json``, which is the file the reference route is built from, while
-the certified CPU fast path is built through ``transformers.AutoTokenizer`` and
-also reads ``tokenizer_config.json``. For an input containing an added-token
-literal that only the configuration file declares, the two routes can return
-different ids today; ``docs/support-matrix.md`` records which artifact this is
-reachable on and states that the certified corpora contain no such input.
+One definition belongs beside that statement (settled in 0.2.8). **The
+reference is the loader face**: the certification subject covers
+``tokenizer.json`` plus the added tokens ``tokenizer_config.json`` declares
+beyond that file, which is the object the pinned loader
+(``transformers.AutoTokenizer``, the construction serving stacks such as
+SGLang take their ids from) materializes. The reference backend, the decode
+oracle, the added-token router and the certified fast path all read that one
+subject, so an input holding a configuration-side literal receives the same
+ids on every route. A certified artifact declares its configuration-side
+subset in the registry (``config_added_tokens``), and the loading paths fail
+closed when the subset on disk does not match the declared one
+(``ARTIFACT_HASH_MISMATCH``, reason ``config_added_tokens_mismatch``). On an
+artifact whose configuration names no loader class the pinned loader can
+resolve, the loader face is materialized file-only -- taken only when the
+configuration-side subset is empty, which is exactly the condition under
+which the file-only face and the loader face are provably the same function.
+``docs/support-matrix.md`` records the one packaged artifact whose two faces
+differ as documents and how its readings carry over.
 
 The registry-derived ``certification.state`` remains unchanged beside it, and
 its ``reference`` / ``reference_only`` values keep their existing meanings.

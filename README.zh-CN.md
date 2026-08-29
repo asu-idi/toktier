@@ -485,9 +485,13 @@ pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
 精确的工件字节和参考版本。如果本机 HF 版本不在认证集合内，加速路由会被
 关闭，请求继续使用本机安装的参考路径。
 
-这里还有一条边界：工件的身份取自 `tokenizer.json`，而对于含有仅在
-`tokenizer_config.json` 中声明的 added token 字面量的输入，加速路与参考路
-今天可能给出不同的 id。认证语料中不含此类输入；具体涉及哪个工件记录在
+这里还有一条定义（0.2.8 定案）：参考实现以 loader 面为准。工件的身份键
+仍是 `tokenizer.json`，而认证主语覆盖该文件加上 `tokenizer_config.json`
+在其之外声明的 added token——即 `transformers.AutoTokenizer` 实际构造出的
+对象，也是基于 loader 的推理服务栈所对齐的对象。加速路与参考路读同一个
+主语，对含此类字面量的输入返回相同的 id；既有认证读数原样延续，因为专项
+扫描证实认证语料中受影响字面量出现次数为零。两面在文件层面存在差异的
+唯一工件与延续证据记录在
 [`docs/support-matrix.md`](docs/support-matrix.md#configuration-only-added-tokens)。
 
 本文档中出现了四类计数，各自回答不同的问题：**15 个随包工件**（`toktier

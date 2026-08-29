@@ -18,7 +18,19 @@ Every certification claim attaches to one of three identity kinds:
 
 1. **Exact artifact identity** -- the SHA-256 of the tokenizer artifact
    bytes. The strongest identity: a certification record keyed here was
-   produced by judging this exact artifact.
+   produced by judging this exact artifact. Since 0.2.8 the certified
+   *subject* extends past those bytes when the loader face does: a record
+   whose ``tokenizer_config.json`` declares added tokens beyond the
+   artifact file carries a ``config_added_tokens`` claim (the canonical
+   digest and count of that subset), the artifact key and naming staying
+   exactly as before. The loading paths recompute the subset from the
+   files they are about to execute and fail closed on a mismatch
+   (``ARTIFACT_HASH_MISMATCH`` with reason
+   ``config_added_tokens_mismatch``); a record without the claim asserts
+   the subset is empty. Readings taken before the 0.2.8 oracle
+   redefinition remain valid under it through the corpus-equivalence
+   carry-over annotation (``carryover``,
+   ``docs/contracts/evidence-carryover.md`` Section 3).
 2. **Pipeline capability identity** -- the pipeline fingerprint
    (`fingerprint.md` Section 5): the core pipeline excluding added tokens.
    Certifies that the accelerated engine implements this pipeline class.

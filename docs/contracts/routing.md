@@ -149,7 +149,7 @@ that may accompany them is not a machine interface.
 
 | Code | Meaning |
 |---|---|
-| `R_INPUT_ADDED_TOKEN` | Input contains an added-token literal; this input is routed to the reference frontend path. Part of the certified pipeline design, not a correctness incident. |
+| `R_INPUT_ADDED_TOKEN` | Input contains an added-token literal; this input is routed to the reference frontend path. Part of the certified pipeline design, not a correctness incident. Since 0.2.8 the literal table every scanning surface reads is the loader face's -- the artifact file's added tokens plus the declared configuration-side ones -- so the router and the execution ledger answer alike about the same input (`docs/contracts/facade.md` Section 5). |
 | `R_INPUT_BELOW_GPU_THRESHOLD` | Input is smaller than the configured GPU crossover, so execution starts at the next eligible backend in the immutable fallback chain. This is a normal latency policy, not a fault. |
 | `R_INPUT_GUARD_ROUTED` | A per-input guard premise on an accelerated path could not be proved -- a guarded fast-CPU input, or a state-seed closure/span premise -- so this input was routed to the reference backend. Every event detail identifies the failing `stage`: `engine_guard` for the fast-CPU engine guard, `span_bridge` for the native accelerated state-seed bridge, or `state_encode` for a facade-owned state-encoding guard. |
 | `R_SESSION_NO_SAFE_CUT` | A session append found no certified safe cut point; the accumulated text was fully re-encoded. Correctness preserved by construction. |

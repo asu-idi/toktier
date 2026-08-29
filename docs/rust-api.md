@@ -33,6 +33,19 @@ can be selected with `load_repository(repo_id, revision)` only when the exact
 immutable revision is in the shipped identity/equivalence table; execution is
 then bound to the verified canonical artifact.
 
+One scoping fact belongs here. This crate executes the artifact file itself
+on every route -- it has no `transformers`, so it cannot materialize the
+loader face the Python product's reference is defined by since 0.2.8
+(`docs/contracts/facade.md` Section 5). The two ship one packaged artifact
+where that distinction exists as documents (`qwen3_5_08b`, seven added-token
+literals declared only in `tokenizer_config.json`): on inputs holding one of
+those literals this crate answers from the artifact file while the Python
+product answers from the loader face. The certified corpora contain zero
+occurrences of every such literal (the shipped absence certificate,
+`readings/corpus_absence_qwen3_5_08b.json`), so the certification readings
+cover both faces; on every other packaged artifact the two are the same
+function by construction.
+
 The default cache entry is
 `<cache>/<family>-<revision-prefix>/tokenizer.json`. `ArtifactManager` can
 acquire an immutable 40-hex revision over TLS, use an HTTPS mirror, consume a

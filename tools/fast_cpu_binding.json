@@ -6,8 +6,8 @@
   "engine_distribution": "toktier",
   "engine_module": "toktier._native",
   "engine_delivery": "integrated",
-  "source_digest": "15112c57ab408b77972131b87fcc1d11758cb8c295f774678b760f0dacc64080",
-  "source_digest_v2": "3f321d2a0466ceb7a6ac00be1cf146bc0700ac7d1f8b25ea9c045370e97c889e",
+  "source_digest": "ac52ef36a80130aa08536189e4bb4a02957a25a5dcaa2557f04a69f633cc6586",
+  "source_digest_v2": "4a62c256cf661fdd6ccf8e46189869b1bfb4168901c37c8e6d469577929ca0d0",
   "source_digest_of": "domain-separated, path-bound source/build set enumerated identically by tools/fast_cpu_source_identity.py and crates/toktier-py/build.rs",
   "build_flags": [
     "profile=release",

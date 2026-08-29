@@ -385,6 +385,12 @@ def test_s1_certified_pinned_is_true_in_the_guarded_sense(
     assert basis["known_wheel"]["engine_digest"] == tree_digest(package)
     assert basis["mismatch_guarded"] == 0
     assert basis["families"] == 15
+    # The count and the list are the same evidence set, so a reader
+    # holding this object can draw the boundary without the registry.
+    assert isinstance(basis["family_ids"], list)
+    assert len(basis["family_ids"]) == basis["families"]
+    assert basis["family_ids"] == sorted(basis["family_ids"])
+    assert "qwen3_8b" in basis["family_ids"]
     statement = basis["statement"]
     assert "routed to that reference by the adapter's Unicode guard" in statement
     assert "other builds of the same source are not covered" in statement
@@ -536,6 +542,42 @@ def test_s7_shadowed_import_refuses(
     assert caught.value.details["engine_assurance"] == "unverifiable"
     assert caught.value.details["imported_from"] == str(copy.resolve())
     assert str(package.resolve()) in caught.value.details["recorded_at"]
+    # The message names both paths and then one thing to do about the
+    # relation between them; which copy to keep stays the reader's call.
+    remedy = str(caught.value.details["remedy"])
+    assert "remove the shadowing entry from sys.path" in remedy
+    assert remedy in str(caught.value)
+    assert "pip install" not in remedy
+
+
+def test_a_package_no_distribution_records_names_the_published_one(
+    site: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The other unverifiable arm used to stop at the diagnosis.
+
+    A bare ``fastokens/`` directory on ``sys.path`` is importable and
+    recorded by nothing, so the digest describes bytes no distribution
+    vouches for. Saying only that left a reader with a state and no move.
+    """
+    package = site / "fastokens"
+    package.mkdir()
+    (package / "__init__.py").write_text(_INIT)
+    importlib.invalidate_caches()
+
+    with pytest.raises(BackendUnavailable) as caught:
+        _open(monkeypatch, make_entry(tree_digest(package)))
+
+    assert caught.value.details["engine_assurance"] == "unverifiable"
+    assert caught.value.details["recorded_at"] == []
+    remedy = str(caught.value.details["remedy"])
+    assert "no installed distribution records" in str(caught.value)
+    assert remedy in str(caught.value)
+    # The distribution and version come from the registry node, in the
+    # same replacement form the unrecognized-build state prints.
+    assert (
+        'pip install --force-reinstall --no-deps --only-binary :all: '
+        '"toktier-fastokens==0.3.1.1"' in remedy
+    )
 
 
 def test_s8_oracle_mismatch(site: Path, monkeypatch: pytest.MonkeyPatch) -> None:

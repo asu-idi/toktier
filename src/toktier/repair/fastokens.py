@@ -545,6 +545,20 @@ def _statement(entry: Mapping[str, Any], wheel: Mapping[str, Any]) -> str:
 
 
 def _basis(entry: Mapping[str, Any], wheel: Mapping[str, Any]) -> dict[str, Any]:
+    """The evidence set this guarantee rests on, named rather than counted.
+
+    ``families`` is the campaign's own count and stays what it has always
+    been; ``family_ids`` lists which families that count is over, so a
+    reader holding this object can draw the coverage boundary from it
+    instead of going back to the registry for the list.
+
+    The set named here is the **evidence** premise, which is not the same
+    question as whether the adapter can be opened for a family at all:
+    that is the certified repair table's answer, reported separately as
+    ``fastokens_family_admitted`` and stated in ``docs/contracts/facade.md``.
+    The readings cover more families than the repair table reaches, and
+    ``engine_assurance: family_outside_evidence`` is about this list.
+    """
     evidence = dict(entry.get("evidence") or {})
     return {
         "statement": _statement(entry, wheel),
@@ -557,6 +571,11 @@ def _basis(entry: Mapping[str, Any], wheel: Mapping[str, Any]) -> dict[str, Any]
         },
         "oracle": dict(entry.get("oracle") or {}),
         "families": evidence.get("families"),
+        "family_ids": sorted(
+            str(row["family"])
+            for row in entry.get("families") or ()
+            if isinstance(row, Mapping) and row.get("family") is not None
+        ),
         "docs_per_family": evidence.get("docs_per_family"),
         "comparisons": evidence.get("comparisons"),
         "mismatch_guarded": evidence.get("mismatch_guarded"),
@@ -869,6 +888,23 @@ class FastokensFullRepair:
                 for candidate in identity.owners
                 if candidate.package_dir is not None
             )
+            # Both arms end with something the reader can do next. The
+            # shadowed arm names the relation a reader can change and
+            # stops there: which of the two copies they meant to keep is
+            # their judgement, not this package's. The arm where no
+            # distribution records the bytes at all names the published
+            # distribution in the form the registry records it, which is
+            # what the unrecognized-build state already prints.
+            action = (
+                "remove the shadowing entry from sys.path (PYTHONPATH is "
+                "the usual source of one), or reinstall so the recorded "
+                "distribution owns the bytes that run"
+                if recorded
+                else "install the published distribution, so the bytes that "
+                "run are ones a distribution records, and check that no "
+                "earlier sys.path entry keeps this copy in front of it: "
+                f"{_published_wheel_command(_shipped_entry())}"
+            )
             raise BackendUnavailable(
                 "the Fastokens engine could not be verified: the import system "
                 f"resolves fastokens to {identity.package_dir}"
@@ -881,7 +917,8 @@ class FastokensFullRepair:
                     f"; hashing failed ({identity.hash_error})"
                     if identity.hash_error
                     else ""
-                ),
+                )
+                + f". To resolve: {action}",
                 details={
                     "backend": BACKEND_FASTOKENS,
                     "stage": "identity",
@@ -892,6 +929,7 @@ class FastokensFullRepair:
                         for candidate in identity.owners
                         if candidate.package_dir is not None
                     ],
+                    "remedy": action,
                 },
             )
         try:

@@ -279,6 +279,7 @@ def test_doctor_human(
         "automatic_gpu_delivery: prebuilt\n"
         "automatic_gpu_min_bytes: 65536\n"
         "automatic_gpu_candidate: true\n"
+        "automatic_routing_policy: supported\n"
         "automatic_gpu_eligible: true\n"
         "automatic_effective_backend: gpu\n"
         "jit_toolchain_satisfied: none\n"
@@ -409,6 +410,7 @@ def test_doctor_json(
         "automatic_gpu_delivery": "prebuilt",
         "automatic_gpu_min_bytes": 65536,
         "automatic_gpu_candidate": True,
+        "automatic_routing_policy": "supported",
         "automatic_gpu_eligible": True,
         "automatic_effective_backend": "gpu",
         "jit_toolchain_satisfied": None,
@@ -690,6 +692,56 @@ def test_doctor_reports_an_unjudged_architecture_the_way_the_policy_reads_it(
     assert report["automatic_effective_backend"] == "fast_cpu"
     assert report["family"]["automatic_gpu_eligible"] is False
     assert report["family"]["automatic_effective_backend"] == "fast_cpu"
+
+
+def test_doctor_answers_under_the_reference_policy_the_way_the_plan_does(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A third premise, and the one this report used to leave out.
+
+    ``REFERENCE`` is not a coverage question. Check 1 of the plan refuses
+    every accelerated backend under it, unwaivably, so the same machine
+    that reads ``gpu`` under the default has to read ``hf`` here -- at
+    the installation level and for a named family -- and the report has
+    to say which policy it applied.
+    """
+    home = tmp_path / "toktier-home"
+    monkeypatch.setenv("TOKTIER_HOME", str(home))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    certified = {"tokenizers": "0.22.2", "transformers": "4.57.6"}
+    monkeypatch.setattr(
+        importlib.metadata, "version", lambda name: certified.get(name, "1.2.3")
+    )
+    _set_doctor_probes(monkeypatch)
+
+    assert cli.main(["doctor", "--json", "--family", "qwen3_8b"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["automatic_routing_policy"] == "supported"
+    assert report["automatic_gpu_eligible"] is True
+    assert report["automatic_effective_backend"] == "gpu"
+
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "config.toml").write_text(
+        "routing_policy = 'reference'\n", encoding="utf-8"
+    )
+
+    assert cli.main(["doctor", "--json", "--family", "qwen3_8b"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["automatic_routing_policy"] == "reference"
+    # The machine did not change: torch is still installed and the
+    # devices are still judged. Only the policy did.
+    assert report["automatic_gpu_candidate"] is True
+    assert report["automatic_gpu_delivery_certification"] == {
+        "sm_120": "certified",
+        "sm_90": "certified",
+    }
+    assert report["automatic_gpu_eligible"] is False
+    assert report["automatic_effective_backend"] == "hf"
+    assert report["family"]["automatic_gpu_eligible"] is False
+    assert report["family"]["automatic_effective_backend"] == "hf"
+    assert report["family"]["automatic_effective_backend_below_gpu_threshold"] == "hf"
 
 
 def test_doctor_reports_the_reference_backend_without_a_certified_cpu_profile(

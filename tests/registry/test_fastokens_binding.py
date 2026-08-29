@@ -91,6 +91,43 @@ def test_the_node_says_what_was_published_and_measured() -> None:
     }
 
 
+def test_every_family_the_repair_table_reaches_is_inside_the_evidence() -> None:
+    """The premise behind an assurance state the shipped tables cannot reach.
+
+    ``engine_assurance: family_outside_evidence`` asks whether the pinned
+    readings cover a family. The adapter is only ever opened for a family
+    in the certified repair table, so the state is reachable only if that
+    table reaches outside the evidence. It does not, and the difference
+    runs the other way: four covered families have no repair entry, which
+    is the separate ``fastokens_family_admitted: false`` answer. Pinning
+    the containment keeps ``docs/contracts/facade.md`` true about which
+    of the four combinations the shipped package can produce.
+    """
+    node = _registry()["engine_distributions"]["fastokens"]
+    covered = {(row["family"], row["artifact_sha256"]) for row in node["families"]}
+    repair = json.loads(
+        (
+            ROOT
+            / "src"
+            / "toktier"
+            / "repair"
+            / "tables"
+            / "fast_repair_families.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    rows = repair["families"] if isinstance(repair, dict) else repair
+    reachable = {(row["family"], row["artifact_sha256"]) for row in rows}
+
+    assert len(reachable) == 11
+    assert reachable <= covered
+    assert {family for family, _ in covered - reachable} == {
+        "hy3",
+        "kimi_k3",
+        "laguna_s_2_1",
+        "ling_3_0_flash",
+    }
+
+
 def test_the_evidence_id_resolves_to_a_manifest() -> None:
     node = _registry()["engine_distributions"]["fastokens"]
     manifest = _json("evidence/evidence_manifest_fastokens_pinned.json")

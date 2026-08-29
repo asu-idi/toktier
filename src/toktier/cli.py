@@ -342,7 +342,15 @@ def _family_report(
         and gpu_status in certified
         and (architecture_admitted or coverage_admitted)
     )
-    family_cpu_ready = cpu_profile_ready and fast_cpu_status in certified
+    # Under REFERENCE the plan admits no accelerated backend at all, so
+    # neither half of this family's answer survives it. ``gpu_eligible``
+    # already carries that premise from the installation-level report;
+    # the CPU lane needs it named here too.
+    family_cpu_ready = (
+        config.routing_policy is not RoutingPolicy.REFERENCE
+        and cpu_profile_ready
+        and fast_cpu_status in certified
+    )
     return {
         "family": entry.family,
         "artifact_sha256": artifact_sha256,
@@ -510,8 +518,16 @@ def _doctor_report(
     # labels such a route ``supported_untested``, so requiring them here
     # would describe a stricter installation than the next request gets.
     coverage_admitted = _policy_admits_coverage_gaps(config.routing_policy)
+    # REFERENCE is a third kind of premise, and the one this report used to
+    # miss. It is not about coverage: check 1 of ``routing/plan.py`` refuses
+    # every accelerated backend under it, unwaivably, before any of the
+    # judgements above are consulted. Reading them anyway reported an
+    # eligible GPU, or a fast CPU lane, on an installation whose next
+    # request goes straight to the reference engine.
+    accelerated_planned = config.routing_policy is not RoutingPolicy.REFERENCE
     automatic_gpu_eligible = (
-        automatic_gpu_candidate
+        accelerated_planned
+        and automatic_gpu_candidate
         and bool(probed_devices)
         and delivery_ready
         and (architecture_admitted or coverage_admitted)
@@ -532,7 +548,9 @@ def _doctor_report(
         "gpu"
         if automatic_gpu_eligible
         else "fast_cpu"
-        if certified_cpu_profile_ready and gigatoken_runtime_ready
+        if accelerated_planned
+        and certified_cpu_profile_ready
+        and gigatoken_runtime_ready
         else "hf"
     )
     return {
@@ -579,6 +597,13 @@ def _doctor_report(
         # Installation-level: torch present and the GPU not disabled.
         # ``automatic_gpu_eligible`` is the full judgement.
         "automatic_gpu_candidate": automatic_gpu_candidate,
+        # Which policy the three answers below were computed under. They
+        # are not properties of the machine alone: the same installation
+        # reads a different effective backend under REFERENCE, CERTIFIED
+        # and SUPPORTED, and a report that does not say which one it
+        # applied cannot be compared with another machine's. The family
+        # block answers under this same policy.
+        "automatic_routing_policy": config.routing_policy.value,
         "automatic_gpu_eligible": automatic_gpu_eligible,
         "automatic_effective_backend": automatic_effective_backend,
         "jit_toolchain_satisfied": jit_satisfied,

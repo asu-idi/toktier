@@ -522,6 +522,22 @@ that is the one `engine_assurance: family_outside_evidence` states. The
 readings cover more families than the repair table reaches, so a family
 can be admitted by neither, by the evidence only, or by both.
 
+Through 0.2.8 the shipped tables never produce the fourth combination:
+every family the repair table reaches is inside the evidence, which is a
+generation-time property the registry checks rather than a coincidence,
+so `family_outside_evidence` is a state the shipped package cannot reach
+by opening the adapter. It is reachable when a build carries an evidence
+node that names fewer families than its repair table does, and it is
+written down here because that is exactly what a partial or edited
+registry looks like from the outside. `guarantee_basis.family_ids` lists
+the evidence's own side of the comparison.
+
+The counts also disagree in the direction that has no state of its own:
+four families the readings cover -- `hy3`, `kimi_k3`, `laguna_s_2_1` and
+`ling_3_0_flash` -- have no repair-table entry, so a session naming one
+of them is refused with `UNSUPPORTED_CONFIG` before any assurance is
+computed. That is `fastokens_family_admitted: false`, the first half.
+
 Two refusals are new, both `BackendUnavailable`: the bytes the import
 system would run are not the ones any installed distribution recorded
 (`engine_assurance: unverifiable` in the details), and metadata whose files

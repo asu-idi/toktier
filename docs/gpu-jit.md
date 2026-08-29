@@ -57,10 +57,16 @@ that with candidacy, the observed architectures, and the delivery's own
 materials, applying the same rule the plan applies: under the default
 `SUPPORTED` policy an unjudged compiler or an unjudged architecture is a
 coverage gap the route is admitted and labelled `supported_untested` for,
-while `CERTIFIED` refuses it. `automatic_effective_backend` names what an
-at-or-above-crossover automatic request would then use. `automatic_gpu_candidate` remains
-the installation-level fact -- torch importable, GPU not disabled -- and is
-not an eligibility answer.
+while `CERTIFIED` refuses it, and `REFERENCE` plans no accelerated backend
+at all, so under it both this field and `automatic_effective_backend` read
+what the plan would do (`false` and `hf`) rather than what the hardware
+could do. Since 0.2.8 `automatic_routing_policy` names the policy those
+answers were computed under, at the installation level and for the family
+section alike, because the same machine reads a different effective
+backend under three of the five policies. `automatic_effective_backend`
+names what an at-or-above-crossover automatic request would then use.
+`automatic_gpu_candidate` remains the installation-level fact -- torch
+importable, GPU not disabled -- and is not an eligibility answer.
 
 Those fields describe the installation. `toktier doctor --family FAMILY`
 adds a `family` section that describes one family on it: its certification

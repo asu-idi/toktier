@@ -424,7 +424,7 @@
   },
   "adapter": {
     "path": "src/toktier/repair/fastokens.py",
-    "source_sha256": "45b50a4c19ef58db3dc46472424e34c6ef68d344f315dbf7a370a5b7b4730307",
+    "source_sha256": "2d17b09098c3014da229169327de7a4b56df04f29ebd7578598b0ad631f24fbf",
     "guard_set_sha256": "86bdc39a8caa57bb883be33da0cef47820006ed43a597ff36ea27edda4f50222",
     "config_id": "toktier-fastokens-full-experimental-v2",
     "basis": "the adapter is not part of the three source identities; this binding ties the file that compiles the guard and reports engine_assurance to the registry node it reads, and generate_registry --check refuses drift"

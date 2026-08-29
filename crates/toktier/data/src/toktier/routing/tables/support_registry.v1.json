@@ -6,7 +6,7 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:427650c60d2e02e15a02ae0f1cb41f4160523b4bdcd8b59ab3954a7df23346be",
+  "root_digest": "sha256:9716359572817ca395a4dc4fc616b58fdc8dc4dc331f466efb05448e4c76fc12",
   "oracles": [
     {
       "oracle_id": "tokenizers",
@@ -1853,6 +1853,33 @@
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
           "source_digest_v2": "3f321d2a0466ceb7a6ac00be1cf146bc0700ac7d1f8b25ea9c045370e97c889e"
         }
+      },
+      "config_added_tokens": {
+        "sha256": "b133260222686f7aca31f3ca7aa30929f45779ea53c85dbbacce3eb039190a33",
+        "count": 7,
+        "source": "tokenizer_config.json"
+      },
+      "carryover": {
+        "mechanism": "corpus_equivalence",
+        "from_subject": "tokenizer.json (artifact face)",
+        "to_subject": "tokenizer.json + config_added_tokens (loader face)",
+        "divergence_set": [
+          "<|audio_start|>",
+          "<|audio_end|>",
+          "<tts_pad>",
+          "<tts_text_bos>",
+          "<tts_text_eod>",
+          "<tts_text_bos_single>",
+          "<|audio_pad|>"
+        ],
+        "certificate": {
+          "path": "readings/corpus_absence_qwen3_5_08b.json",
+          "sha256": "131bf62d9e15a7ab8afae84aad4998a514348f7e986bf535909a38bc781e5603",
+          "docs": 3800016491,
+          "chars": 12334132100653,
+          "occurrences": 0
+        },
+        "note": "0.2.8 oracle redefinition (decision B, loader face authoritative). The in-archive readings were judged with an artifact-face oracle; on the certification corpus the two faces are provably the same function because every divergence-set literal occurs zero times there (PLAN/180 P3 absence scan, SLURM job 62244420). Sources: results/explore/plan180_families/REPORT.md section B.5.1; FINDING/025 evidence-append; known_issues_027.md section 7.0."
       }
     },
     {

@@ -12,7 +12,7 @@ faster, are in the tables here.
 | | |
 |---|---|
 | Machine A (GPU + single-request) | 2x AMD EPYC 9115 (32 cores, SMT off), 1 TB RAM, NVIDIA RTX PRO 6000 Blackwell Server Edition (single card used) |
-| Machine B (CPU batteries) | AMD Ryzen 9 9950X (16 cores), 123 GB RAM |
+| Machine B (CPU batteries) | AMD Ryzen 9 9950X (16 cores), 91 GiB RAM |
 | Tokenizer family | `llama_3_1_8b`, pinned artifact sha256 `76e48799b099...` |
 | Reference engine | Hugging Face (HF) `tokenizers` 0.22.2 (the certified oracle version) |
 | Other engines | fastokens 0.2.0; gigatoken 0.10.0 (project-pinned build) |
@@ -34,7 +34,11 @@ exceeds 16,384 UTF-8 bytes (observed on both machines, deterministic;
 independent of thread-count environment variables). Its lanes
 therefore run with a two-core affinity mask; the thread-count
 environment keeps its compute single-threaded (verified: CPU time /
-wall time = 1.05 on an 8 MB input).
+wall time = 1.05 on an 8 MB input). The limitation belongs to that
+version: the build the `toktier[fastokens]` extra pins from 0.2.8 on,
+toktier-fastokens 0.3.1.2, was re-measured on Machine B under an exact
+single-core mask and completed every input up to 4M characters, so a
+lane driving the pinned build has no reason to widen its mask.
 
 ## F1 — single-request encode latency (Machine A)
 
@@ -136,8 +140,10 @@ the split this column used to carry (4001 healed / 1999 window-all)
 cannot be re-derived from anything shipped. In the replay every turn in
 every tier lane took the healed path (`gigatoken_repair`) and none took
 the window-all path, in a pass whose 1,800 full-stream validations all
-agreed with a fresh reference encode. A published count nobody can
-reproduce is worth less than a smaller one anybody can.
+agreed with a fresh reference encode. A later independent replay of the
+same construction, on a second machine of the Machine B specification,
+reached the same 1,800 healed / 0 window-all. A published count nobody
+can reproduce is worth less than a smaller one anybody can.
 
 Raw single-engine latency can beat the tier at small sessions (bare gigatoken and bare fastokens above); the tier buys exact-id sessions, durable state, and tail stability against the certified reference engine.
 
@@ -146,7 +152,12 @@ Raw single-engine latency can beat the tier at small sessions (bare gigatoken an
 What the store durably keeps per session (sealed block records +
 session record, exported bytes) vs holding the same information in
 plain Python structures. Memory is machine-independent; token counts
-from the pinned llama_3_1_8b artifact.
+from the pinned llama_3_1_8b artifact. The `toktier durable` column is
+what the store writes and is readable from the public facade; `store
+approx (mem)` is the store core's own resident estimate, taken from
+inside the crate rather than through the public Python API, and a reader
+reproducing this table from the installed package will not find it
+there.
 
 | Context | Tokens | toktier durable | store approx (mem) | naive Python | utf-8+uint32 | dynamo L1 RSS/session |
 |---|---|---|---|---|---|---|
@@ -181,12 +192,26 @@ re-encode of context + delta. The repair lanes measure the certified
 repair configuration (see the F2 caliber note). The shipped facade now wires
 the corrected-Gigatoken configuration into its default certified session path.
 
+**What these cells exclude.** The repair reading measures the repair
+operation itself; it excludes materializing the full historical token
+sequence as a Python tuple, and the toktier lanes here are driven at the
+store core rather than through the public Python API. That is the same
+exclusion `README.md` states beside the headline figure, and it is
+restated here because it is what makes these cells and a call a reader
+times themselves different measurements. A public
+`toktier.load(...).encode(..., session=...)` on the same context and
+delta additionally pays for that materialization, and on a 4M context
+with a 65,536-character delta reads tens of milliseconds rather than the
+figure below. The table under "Public Python API" further down measures
+exactly that call, so the two calibers can be read side by side without
+being mixed.
+
 One consequence of that wiring belongs beside the table rather than
 behind it: the `repair (HF tokenizers win.)` column is **not a lane the
 shipped facade takes by default**. Both repair columns are the same
 certified session path measured with two window engines, and a default
-`toktier.load(..., session=...)` on an installation carrying the
-certified binding takes the corrected-Gigatoken window, which is the
+`toktier.load(...).encode(..., session=...)` on an installation carrying
+the certified binding takes the corrected-Gigatoken window, which is the
 other column. The HF-window column is the same construction driven
 through the store's public encoder interface with the reference crate as
 the window engine; it is measured because it isolates what the window
@@ -235,6 +260,59 @@ delta: the work is bounded by the window and the delta, not the
 context. At small contexts (~4K chars) a fast full re-encode
 (gigatoken) is the better tool; the crossover is in the tens of
 kilobytes of context.
+
+### F4 through the public Python API (Machine B, 2026-08-29)
+
+**Caliber: public Python API, full id materialization included.** Every
+cell here is one call a reader can make from the installed package, so
+it carries the costs the table above excludes -- the Python call itself
+and materializing the full historical token sequence. It is a different
+measurement of the same construction, not a refresh of the grid above,
+and the two are not comparable cell by cell. Same grid, same
+`llama_3_1_8b` artifact, same single-core pinning and single-thread
+environment; grid cells n=30, 4M cells n=19; every output verified
+id-identical against `tokenizers` 0.22.2 by stream length and SHA-256.
+Units are equivalent chars/s as above.
+
+| Column | The call |
+|---|---|
+| `repair (gigatoken win.)` | `with toktier.load(device='cpu').session(text=context) as s:` then `s.append(delta)`, at the default `repair_backend` |
+| `gigatoken full` | `Tokenizer.encode(text, lookup='off')` |
+| `toktier-fastokens 0.3.1.2 full` | `fastokens.Tokenizer.from_file(...).encode(text, add_special_tokens=False)` — the pinned build, not the 0.2.0 column above |
+| `HF tokenizers full` | the equivalent public `tokenizers.Tokenizer` call |
+| `repair (HF tokenizers win.)` | not covered: the installed package exposes no bounded-HF-window append control, so this column has no public-API counterpart |
+
+| Context | delta | repair (HF tok. win.) | repair (gigatoken win.) | gigatoken full | toktier-fastokens 0.3.1.2 full | HF tokenizers full |
+|---|---|---|---|---|---|---|
+| 4K | 16 | not covered | 13.77 M | 11.88 M | 6.61 M | 2.01 M |
+| 4K | 256 | not covered | 20.90 M | 15.80 M | 7.31 M | 2.52 M |
+| 4K | 4096 | not covered | 22.40 M | 17.81 M | 10.86 M | 2.83 M |
+| 4K | 65536 | not covered | 23.14 M | 21.96 M | 16.54 M | 2.87 M |
+| 32K | 16 | not covered | 61.67 M | 24.38 M | 15.18 M | 3.09 M |
+| 32K | 256 | not covered | 69.38 M | 26.17 M | 20.25 M | 3.27 M |
+| 32K | 4096 | not covered | 58.22 M | 27.78 M | 21.26 M | 3.28 M |
+| 32K | 65536 | not covered | 30.66 M | 29.57 M | 22.47 M | 2.79 M |
+| 262K | 16 | not covered | 74.73 M | 31.26 M | 22.06 M | 2.62 M |
+| 262K | 256 | not covered | 83.97 M | 32.67 M | 24.60 M | 2.42 M |
+| 262K | 4096 | not covered | 82.61 M | 26.07 M | 24.86 M | 2.37 M |
+| 262K | 65536 | not covered | 64.07 M | 34.63 M | 23.76 M | 2.21 M |
+| 1M | 16 | not covered | 74.59 M | 41.19 M | 27.30 M | 2.07 M |
+| 1M | 256 | not covered | 81.49 M | 42.82 M | 29.62 M | 1.99 M |
+| 1M | 4096 | not covered | 76.90 M | 57.02 M | 36.52 M | 1.92 M |
+| 1M | 65536 | not covered | 61.22 M | 57.32 M | 34.65 M | 1.91 M |
+| 4M | 16 | not covered | 59.55 M | 56.33 M | 35.97 M | 1.91 M |
+| 4M | 256 | not covered | 64.59 M | 67.32 M | 41.60 M | 1.78 M |
+| 4M | 4096 | not covered | 64.60 M | 75.29 M | 42.62 M | 1.72 M |
+| 4M | 65536 | not covered | 62.85 M | 69.01 M | 42.30 M | 1.65 M |
+
+In wall clock, the corrected-Gigatoken repair of a 65,536-character
+append to a 4M-character context reads **67.78 ms** here against the
+**2.39 ms** of the corresponding cell above, and the 256-character
+append reads **64.94 ms**. The 256-character figure the README quotes
+comes from the HF-window column, which has no public-API counterpart at
+all, so it has no cell in this table and the Gigatoken column must not
+be read in its place. The distance between the two tables is the
+caliber, not a disagreement about what the code does.
 
 ## Which lane is which route
 

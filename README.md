@@ -529,10 +529,12 @@ build whose digest is not among the published ones reports `false`. This
 includes the upstream wheel and, usually, a build from the sdist produced on
 another host or with another toolchain. A build with an identical digest reads
 exactly as the published one does. The pinned distribution keeps the upstream
-import name; install either it or the upstream distribution, not both
-(`toktier doctor` reports which one is present). If the upstream distribution
-is already installed, reinstall rather than remove one of the two, because
-uninstalling either removes the files they share:
+import name, so having both installed is not recommended: they share the files
+that `import fastokens` runs, and whichever was installed last owns them
+(`toktier doctor` reports which one that is, and names the other as
+co-installed). If the upstream distribution is already installed, reinstall
+rather than remove one of the two, because uninstalling either removes the
+files they share:
 
 ```bash
 pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"

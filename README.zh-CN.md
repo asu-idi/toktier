@@ -463,9 +463,10 @@ Unicode 守卫作用下改由参考实现回答。这里比较的是引擎摘要
 如果某个构建的摘要不在已发布摘要之列——无论该构建是上游 wheel，
 还是从 sdist 自行构建的 wheel（换一台主机或一套工具链通常就会得到不同摘要）——
 就会报告 `false`；如果其摘要与已发布 wheel 完全相同，读数也相同。
-钉住分发沿用上游的 import 名，因此只能安装它或上游分发之一，不能同时安装
-（`toktier doctor` 会报告当前装的是哪一个）。若已安装上游分发，请整体重装，不要
-单独卸载其中一个分发，因为卸载任一分发都会删除两者共享的文件：
+钉住分发沿用上游的 import 名，因此不建议两者同时安装：它们共用 `import
+fastokens` 实际运行的那些文件，文件归最后装的那个所有（`toktier doctor` 会
+报告归属于哪一个，并把另一个如实报成 co-installed）。若已安装上游分发，请整体
+重装，不要单独卸载其中一个分发，因为卸载任一分发都会删除两者共享的文件：
 
 ```bash
 pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"

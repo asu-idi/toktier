@@ -30,7 +30,7 @@ from toktier.repair.registry import RepairFamily
 ROOT = Path(__file__).resolve().parents[2]
 PINNED = "toktier-fastokens"
 UPSTREAM = "fastokens"
-PINNED_VERSION = "0.3.1.1"
+PINNED_VERSION = "0.3.1.2"
 UPSTREAM_VERSION = "0.3.1"
 
 _INIT = '''"""Stand-in for the fastokens import package (tests only)."""
@@ -315,7 +315,7 @@ def test_one_distribution_whose_record_does_not_match_is_not_coinstalled(
         artifact_sha256=None,
     ).advisory
     assert advisory is not None
-    assert "the RECORD of 'toktier-fastokens 0.3.1.1' names" in advisory
+    assert "the RECORD of 'toktier-fastokens 0.3.1.2' names" in advisory
     # One distribution is spoken of in the singular, and the sentence
     # does not claim two of anything.
     for plural in ("the RECORDs", "the distributions", "neither"):
@@ -401,7 +401,7 @@ def test_s1_certified_pinned_is_true_in_the_guarded_sense(
         "active": True,
     }
     known = cast(dict[str, str], stats["known_wheel"])
-    assert known["filename"].startswith("toktier_fastokens-0.3.1.1-")
+    assert known["filename"].startswith("toktier_fastokens-0.3.1.2-")
 
 
 def test_s2_unrecognized_build_when_the_digest_is_not_listed(
@@ -421,7 +421,7 @@ def test_s2_unrecognized_build_when_the_digest_is_not_listed(
     # registry records rather than a version written here.
     assert (
         'pip install --force-reinstall --no-deps --only-binary :all: '
-        '"toktier-fastokens==0.3.1.1"' in reason
+        '"toktier-fastokens==0.3.1.2"' in reason
     )
     # The guard is unconditional: it is active in this state as well.
     assert cast(dict[str, object], stats["unicode_guard"])["active"] is True
@@ -458,7 +458,7 @@ def test_s4a_coinstalled_with_pinned_bytes_reports_and_does_not_refuse(
     assert stats["exact_id_guarantee"] is True
     advisory = str(stats["advisory"])
     assert "'fastokens 0.3.1' is also installed" in advisory
-    assert "belong to toktier-fastokens 0.3.1.1" in advisory
+    assert "belong to toktier-fastokens 0.3.1.2" in advisory
     assert "pip uninstall -y fastokens toktier-fastokens" in advisory
 
 
@@ -470,7 +470,7 @@ def test_s4b_coinstalled_with_upstream_bytes(
     repair = _open(monkeypatch, make_entry("0" * 64))
     stats = repair.stats()
     assert stats["engine_assurance"] == "upstream_build"
-    assert "'toktier-fastokens 0.3.1.1' is also installed" in str(stats["advisory"])
+    assert "'toktier-fastokens 0.3.1.2' is also installed" in str(stats["advisory"])
 
 
 def test_s4c_mixed_bytes_are_unrecognized_with_an_advisory(
@@ -576,7 +576,7 @@ def test_a_package_no_distribution_records_names_the_published_one(
     # same replacement form the unrecognized-build state prints.
     assert (
         'pip install --force-reinstall --no-deps --only-binary :all: '
-        '"toktier-fastokens==0.3.1.1"' in remedy
+        '"toktier-fastokens==0.3.1.2"' in remedy
     )
 
 

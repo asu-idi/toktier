@@ -136,19 +136,30 @@ def guard_set_digest(codepoints: list[int]) -> str:
 
 
 def _verify_wheels(binding: dict[str, Any]) -> str:
+    """Check the published wheels and return the pinned release's engine digest.
+
+    The list may name more than one release. The adapter recognises an
+    installed engine by its content digest, so a wheel this project published
+    under an earlier version keeps reporting ``certified_pinned`` for as long
+    as it stays listed; dropping it the moment the extra moves its pin would
+    turn an unchanged installation into ``unrecognized_build`` for no reason
+    the reader could act on. What the list must contain is exactly one wheel
+    of the version the extra pins, because that is the one the readings, the
+    guard and the evidence are checked against.
+    """
     wheels = _require_list(binding.get("known_wheels"), label="known_wheels")
     version = str(
         _require_mapping(binding.get("distribution"), label="distribution")["version"]
     )
+    prefix = "toktier_fastokens-"
     engine_digests: set[str] = set()
+    pinned: list[str] = []
     for index, wheel in enumerate(wheels):
         wheel = _require_mapping(wheel, label=f"known_wheels[{index}]")
         name = str(wheel.get("filename", ""))
-        if not name.startswith(f"toktier_fastokens-{version}-") or not name.endswith(
-            ".whl"
-        ):
+        if not name.startswith(prefix) or not name.endswith(".whl"):
             raise GenerationError(
-                f"known_wheels[{index}] is not a {version} wheel of the distribution"
+                f"known_wheels[{index}] is not a wheel of the distribution"
             )
         _require_digest(wheel.get("sha256"), label=f"known_wheels[{index}].sha256")
         engine = _require_digest(
@@ -170,7 +181,14 @@ def _verify_wheels(binding: dict[str, Any]) -> str:
             )
         for entry in files:
             _require_digest(entry.get("sha256"), label="code_files entry digest")
-    return str(wheels[0]["engine_digest"])
+        if name.startswith(f"{prefix}{version}-"):
+            pinned.append(engine)
+    if len(pinned) != 1:
+        raise GenerationError(
+            f"known_wheels must name exactly one {version} wheel of the "
+            f"distribution, the version the extra pins; it names {len(pinned)}"
+        )
+    return pinned[0]
 
 
 def _verify_families(registry: dict[str, Any], binding: dict[str, Any]) -> None:
@@ -227,14 +245,14 @@ def _verify_guard(binding: dict[str, Any], engine_digest: str) -> None:
         guard.get("derived_against"), label="guard.derived_against"
     )
     if derived.get("engine_digest") != engine_digest:
-        raise GenerationError("the guard was not derived on the first known wheel")
+        raise GenerationError("the guard was not derived on the pinned wheel")
     reading = _require_mapping(
         load_json(REPOSITORY_ROOT / str(guard.get("selftest_reading"))),
         label="guard selftest reading",
     )
     if reading.get("engine_digest") != engine_digest:
         raise GenerationError(
-            "the guard reading was not taken on the first known wheel"
+            "the guard reading was not taken on the pinned wheel"
         )
     if [parse_codepoint(cp) for cp in reading.get("codepoints", [])] != codepoints:
         raise GenerationError(
@@ -264,12 +282,12 @@ def _verify_evidence(binding: dict[str, Any], engine_digest: str) -> None:
     subject = _require_mapping(gate1.get("subject"), label="gate1 subject")
     if subject.get("engine_digest") != engine_digest:
         raise GenerationError(
-            "the gate1 reading was not taken on the first known wheel"
+            "the gate1 reading was not taken on the pinned wheel"
         )
     for gate in ("gate2", "gate3", "gate4"):
         if loaded[gate].get("engine_digest") != engine_digest:
             raise GenerationError(
-                f"the {gate} reading was not taken on the first known wheel"
+                f"the {gate} reading was not taken on the pinned wheel"
             )
     totals = _require_mapping(gate1.get("totals"), label="gate1 totals")
     expectations = {

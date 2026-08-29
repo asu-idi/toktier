@@ -10,19 +10,19 @@
   "units_assigned_in_reported_shards": 4000,
   "units_completed": 4000
  },
- "core_hours": 1556.8,
+ "core_hours": 1485.7,
  "corpus": "nvidia/Nemotron-CC-v2.1, all nine splits interleaved, files and row groups in lexicographic order; the first 998,857,881 documents of that order",
  "docs_per_family": 998857881,
  "families": 15,
  "gate": "differential run, full token-id list equality per document",
- "generated_at": "2026-08-20T02:46:00Z",
+ "generated_at": "2026-08-28T12:37:51Z",
  "guard": {
   "codepoints_in_harness": 108,
   "note": "the harness routed a document containing any of the 108 code points then on file to the reference; the shipped adapter compiles the 154-code-point superset from the registry, which can only route more documents"
  },
  "integrity": {
   "builds": {
-   "0.3.1.1+toktier.b2.0bcf3ada9268": 1333
+   "0.3.1.2+toktier.cert0312.2c4f48450a86": 1333
   },
   "judges": {
    "0.22.2": 1333
@@ -36,7 +36,7 @@
   "library": "tokenizers",
   "version": "0.22.2"
  },
- "label": "gate1-b2-cert",
+ "label": "gate1-cert0312",
  "per_family": {
   "deepseek_v3": {
    "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
@@ -231,7 +231,7 @@
  },
  "schema": "toktier.fastokens_pinned.gate1.v1",
  "site": "SOL htc, Rocky Linux 8 compute nodes (88 hosts)",
- "source": "PLAN/179 gate1_b2/readings/gate1_b2_aggregate.json, mismatch_classification_b2.json, shard_integrity_b2.json",
+ "source": "PLAN/179 cert0312/readings/gate1_0312_aggregate.json, mismatch_classification_0312.json, shard_integrity_0312.json",
  "subject": {
   "code_files": [
    {
@@ -245,9 +245,9 @@
     "sha256": "ce6bf9f7dcbca26eeff2e5d6696612cb83d68cb127304a6049caf17d4236fd24"
    },
    {
-    "bytes": 8978104,
+    "bytes": 8978120,
     "name": "fastokens/_native.abi3.so",
-    "sha256": "fc06944a2ec68c7b7c0b2b622b2db28a28d7a3020d4f14def0cc7470e5431681"
+    "sha256": "37bbfa7ca1703cc830bed4fd067c35c143a2f490d9ae93117c82cbf2b390f47a"
    },
    {
     "bytes": 6615,
@@ -256,10 +256,10 @@
    }
   ],
   "distribution": "toktier-fastokens",
-  "engine_digest": "0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec",
-  "version": "0.3.1.1",
-  "wheel": "toktier_fastokens-0.3.1.1-cp39-abi3-manylinux_2_28_x86_64.whl",
-  "wheel_sha256": "b99f2765fa1b900afe181844a85ed8eb784ba87972ac92e22cc924322d9c5468"
+  "engine_digest": "2c4f48450a866e3f570416a8aa8975da31f8bce6b660ca16952ff859e92e5b89",
+  "version": "0.3.1.2",
+  "wheel": "toktier_fastokens-0.3.1.2-cp39-abi3-manylinux_2_28_x86_64.whl",
+  "wheel_sha256": "ad10936dd941ebd505efa37943b683aef9abd32ccd45fd9aa3661a8d4a640b48"
  },
  "totals": {
   "engine_error": 0,

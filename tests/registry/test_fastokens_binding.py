@@ -54,22 +54,31 @@ def test_the_node_says_what_was_published_and_measured() -> None:
     assert node["backend"] == "fastokens"
     assert node["admission"] == "experimental"
     assert node["distribution"]["name"] == "toktier-fastokens"
-    assert node["distribution"]["version"] == "0.3.1.1"
+    assert node["distribution"]["version"] == "0.3.1.2"
     assert node["distribution"]["import_name"] == "fastokens"
     assert node["recognised_distributions"] == ["toktier-fastokens", "fastokens"]
-    (wheel,) = node["known_wheels"]
+    # The list names the pinned wheel and the one published before it, so an
+    # installation that predates this release still resolves to a listed
+    # build rather than to ``unrecognized_build``.
+    wheel, previous = node["known_wheels"]
     assert wheel["filename"] == (
-        "toktier_fastokens-0.3.1.1-cp39-abi3-manylinux_2_28_x86_64.whl"
+        "toktier_fastokens-0.3.1.2-cp39-abi3-manylinux_2_28_x86_64.whl"
     )
     assert wheel["sha256"] == (
-        "b99f2765fa1b900afe181844a85ed8eb784ba87972ac92e22cc924322d9c5468"
+        "ad10936dd941ebd505efa37943b683aef9abd32ccd45fd9aa3661a8d4a640b48"
     )
     assert wheel["engine_digest"] == (
-        "0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec"
+        "2c4f48450a866e3f570416a8aa8975da31f8bce6b660ca16952ff859e92e5b89"
     )
     assert wheel["published"]["index"] == "PyPI"
+    assert previous["filename"] == (
+        "toktier_fastokens-0.3.1.1-cp39-abi3-manylinux_2_28_x86_64.whl"
+    )
+    assert previous["engine_digest"] == (
+        "0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec"
+    )
     assert node["sdist"]["sha256"] == (
-        "7c275f907d26107d2f4605821372e9104c6679e240f88b41f22a521445b86969"
+        "2b0d1ffd43023750bc7956bd8d50c6c818dcafdc1abd1b782cdf5ce28519fb30"
     )
     assert node["oracle"] == {"package": "tokenizers", "version": "0.22.2"}
     assert len(node["families"]) == 15
@@ -211,7 +220,18 @@ def test_a_binding_that_drifts_from_its_readings_is_refused() -> None:
         tool.augmented_document(registry, drifted)
     drifted = copy.deepcopy(binding)
     drifted["known_wheels"][0]["engine_digest"] = "0" * 64
-    with pytest.raises(GenerationError, match="not derived on the first known wheel"):
+    with pytest.raises(GenerationError, match="not derived on the pinned wheel"):
+        tool.augmented_document(registry, drifted)
+    # The list may name earlier releases, but exactly one of its entries has
+    # to be the version the extra pins: that is the wheel the readings, the
+    # guard and the evidence are all checked against.
+    drifted = copy.deepcopy(binding)
+    drifted["known_wheels"] = drifted["known_wheels"][1:]
+    with pytest.raises(GenerationError, match="exactly one 0.3.1.2 wheel"):
+        tool.augmented_document(registry, drifted)
+    drifted = copy.deepcopy(binding)
+    drifted["known_wheels"][1]["filename"] = "not-a-fastokens-wheel-0.1.0.whl"
+    with pytest.raises(GenerationError, match="known_wheels.1. is not a wheel"):
         tool.augmented_document(registry, drifted)
 
 

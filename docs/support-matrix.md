@@ -103,11 +103,11 @@ and the one-call native-front-end rerun is in
 
 ## Pinned Fastokens distribution (toktier-fastokens)
 
-toktier-fastokens 0.3.1.1 is a build of fastokens 0.3.1 with five patches
+toktier-fastokens 0.3.1.2 is a build of fastokens 0.3.1 with six patches
 maintained by the toktier project, published on PyPI by this project and
 installed by the `toktier[fastokens]` extra. The readings below were taken on
 the wheel named here (engine digest
-`0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec`); they do
+`2c4f48450a866e3f570416a8aa8975da31f8bce6b660ca16952ff859e92e5b89`); they do
 not apply to the upstream distribution, nor to a build of the same sources
 whose engine digest differs, which a build from the sdist on another host or
 toolchain usually does. The adapter itself remains an explicit experimental
@@ -118,9 +118,9 @@ route: it is selected only with `policy="experimental"` and
 
 | Item | Value |
 |---|---|
-| Wheel | `toktier_fastokens-0.3.1.1-cp39-abi3-manylinux_2_28_x86_64.whl`, sha256 `b99f2765fa1b900afe181844a85ed8eb784ba87972ac92e22cc924322d9c5468` |
-| Engine digest (the `fastokens/` payload, as the adapter computes it) | `0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec` |
-| Source | upstream `v0.3.1` (`fe854299`) plus patches 0001-0005, tree `aa1924284ec4abaedcc8ed5823ee17e7959c55c5`; series and recipe in `packaging/fastokens-pinned/` |
+| Wheel | `toktier_fastokens-0.3.1.2-cp39-abi3-manylinux_2_28_x86_64.whl`, sha256 `ad10936dd941ebd505efa37943b683aef9abd32ccd45fd9aa3661a8d4a640b48` |
+| Engine digest (the `fastokens/` payload, as the adapter computes it) | `2c4f48450a866e3f570416a8aa8975da31f8bce6b660ca16952ff859e92e5b89` |
+| Source | upstream `v0.3.1` (`fe854299`) plus patches 0001-0006, tree `aaa5fb94ea62b9379d03074640e267c8d837d649`; series and recipe in `packaging/fastokens-pinned/` |
 | Reference | `tokenizers==0.22.2`, per-token-id equality |
 | Differential run | 998,857,881 documents per artifact x 15 artifacts = 14,982,868,215 comparisons; eight visible CPUs per process |
 | Result | guarded: 0 mismatches, 0 engine errors; raw: 28 mismatches, all in the reference's own Unicode data vintage (the reference does not reorder a combining mark the engine reorders), none attributed to the engine |

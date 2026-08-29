@@ -503,8 +503,9 @@ guesswork: state is not a cache. See
 ### Experimental: the pinned Fastokens adapter
 
 `pip install "toktier[fastokens]"` installs **toktier-fastokens**, a pinned
-build of fastokens 0.3.1 with five patches from the toktier project. The
-project publishes this build on PyPI. The adapter still requires explicit
+build of fastokens 0.3.1 with six patches from the toktier project: five
+close defects, and one records in each modified file that it was modified.
+The project publishes this build on PyPI. The adapter still requires explicit
 selection:
 
 ```python
@@ -543,7 +544,7 @@ whichever was installed last, and uninstalling either removes them for both.
 is not there.
 
 The readings behind `certified_pinned` were taken on the published wheel
-(engine digest `0bcf3ada9268e5ae...`). Across 15 tokenizer artifacts,
+(engine digest `2c4f48450a866e3f...`). Across 15 tokenizer artifacts,
 998,857,881 documents per artifact were checked against
 `tokenizers==0.22.2`, using eight visible CPUs, with zero guarded mismatches
 and zero engine errors. The same wheel was also used for a stateful-replay
@@ -791,7 +792,7 @@ reference; the resulting path recorded 41.8 billion checks over 12.33 trillion
 characters with zero observed token-ID divergence.
 
 The toktier project publishes toktier-fastokens, a pinned build of Fastokens
-0.3.1 with five patches, for use with its explicitly selected experimental
+0.3.1 with six patches, for use with its explicitly selected experimental
 adapter. The upstream project is a separate implementation and does not
 endorse this build. Fastokens is Apache-2.0 and Gigatoken is MIT; exact
 revisions, license copies, patch series, and modification notices are in

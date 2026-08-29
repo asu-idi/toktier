@@ -43,10 +43,10 @@ The readings below were taken on one specific wheel, not on a source tree:
 
 | Item | Value |
 |---|---|
-| wheel | `toktier_fastokens-0.3.1.1-cp39-abi3-manylinux_2_28_x86_64.whl` |
-| wheel sha256 | `b99f2765fa1b900afe181844a85ed8eb784ba87972ac92e22cc924322d9c5468` |
-| engine digest (the `fastokens/` payload, as toktier computes it) | `0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec` |
-| source tree | `aa1924284ec4abaedcc8ed5823ee17e7959c55c5` (patches 0001 to 0005) |
+| wheel | `toktier_fastokens-0.3.1.2-cp39-abi3-manylinux_2_28_x86_64.whl` |
+| wheel sha256 | `ad10936dd941ebd505efa37943b683aef9abd32ccd45fd9aa3661a8d4a640b48` |
+| engine digest (the `fastokens/` payload, as toktier computes it) | `2c4f48450a866e3f570416a8aa8975da31f8bce6b660ca16952ff859e92e5b89` |
+| source tree | `aaa5fb94ea62b9379d03074640e267c8d837d649` (patches 0001 to 0006) |
 | reference | `tokenizers==0.22.2`, per-token-id equality |
 
 - Differential run: 998,857,881 documents per family across 15 tokenizer
@@ -76,17 +76,22 @@ wheel built from the same sources on another machine or toolchain is a
 different artifact with a different digest, and the readings above are not
 about it; the toktier documentation lists the states its adapter reports.
 
-## Which tree the 0.3.1.1 artifacts come from
+## Which tree the published artifacts come from
 
-The 0.3.1.1 wheel above and its sdist were built from the five-patch tree
-`aa1924284ec4abaedcc8ed5823ee17e7959c55c5`, before patch 0006 existed. The
-notice patch is carried in the series so that source form built from it
-states, in each modified file, that the file was changed. It cannot be
-folded into the published wheel without changing the compiled bytes: source
-line numbers reach the binary through diagnostics metadata, so a build from
-the six-patch tree reports a different engine digest. `build_pinned.sh`
-applies the full series by default and can be told to stop after 0005 to
-reproduce the tree the published wheel came from.
+The 0.3.1.2 wheel above and its sdist were built from the six-patch tree
+`aaa5fb94ea62b9379d03074640e267c8d837d649`, so the source form they carry
+states, in each modified file, that the file was changed. The wheel published
+before it, 0.3.1.1, came from the five-patch tree
+`aa1924284ec4abaedcc8ed5823ee17e7959c55c5`, before patch 0006 existed; it
+remains on PyPI and toktier still recognises it.
+
+The notice patch cannot be folded into a published wheel without changing the
+compiled bytes: source line numbers reach the binary through diagnostics
+metadata, so the two trees report different engine digests. The machine code
+itself is byte-identical between them, and the readings above were retaken on
+0.3.1.2 rather than carried over. `build_pinned.sh` applies the full series
+by default and can be told to stop after 0005 to reproduce the tree the
+0.3.1.1 wheel came from.
 
 ## Upstream reports
 

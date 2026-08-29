@@ -38,13 +38,13 @@
    ]
   }
  },
- "engine_digest": "0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec",
+ "engine_digest": "2c4f48450a866e3f570416a8aa8975da31f8bce6b660ca16952ff859e92e5b89",
  "gate": "stateful replay (four arms)",
- "generated_at": "2026-08-18T23:20:22Z",
+ "generated_at": "2026-08-27T10:26:26Z",
  "imported_tree_matches_record": true,
- "label": "0.3.1.1-p179b2-cert-0bcf3ada",
+ "label": "0.3.1.2-cert0312-2c4f4845",
  "schema": "toktier.fastokens_pinned.gate2.v1",
- "source": "PLAN/179 readings/gate2_p179b2_cert.json",
+ "source": "PLAN/179 cert0312/readings/gate2_p180_cert0312.json",
  "total_drift_events": 0,
  "verdict": "PASS"
 }

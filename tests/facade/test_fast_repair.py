@@ -1405,7 +1405,7 @@ def test_fastokens_config_id_v2_retires_v1_sessions(rig: Rig) -> None:
         def stats(self) -> dict[str, object]:
             return {
                 "backend": "fastokens",
-                "engine_version": "0.3.1.1",
+                "engine_version": "0.3.1.2",
                 "engine_digest": "e" * 64,
             }
 

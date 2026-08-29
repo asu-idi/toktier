@@ -1986,13 +1986,13 @@ def test_doctor_applies_the_family_premise_the_adapter_actually_has(
         lambda identity, **kwargs: fastokens.AssuranceReport(
             assurance=fastokens.ASSURANCE_CERTIFIED_PINNED,
             reason=None,
-            known_wheel={"filename": "toktier_fastokens-0.3.1.1.whl"},
+            known_wheel={"filename": "toktier_fastokens-0.3.1.2.whl"},
             guard_active=True,
             guard_codepoints=154,
             basis={"statement": "guarded"},
             advisory=None,
             distribution="toktier-fastokens",
-            version="0.3.1.1",
+            version="0.3.1.2",
             engine_digest="d" * 64,
         ),
     )

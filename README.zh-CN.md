@@ -445,7 +445,8 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 
 `pip install "toktier[fastokens]"` 安装的是 **toktier-fastokens**，即
 fastokens 0.3.1 的钉住构建；该构建由 toktier 项目在 PyPI 上发布，
-并附带本项目的五个补丁。该适配器
+并附带本项目的六个补丁：五个修正缺陷，一个在每个被改动的文件里
+注明该文件已被改动。该适配器
 仍然只能显式选择：
 
 ```python
@@ -478,7 +479,7 @@ pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
 如实报成 co-installed，而不是当作不存在。
 
 `certified_pinned` 所依据的读数取自已发布的 wheel（引擎摘要
-`0bcf3ada9268e5ae...`）：以 `tokenizers==0.22.2` 为参照，覆盖 15 个 tokenizer 工件，
+`2c4f48450a866e3f...`）：以 `tokenizers==0.22.2` 为参照，覆盖 15 个 tokenizer 工件，
 每个工件 998,857,881 篇文档，可见 CPU 数为 8；守卫口径下记录到零处 id 不一致、
 零次引擎报错。同一 wheel 还通过了三道门禁：有状态重放、六种 CPU 拓扑和拼接/编辑。
 五个补丁修正了我们在上游 0.3.1 代码中观察到的五处缺陷——其中一处表现为遇到
@@ -690,7 +691,7 @@ TokTier 的 CPU Fast Pass 和 Fast Repair 建立在
 [Hugging Face tokenizers](https://github.com/huggingface/tokenizers) 参考实现对齐；
 该路径在 12.33 万亿字符上完成 418 亿次检查，未观察到 token ID 不一致。
 
-toktier 项目为其需显式选择的实验性适配器发布了 toktier-fastokens——即附带五个
+toktier 项目为其需显式选择的实验性适配器发布了 toktier-fastokens——即附带六个
 补丁的 Fastokens 0.3.1 钉住构建；上游项目是独立的实现，并未为这一构建背书。Fastokens
 采用 Apache-2.0，Gigatoken 采用 MIT；确切 revision、许可证副本、补丁序列与修改
 声明见 [`THIRD_PARTY_NOTICES`](THIRD_PARTY_NOTICES) 和 [`packaging/`](packaging/)。

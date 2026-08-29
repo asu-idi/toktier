@@ -29,17 +29,23 @@ the upstream code:
 ## Which bytes are certified
 
 The readings behind `engine_assurance: certified_pinned` were taken on one
-wheel, the one published on PyPI as `toktier-fastokens` 0.3.1.1 (the sdist
-published beside it is `toktier_fastokens-0.3.1.1.tar.gz`, sha256
-`7c275f907d26107d2f4605821372e9104c6679e240f88b41f22a521445b86969`):
+wheel, the one published on PyPI as `toktier-fastokens` 0.3.1.2 (the sdist
+published beside it is `toktier_fastokens-0.3.1.2.tar.gz`, sha256
+`2b0d1ffd43023750bc7956bd8d50c6c818dcafdc1abd1b782cdf5ce28519fb30`):
 
 | Item | Value |
 |---|---|
-| file | `toktier_fastokens-0.3.1.1-cp39-abi3-manylinux_2_28_x86_64.whl` |
-| wheel sha256 | `b99f2765fa1b900afe181844a85ed8eb784ba87972ac92e22cc924322d9c5468` |
-| engine digest | `0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec` |
-| source tree | `aa1924284ec4abaedcc8ed5823ee17e7959c55c5` (patches 0001 to 0005 on `fe854299`) |
+| file | `toktier_fastokens-0.3.1.2-cp39-abi3-manylinux_2_28_x86_64.whl` |
+| wheel sha256 | `ad10936dd941ebd505efa37943b683aef9abd32ccd45fd9aa3661a8d4a640b48` |
+| engine digest | `2c4f48450a866e3f570416a8aa8975da31f8bce6b660ca16952ff859e92e5b89` |
+| source tree | `aaa5fb94ea62b9379d03074640e267c8d837d649` (patches 0001 to 0006 on `fe854299`) |
 | build | manylinux_2_28 host, rustc 1.93.1, maturin 1.14.1, fixed build root |
+
+The earlier wheel, 0.3.1.1, is still on PyPI and still listed in the
+registry, so an installation that predates this release keeps reporting
+`certified_pinned` rather than falling to `unrecognized_build`. Its readings
+are the ones the 0.2.7 documentation quoted; the numbers this release quotes
+were retaken on 0.3.1.2.
 
 Neither published file is kept in this repository; `SHA256SUMS` records
 their digests, and those digests are what tie the bytes on PyPI to the
@@ -64,18 +70,22 @@ before the texts in this directory took their final form: their
 `dist-info/licenses/` carry `NOTICE`, `CHANGES-toktier.md` and the
 distribution README as they stood at build time (five patches listed, the
 upstream reports described as prepared rather than submitted, no
-`THIRD_PARTY_LICENSES-fastokens.txt`). The files here are the source for the
-next build; the bytes that were certified are the bytes that were published.
+`THIRD_PARTY_LICENSES-fastokens.txt`). From 0.3.1.2 the published artifacts
+carry the texts in this directory as they stand.
 
 ## Two trees
 
-Patch 0006 was added after the 0.3.1.1 wheel was built. It changes no code,
-but the compiled extension differs between the five-patch tree and the
-six-patch tree (`aaa5fb94ea62b9379d03074640e267c8d837d649`) because source
-line numbers reach the binary through diagnostics metadata. `build_pinned.sh`
-applies the full series by default and checks for the six-patch tree;
+Patch 0006 was added after the 0.3.1.1 wheel was built, and 0.3.1.2 is the
+first published wheel to carry it. It changes no code, but the compiled
+extension differs between the five-patch tree
+(`aa1924284ec4abaedcc8ed5823ee17e7959c55c5`) and the six-patch tree
+(`aaa5fb94ea62b9379d03074640e267c8d837d649`) because source line numbers
+reach the binary through diagnostics metadata: the machine code section is
+byte-identical, and the difference is the recorded line of each panic site
+plus the build identifiers derived from it. `build_pinned.sh` applies the
+full series by default and checks for the six-patch tree;
 `APPLY_NOTICE_PATCH=0` stops after 0005 and checks for the five-patch tree
-the published wheel came from. Either way, the engine bytes of a fresh build
+the 0.3.1.1 wheel came from. Either way, the engine bytes of a fresh build
 reproduce only when the dependency source root is the same absolute path as
 the build being reproduced (`BUILD_ROOT`).
 

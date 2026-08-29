@@ -79,7 +79,7 @@ dependencies = [
 # It keeps the upstream import name `fastokens`; install either it or the
 # upstream distribution, not both (packaging/fastokens-pinned/README.md).
 fastokens = [
-    "toktier-fastokens==0.3.1.1",
+    "toktier-fastokens==0.3.1.2",
 ]
 # Prebuilt delivery mode for the GPU backend: the shipped fatbin is loaded
 # through the CUDA driver API (bound via the standard library's ctypes over

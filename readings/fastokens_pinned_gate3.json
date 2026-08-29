@@ -5,11 +5,11 @@
   "ok": 150,
   "process_died": 0
  },
- "engine_digest": "0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec",
+ "engine_digest": "2c4f48450a866e3f570416a8aa8975da31f8bce6b660ca16952ff859e92e5b89",
  "gate": "topology robustness (visible CPU count x throttling mechanism)",
- "generated_at": "2026-08-18T22:00:03Z",
+ "generated_at": "2026-08-27T09:07:39Z",
  "host_cpu_count": 32,
- "label": "0.3.1.1-p179b2-cert-0bcf3ada",
+ "label": "0.3.1.2-cert0312-2c4f4845",
  "matrix": {
   "bytes": [
    16383,
@@ -39,6 +39,6 @@
   ]
  },
  "schema": "toktier.fastokens_pinned.gate3.v1",
- "source": "PLAN/179 readings/gate3_p179b2_cert.json",
+ "source": "PLAN/179 cert0312/readings/gate3_p180_cert0312.json",
  "verdict": "PASS"
 }

@@ -4,7 +4,7 @@
   "admission": "experimental",
   "distribution": {
     "name": "toktier-fastokens",
-    "version": "0.3.1.1",
+    "version": "0.3.1.2",
     "import_name": "fastokens",
     "requires_python": ">=3.9",
     "abi": "cp39-abi3",
@@ -69,6 +69,42 @@
   },
   "known_wheels": [
     {
+      "filename": "toktier_fastokens-0.3.1.2-cp39-abi3-manylinux_2_28_x86_64.whl",
+      "sha256": "ad10936dd941ebd505efa37943b683aef9abd32ccd45fd9aa3661a8d4a640b48",
+      "bytes": 3565400,
+      "engine_digest": "2c4f48450a866e3f570416a8aa8975da31f8bce6b660ca16952ff859e92e5b89",
+      "platform": "manylinux_2_28_x86_64",
+      "abi": "cp39-abi3",
+      "built_from_tree": "aaa5fb94ea62b9379d03074640e267c8d837d649",
+      "built_by": "the toktier project (SOL lightwork job 62245807, node sc001)",
+      "published": {
+        "index": "PyPI",
+        "upload_time": "2026-08-28T18:28:10Z"
+      },
+      "code_files": [
+        {
+          "name": "fastokens/__init__.py",
+          "bytes": 6479,
+          "sha256": "306759cf3249e8db8e48a5abee24764ef7021317057f64fa37f748282ef188d5"
+        },
+        {
+          "name": "fastokens/_compat.py",
+          "bytes": 15354,
+          "sha256": "ce6bf9f7dcbca26eeff2e5d6696612cb83d68cb127304a6049caf17d4236fd24"
+        },
+        {
+          "name": "fastokens/_native.abi3.so",
+          "bytes": 8978120,
+          "sha256": "37bbfa7ca1703cc830bed4fd067c35c143a2f490d9ae93117c82cbf2b390f47a"
+        },
+        {
+          "name": "fastokens/_native.pyi",
+          "bytes": 6615,
+          "sha256": "76a857a926a63889e29c88e83bae9c8766e3dfe4e28e15a26e6ffacae4100eff"
+        }
+      ]
+    },
+    {
       "filename": "toktier_fastokens-0.3.1.1-cp39-abi3-manylinux_2_28_x86_64.whl",
       "sha256": "b99f2765fa1b900afe181844a85ed8eb784ba87972ac92e22cc924322d9c5468",
       "bytes": 3500334,
@@ -106,10 +142,10 @@
     }
   ],
   "sdist": {
-    "filename": "toktier_fastokens-0.3.1.1.tar.gz",
-    "sha256": "7c275f907d26107d2f4605821372e9104c6679e240f88b41f22a521445b86969",
-    "bytes": 770777,
-    "built_from_tree": "aa1924284ec4abaedcc8ed5823ee17e7959c55c5"
+    "filename": "toktier_fastokens-0.3.1.2.tar.gz",
+    "sha256": "2b0d1ffd43023750bc7956bd8d50c6c818dcafdc1abd1b782cdf5ce28519fb30",
+    "bytes": 833892,
+    "built_from_tree": "aaa5fb94ea62b9379d03074640e267c8d837d649"
   },
   "oracle": {
     "package": "tokenizers",
@@ -370,7 +406,7 @@
     "set_sha256_of": "sha256 over the domain tag toktier.fastokens.unicode_guard.v1 followed by NUL, then the sorted code points as U+XXXX joined by newline",
     "derived_against": {
       "judge": "tokenizers 0.22.2 (unicode-normalization-alignments 0.1.12)",
-      "engine_digest": "0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec",
+      "engine_digest": "2c4f48450a866e3f570416a8aa8975da31f8bce6b660ca16952ff859e92e5b89",
       "domain": "U+0000..U+10FFFF, surrogates excluded, no Python-side prefilter",
       "probe": "four shapes per code point X: X, a+X, X+U+0334, a+X+U+0334; judge and engine each asked whether they reorder; four NFC-normalizing families"
     },

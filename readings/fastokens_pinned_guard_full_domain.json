@@ -334,20 +334,20 @@
    "U+DFFF"
   ]
  },
- "engine_digest": "0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec",
+ "engine_digest": "2c4f48450a866e3f570416a8aa8975da31f8bce6b660ca16952ff859e92e5b89",
  "families": [
   "qwen3_8b",
   "qwen3_5_08b",
   "minimax_m3",
   "ling_3_0_flash"
  ],
- "generated_at": "2026-08-18T22:04:01Z",
+ "generated_at": "2026-08-27T09:15:43Z",
  "item": "full-domain re-derivation of the Unicode guard code-point set",
  "judge": {
   "library": "tokenizers",
   "version": "0.22.2"
  },
- "label": "cert-candidate-2_28-engine-0bcf3ada",
+ "label": "cert0312-2_28-engine-2c4f4845",
  "per_family_counts": {
   "ling_3_0_flash": {
    "disagree_any": 154,
@@ -593,6 +593,6 @@
   "s3": "a + X",
   "s4": "X + U+0334"
  },
- "source": "PLAN/179 readings/guard_full_domain.json",
- "wall_s": 181.7
+ "source": "PLAN/179 cert0312/readings/guard_full_domain_0312.json",
+ "wall_s": 97.3
 }

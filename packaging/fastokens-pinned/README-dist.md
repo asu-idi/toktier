@@ -48,10 +48,12 @@ line to each modified source file. `CHANGES-toktier.md` lists them one by
 one, `NOTICE` states which files each one touches, and `PATCHES/` carries the
 patches verbatim.
 
-Applying patches 0001 to 0005 in order to upstream commit
+Applying the whole series in order to upstream commit
 `fe854299553524f2156a22036a2cb4d1f2ef4d97` (tag `v0.3.1`) reproduces the
-source tree the 0.3.1.1 wheel comes from: git tree hash
-`aa1924284ec4abaedcc8ed5823ee17e7959c55c5`.
+source tree the 0.3.1.2 wheel comes from: git tree hash
+`aaa5fb94ea62b9379d03074640e267c8d837d649`. Stopping after 0005 reproduces
+`aa1924284ec4abaedcc8ed5823ee17e7959c55c5`, the tree behind the earlier
+0.3.1.1 wheel, which is still published and still recognised.
 
 ## Rebuilding
 

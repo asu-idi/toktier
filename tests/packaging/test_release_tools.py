@@ -138,14 +138,14 @@ def test_requirement_key_reads_both_marker_spellings() -> None:
 REAL_WHEEL_METADATA = b"""\
 Metadata-Version: 2.4
 Name: toktier
-Version: 0.2.7
+Version: 0.2.8
 Classifier: Programming Language :: Rust
 Requires-Dist: tokenizers==0.22.2
 Requires-Dist: transformers==4.57.6
 Requires-Dist: huggingface-hub>=0.30
 Requires-Dist: platformdirs>=3.0
 Requires-Dist: tomli>=2.0 ; python_full_version < '3.11'
-Requires-Dist: toktier-fastokens==0.3.1.1 ; extra == 'fastokens'
+Requires-Dist: toktier-fastokens==0.3.1.2 ; extra == 'fastokens'
 Requires-Dist: torch~=2.11 ; extra == 'gpu'
 Requires-Dist: numpy>=1.24 ; extra == 'gpu'
 Requires-Dist: torch~=2.11 ; extra == 'gpu-jit'
@@ -190,14 +190,14 @@ def test_the_gate_accepts_a_real_wheels_metadata() -> None:
     [
         (
             (
-                b"Requires-Dist: toktier-fastokens==0.3.1.1 ; extra == 'fastokens'",
+                b"Requires-Dist: toktier-fastokens==0.3.1.2 ; extra == 'fastokens'",
                 b"Requires-Dist: fastokens==0.3.1 ; extra == 'fastokens'",
             ),
             "requires the upstream fastokens distribution",
         ),
         (
             (
-                b"Requires-Dist: toktier-fastokens==0.3.1.1 ; extra == 'fastokens'",
+                b"Requires-Dist: toktier-fastokens==0.3.1.2 ; extra == 'fastokens'",
                 b"Requires-Dist: toktier-fastokens ; extra == 'fastokens'",
             ),
             "the fastokens extra does not require",

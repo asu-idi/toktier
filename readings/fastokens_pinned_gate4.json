@@ -1,5 +1,5 @@
 {
- "engine_digest": "0bcf3ada9268e5aef1c9da515555f5e2ea6fc8d7a8accfbc444789853edfdfec",
+ "engine_digest": "2c4f48450a866e3f570416a8aa8975da31f8bce6b660ca16952ff859e92e5b89",
  "engine_role": "fastokens as the tier warm-path window engine, spans via byte-BPE reconstruction (fastokens exposes no offsets)",
  "failing": [],
  "families": [
@@ -18,8 +18,8 @@
   "qwen3_8b"
  ],
  "gate": "splice and edit battery",
- "generated_at": "2026-08-18T23:08:33Z",
- "label": "0.3.1.1-p179b2-cert-0bcf3ada",
+ "generated_at": "2026-08-27T10:19:30Z",
+ "label": "0.3.1.2-cert0312-2c4f4845",
  "per_family": {
   "deepseek_v3": {
    "drift": 0,
@@ -114,7 +114,7 @@
   }
  },
  "schema": "toktier.fastokens_pinned.gate4.v1",
- "source": "PLAN/179 readings/gate4_p179b2_cert.json",
+ "source": "PLAN/179 cert0312/readings/gate4_p180_cert0312.json",
  "verdict": "PASS",
  "volume": {
   "bar_default_certificate": {

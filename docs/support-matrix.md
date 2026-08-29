@@ -785,10 +785,18 @@ own, `added-frontend.6f80a43b9fe6a15f`, for which no campaign reading exists.
 What follows from that. Under the rule stated at the top of this page --
 coverage is decided by tokenizer content -- a differing added-token table is a
 differing artifact, and the composition of this pipeline with this added-token
-table has no evidence behind it. Both repositories therefore resolve to the
-reference route and report `R_UNCERTIFIED_ARTIFACT`, which is the same answer
-the package gives for any content it has not certified. They are not siblings
-of `qwen3_5_08b` and are not counted anywhere in this document's totals.
+table has no evidence behind it. No accelerated route is therefore eligible
+for either repository: wherever an accelerated backend is installed to be
+assessed, the plan records `R_UNCERTIFIED_ARTIFACT`, and
+`policy="require_accelerated"` refuses with that reason. Both repositories
+load and return the reference engine's ids, which is the same answer the
+package gives for any content it has not certified. (The unconditional form
+this paragraph carried in 0.2.7 -- that the two "report
+`R_UNCERTIFIED_ARTIFACT`" -- is not what a machine with no accelerated
+backend installed reads: there the first premise to fail is
+`R_BACKEND_UNAVAILABLE`, and the artifact is never reached.) They are not
+siblings of `qwen3_5_08b` and are not counted anywhere in this document's
+totals.
 
 This entry is here so that the boundary is visible: a reader looking for these
 repositories finds what was examined and what was concluded, rather than

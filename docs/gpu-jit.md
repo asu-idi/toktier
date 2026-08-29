@@ -152,9 +152,9 @@ while the certificate stayed green.
 So generation is an explicit command, run from a source checkout:
 
 ```
-python tools/generate_class_tables.py --table cl100k_v3 --out-dir DIR
-python tools/generate_class_tables.py --out-dir DIR --manifest MANIFEST
-python tools/generate_class_tables.py --out-dir DIR --check --manifest MANIFEST
+python3 tools/generate_class_tables.py --table cl100k_v3 --out-dir DIR
+python3 tools/generate_class_tables.py --out-dir DIR --manifest MANIFEST
+python3 tools/generate_class_tables.py --out-dir DIR --check --manifest MANIFEST
 ```
 
 Artifact inputs for the full run: most tables are probed from the
@@ -168,7 +168,7 @@ artifact cache (`toktier artifacts fetch <family>`, honoring
 once fetched. To check a subset instead, name the tables:
 
 ```
-python tools/generate_class_tables.py --out-dir src/toktier/kernels/tables \
+python3 tools/generate_class_tables.py --out-dir src/toktier/kernels/tables \
     --check --table cl100k_v3 --table cl100k_m2l_v3 --table nfc_qc_v1
 ```
 

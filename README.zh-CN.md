@@ -470,7 +470,10 @@ Unicode 守卫作用下改由参考实现回答。这里比较的是引擎摘要
 pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
 ```
 
-若其他代码需要上游分发，请使用单独的环境；同一个 import 名下两者无法共存。
+若其他代码需要上游分发，请使用单独的环境：两者共用同一个 import 名，因此
+`import fastokens` 实际运行的字节只能归其中一个所有——两个都装，文件归最后
+装的那个；卸载任意一个，两者共用的文件都会被删。`toktier doctor` 会把另一个
+如实报成 co-installed，而不是当作不存在。
 
 `certified_pinned` 所依据的读数取自已发布的 wheel（引擎摘要
 `0bcf3ada9268e5ae...`）：以 `tokenizers==0.22.2` 为参照，覆盖 15 个 tokenizer 工件，

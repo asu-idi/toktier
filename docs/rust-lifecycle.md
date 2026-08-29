@@ -123,6 +123,19 @@ Notes that matter when running the shipped examples:
   than a directory placed by guesswork; in-memory sessions are unaffected.
 - `RuntimeBuilder::home()` governs session state, not the artifact cache.
   The two are still set independently.
+- `TOKTIER_CAMPAIGN_DEVICE` selects the device for the two matrix
+  examples, and the two read it differently on purpose:
+  `direct_jit_matrix` takes a bare ordinal (`0`), because a JIT compile
+  names a device rather than a routing target, while `rust_api_matrix`
+  takes the routing spelling (`cuda:0`, or `cpu`). The same string does
+  not work in both.
+- The last `direct_jit_matrix` round has to run against an empty
+  `TOKTIER_JIT_CACHE` directory. What that round establishes is the
+  miss-then-authenticated-hit transition -- the first compile must be a
+  miss and the second must be a hit on the same product and binding
+  digest -- and a directory that already holds the product makes the
+  first call a hit, so the check fails on a cache state rather than on
+  anything about the build.
 
 ## Mirrors and air-gap bundles
 

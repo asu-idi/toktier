@@ -3,16 +3,16 @@
   "generated_by": {
     "tool": "tools/generate_sibling_aliases.py",
     "tool_version": "1.0.0",
-    "source_commit": "299274ea0ff16fb1fade028915d9b2a10bb9a51d",
-    "generated_at": "2026-08-27T07:54:33Z"
+    "source_commit": "fc1a4d0be4dc532e4ba5fb94620db2d04693e5b7",
+    "generated_at": "2026-08-29T02:37:45Z"
   },
-  "root_digest": "sha256:94cc427f4e99deb3b26936dd1caaa324b99a4be3d66ea52cc355525fc1a62639",
+  "root_digest": "sha256:e70673f4f8bfd16708c97d5f835cc8203ebe9dc15aade61269c9b0ae5cc4c0d0",
   "provenance": {
     "audit_date": "2026-08-04",
     "audit_rows": 470,
     "audit_sha256": "f3cc273898e7604a7d3b947be95bbf24dc6fa1df082aa55cf777c0c83d6a3fd2",
     "support_matrix_sha256": "c17c3091b3c0ced929383b7d4c5507a09ed5dee3fde690496aa85da39a25cb9a",
-    "selection": "verified repositories enumerated in docs/support-matrix.md, plus the canonical repository of each family whose upstream source file is not tokenizer.json, plus repositories published after the audit snapshot whose upstream file was compared byte for byte against the shipped anchor on the date recorded beside them in docs/support-matrix.md"
+    "selection": "as recorded at the 2026-08-04 admission audit: the verified repositories docs/support-matrix.md enumerated then, plus the canonical repository of each family whose upstream source file is not tokenizer.json, plus repositories published after that snapshot whose upstream file was compared byte for byte against the shipped anchor on the date recorded beside them in docs/support-matrix.md. This whole block is a snapshot of that audit and is deliberately not refreshed against the current tree: audit_date, audit_rows and audit_sha256 are what was observed then, and support_matrix_sha256 is the digest docs/support-matrix.md carried at the admission commit, not the digest it carries today. Nothing checks it, because there is nothing for it to agree with; rewriting it to the current digest would make the record describe an audit that did not happen."
   },
   "counts": {
     "identical": 152,

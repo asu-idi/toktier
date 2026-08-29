@@ -1524,15 +1524,18 @@ def test_verify_local_records_nothing_when_the_route_never_ran(
     )
 
     captured = capsys.readouterr()
+    # The notes are wrapped for a terminal, so the assertions read them
+    # as the sentence they are rather than as the lines they print on.
+    unwrapped = " ".join(captured.out.split())
     assert exit_code == 0
-    assert "was admitted and served none of the 3 documents" in captured.out
-    assert "measured nothing about it and no record was written" in captured.out
+    assert "was admitted and served none of the 3 documents" in unwrapped
+    assert "measured nothing about it and no record was written" in unwrapped
     # The fake reports no execution path, and the sentence says so
     # rather than inventing one.
-    assert "per-input reason (no path was recorded)" in captured.out
-    assert "`explain()` on a tokenizer for the same input" in captured.out
-    assert "says why the route did not run" not in captured.out
-    assert "locally_verified" not in captured.out
+    assert "per-input reason (no path was recorded)" in unwrapped
+    assert "`explain()` on a tokenizer for the same input" in unwrapped
+    assert "says why the route did not run" not in unwrapped
+    assert "locally_verified" not in unwrapped
 
 
 def test_verify_local_points_a_route_the_plan_did_not_admit_at_doctor(
@@ -1584,7 +1587,7 @@ def test_verify_local_points_a_route_the_plan_did_not_admit_at_doctor(
     arguments = ["verify-local", "--family", "qwen3_8b", "--engine", "cpu"]
 
     assert cli.main([*arguments, "--synthetic", "2"]) == 0
-    not_admitted = capsys.readouterr().out
+    not_admitted = " ".join(capsys.readouterr().out.split())
     assert "the plan did not admit the cpu route" in not_admitted
     assert "served none of the 2 documents" in not_admitted
     assert (
@@ -1599,6 +1602,45 @@ def test_verify_local_points_a_route_the_plan_did_not_admit_at_doctor(
     assert item["status"] == "not_measured"
     assert item["route_admitted"] is True
     assert item["unserved_paths"] == [{"path": "hf_added_token", "documents": 2}]
+
+
+def test_the_uncovered_notes_are_wrapped_and_punctuated() -> None:
+    """The promise was written in a release note and kept on one side.
+
+    The Rust face has pinned this since it grew these notes
+    (``the_uncovered_notes_are_wrapped_and_punctuated`` in
+    ``crates/toktier/src/verify_local.rs``); the Python face printed one
+    physical line of several hundred characters with no full stop at the
+    end of it. The same three states, the same two properties.
+    """
+    notes = [
+        cli.uncovered_note(
+            "cpu",
+            served=0,
+            documents=3,
+            unserved_paths=[{"path": "hf_added_token", "documents": 3}],
+            route_admitted=True,
+        ),
+        cli.uncovered_note(
+            "gpu",
+            served=2,
+            documents=3,
+            unserved_paths=[],
+            route_admitted=True,
+        ),
+        cli.uncovered_note(
+            "cpu",
+            served=0,
+            documents=3,
+            unserved_paths=[],
+            route_admitted=False,
+        ),
+    ]
+
+    for note in notes:
+        assert note.endswith("."), note
+        for line in note.splitlines():
+            assert len(line) <= 100, line
 
 
 def test_verify_local_says_what_a_partly_served_run_did_compare(

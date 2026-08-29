@@ -176,6 +176,10 @@ def test_the_source_archive_carries_what_its_readme_links_to() -> None:
     trees = set(builder.TREES)
 
     assert "README.zh-CN.md" in declared
+    # `pyproject.toml` travels in the archive and its `readme` key names
+    # this file, so an archive without it points at something it does
+    # not carry, and a reader cannot check the PyPI front page there.
+    assert "README.pypi.md" in declared
     assert "evidence" in trees
     # `generate_sibling_aliases.py --check` is in the same README block.
     assert "data" in trees

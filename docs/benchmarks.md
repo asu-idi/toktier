@@ -120,12 +120,24 @@ content lookup without manual bookkeeping.
 
 | Lane | p50 | p90 | p99 | paths (healed / window-all) |
 |---|---|---|---|---|
-| tier-hf | 0.284 ms | 0.816 ms | 1.819 ms | 4001 / 1999 |
+| tier-hf | 0.284 ms | 0.816 ms | 1.819 ms | 1800 / 0 |
 | bare-hf | 8.769 ms | 42.713 ms | 66.160 ms | - |
-| tier-fastokens | 0.283 ms | 0.811 ms | 1.844 ms | 4001 / 1999 |
+| tier-fastokens | 0.283 ms | 0.811 ms | 1.844 ms | 1800 / 0 |
 | bare-fastokens | 0.229 ms | 0.813 ms | 1.336 ms | - |
-| tier-gt | 0.295 ms | 0.872 ms | 1.960 ms | 4001 / 1999 |
+| tier-gt | 0.295 ms | 0.872 ms | 1.960 ms | 1800 / 0 |
 | bare-gt | 0.062 ms | 0.264 ms | 0.684 ms | - |
+
+The percentiles are the run described above. The path counts are not:
+they come from a later replay of the same construction over 60 of the
+200 sessions, keeping all 30 turns, so N=1,800 turns per lane. The
+replay is what this column can stand behind, because the sample manifest
+and seed behind the original run were not archived with the figure, and
+the split this column used to carry (4001 healed / 1999 window-all)
+cannot be re-derived from anything shipped. In the replay every turn in
+every tier lane took the healed path (`gigatoken_repair`) and none took
+the window-all path, in a pass whose 1,800 full-stream validations all
+agreed with a fresh reference encode. A published count nobody can
+reproduce is worth less than a smaller one anybody can.
 
 Raw single-engine latency can beat the tier at small sessions (bare gigatoken and bare fastokens above); the tier buys exact-id sessions, durable state, and tail stability against the certified reference engine.
 
@@ -168,6 +180,18 @@ repair output is verified token-identical to a full reference
 re-encode of context + delta. The repair lanes measure the certified
 repair configuration (see the F2 caliber note). The shipped facade now wires
 the corrected-Gigatoken configuration into its default certified session path.
+
+One consequence of that wiring belongs beside the table rather than
+behind it: the `repair (HF tokenizers win.)` column is **not a lane the
+shipped facade takes by default**. Both repair columns are the same
+certified session path measured with two window engines, and a default
+`toktier.load(..., session=...)` on an installation carrying the
+certified binding takes the corrected-Gigatoken window, which is the
+other column. The HF-window column is the same construction driven
+through the store's public encoder interface with the reference crate as
+the window engine; it is measured because it isolates what the window
+engine contributes, not because it is what a reader gets by installing
+the package.
 
 The figure (`f4_repair_equivalent_throughput`) draws the frozen
 measurement grid (context up to 4M chars). The 8M and 16M rows below

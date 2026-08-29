@@ -8,6 +8,7 @@ import importlib.util
 import json
 import platform
 import sys
+import textwrap
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn, cast
@@ -1374,6 +1375,62 @@ def _verify_local(arguments: argparse.Namespace) -> int:
     return _VERIFY_MISMATCH if failed else 0
 
 
+#: Width the notes below wrap to. A person reads them at a prompt, and
+#: one physical line of several hundred characters is not read.
+_NOTE_WIDTH = 88
+
+
+def uncovered_note(
+    engine: str,
+    *,
+    served: int,
+    documents: int,
+    unserved_paths: Sequence[Mapping[str, object]],
+    route_admitted: bool,
+) -> str:
+    """Why a run measured nothing, or not enough, about a route.
+
+    Three states reach here and the sentence says which. The text is
+    wrapped and ends in a full stop, which the Rust face has pinned with
+    a test since it grew these notes and this face had not: the promise
+    was written in a release note and kept on one side only.
+    """
+    if not route_admitted:
+        body = (
+            f"the plan did not admit the {engine} route, so it served none "
+            f"of the {documents} documents. This run measured nothing about "
+            "it and no record was written. `toktier doctor --family "
+            "<family>` reports the plan's own reasons for it under "
+            "`family.plan_reasons`."
+        )
+    elif served == 0:
+        recorded = (
+            ", ".join(
+                f"{path['path']} x{path['documents']}" for path in unserved_paths
+            )
+            or "no path was recorded"
+        )
+        body = (
+            f"the {engine} route was admitted and served none of the "
+            f"{documents} documents: each one left it for a per-input reason "
+            f"({recorded}). This run measured nothing about it and no record "
+            "was written. `explain()` on a tokenizer for the same input names "
+            "the reason, and `toktier doctor` answers about the plan rather "
+            "than about one input."
+        )
+    else:
+        body = (
+            f"the {engine} route served {served} of {documents} documents; "
+            "the served ones compared equal, but the run does not cover the "
+            "route and no record was written. The rest went to the reference "
+            "path document by document, so a record needs an input the route "
+            "serves throughout."
+        )
+    return "\n".join(
+        textwrap.wrap(f"{engine}: {body}", width=_NOTE_WIDTH, subsequent_indent="  ")
+    )
+
+
 def _print_verify_human(payload: Mapping[str, object]) -> None:
     """One block per engine, in the words the label uses."""
     print(f"family: {payload['family']}")
@@ -1391,40 +1448,18 @@ def _print_verify_human(payload: Mapping[str, object]) -> None:
         documents = item["documents"]
         if status == "not_measured":
             served = item["served_by_engine"]
-            if served == 0 and item.get("route_admitted") is False:
-                print(
-                    f"{engine}: the plan did not admit the {engine} route, so "
-                    f"it served none of the {documents} documents, this run "
-                    "measured nothing about it and no record was written; "
-                    "`toktier doctor --family <family>` reports the plan's own "
-                    "reasons for it under `family.plan_reasons`"
+            paths = cast(
+                Sequence[Mapping[str, object]], item.get("unserved_paths", [])
+            )
+            print(
+                uncovered_note(
+                    str(engine),
+                    served=cast(int, served),
+                    documents=cast(int, documents),
+                    unserved_paths=paths,
+                    route_admitted=item.get("route_admitted") is not False,
                 )
-            elif served == 0:
-                paths = cast(
-                    Sequence[Mapping[str, object]], item.get("unserved_paths", [])
-                )
-                recorded = (
-                    ", ".join(f"{p['path']} x{p['documents']}" for p in paths)
-                    or "no path was recorded"
-                )
-                print(
-                    f"{engine}: the {engine} route was admitted and served "
-                    f"none of the {documents} documents: each one left it for "
-                    f"a per-input reason ({recorded}), so this run measured "
-                    "nothing about it and no record was written; `explain()` "
-                    "on a tokenizer for the same input names the reason, and "
-                    "`toktier doctor` answers about the plan rather than "
-                    "about one input"
-                )
-            else:
-                print(
-                    f"{engine}: the {engine} route served {served} of "
-                    f"{documents} documents; the served ones compared equal, "
-                    "but the run does not cover the route and no record was "
-                    "written; the rest went to the reference path document "
-                    "by document, so a record needs an input the route "
-                    "serves throughout"
-                )
+            )
             continue
         if status == "passed":
             print(

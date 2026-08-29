@@ -186,7 +186,7 @@ or deleted.
 
 ## 5. Chain rules and release gate
 
-`python tools/verify_carryover.py --check` validates the schema, witness
+`python3 tools/verify_carryover.py --check` validates the schema, witness
 consistency, replay fields, evidence pointers, and the graph formed by the
 from/to identity sets. A pointer whose selected original record binds all
 three `from_source_identity` values marks a real campaign and resets the

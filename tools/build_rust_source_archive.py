@@ -52,6 +52,11 @@ ROOT_FILES = (
     "THIRD_PARTY_NOTICES",
     "README.md",
     "README.zh-CN.md",
+    # The generated PyPI long description. `pyproject.toml` travels in
+    # this archive and names it, and it is the text a reader would
+    # compare against the project's PyPI front page, so leaving it out
+    # made the archive point at a file it did not carry.
+    "README.pypi.md",
     "ARCHITECTURE.md",
     "ROADMAP.md",
     "CITATION.cff",

@@ -245,6 +245,7 @@ these are in the support matrix yet.
 |---|---|---|
 | Step 3.7 Flash | `stepfun-ai/Step-3.7-Flash` | pre-tokenizer, normalizer and decoder segments match an already certified splitter group; new vocabulary, merges and added-token table |
 | LongCat 2.0 | `meituan-longcat/LongCat-2.0` | script-partitioned pre-splits; each stage is a plain character-class run, so an existing construction applies, but it is a new kernel group |
+| Hy4-preview | `tencent/Hy4-preview` | normalizer, pre-tokenizer, post-processor and decoder segments are byte-equal to the certified `hy3` splitter; vocabulary, merges and added-token table are a retrain rather than an edit. A preview publication, so a revision that changes the bytes is a different artifact; what was examined is recorded in `docs/support-matrix.md` |
 
 Requests for additional families are welcome as issues; what determines the
 effort is the pre-tokenizer structure, not the vocabulary size.

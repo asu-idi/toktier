@@ -537,8 +537,12 @@ uninstalling either removes the files they share:
 pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
 ```
 
-If other code needs the upstream distribution, use a separate environment; the
-two cannot coexist under one import name.
+If other code needs the upstream distribution, use a separate environment.
+The two share one import name, so only one of them can own the bytes that
+`import fastokens` runs: installing both leaves the files belonging to
+whichever was installed last, and uninstalling either removes them for both.
+`toktier doctor` reports the other as co-installed rather than pretending it
+is not there.
 
 The readings behind `certified_pinned` were taken on the published wheel
 (engine digest `0bcf3ada9268e5ae...`). Across 15 tokenizer artifacts,

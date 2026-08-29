@@ -35,8 +35,9 @@ pip uninstall -y fastokens toktier-fastokens
 pip install fastokens
 ```
 
-If other code needs the upstream distribution, use a separate environment;
-the two cannot coexist under one import name.
+If other code needs the upstream distribution, use a separate environment:
+the two share one import name, so only one of them can own the bytes that
+`import fastokens` runs, and uninstalling either removes the files of both.
 
 ## What the patches change
 

@@ -634,6 +634,100 @@ def sync_prebuilt_bindings(registry_path: Path) -> None:
     PACKAGED_OUTPUT.write_bytes(registry_path.read_bytes())
 
 
+def carryover_problems(registry_path: Path) -> list[str]:
+    """Verify the corpus-equivalence carry-over annotations against their evidence.
+
+    A ``carryover`` node states that the record's readings, taken under an
+    earlier judge definition, remain valid under the current one because
+    every divergence-set literal is absent from the judged corpus. The
+    statement is only as good as its certificate, so this check re-reads
+    the shipped certificate byte for byte: digest, subject, per-literal
+    zero counts, corpus totals, and the subset relation between the
+    record's readings and the certificate corpus. The generation side
+    (maintainer tooling) recomputes the divergence set from the artifact
+    pair; this verification half covers everything the release ships.
+    """
+    document = load_json(registry_path)
+    problems: list[str] = []
+    for artifact in document.get("artifacts", []):
+        if not isinstance(artifact, dict):
+            continue
+        family = artifact.get("family", "<unknown>")
+        carryover = artifact.get("carryover")
+        declared = artifact.get("config_added_tokens")
+        if carryover is None:
+            continue
+        if not isinstance(carryover, dict):
+            problems.append(f"{family}: carryover is not an object")
+            continue
+        certificate = carryover.get("certificate") or {}
+        divergence = [str(item) for item in carryover.get("divergence_set") or ()]
+        if (
+            isinstance(declared, dict)
+            and int(declared.get("count", -1)) != len(divergence)
+        ):
+            problems.append(
+                f"{family}: config_added_tokens.count does not equal the "
+                "carryover divergence set size"
+            )
+        path = REPOSITORY_ROOT / str(certificate.get("path", ""))
+        if not path.is_file():
+            problems.append(f"{family}: absence certificate is missing ({path})")
+            continue
+        observed_digest = sha256_of_file(path)
+        if observed_digest != certificate.get("sha256"):
+            problems.append(
+                f"{family}: absence certificate digest {observed_digest} does "
+                f"not match the recorded {certificate.get('sha256')}"
+            )
+            continue
+        try:
+            reading = load_json(path)
+        except (OSError, ValueError) as error:
+            problems.append(f"{family}: absence certificate is unreadable: {error}")
+            continue
+        subject = reading.get("subject") or {}
+        scan = reading.get("scan") or {}
+        corpus = reading.get("corpus") or {}
+        occurrences = scan.get("occurrences") or {}
+        certificate_literals = [
+            str(item.get("content"))
+            for item in subject.get("divergence_set") or []
+        ]
+        if subject.get("artifact_sha256") != artifact.get("artifact_sha256"):
+            problems.append(f"{family}: certificate subject is a different artifact")
+        if sorted(certificate_literals) != sorted(divergence):
+            problems.append(
+                f"{family}: certificate divergence set differs from the registry"
+            )
+        if scan.get("verdict") != "ABSENT" or not scan.get("coverage_closed"):
+            problems.append(
+                f"{family}: certificate does not state a closed ABSENT verdict"
+            )
+        if scan.get("docs_with_any_target") != 0:
+            problems.append(
+                f"{family}: certificate reports documents holding a target"
+            )
+        for literal in divergence:
+            if occurrences.get(literal) != 0:
+                problems.append(
+                    f"{family}: certificate count for {literal!r} is not zero"
+                )
+        if int(corpus.get("docs", -1)) != int(certificate.get("docs", -2)) or int(
+            corpus.get("chars", -1)
+        ) != int(certificate.get("chars", -2)):
+            problems.append(
+                f"{family}: certificate corpus totals differ from the registry"
+            )
+        readings = artifact.get("readings") or {}
+        if int(readings.get("docs", 0)) > int(corpus.get("docs", 0)):
+            problems.append(
+                f"{family}: readings cover more documents than the certificate "
+                "corpus, so absence there does not imply absence here"
+            )
+    return problems
+
+
 def packaged_copy_problems(registry_path: Path) -> list[str]:
     """The installed copy must be byte-identical to the repository copy.
 
@@ -871,6 +965,7 @@ def main(argv: list[str] | None = None) -> int:
         problems += fast_cpu_binding_problems(arguments.out)
         problems += rust_api_binding_problems(arguments.out)
         problems += fastokens_binding_problems(arguments.out)
+        problems += carryover_problems(arguments.out)
         problems += packaged_copy_problems(arguments.out)
     if arguments.release_check:
         problems = list(problems) + release_problems(arguments.out)

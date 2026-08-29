@@ -227,11 +227,11 @@ def test_a_binding_that_drifts_from_its_readings_is_refused() -> None:
     # guard and the evidence are all checked against.
     drifted = copy.deepcopy(binding)
     drifted["known_wheels"] = drifted["known_wheels"][1:]
-    with pytest.raises(GenerationError, match="exactly one 0.3.1.2 wheel"):
+    with pytest.raises(GenerationError, match=r"exactly one 0\.3\.1\.2 wheel"):
         tool.augmented_document(registry, drifted)
     drifted = copy.deepcopy(binding)
     drifted["known_wheels"][1]["filename"] = "not-a-fastokens-wheel-0.1.0.whl"
-    with pytest.raises(GenerationError, match="known_wheels.1. is not a wheel"):
+    with pytest.raises(GenerationError, match=r"known_wheels\[1\] is not a wheel"):
         tool.augmented_document(registry, drifted)
 
 

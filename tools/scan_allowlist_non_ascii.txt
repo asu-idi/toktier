@@ -5,6 +5,9 @@ README.zh-CN.md
 ARCHITECTURE.md
 docs/**
 ROADMAP.md
+# The standing loader-face alignment gate intentionally probes
+# multilingual text (CJK, kana, hangul, fullwidth punctuation).
+tools/check_loader_face_alignment.py
 # The vendored-engine SBOM preserves upstream author names verbatim.
 packaging/fast_cpu/gigatoken.cyclonedx.json
 # The pinned Fastokens SBOM, taken from the published wheel, preserves upstream

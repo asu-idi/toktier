@@ -114,6 +114,27 @@ class _RouteEveryInput:
         return [(text, None)]
 
 
+def _config_added_tokens_claim(
+    registry: Any, artifact_sha256: str
+) -> Mapping[str, object] | None:
+    """The certification record's configuration-side added-token claim.
+
+    ``None`` when no exact record exists (an uncertified artifact makes no
+    claim to verify); the record's declared ``config_added_tokens`` mapping
+    when it carries one; and an explicit empty claim (count 0) for a record
+    without the section, so a certified artifact whose local sidecar has
+    since grown extra added tokens fails closed instead of executing a
+    loader face nobody judged.
+    """
+    match = registry.certification(artifact_sha256=artifact_sha256)
+    if match is None or match.identity != "exact":
+        return None
+    declared = getattr(match.record, "config_added_tokens", None)
+    if declared is not None:
+        return dict(declared)
+    return {"sha256": None, "count": 0}
+
+
 def _module_present(name: str) -> bool:
     try:
         return find_spec(name) is not None
@@ -257,6 +278,12 @@ class _ResolvedArtifact:
     root: Path
     artifact_sha256: str
     files: Mapping[str, str]
+    #: The certification record's configuration-side added-token claim for
+    #: this exact artifact: the declared ``config_added_tokens`` mapping, an
+    #: empty claim (count 0) for a record that declares none, or ``None``
+    #: when no record makes a claim. Backends verify the subset they
+    #: observe against it and fail closed on a mismatch.
+    config_added_tokens_claim: Mapping[str, object] | None = None
 
     def path(self, relative_name: str) -> Path:
         return self.root / relative_name
@@ -468,15 +495,24 @@ class Tokenizer:
             active_manifest, config=self._config, source=HuggingFaceSource()
         ).ensure(family)
         self._artifact_sha256 = entry.file(TOKENIZER_FILE).sha256
+        self._registry = shipped_registry()
         handle = _ResolvedArtifact(
             family=entry.family,
             root=verified.directory,
             artifact_sha256=self._artifact_sha256,
             files={item.name: item.sha256 for item in entry.files},
+            config_added_tokens_claim=_config_added_tokens_claim(
+                self._registry, self._artifact_sha256
+            ),
         )
         self._artifact_handle = handle
         self._backend = HfBackend.open(handle)
-        document = json.loads(self._backend.tokenizer_path.read_text(encoding="utf-8"))
+        # Everything below reads the loader face the reference executes:
+        # for an artifact whose configuration sidecar contributes added
+        # tokens this is the serialized live loader object, so the
+        # added-token router, the seal guard and the reference itself
+        # answer from one document.
+        document = json.loads(self._backend.materialized_tokenizer_json())
         added_token_rows = document.get("added_tokens") or []
         self._seal_end_guard_chars = max(
             (
@@ -501,7 +537,6 @@ class Tokenizer:
         else:
             self._added_router = AddedTokenRouter(frontend)
         self._postprocessor_adds_tokens = document.get("post_processor") is not None
-        self._registry = shipped_registry()
         device_probe = (
             CudaHostProbe(
                 config=self._config,
@@ -1175,9 +1210,19 @@ class Tokenizer:
 
     def _oracle(self) -> _OracleTokenizer:
         if self._oracle_handle is None:
-            crate = import_oracle().Tokenizer.from_file(
-                str(self._backend.tokenizer_path)
+            # The oracle executes the same document as the reference
+            # backend: the loader-face serialization when the
+            # configuration sidecar contributed added tokens, and the
+            # verified artifact file itself otherwise.
+            loader_face = getattr(
+                self._backend, "materialized_tokenizer_json", None
             )
+            if callable(loader_face):
+                crate = import_oracle().Tokenizer.from_str(loader_face())
+            else:
+                crate = import_oracle().Tokenizer.from_file(
+                    str(self._backend.tokenizer_path)
+                )
             self._oracle_handle = cast("_OracleTokenizer", crate)
         return self._oracle_handle
 

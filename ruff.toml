@@ -8,3 +8,6 @@ select = ["B", "E", "F", "I", "RUF", "SIM", "UP"]
 [lint.per-file-ignores]
 # The blind conformance suite inserts src on sys.path before importing.
 "tests/conformance/*" = ["E402"]
+# The standing alignment gate intentionally probes multilingual text,
+# fullwidth punctuation included; the ambiguity is the test vector.
+"tools/check_loader_face_alignment.py" = ["RUF001"]

@@ -302,7 +302,10 @@ reference normalizer only about the segments that need it.
 
 ## 8. Running the tests
 
-Host tests (no GPU, no torch) run in ordinary CI:
+Host tests (no GPU, no torch) run in ordinary CI, from a repository
+checkout: `tests/` is not part of the published source archive or the
+wheel, so this command needs the repository rather than an installed
+copy.
 
 ```
 pytest tests/gpu
@@ -315,7 +318,7 @@ read and they skip with that reason rather than failing. Building the
 extension into `src/toktier` (`maturin develop`, or `maturin build
 --locked` and placing it there) runs them.
 
-The hardware suite:
+The hardware suite, again from a repository checkout:
 
 ```
 pytest tests/gpu -m gpu \

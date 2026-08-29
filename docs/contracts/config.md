@@ -128,7 +128,10 @@ correctness" rule above covers both layers.
 | `log_level` | str | `"WARNING"` |
 | `disable_gpu` | bool | `False` |
 | `diagnostics` | bool | `False` |
-| `routing_policy` | `RoutingPolicy` | `CERTIFIED` |
+| `routing_policy` | `RoutingPolicy` | `SUPPORTED` |
 
 New fields may be added with defaults in minor releases; existing fields
-keep their names and meanings.
+keep their names and meanings. What is frozen here is the field names and
+their types, not the history of their defaults: `routing_policy`
+defaulted to `CERTIFIED` until 0.2.6, which made `SUPPORTED` the default
+so that a family with a supported route is served rather than refused.

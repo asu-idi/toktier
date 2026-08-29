@@ -9,7 +9,9 @@ fail-closed configuration file.
 
 from __future__ import annotations
 
+import ast
 import dataclasses
+import re
 import sys
 from pathlib import Path
 
@@ -38,7 +40,73 @@ def write_config_file(home: Path, body: str) -> Path:
     return path
 
 
+CONTRACT = Path(__file__).resolve().parents[1] / "docs" / "contracts" / "config.md"
+
+_FIELD_ROW = re.compile(
+    r"^\| `(?P<field>\w+)` \| (?P<type>[^|]+?) \| (?P<default>[^|]+?) \|$"
+)
+
+#: Stands for a default the table states in prose rather than as a value:
+#: the directory layout of Section 5, which ``test_paths.py`` covers.
+_DERIVED = object()
+
+
+def _section(number: str) -> list[str]:
+    """The lines of one numbered section of the contract document."""
+    lines = CONTRACT.read_text(encoding="utf-8").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(f"## {number}. "))
+    rest = lines[start + 1 :]
+    end = next((i for i, line in enumerate(rest) if line.startswith("## ")), len(rest))
+    return rest[:end]
+
+
+def contract_defaults() -> dict[str, object]:
+    """Field name to documented default, as written in the field table."""
+    defaults: dict[str, object] = {}
+    for line in _section("7"):
+        match = _FIELD_ROW.match(line)
+        if match is None:
+            continue
+        written = match.group("default").strip()
+        if not (written.startswith("`") and written.endswith("`")):
+            defaults[match.group("field")] = _DERIVED
+            continue
+        literal = written[1:-1]
+        if match.group("type").strip() == "`RoutingPolicy`":
+            defaults[match.group("field")] = RoutingPolicy[literal]
+        else:
+            defaults[match.group("field")] = ast.literal_eval(literal)
+    return defaults
+
+
 # -- layer 6: built-in defaults ---------------------------------------
+
+
+def test_documented_defaults_are_the_defaults(isolated_home: Path) -> None:
+    """The frozen field table is read back against a resolved config.
+
+    The table is where a reader looks up what happens when nothing is
+    set, so it is worth checking rather than trusting: a default that
+    moves in a release and a row that stays behind is exactly the drift
+    this compares away.
+    """
+    documented = contract_defaults()
+    config = Config.resolve()
+
+    assert set(documented) == {field.name for field in dataclasses.fields(Config)}
+    # The three directory rows are prose; every other row states a value.
+    stated = {
+        name: value for name, value in documented.items() if value is not _DERIVED
+    }
+    assert set(stated) == {
+        "offline",
+        "log_level",
+        "disable_gpu",
+        "diagnostics",
+        "routing_policy",
+    }
+    for name, expected in stated.items():
+        assert getattr(config, name) == expected, name
 
 
 def test_defaults_when_nothing_is_set(isolated_home: Path) -> None:

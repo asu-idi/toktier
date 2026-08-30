@@ -41,6 +41,24 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 
 ## 最新动态
 
+- **2026.08.30** 🚀 **toktier 0.2.8** 发布——Python 侧的认证主语现在是 loader
+  面：`tokenizer.json` 加上钉住版 `transformers.AutoTokenizer` 物化出的
+  config-only 新增 token。`qwen3_5_08b` 的七个 config-only 字面量（id
+  248070-248076）现在在所有 Python 策略下都返回其声明的单个 id，而此前
+  `REFERENCE` 会把它们拼作普通文本；Rust crate 仍按 artifact 文件执行，
+  因此它对这些字面量的结果没有变化。声明的子集会被 fail-closed 地校验，
+  sidecar 漂移会给出 `ARTIFACT_HASH_MISMATCH`，reason 为
+  `config_added_tokens_mismatch`。重新导入未改动的隔离网 bundle 现在是幂等的，
+  别名冲突则给出新的稳定错误码 `ALIAS_CONFLICT`。诊断新增
+  `automatic_routing_policy`、`guarantee_basis.family_ids`，Rust
+  `verify-local --json` 新增 `route_admitted` 与 `unserved_paths`；在
+  `REFERENCE` 策略下，`doctor` 现在如实回答 `false`/`hf`，而不再是
+  `true`/`gpu`。`pip install "toktier[fastokens]"` 现在解析到
+  `toktier-fastokens==0.3.1.2`，0.3.1.1 仍被认可。0.2.7 写下的持久 store 会被
+  拒绝打开并报 `SESSION_STATE_MISMATCH`，因为语义指纹发生了变化：请将
+  `store=` 指向新目录并重放 transcript。store 格式、随包发布的 fatbin 与
+  kernel ABI 都没有变化，现有的 Python facade 调用保持源码兼容。详见
+  [v0.2.8 发布说明](docs/releases/v0.2.8.md)（英文）。
 - **2026.08.27** 🚀 **toktier 0.2.7** 发布——`pip install "toktier[fastokens]"`
   现在安装的是 `toktier-fastokens`，即本项目发布的 fastokens 0.3.1 钉住构建，
   附带五个补丁；因此，适配器读数所描述的字节就是该 extra 实际安装的字节。适配器

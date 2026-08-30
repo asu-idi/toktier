@@ -45,6 +45,28 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
 
 ## News
 
+- **2026.08.30** 🚀 **toktier 0.2.8** released — on the Python face the
+  certified subject is now the loader face: `tokenizer.json` plus the
+  configuration-only added tokens that the pinned
+  `transformers.AutoTokenizer` materializes. The seven configuration-only
+  literals of `qwen3_5_08b`, at ids 248070-248076, now return their declared
+  single ids under every Python policy, where `REFERENCE` used to spell them
+  as ordinary text; the Rust crate still executes the artifact file, so its
+  answers for those literals do not change. The declared subset is verified
+  fail-closed, and a drifted sidecar raises `ARTIFACT_HASH_MISMATCH` with
+  reason `config_added_tokens_mismatch`. Re-importing an unchanged air-gap
+  bundle is now idempotent, and a conflicting alias raises the new stable
+  `ALIAS_CONFLICT` code. Diagnostics add `automatic_routing_policy`,
+  `guarantee_basis.family_ids`, and, on Rust `verify-local --json`,
+  `route_admitted` and `unserved_paths`; under `REFERENCE`, `doctor` now
+  answers `false`/`hf` instead of `true`/`gpu`. `pip install
+  "toktier[fastokens]"` resolves `toktier-fastokens==0.3.1.2`, and 0.3.1.1
+  stays recognized. A persistent store written by 0.2.7 is refused with
+  `SESSION_STATE_MISMATCH` because the semantic fingerprint moved: point
+  `store=` at a new directory and replay the transcript. The store format,
+  the shipped fatbin, and the kernel ABI are unchanged, and existing Python
+  facade calls remain source-compatible. See the
+  [v0.2.8 release notes](docs/releases/v0.2.8.md).
 - **2026.08.27** 🚀 **toktier 0.2.7** released — `pip install
   "toktier[fastokens]"` now installs `toktier-fastokens`, a pinned build of
   fastokens 0.3.1 with five patches from this project. The project publishes

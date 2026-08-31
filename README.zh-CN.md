@@ -130,7 +130,11 @@ print(tok.explain(summary=True))        # 简明路由与判定
 先 `encode` 再 `decode`，不一定能还原为完全相同的文本：如果 tokenizer 的处理
 流程包含归一化（例如 NFC），返回的会是归一化后的文本。这是 tokenizer 自身的
 行为，并非 TokTier 造成的不一致。TokTier 保证的是 ID 一致性，这项保证不受影响：
-对于同一输入，其 ID 与 HF 从头编码的结果相同，而且两个解码器返回的文本也相同。
+对于同一输入，其 ID 与 HF 从头编码的结果相同；在解码选项相同的前提下，两个
+解码器返回的文本也相同。默认选项本身并不相同：这里的 `decode` 默认跳过特殊
+token（`skip_special_tokens=True`），而 HF 的解码器默认保留它们，因此含特殊
+token 的 id 在默认设置下会解码出不同文本，除非把其中一侧的设置传给另一侧。
+两侧传入相同取值时，结果逐字节相同。
 
 如果应用代码使用的是 Hugging Face 模型仓库，而不是 TokTier family id，也可以
 按 tokenizer 内容解析：
@@ -141,10 +145,10 @@ tok = toktier.from_pretrained("Qwen/Qwen3-0.6B")
 
 对于已登记的 sibling 或 canonical 仓库，`from_pretrained()` 会下载经审计的
 不可变 revision，对解析出的文件计算 SHA-256，再查询由根摘要校验的
-sibling 注册表（212 个已审计仓库，另加 1 个 canonical 自指条目）。对于未登记的仓库，`from_pretrained()`
+sibling 注册表（214 个已审计仓库，另加 1 个 canonical 自指条目）。对于未登记的仓库，`from_pretrained()`
 在未显式传入 `revision=` 时解析 `main`。字节完全相同、经 canonicalization
-后等价或序列化等价的记录，会通过同一套 CPU/GPU 路由使用已经认证的
-canonical 工件。已知仓库的字节内容一旦变化，或遇到任何未登记
+后等价、序列化等价或 loader 面等价的记录，会通过同一套 CPU/GPU 路由使用
+已经认证的 canonical 工件。已知仓库的字节内容一旦变化，或遇到任何未登记
 内容，在允许参考实现 fallback 的策略下都会继续使用 HF；
 `REQUIRE_ACCELERATED` 策略则会报错。`explain()["model_resolution"]` 会同时报告
 来源身份和实际执行的 canonical 身份。`load(family)` 仍是直接的 family API，
@@ -525,7 +529,7 @@ pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
 本文档中出现了四类计数，各自回答不同的问题：**15 个随包工件**（`toktier
 inspect` 列出的那些）、**15+3 个 model family**（byte-level BPE 加
 WordPiece；不同 family 可以共用同一工件）、**11 个具备 CPU 快路径认证的
-工件**（按精确工件继承覆盖 12 个 family），以及**注册表 213 条**（212 个
+工件**（按精确工件继承覆盖 12 个 family），以及**注册表 215 条**（214 个
 已审计 sibling 仓库加 1 个 canonical 自指条目）。如果某个数字看起来与另一个
 不一致，通常是因为它们属于不同的计数轴。
 
@@ -650,16 +654,16 @@ kernel 的批量吞吐，与上表的端到端数据回答的是不同问题，�
 | 结构性排除 | 2 | 记录具体原因 |
 
 [`docs/support-matrix.md`](docs/support-matrix.md) 列出了每个锚点工件、
-SHA-256、后端状态，以及 **212 个已验证模型仓库**；这些仓库使用完全相同或
+SHA-256、后端状态，以及 **214 个已验证模型仓库**；这些仓库使用完全相同或
 仅序列化形式不同的 tokenizer。覆盖关系由 tokenizer 内容决定，而不是仓库名。
 `toktier.from_pretrained(repo_id)` 会在运行时落实这条规则：对解析到的文件
 计算哈希，将登记内容映射到 canonical 工件，其他内容继续使用 HF。
 
-随包注册表共 213 条：上述 212 个 sibling，外加 `moonshotai/Kimi-K3`
+随包注册表共 215 条：上述 214 个 sibling，外加 `moonshotai/Kimi-K3`
 自身——这样按名解析 canonical 仓库时，报告的 evidence 仓库就是它自己，
-而不是某个字节完全相同的 sibling。其中 206 条会映射到当前 wheel 随附的
+而不是某个字节完全相同的 sibling。其中 208 条会映射到当前 wheel 随附的
 canonical 工件。其余 7 个是 WordPiece 条目，对应 canonical 工件尚未打包，
-因而使用 HF。13 个源码级 `kimi_k3` 条目已在这 206 个之内：其 canonical
+因而使用 HF。13 个源码级 `kimi_k3` 条目已在这 208 个之内：其 canonical
 工件由固定的上游字节在本机推导得到，因此比对仍在 `tiktoken.model` 层面
 进行，而载入的对象是那份已认证的转换件。`toktier inspect` 仍是随包 family
 列表的权威来源。

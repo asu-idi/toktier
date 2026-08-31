@@ -194,6 +194,11 @@ tokenizer.explain() -> Mapping[str, object]
 ## 7. Out of scope for v1 (recorded so absence is deliberate)
 
 - `decode` and offset mappings -- planned, not part of the frozen v1 set.
+  `decode` exists and works; what is not frozen is its signature. It
+  defaults to `skip_special_tokens=True`, where the reference tokenizer's
+  own `decode` defaults to `False`, so the two return the same text only
+  when both are given the same value. That default is recorded here
+  rather than frozen, and it is unchanged in this release.
 - Padding/truncation convenience -- rejected at construction for sessions;
   batch padding helpers may arrive later as pure post-steps that do not
   change the id contract.

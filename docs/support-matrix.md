@@ -821,7 +821,7 @@ the serializations byte for byte.
 `from_pretrained("Qwen/Qwen3.8-27B")` and
 `from_pretrained("Qwen/Qwen3.8-Flash-Next")` therefore resolve by content to
 the certified `qwen3_5_08b` anchor, execute its bytes, and are covered by its
-certificates, exactly as the other 213 sibling rows are. Admission is still by
+certificates, exactly as the other 212 sibling rows are. Admission is still by
 digest: a Qwen3.8 revision whose `tokenizer.json` differs from the audited
 bytes matches no row and stays on the reference route.
 

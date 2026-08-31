@@ -158,7 +158,11 @@ text. For example, a tokenizer whose pipeline applies NFC normalization
 returns normalized text; that is the tokenizer's own behavior, not a TokTier
 divergence. TokTier's guarantee concerns token IDs: they match a
 from-scratch HF encode of the same input, and both decoders return the same
-text.
+text under the same decoding options. The options themselves differ by
+default: `decode` here skips special tokens (`skip_special_tokens=True`)
+where the HF decoder keeps them, so ids carrying special tokens decode to
+different text until one call is given the other's setting. Pass the same
+value to both and the two results are identical byte for byte.
 
 If application code starts from a Hugging Face model repository instead of a
 TokTier family id, resolve it by content:
@@ -169,13 +173,13 @@ tok = toktier.from_pretrained("Qwen/Qwen3-0.6B")
 
 `from_pretrained()` downloads the audited immutable revision for a recorded
 sibling or canonical repository, hashes the exact file, and consults the
-sibling registry, which contains 212 audited repositories plus one canonical
+sibling registry, which contains 214 audited repositories plus one canonical
 self-row and is itself covered by a root digest.
 For an unknown repository, `from_pretrained()` resolves `main` unless
 `revision=` is passed.
-Byte-identical, canonicalization-equivalent, and serialization-equivalent
-records run on the already certified canonical artifact through the same
-CPU/GPU router. A known repository whose bytes have changed — and any
+Byte-identical, canonicalization-equivalent, serialization-equivalent, and
+loader-face-equivalent records run on the already certified canonical artifact
+through the same CPU/GPU router. A known repository whose bytes have changed — and any
 unregistered content — stays on HF under policies that permit
 the reference fallback; `REQUIRE_ACCELERATED` raises an error instead. See
 `explain()["model_resolution"]` for both the source identity and the
@@ -609,7 +613,7 @@ Four different counts appear in this document, and each answers a different
 question: **15 packaged artifacts** (what `toktier inspect` lists), **15+3
 model families** (byte-level BPE plus WordPiece, since families can share an
 artifact), **11 artifacts with a certified CPU fast path** (12 families by
-exact-artifact inheritance), and **213 registry rows** (212 audited sibling
+exact-artifact inheritance), and **215 registry rows** (214 audited sibling
 repositories plus one canonical self-row). Numbers that appear inconsistent
 usually belong to different axes.
 
@@ -753,19 +757,19 @@ document also shows the regimes where direct use of another engine is faster.
 | Structural exclusions | 2 | reason recorded |
 
 [`docs/support-matrix.md`](docs/support-matrix.md) lists every anchor artifact,
-SHA-256, backend status, and **212 verified model repositories** that share an
+SHA-256, backend status, and **214 verified model repositories** that share an
 identical or serialization-equivalent tokenizer. Coverage follows tokenizer
 content, not repository naming. `toktier.from_pretrained(repo_id)` enforces
 that rule at runtime: it hashes the resolved file, maps registered content to
 the canonical artifact, and otherwise remains on HF.
 
-The shipped registry holds 213 rows: those 212 siblings plus
+The shipped registry holds 215 rows: those 214 siblings plus
 `moonshotai/Kimi-K3` itself, so resolving the canonical repository by name
 reports itself as the evidence repository rather than a byte-identical
-sibling. 206 of the rows map to canonical artifacts present in this wheel.
+sibling. 208 of the rows map to canonical artifacts present in this wheel.
 The other 7 are WordPiece rows, whose canonical artifacts are not packaged and
 which therefore run through HF. The 13 source-level `kimi_k3` rows are among
-the 206: their canonical artifact is derived on your machine from pinned
+the 208: their canonical artifact is derived on your machine from pinned
 upstream bytes, so the comparison stays at `tiktoken.model` level while the
 loaded object is the certified conversion. `toktier inspect` is the
 authoritative packaged-family list.

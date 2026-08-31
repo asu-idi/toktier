@@ -54,8 +54,9 @@ _EXPECTED_COUNTS = {
     "identical_source": 13,
     "equivalent_canonicalisation": 10,
     "equivalent_serialisation": 38,
-    "total": 213,
-    "packaged": 206,
+    "equivalent_loader_face": 2,
+    "total": 215,
+    "packaged": 208,
     "reference_only": 7,
 }
 _TOP_LEVEL_KEYS = {
@@ -376,6 +377,7 @@ class SiblingAliasRegistry:
             "equivalent_serialisation": basis_counts[
                 "equivalent_serialisation"
             ],
+            "equivalent_loader_face": basis_counts["equivalent_loader_face"],
             "total": len(records),
             "packaged": sum(item.canonical_packaged for item in records),
             "reference_only": sum(not item.canonical_packaged for item in records),

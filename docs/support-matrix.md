@@ -302,18 +302,20 @@ everything below rests on it:
 | identical (source file) | `kimi_k3` lineage: upstream `tiktoken.model` sha256 equal to the conversion source of the certified artifact | 12 |
 | equivalent (canonicalisation) | JSON content equal after canonicalisation; byte difference is formatting only | 10 |
 | equivalent (serialisation) | loads to the same tokenizer; byte difference is legacy serialisation form | 38 |
+| equivalent (loader face) | the audited file group materializes, under the pinned loader, a loader face byte-identical to the certified artifact's | 2 |
 
-**212 repositories** are verified on these bases, spread over 15 of the 18
-artifacts in the family matrix. Two of them were published after the audit
-snapshot and were admitted one at a time on the same basis; they are listed
-under [Repositories admitted after the
+**214 repositories** are verified on these bases, spread over 15 of the 18
+artifacts in the family matrix. Four of them were published after the audit
+snapshot and were admitted one at a time -- two byte-identical files on the
+identical basis, and, since 0.2.9, the two Qwen3.8 repositories on the
+loader-face basis; they are listed under [Repositories admitted after the
 snapshot](#repositories-admitted-after-the-snapshot), and the audit accounting
 at the end of the page counts the 210 that were in the snapshot. The shipped
 registry carries one further row that is not a sibling:
 `moonshotai/Kimi-K3`, the canonical repository of the `kimi_k3` family
 itself, so that resolving it by name reports itself as the evidence
-repository instead of a byte-identical sibling. The file therefore holds 213
-rows; every count in this section counts the 212 siblings. Nine of them are
+repository instead of a byte-identical sibling. The file therefore holds 215
+rows; every count in this section counts the 214 siblings. Nine of them are
 cross-vendor: three
 `nvidia/Nemotron-Terminal-*` repositories ship the `qwen3_8b` artifact
 verbatim, and six `nvidia/Llama-3.x-Nemotron-*` repositories carry the
@@ -324,7 +326,7 @@ which is the same rule the loader applies.
 The shipped file's own `counts` object counts rows, not siblings, so it
 reads one higher on two of them and is not a second opinion about the
 table above: `identical_source` is **13** there against 12 here, and
-`total` is 213 against 212, both because the canonical `kimi_k3` row is
+`total` is 215 against 214, both because the canonical `kimi_k3` row is
 an `identical_source` row that is not a sibling. The per-artifact table
 further down totals `identical` at **164** rather than 152 for a
 different reason: it folds the 12 `identical (source file)` rows into
@@ -348,25 +350,25 @@ The kernel-facing tokenizer in those repositories is the certified one, but the
 loaded tokenizer is not the certified object, so they are recorded and not
 counted.
 
-| Artifact | Verified sub-versions | identical | equivalent (canonicalisation) | equivalent (serialisation) | Core-equal only (added-token face) |
-|---|---|---|---|---|---|
-| `qwen3_8b` | 110 | 79 | 0 | 31 | 18 |
-| `qwen3_5_08b` | 19 | 19 | 0 | 0 | 5 |
-| `llama_3_1_8b` | 13 | 3 | 5 | 5 | 6 |
-| `deepseek_v3` | 2 | 2 | 0 | 0 | 10 |
-| `deepseek_v4_flash` | 7 | 7 | 0 | 0 | 0 |
-| `gpt_oss_120b` | 3 | 3 | 0 | 0 | 0 |
-| `glm_5_2` | 7 | 7 | 0 | 0 | 0 |
-| `minimax_m3` | 1 | 1 | 0 | 0 | 11 |
-| `ministral_3_8b` | 2 | 2 | 0 | 0 | 5 |
-| `nemotron_3_nano_4b` | 19 | 16 | 3 | 0 | 1 |
-| `olmo_3_7b` | 9 | 7 | 0 | 2 | 0 |
-| `hy3` | 1 | 1 | 0 | 0 | 21 |
-| `kimi_k3` | 12 | 12 * | 0 | 0 | 0 |
-| `bert_cased` | 4 | 2 | 2 | 0 | 0 |
-| `bert_uncased` | 3 | 3 | 0 | 0 | 0 |
-| `bert_multilingual_cased` | 0 | 0 | 0 | 0 | 0 |
-| **total** | **212** | 164 | 10 | 38 | 77 |
+| Artifact | Verified sub-versions | identical | equivalent (canonicalisation) | equivalent (serialisation) | equivalent (loader face) | Core-equal only (added-token face) |
+|---|---|---|---|---|---|---|
+| `qwen3_8b` | 110 | 79 | 0 | 31 | 0 | 18 |
+| `qwen3_5_08b` | 21 | 19 | 0 | 0 | 2 | 5 |
+| `llama_3_1_8b` | 13 | 3 | 5 | 5 | 0 | 6 |
+| `deepseek_v3` | 2 | 2 | 0 | 0 | 0 | 10 |
+| `deepseek_v4_flash` | 7 | 7 | 0 | 0 | 0 | 0 |
+| `gpt_oss_120b` | 3 | 3 | 0 | 0 | 0 | 0 |
+| `glm_5_2` | 7 | 7 | 0 | 0 | 0 | 0 |
+| `minimax_m3` | 1 | 1 | 0 | 0 | 0 | 11 |
+| `ministral_3_8b` | 2 | 2 | 0 | 0 | 0 | 5 |
+| `nemotron_3_nano_4b` | 19 | 16 | 3 | 0 | 0 | 1 |
+| `olmo_3_7b` | 9 | 7 | 0 | 2 | 0 | 0 |
+| `hy3` | 1 | 1 | 0 | 0 | 0 | 21 |
+| `kimi_k3` | 12 | 12 * | 0 | 0 | 0 | 0 |
+| `bert_cased` | 4 | 2 | 2 | 0 | 0 | 0 |
+| `bert_uncased` | 3 | 3 | 0 | 0 | 0 | 0 |
+| `bert_multilingual_cased` | 0 | 0 | 0 | 0 | 0 | 0 |
+| **total** | **214** | 164 | 10 | 38 | 2 | 77 |
 
 `*` `kimi_k3` rows are compared at `tiktoken.model` level, for the reason given
 under the family matrix above.
@@ -502,7 +504,7 @@ snapshot](#repositories-admitted-after-the-snapshot).
 | `Qwen/Qwen3-VL-Reranker-2B` | `4bd860ac4f15` | `aeb13307a71a` | identical |
 | `Qwen/Qwen3-VL-Reranker-8B` | `b212dc8c91a8` | `aeb13307a71a` | identical |
 
-#### `qwen3_5_08b` (19 repositories)
+#### `qwen3_5_08b` (21 repositories)
 
 | Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
 |---|---|---|---|
@@ -525,6 +527,8 @@ snapshot](#repositories-admitted-after-the-snapshot).
 | `Qwen/Qwen3.6-27B-FP8` | `e89b16ebf198` | `5f9e4d4901a9` | identical |
 | `Qwen/Qwen3.6-35B-A3B` | `995ad96eacd9` | `5f9e4d4901a9` | identical |
 | `Qwen/Qwen3.6-35B-A3B-FP8` | `95a723d08a94` | `5f9e4d4901a9` | identical |
+| `Qwen/Qwen3.8-27B` &dagger; | `1d4bf0f2ff60` | `0997f410c57a` | equivalent (loader face) |
+| `Qwen/Qwen3.8-Flash-Next` &dagger; | `de4b8e4d43b9` | `0997f410c57a` | equivalent (loader face) |
 
 #### `llama_3_1_8b` (13 repositories)
 
@@ -714,9 +718,9 @@ a benchmark reference rather than a certified family.
 The accounting closes on the snapshot total: 470 repositories examined = 16
 anchors + 210 verified sub-versions + 77 core-equal + 83 different + 32 without
 a comparable file + 13 gated + 39 out of scope. This equation is about the
-snapshot and stays fixed: the two repositories admitted afterwards were not
+snapshot and stays fixed: the four repositories admitted afterwards were not
 among the 470 examined on that date, which is why the verified total elsewhere
-on this page reads 212 while this line reads 210.
+on this page reads 214 while this line reads 210.
 
 ### What the snapshot is and is not
 
@@ -750,17 +754,28 @@ repository on a later date.
 |---|---|---|---|---|---|---|
 | `deepseek-ai/DeepSeek-V4-Pro-0813` | `72e1d3230f6c` | `8f9f37ca37fd` | 6,367,146 | `deepseek_v4_flash` | identical | 2026-08-27 |
 | `zai-org/GLM-5.3-Flash` | `3f1971b7b5f7` | `19e773648cb4` | 20,217,442 | `glm_5_2` | identical | 2026-08-27 |
+| `Qwen/Qwen3.8-27B` | `1d4bf0f2ff60` | `0997f410c57a` | 12,809,320 | `qwen3_5_08b` | equivalent (loader face) | 2026-08-27 |
+| `Qwen/Qwen3.8-Flash-Next` | `de4b8e4d43b9` | `0997f410c57a` | 12,809,320 | `qwen3_5_08b` | equivalent (loader face) | 2026-08-27 |
 
-Both files are byte-identical to the anchor their family was certified on, so
-the certificate carries over unchanged and no campaign was run for either. The
-`tokenizer_config.json` of each repository was hashed alongside its
-`tokenizer.json` and is equal to the anchor's as well, which is recorded
-because the loaded tokenizer object depends on both.
+The first two files are byte-identical to the anchor their family was
+certified on, so the certificate carries over unchanged and no campaign was
+run for either. The `tokenizer_config.json` of each repository was hashed
+alongside its `tokenizer.json` and is equal to the anchor's as well, which is
+recorded because the loaded tokenizer object depends on both.
+
+The two Qwen3.8 repositories ship one and the same `tokenizer.json`, and it
+is not byte-identical to the `qwen3_5_08b` anchor file. What is byte-identical
+is the loader face: the pinned loader serializes their audited file group and
+the anchor's to equal bytes, which the maintainer materialization check
+re-establishes from the frozen directories before such a row is written
+(basis `equivalent (loader face)`, since 0.2.9). The Qwen3.8 section below
+records what was measured and what follows.
 
 These rows are in the shipped registry, so the packaged counts include them:
-`identical` reads 152 and `total` reads 213 there, with 206 rows pointing at a
-packaged family. Counted as siblings, the verified total is 212, and the two
-families concerned hold seven sub-versions each.
+`identical` reads 152 and `total` reads 215 there, with 208 rows pointing at a
+packaged family. Counted as siblings, the verified total is 214; the two
+identical-basis families hold seven sub-versions each, and `qwen3_5_08b`
+holds 21.
 
 A repository listed here is subject to the same caveat as every other row: it
 records a comparison made on a date, not a promise about the repository's

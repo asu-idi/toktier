@@ -3,24 +3,25 @@
   "generated_by": {
     "tool": "tools/generate_sibling_aliases.py",
     "tool_version": "1.0.0",
-    "source_commit": "fc1a4d0be4dc532e4ba5fb94620db2d04693e5b7",
-    "generated_at": "2026-08-29T02:37:45Z"
+    "source_commit": "257d925533280e1f9f529f1afe8c8c3fb3c5f92a",
+    "generated_at": "2026-08-31T02:43:16Z"
   },
-  "root_digest": "sha256:e70673f4f8bfd16708c97d5f835cc8203ebe9dc15aade61269c9b0ae5cc4c0d0",
+  "root_digest": "sha256:1b5e08f6d176e356c787133b18c77ceb08ef49842ca96a13c654bb97c26869af",
   "provenance": {
     "audit_date": "2026-08-04",
     "audit_rows": 470,
     "audit_sha256": "f3cc273898e7604a7d3b947be95bbf24dc6fa1df082aa55cf777c0c83d6a3fd2",
     "support_matrix_sha256": "c17c3091b3c0ced929383b7d4c5507a09ed5dee3fde690496aa85da39a25cb9a",
-    "selection": "as recorded at the 2026-08-04 admission audit: the verified repositories docs/support-matrix.md enumerated then, plus the canonical repository of each family whose upstream source file is not tokenizer.json, plus repositories published after that snapshot whose upstream file was compared byte for byte against the shipped anchor on the date recorded beside them in docs/support-matrix.md. This whole block is a snapshot of that audit and is deliberately not refreshed against the current tree: audit_date, audit_rows and audit_sha256 are what was observed then, and support_matrix_sha256 is the digest docs/support-matrix.md carried at the admission commit, not the digest it carries today. Nothing checks it, because there is nothing for it to agree with; rewriting it to the current digest would make the record describe an audit that did not happen."
+    "selection": "as recorded at the 2026-08-04 admission audit: the verified repositories docs/support-matrix.md enumerated then, plus the canonical repository of each family whose upstream source file is not tokenizer.json, plus repositories published after that snapshot whose upstream file was compared byte for byte against the shipped anchor on the date recorded beside them in docs/support-matrix.md. This whole block is a snapshot of that audit and is deliberately not refreshed against the current tree: audit_date, audit_rows and audit_sha256 are what was observed then, and support_matrix_sha256 is the digest docs/support-matrix.md carried at the admission commit, not the digest it carries today. Nothing checks it, because there is nothing for it to agree with; rewriting it to the current digest would make the record describe an audit that did not happen. Rows whose basis is equivalent_loader_face were admitted since 0.2.9: their audited tokenizer file group materializes, under the pinned loader, a loader face byte-identical to the certified family anchor face, re-established by the maintainer materialization check on the date recorded beside them in docs/support-matrix.md."
   },
   "counts": {
     "identical": 152,
     "identical_source": 13,
     "equivalent_canonicalisation": 10,
     "equivalent_serialisation": 38,
-    "total": 213,
-    "packaged": 206,
+    "equivalent_loader_face": 2,
+    "total": 215,
+    "packaged": 208,
     "reference_only": 7
   },
   "aliases": [
@@ -2277,6 +2278,28 @@
       "canonical_family": "qwen3_5_08b",
       "canonical_anchor_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
       "basis": "identical",
+      "canonical_packaged": true
+    },
+    {
+      "repo_id": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "source_file": "tokenizer.json",
+      "source_sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+      "source_size": 12809320,
+      "canonical_family": "qwen3_5_08b",
+      "canonical_anchor_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+      "basis": "equivalent_loader_face",
+      "canonical_packaged": true
+    },
+    {
+      "repo_id": "Qwen/Qwen3.8-Flash-Next",
+      "revision": "de4b8e4d43b917e7706784d8bb445c9af86a3540",
+      "source_file": "tokenizer.json",
+      "source_sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+      "source_size": 12809320,
+      "canonical_family": "qwen3_5_08b",
+      "canonical_anchor_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+      "basis": "equivalent_loader_face",
       "canonical_packaged": true
     },
     {

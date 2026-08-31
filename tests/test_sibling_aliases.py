@@ -18,15 +18,15 @@ from toktier.errors import RegistryInvalid
 
 def test_shipped_registry_closes_to_the_documented_coverage() -> None:
     registry = shipped_sibling_aliases()
-    assert len(registry.records) == 213
+    assert len(registry.records) == 215
     equivalent = [
         record
         for record in registry.records
         if record.basis.startswith("equivalent_")
     ]
-    assert len(equivalent) == 48
-    assert sum(record.canonical_packaged for record in equivalent) == 46
-    assert sum(record.canonical_packaged for record in registry.records) == 206
+    assert len(equivalent) == 50
+    assert sum(record.canonical_packaged for record in equivalent) == 48
+    assert sum(record.canonical_packaged for record in registry.records) == 208
     assert registry.root_digest.startswith("sha256:")
 
 

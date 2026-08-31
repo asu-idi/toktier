@@ -29,6 +29,7 @@ from toktier.errors import (
     UnsupportedConfig,
 )
 from toktier.policy import (
+    BACKEND_FAST_CPU,
     BACKEND_GPU,
     BACKEND_REFERENCE,
     ReasonCode,
@@ -123,6 +124,7 @@ def _uncertified_case(
     error: type[ToktierError] = UncertifiedTokenizer,
     waivable: bool = True,
     coverage: bool = False,
+    unregistered: bool = False,
 ) -> State:
     """A state where the accelerated path is closed for one reason.
 
@@ -130,20 +132,45 @@ def _uncertified_case(
     has measured rather than about something that failed to verify. The
     SUPPORTED policy admits those and labels them; it refuses everything
     else exactly as CERTIFIED does.
+
+    ``unregistered`` marks the states whose content the registry carries
+    no record for. Since 0.2.9 the CPU fast path is assessed for those
+    too, so every plan that reaches an assessment carries a second reason
+    entry naming it. This fixture installs no fast CPU extension, so the
+    reason is that the backend is not there -- except under REFERENCE,
+    where check 1 answers first for that backend as for the GPU. The
+    selected backend and the fallback chain are unchanged either way:
+    the option was never eligible, it was previously just not named.
     """
+    expect = {
+        SUPPORTED: _eligible(supported=(code,)) if coverage else _blocked(code),
+        CERTIFIED: _blocked(code),
+        REFERENCE: _reference_only(),
+        REQUIRE: _eligible(supported=(code,)) if coverage else Expect(error=error),
+        EXPERIMENTAL: _eligible((code,)) if waivable else _blocked(code),
+    }
+    if unregistered:
+        expect = {
+            policy: cell
+            if cell.error is not None
+            else dataclasses.replace(
+                cell,
+                reasons=(
+                    *cell.reasons,
+                    ReasonCode.R_POLICY_REFERENCE
+                    if policy is REFERENCE
+                    else ReasonCode.R_BACKEND_UNAVAILABLE,
+                ),
+            )
+            for policy, cell in expect.items()
+        }
     return State(
         build=_state(
             registry_kwargs=registry_kwargs,
             snapshot_kwargs=snapshot_kwargs,
             config_kwargs=config_kwargs,
         ),
-        expect={
-            SUPPORTED: _eligible(supported=(code,)) if coverage else _blocked(code),
-            CERTIFIED: _blocked(code),
-            REFERENCE: _reference_only(),
-            REQUIRE: _eligible(supported=(code,)) if coverage else Expect(error=error),
-            EXPERIMENTAL: _eligible((code,)) if waivable else _blocked(code),
-        },
+        expect=expect,
     )
 
 
@@ -241,10 +268,12 @@ STATES: dict[str, State] = {
     ),
     # -- certification statements: EXPERIMENTAL may waive -------------
     "artifact_not_in_registry": _uncertified_case(
-        snapshot_kwargs={"artifact_sha256": "1" * 64, "pipeline_fingerprint": None}
+        snapshot_kwargs={"artifact_sha256": "1" * 64, "pipeline_fingerprint": None},
+        unregistered=True,
     ),
     "composition_absent": _uncertified_case(
-        registry_kwargs={"artifact_sha256": "9" * 64}
+        registry_kwargs={"artifact_sha256": "9" * 64},
+        unregistered=True,
     ),
     "backend_entry_absent": _uncertified_case(registry_kwargs={"backends": {}}),
     "status_experimental": _uncertified_case(
@@ -459,6 +488,68 @@ def test_require_accelerated_does_not_blame_hardware_nobody_probed() -> None:
     assert caught.value.details["backend"] == BACKEND_GPU
 
 
+def _with_fast_cpu_installed(snapshot: ProbeSnapshot) -> ProbeSnapshot:
+    """The same machine with the fast CPU extension importable."""
+    return dataclasses.replace(
+        snapshot,
+        importable_backends=frozenset(
+            {*snapshot.importable_backends, BACKEND_FAST_CPU}
+        ),
+    )
+
+
+def test_content_with_no_record_is_told_why_the_cpu_lane_is_closed() -> None:
+    """The CPU fast path names its refusal, as the GPU always has.
+
+    ``docs/contracts/routing.md`` Section 2 promises one reason per
+    accelerated option considered and not selected, and
+    ``docs/support-matrix.md`` says an uncertified artifact records
+    ``R_UNCERTIFIED_ARTIFACT`` wherever the backend is installed to be
+    assessed. Content the registry carries no record for used to get
+    neither for ``fast_cpu``: the option was dropped before assessment,
+    so a reader comparing it with a recorded artifact saw a silence with
+    no cause attached.
+    """
+    snapshot, registry, config = STATES["artifact_not_in_registry"].build()
+    snapshot = _with_fast_cpu_installed(snapshot)
+
+    route_plan = plan(snapshot, CERTIFIED, registry, config)
+    named = {reason.backend: reason for reason in route_plan.reasons}
+    assert named[BACKEND_FAST_CPU].code is ReasonCode.R_UNCERTIFIED_ARTIFACT
+    assert named[BACKEND_FAST_CPU].detail["cause"] == "no_record"
+    # The GPU keeps the reason it always had: this adds an entry, it does
+    # not restate an existing one.
+    assert named[BACKEND_GPU].code is ReasonCode.R_UNCERTIFIED_ARTIFACT
+
+    # And the route is the route it was: naming the option does not open
+    # it. Under EXPERIMENTAL the GPU refusal is waivable and this one is
+    # not -- there is no record here, so there is no engine binding for
+    # the fast CPU path to be verified against.
+    experimental = plan(snapshot, EXPERIMENTAL, registry, config)
+    assert experimental.backend == BACKEND_GPU
+    assert BACKEND_FAST_CPU not in experimental.fallback_chain
+
+
+def test_a_recorded_artifact_keeps_the_cpu_answer_it_had() -> None:
+    """The contrast side: a record that exists is assessed as before.
+
+    ``hy3`` in the shipped registry is the live example -- a record whose
+    fast CPU entry is ``unsupported``. Its refusal came from check 5
+    before this change and comes from check 5 after it; only content with
+    no record at all moved.
+    """
+    snapshot, registry, config = STATES["status_unsupported"].build()
+    snapshot = _with_fast_cpu_installed(snapshot)
+
+    route_plan = plan(snapshot, CERTIFIED, registry, config)
+    backends_named = [reason.backend for reason in route_plan.reasons]
+    # The record carries no fast CPU entry, so the option is still not
+    # assessed: a registry that has spoken about an artifact is not the
+    # case this change is about.
+    assert backends_named == [BACKEND_GPU]
+    assert route_plan.backend == BACKEND_REFERENCE
+
+
 def test_experimental_waivers_are_reported_not_hidden() -> None:
     """An uncertified path that ran says which checks it skipped."""
     snapshot, registry, config = STATES["artifact_not_in_registry"].build()
@@ -467,5 +558,11 @@ def test_experimental_waivers_are_reported_not_hidden() -> None:
     assert ReasonCode.R_UNCERTIFIED_ARTIFACT in waived
     route_plan = plan(snapshot, EXPERIMENTAL, registry, config)
     assert route_plan.backend == BACKEND_GPU
-    # The plan itself records no reason: nothing was excluded.
-    assert route_plan.reasons == ()
+    # The GPU was not excluded: its refusal was waived, and the waiver is
+    # what gets reported. The one reason the plan does record is the CPU
+    # fast path, which since 0.2.9 is assessed for content the registry
+    # has no record of. This fixture installs no fast CPU extension, so
+    # the reason is that the backend is not there.
+    assert [(reason.backend, reason.code) for reason in route_plan.reasons] == [
+        (BACKEND_FAST_CPU, ReasonCode.R_BACKEND_UNAVAILABLE)
+    ]

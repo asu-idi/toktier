@@ -47,6 +47,7 @@ from .paths import (
 from .policy import BACKEND_FAST_CPU, BACKEND_GPU, RoutingPolicy
 
 if TYPE_CHECKING:
+    from .backends.fast_cpu import FastCpuEngineFacts
     from .engine.gpu.toolchain import NvccFacts
     from .routing.probe import DeviceInfo, KernelCacheState
 
@@ -293,6 +294,7 @@ def _family_report(
     observed_architectures: Sequence[str],
     gpu_eligible: bool,
     cpu_profile_ready: bool,
+    engine_facts: FastCpuEngineFacts,
     config: Config,
     devices: Sequence[DeviceInfo] = (),
     driver_version: str | None = None,
@@ -317,6 +319,7 @@ def _family_report(
     certified = {STATUS_CERTIFIED, STATUS_CERTIFIED_SOURCE}
     fast_cpu_status: str | None = None
     gpu_status: str | None = None
+    fast_cpu = None
     architecture_certification: dict[str, str] = {}
     if match is not None:
         fast_cpu = match.record.backends.get("fast_cpu")
@@ -347,10 +350,21 @@ def _family_report(
     # neither half of this family's answer survives it. ``gpu_eligible``
     # already carries that premise from the installation-level report;
     # the CPU lane needs it named here too.
+    # The plan does not stop at the entry's status: check 8 verifies the
+    # executing extension against the binding that entry carries, and a
+    # binding that does not verify sends this family to the reference
+    # engine. Reading the status alone put two answers in one object --
+    # "fast_cpu will run" beside a ``plan_reasons`` entry refusing
+    # fast_cpu and naming the axis that disagreed. Same list of axes, so
+    # the two cannot come apart again.
+    from .routing.plan import fast_cpu_binding_mismatches
+
     family_cpu_ready = (
         config.routing_policy is not RoutingPolicy.REFERENCE
         and cpu_profile_ready
         and fast_cpu_status in certified
+        and fast_cpu is not None
+        and not fast_cpu_binding_mismatches(fast_cpu, engine_facts)
     )
     return {
         "family": entry.family,
@@ -545,6 +559,20 @@ def _doctor_report(
             ),
             None,
         )
+    # The same premise the family block applies, asked without a family.
+    # ``certified_cpu_profile_ready`` says the engine reported its facts;
+    # it never compared them with what a record binds, so this answer
+    # could read ``fast_cpu`` on an installation where the plan refuses
+    # that backend for every family. With no family named, the honest
+    # question is whether the installed engine verifies against any
+    # record eligible to take the fast path at all.
+    from .policy import BACKEND_FAST_CPU
+    from .routing.plan import fast_cpu_binding_mismatches
+
+    fast_cpu_binding_verifies = any(
+        not fast_cpu_binding_mismatches(entry, fast_cpu)
+        for entry in shipped_registry().eligible_entries(BACKEND_FAST_CPU)
+    )
     automatic_effective_backend = (
         "gpu"
         if automatic_gpu_eligible
@@ -552,6 +580,7 @@ def _doctor_report(
         if accelerated_planned
         and certified_cpu_profile_ready
         and gigatoken_runtime_ready
+        and fast_cpu_binding_verifies
         else "hf"
     )
     return {
@@ -570,6 +599,7 @@ def _doctor_report(
                 cpu_profile_ready=(
                     certified_cpu_profile_ready and gigatoken_runtime_ready
                 ),
+                engine_facts=fast_cpu,
                 config=config,
                 devices=probed_devices,
                 driver_version=driver_version,

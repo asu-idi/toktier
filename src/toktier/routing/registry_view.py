@@ -495,6 +495,24 @@ class RegistryView:
             }
         return shared
 
+    def eligible_entries(self, backend_id: str) -> tuple[BackendEntry, ...]:
+        """This backend's entries whose status admits an accelerated route.
+
+        ``doctor`` without a family argument reports what an automatic
+        request would use on this installation, and for the CPU fast path
+        that depends on whether the installed engine is the one a record
+        binds. The question has no artifact to hang on, so it is asked of
+        the records that carry an eligible entry at all: an engine that
+        matches none of them is an engine no family could take the fast
+        path with, whichever family is asked for next.
+        """
+        return tuple(
+            entry
+            for record in self._by_sha.values()
+            if (entry := record.backends.get(backend_id)) is not None
+            and entry.status in ELIGIBLE_STATUSES
+        )
+
 
 def empty_registry() -> RegistryView:
     """A registry that certifies nothing (everything runs as reference)."""

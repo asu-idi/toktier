@@ -33,7 +33,10 @@ and hold under every policy.
 Checks 5-9, 11 and 12 are certification statements, so ``EXPERIMENTAL``
 may proceed past them; each one it passes is recorded as a waiver and
 reported by ``explain()``, never silently. Check 10 blocks under every
-policy, because a kernel that failed to build cannot run.
+policy, because a kernel that failed to build cannot run. Check 5 has
+one exception: for the CPU fast path on content the registry carries no
+record for, there is no engine binding to run against, so the refusal is
+not a statement ``EXPERIMENTAL`` can waive.
 
 Two of these refusals are about coverage rather than verification: the
 device architecture of check 9, and the compiler/runtime pair of check
@@ -48,7 +51,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from ..backends.fast_cpu import ENGINE_DELIVERY, ENGINE_MODULE
+from ..backends.fast_cpu import (
+    ENGINE_DELIVERY,
+    ENGINE_MODULE,
+    FastCpuEngineFacts,
+)
 from ..config import Config
 from ..errors import (
     BackendUnavailable,
@@ -177,6 +184,104 @@ class _RefuseFn(Protocol):
         """Refuse the backend, unless the policy waives this check."""
 
 
+def fast_cpu_binding_mismatches(
+    entry: BackendEntry, facts: FastCpuEngineFacts
+) -> tuple[tuple[str, dict[str, object]], ...]:
+    """Every engine-binding axis of check 8 that does not verify, in order.
+
+    The axis name and the reason detail for each, so one list answers
+    both "may this route be planned?" and "which axis disagreed?". Pure;
+    it reads the two records it is handed and nothing else.
+
+    It is a function rather than ten inline comparisons because ``doctor``
+    asks the same question. A report that decided for itself which axes
+    matter could say a request will run on ``fast_cpu`` in the same
+    object whose ``plan_reasons`` says the plan refused it and names the
+    axis -- which is what it did before this became one list.
+    """
+    mismatches: list[tuple[str, dict[str, object]]] = []
+    if entry.engine != "gigatoken":
+        mismatches.append(
+            ("engine", {"installed": "gigatoken", "certified": entry.engine})
+        )
+    if entry.engine_delivery != ENGINE_DELIVERY:
+        mismatches.append(
+            (
+                "engine_delivery",
+                {"installed": ENGINE_DELIVERY, "certified": entry.engine_delivery},
+            )
+        )
+    if entry.engine_module != ENGINE_MODULE:
+        mismatches.append(
+            (
+                "engine_module",
+                {"installed": ENGINE_MODULE, "certified": entry.engine_module},
+            )
+        )
+    if facts.version != entry.engine_version:
+        mismatches.append(
+            (
+                "engine_version",
+                {"installed": facts.version, "certified": entry.engine_version},
+            )
+        )
+    if entry.status != STATUS_CERTIFIED_SOURCE:
+        mismatches.append(
+            (
+                "status",
+                {"expected": STATUS_CERTIFIED_SOURCE, "observed": entry.status},
+            )
+        )
+    if facts.source_digest != entry.source_digest:
+        mismatches.append(
+            (
+                "source_digest",
+                {
+                    "expected_digest": entry.source_digest,
+                    "observed_digest": facts.source_digest,
+                },
+            )
+        )
+    if facts.build_flags != entry.build_flags:
+        mismatches.append(
+            (
+                "build_flags",
+                {
+                    "expected": list(entry.build_flags),
+                    "observed": list(facts.build_flags),
+                },
+            )
+        )
+    if facts.toolchain != entry.toolchain:
+        mismatches.append(
+            (
+                "toolchain",
+                {"expected": entry.toolchain, "observed": facts.toolchain},
+            )
+        )
+    if entry.config_id != "toktier-fast-repair-v1":
+        mismatches.append(
+            (
+                "config_id",
+                {
+                    "expected": "toktier-fast-repair-v1",
+                    "observed": entry.config_id,
+                },
+            )
+        )
+    if facts.config_digest != entry.config_digest:
+        mismatches.append(
+            (
+                "config_digest",
+                {
+                    "expected_digest": entry.config_digest,
+                    "observed_digest": facts.config_digest,
+                },
+            )
+        )
+    return tuple(mismatches)
+
+
 def assess_backend(
     backend: str,
     snapshot: ProbeSnapshot,
@@ -285,7 +390,18 @@ def _assess(
                 artifact_sha256=snapshot.artifact_sha256,
                 family=snapshot.family,
             ),
-            waivable=True,
+            # EXPERIMENTAL waives a certification statement so a caller
+            # can measure what no campaign has judged, and for the GPU
+            # that leaves something to attempt: a kernel built against
+            # the artifact as it stands. The CPU fast path has nothing
+            # to attempt -- every check below this one reads the
+            # record's engine binding, and with no record there is no
+            # binding to verify against -- so it is named and refused
+            # rather than waived onto a route with no bound identity
+            # behind it. Reachable only for the option check 5 of the
+            # 0.2.9 assessment order now considers; a record that omits
+            # the fast CPU entry is still not assessed for it.
+            waivable=backend != BACKEND_FAST_CPU,
         )
     elif entry.status == STATUS_UNSUPPORTED:
         # Known not to work: never planned, not even under EXPERIMENTAL.
@@ -386,114 +502,15 @@ def _assess(
     #    by the executing extension and bound by the registry. Its row carries
     #    no device/kernel facts, so a successful check terminates here.
     if backend == BACKEND_FAST_CPU:
-        facts = snapshot.fast_cpu_engine
-        if entry.engine != "gigatoken":
+        for axis, detail in fast_cpu_binding_mismatches(
+            entry, snapshot.fast_cpu_engine
+        ):
             refuse(
                 _reason(
                     ReasonCode.R_ENGINE_BINDING_MISMATCH,
                     backend,
-                    axis="engine",
-                    installed="gigatoken",
-                    certified=entry.engine,
-                ),
-                waivable=True,
-            )
-        if entry.engine_delivery != ENGINE_DELIVERY:
-            refuse(
-                _reason(
-                    ReasonCode.R_ENGINE_BINDING_MISMATCH,
-                    backend,
-                    axis="engine_delivery",
-                    installed=ENGINE_DELIVERY,
-                    certified=entry.engine_delivery,
-                ),
-                waivable=True,
-            )
-        if entry.engine_module != ENGINE_MODULE:
-            refuse(
-                _reason(
-                    ReasonCode.R_ENGINE_BINDING_MISMATCH,
-                    backend,
-                    axis="engine_module",
-                    installed=ENGINE_MODULE,
-                    certified=entry.engine_module,
-                ),
-                waivable=True,
-            )
-        if facts.version != entry.engine_version:
-            refuse(
-                _reason(
-                    ReasonCode.R_ENGINE_BINDING_MISMATCH,
-                    backend,
-                    axis="engine_version",
-                    installed=facts.version,
-                    certified=entry.engine_version,
-                ),
-                waivable=True,
-            )
-        if entry.status != STATUS_CERTIFIED_SOURCE:
-            refuse(
-                _reason(
-                    ReasonCode.R_ENGINE_BINDING_MISMATCH,
-                    backend,
-                    axis="status",
-                    expected=STATUS_CERTIFIED_SOURCE,
-                    observed=entry.status,
-                ),
-                waivable=True,
-            )
-        if facts.source_digest != entry.source_digest:
-            refuse(
-                _reason(
-                    ReasonCode.R_ENGINE_BINDING_MISMATCH,
-                    backend,
-                    axis="source_digest",
-                    expected_digest=entry.source_digest,
-                    observed_digest=facts.source_digest,
-                ),
-                waivable=True,
-            )
-        if facts.build_flags != entry.build_flags:
-            refuse(
-                _reason(
-                    ReasonCode.R_ENGINE_BINDING_MISMATCH,
-                    backend,
-                    axis="build_flags",
-                    expected=list(entry.build_flags),
-                    observed=list(facts.build_flags),
-                ),
-                waivable=True,
-            )
-        if facts.toolchain != entry.toolchain:
-            refuse(
-                _reason(
-                    ReasonCode.R_ENGINE_BINDING_MISMATCH,
-                    backend,
-                    axis="toolchain",
-                    expected=entry.toolchain,
-                    observed=facts.toolchain,
-                ),
-                waivable=True,
-            )
-        if entry.config_id != "toktier-fast-repair-v1":
-            refuse(
-                _reason(
-                    ReasonCode.R_ENGINE_BINDING_MISMATCH,
-                    backend,
-                    axis="config_id",
-                    expected="toktier-fast-repair-v1",
-                    observed=entry.config_id,
-                ),
-                waivable=True,
-            )
-        if facts.config_digest != entry.config_digest:
-            refuse(
-                _reason(
-                    ReasonCode.R_ENGINE_BINDING_MISMATCH,
-                    backend,
-                    axis="config_digest",
-                    expected_digest=entry.config_digest,
-                    observed_digest=facts.config_digest,
+                    axis=axis,
+                    **detail,
                 ),
                 waivable=True,
             )
@@ -729,18 +746,34 @@ def assessments_for(
     registry: RegistryView,
     config: Config,
 ) -> tuple[BackendAssessment, ...]:
-    """Per-backend assessments behind a plan, for diagnostics."""
-    backends: list[str] = [BACKEND_GPU]
+    """Per-backend assessments behind a plan, for diagnostics.
+
+    The CPU fast path is assessed when the matched record carries an
+    entry for it and, since 0.2.9, when the registry carries no record
+    for this content at all. That second case used to drop the option
+    before it was assessed, so the plan for an artifact the registry has
+    never seen named only the GPU, while an artifact that *is* recorded
+    with an ineligible entry correctly named both --
+    ``docs/contracts/routing.md`` Section 2 promises one reason entry per
+    accelerated option considered and not selected, and
+    ``docs/support-matrix.md`` says an uncertified artifact records
+    ``R_UNCERTIFIED_ARTIFACT`` wherever the backend is installed to be
+    assessed. It is assessed rather than refused by hand so the earlier
+    checks still answer first: under ``REFERENCE`` the reason is the
+    policy, and on a machine with no fast CPU extension it is that the
+    backend is not installed, exactly as for the GPU.
+
+    A record that exists and simply carries no fast CPU entry is left as
+    it was: the registry has spoken about that artifact, and reading a
+    silence as a refusal is a separate question from this one.
+    """
+    assessments = [assess_backend(BACKEND_GPU, snapshot, policy, registry, config)]
     match = snapshot.certification
-    if (
-        match is not None
-        and BACKEND_FAST_CPU in match.record.backends
-    ):
-        backends.append(BACKEND_FAST_CPU)
-    return tuple(
-        assess_backend(backend, snapshot, policy, registry, config)
-        for backend in backends
-    )
+    if match is None or BACKEND_FAST_CPU in match.record.backends:
+        assessments.append(
+            assess_backend(BACKEND_FAST_CPU, snapshot, policy, registry, config)
+        )
+    return tuple(assessments)
 
 
 def _require_accelerated_error(

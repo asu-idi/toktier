@@ -23,8 +23,9 @@ import os
 import platform
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn
 
 import pytest
 
@@ -92,9 +93,55 @@ def _manifest() -> ArtifactManifest:
     )
 
 
-def _set_doctor_probes(monkeypatch: pytest.MonkeyPatch) -> None:
+def _set_engine_facts(
+    monkeypatch: pytest.MonkeyPatch, facts: Callable[[], Any]
+) -> None:
+    """Install one engine reading everywhere the report reads one.
+
+    ``doctor`` calls the probe in ``toktier.backends.fast_cpu``; the plan
+    it prints the reasons of reads the copy bound into
+    ``toktier.routing.probe`` at import. Patching only the first leaves a
+    machine that disagrees with itself for a reason no machine does, and
+    the report's whole job is to compare those two.
+    """
     from toktier.backends import fast_cpu
+
+    # By name: ``toktier.routing.probe`` the module is shadowed on the
+    # package by ``probe`` the function it exports.
+    probe_module = importlib.import_module("toktier.routing.probe")
+    monkeypatch.setattr(fast_cpu, "fast_cpu_engine_facts", facts)
+    monkeypatch.setattr(probe_module, "fast_cpu_engine_facts", facts)
+
+
+def _bound_entry() -> Any:
+    """The shipped registry's engine binding for the CPU fast path."""
+    from toktier.policy import BACKEND_FAST_CPU
+    from toktier.routing.registry_load import shipped_registry
+
+    return shipped_registry().eligible_entries(BACKEND_FAST_CPU)[0]
+
+
+def _bound_engine_facts(**overrides: object) -> Any:
+    """Engine facts that verify against the shipped registry's binding.
+
+    ``overrides`` moves one axis off the bound value, for the cases that
+    want an engine the plan refuses.
+    """
     from toktier.backends.fast_cpu import FastCpuEngineFacts
+
+    bound = _bound_entry()
+    facts: dict[str, object] = {
+        "version": bound.engine_version,
+        "source_digest": bound.source_digest,
+        "build_flags": bound.build_flags,
+        "toolchain": bound.toolchain,
+        "config_digest": bound.config_digest,
+    }
+    facts.update(overrides)
+    return FastCpuEngineFacts(**facts)  # type: ignore[arg-type]
+
+
+def _set_doctor_probes(monkeypatch: pytest.MonkeyPatch) -> None:
     from toktier.engine.gpu import native as native_gpu
     from toktier.engine.gpu.native import NativeHostBuildFacts
     from toktier.repair import fastokens
@@ -124,17 +171,13 @@ def _set_doctor_probes(monkeypatch: pytest.MonkeyPatch) -> None:
             stderr="",
         ),
     )
-    monkeypatch.setattr(
-        fast_cpu,
-        "fast_cpu_engine_facts",
-        lambda: FastCpuEngineFacts(
-            version="0.10.0+toktier.pinned.1",
-            source_digest="f" * 64,
-            build_flags=("profile=release", "opt-level=3"),
-            toolchain="rustc 1.93.1 (test fixture)",
-            config_digest="e" * 64,
-        ),
-    )
+    # The engine the registry binds, read from the registry rather than
+    # written out here. ``doctor`` verifies the installed engine against
+    # that binding -- the same axes the plan checks -- so a fixture with
+    # invented digests describes a machine whose CPU fast path the plan
+    # refuses, which is not the machine these cases are about. Reading
+    # the values keeps the fixture from going stale when they move.
+    _set_engine_facts(monkeypatch, _bound_engine_facts)
     monkeypatch.setattr(
         native_gpu,
         "native_host_build_facts",
@@ -253,6 +296,7 @@ def test_doctor_human(
     monkeypatch.setenv("TOKTIER_OFFLINE", "1")
     monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
     _set_doctor_probes(monkeypatch)
+    _bound = _bound_entry()
 
     exit_code = cli.main(["doctor"])
 
@@ -304,12 +348,12 @@ def test_doctor_human(
         "gigatoken_delivery: integrated\n"
         "gigatoken_module: toktier._native\n"
         "gigatoken_runtime_ready: true\n"
-        "gigatoken_version: 0.10.0+toktier.pinned.1\n"
+        f"gigatoken_version: {_bound.engine_version}\n"
         "gigatoken_native_digest: none\n"
-        f"gigatoken_source_digest: {'f' * 64}\n"
-        "gigatoken_build_flags: profile=release; opt-level=3\n"
-        "gigatoken_toolchain: rustc 1.93.1 (test fixture)\n"
-        f"gigatoken_repair_config_digest: {'e' * 64}\n"
+        f"gigatoken_source_digest: {_bound.source_digest}\n"
+        f"gigatoken_build_flags: {'; '.join(_bound.build_flags)}\n"
+        f"gigatoken_toolchain: {_bound.toolchain}\n"
+        f"gigatoken_repair_config_digest: {_bound.config_digest}\n"
         "fastokens_available: true\n"
         "fastokens_distribution: fastokens\n"
         "fastokens_version: 1.2.3\n"
@@ -389,6 +433,7 @@ def test_doctor_json(
     monkeypatch.setenv("TOKTIER_OFFLINE", "0")
     monkeypatch.setattr(importlib.metadata, "version", lambda name: "2.0.0")
     _set_doctor_probes(monkeypatch)
+    _bound = _bound_entry()
     expected = {
         "python_version": platform.python_version(),
         "toktier_version": "2.0.0",
@@ -445,12 +490,12 @@ def test_doctor_json(
         "gigatoken_delivery": "integrated",
         "gigatoken_module": "toktier._native",
         "gigatoken_runtime_ready": True,
-        "gigatoken_version": "0.10.0+toktier.pinned.1",
+        "gigatoken_version": _bound.engine_version,
         "gigatoken_native_digest": None,
-        "gigatoken_source_digest": "f" * 64,
-        "gigatoken_build_flags": ["profile=release", "opt-level=3"],
-        "gigatoken_toolchain": "rustc 1.93.1 (test fixture)",
-        "gigatoken_repair_config_digest": "e" * 64,
+        "gigatoken_source_digest": _bound.source_digest,
+        "gigatoken_build_flags": list(_bound.build_flags),
+        "gigatoken_toolchain": _bound.toolchain,
+        "gigatoken_repair_config_digest": _bound.config_digest,
         "fastokens_available": True,
         "fastokens_distribution": "fastokens",
         "fastokens_version": "2.0.0",
@@ -1963,6 +2008,88 @@ def test_doctor_answers_for_one_family_when_asked(
     assert family["fast_cpu_status"] == "certified_source"
     assert family["automatic_effective_backend"] == "gpu"
     assert family["automatic_effective_backend_below_gpu_threshold"] == "fast_cpu"
+
+
+def _assert_cpu_answer_agrees_with_the_plan(report: dict[str, Any]) -> set[str]:
+    """The CPU lane the report names is the CPU lane the plan allowed.
+
+    The relation, not a particular answer: ``doctor --family`` carries
+    both what it says will run and the planner's own reasons, and a
+    backend named in ``plan_reasons`` is one the plan did not select. So
+    the report may name ``fast_cpu`` exactly when the plan did not refuse
+    it -- an equivalence that holds whichever engine is installed, which
+    is why it is asserted instead of an expected backend.
+    """
+    family = report["family"]
+    refused = {reason["backend"] for reason in (family["plan_reasons"] or ())}
+    allowed = "fast_cpu" not in refused
+    for key in (
+        "automatic_effective_backend",
+        "automatic_effective_backend_below_gpu_threshold",
+    ):
+        if not allowed:
+            assert family[key] != "fast_cpu", (
+                f"{key} names fast_cpu, which plan_reasons refuses"
+            )
+    # The other direction, which keeps the check from passing by never
+    # saying fast_cpu at all: below the GPU threshold this family's CPU
+    # lane is the fast one whenever the plan left it open.
+    assert (
+        family["automatic_effective_backend_below_gpu_threshold"] == "fast_cpu"
+    ) is allowed
+    return refused
+
+
+def test_doctor_family_json_does_not_contradict_its_own_plan_reasons(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The report reads the engine binding the plan reads.
+
+    ``doctor`` exists to explain refusals of exactly this kind, so one
+    object saying "fast_cpu will run" beside a ``plan_reasons`` entry
+    refusing ``fast_cpu`` and naming the axis is the one answer it must
+    not give. It used to: the effective-backend fields stopped at the
+    entry's status and never compared the installed engine with what the
+    record binds.
+    """
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    certified = {"tokenizers": "0.22.2", "transformers": "4.57.6"}
+    monkeypatch.setattr(
+        importlib.metadata, "version", lambda name: certified.get(name, "1.2.3")
+    )
+    _set_doctor_probes(monkeypatch)
+
+    # The engine the registry binds: whatever the fields say, they must
+    # not name a backend the plan refused.
+    assert cli.main(["doctor", "--json", "--family", "qwen3_8b"]) == 0
+    bound_report = json.loads(capsys.readouterr().out)
+    _assert_cpu_answer_agrees_with_the_plan(bound_report)
+
+    # An engine off the bound source digest by one axis. This is the
+    # shape the report used to misread: the entry is still
+    # ``certified_source``, so a status-only reading still says
+    # ``fast_cpu`` while the plan refuses it.
+    _set_engine_facts(
+        monkeypatch, lambda: _bound_engine_facts(source_digest="c" * 64)
+    )
+
+    assert cli.main(["doctor", "--json", "--family", "qwen3_8b"]) == 0
+    drifted = json.loads(capsys.readouterr().out)
+    refused = _assert_cpu_answer_agrees_with_the_plan(drifted)
+
+    # The fixture really does exercise the binding check, so this test
+    # cannot pass by the plan having refused nothing.
+    assert drifted["family"]["fast_cpu_status"] == "certified_source"
+    assert "fast_cpu" in refused
+    engine_axes = {
+        reason["detail"].get("axis")
+        for reason in drifted["family"]["plan_reasons"]
+        if reason["code"] == "R_ENGINE_BINDING_MISMATCH"
+    }
+    assert "source_digest" in engine_axes
+    # Both levels of the report follow the same premise.
+    assert drifted["automatic_effective_backend"] != "fast_cpu"
 
 
 def test_doctor_applies_the_family_premise_the_adapter_actually_has(

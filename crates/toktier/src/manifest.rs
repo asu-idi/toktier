@@ -258,6 +258,24 @@ pub(crate) struct AliasRow {
     pub(crate) canonical_packaged: bool,
 }
 
+/// Sibling-alias bases that admit the canonical execution artifact.
+///
+/// The list matches the Python-side `ALIAS_BASES` and the schema enum
+/// (`schemas/sibling_aliases.schema.json`); a basis outside it is never
+/// admitted, so a widened table cannot widen admission silently.
+/// `equivalent_loader_face` joined in 0.2.9
+/// (`docs/contracts/registry.md` Section 4.1).
+pub(crate) fn admitted_alias_basis(basis: &str) -> bool {
+    matches!(
+        basis,
+        "identical"
+            | "identical_source"
+            | "equivalent_canonicalisation"
+            | "equivalent_serialisation"
+            | "equivalent_loader_face"
+    )
+}
+
 #[derive(Debug)]
 #[cfg_attr(not(feature = "prebuilt-gpu"), allow(dead_code))]
 pub(crate) struct Registry {
@@ -642,13 +660,7 @@ impl Registry {
         if !alias.canonical_packaged
             || alias.source_sha256.len() != 64
             || alias.source_size == 0
-            || !matches!(
-                alias.basis.as_str(),
-                "identical"
-                    | "identical_source"
-                    | "equivalent_canonicalisation"
-                    | "equivalent_serialisation"
-            )
+            || !admitted_alias_basis(alias.basis.as_str())
         {
             return Err(Error::new(
                 ErrorCode::UncertifiedTokenizer,
@@ -788,10 +800,37 @@ fn registry_error(message: impl Into<String>) -> Error {
 #[cfg(test)]
 mod tests {
     use super::{
-        describe_flag_divergence, nearest_judged_row, parse_json, registry_error, verify_embedded,
-        ArtifactRow, RuntimeBuildRow, SUPPORT_REGISTRY_BYTES, SUPPORT_REGISTRY_SHA256,
+        admitted_alias_basis, describe_flag_divergence, nearest_judged_row, parse_json,
+        registry_error, verify_embedded, ArtifactRow, RuntimeBuildRow, SUPPORT_REGISTRY_BYTES,
+        SUPPORT_REGISTRY_SHA256,
     };
     use crate::ErrorCode;
+
+    /// Every recorded sibling basis admits the canonical execution
+    /// artifact, the 0.2.9 loader-face basis included: a table row with
+    /// any of these values must load and resolve, not be refused as an
+    /// unknown basis.
+    #[test]
+    fn alias_admission_accepts_every_recorded_basis() {
+        for basis in [
+            "identical",
+            "identical_source",
+            "equivalent_canonicalisation",
+            "equivalent_serialisation",
+            "equivalent_loader_face",
+        ] {
+            assert!(admitted_alias_basis(basis), "{basis} must be admitted");
+        }
+    }
+
+    /// A basis outside the recorded vocabulary never admits: a widened
+    /// or damaged table cannot widen admission silently.
+    #[test]
+    fn alias_admission_refuses_an_unrecorded_basis() {
+        for basis in ["", "equivalent", "loader_face", "equivalent_loader_face2"] {
+            assert!(!admitted_alias_basis(basis), "{basis:?} must not admit");
+        }
+    }
 
     /// A judged row carrying one feature list, with every other axis
     /// equal to the build under test: the divergence reporter only ever

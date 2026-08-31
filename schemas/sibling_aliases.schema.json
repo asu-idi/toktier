@@ -50,7 +50,8 @@
         "identical",
         "identical_source",
         "equivalent_canonicalisation",
-        "equivalent_serialisation"
+        "equivalent_serialisation",
+        "equivalent_loader_face"
       ]
     },
     "generated_by": {

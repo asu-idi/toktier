@@ -39,6 +39,7 @@ ALIAS_BASES = frozenset(
         "identical_source",
         "equivalent_canonicalisation",
         "equivalent_serialisation",
+        "equivalent_loader_face",
     }
 )
 

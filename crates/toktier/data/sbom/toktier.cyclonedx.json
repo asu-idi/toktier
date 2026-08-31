@@ -434,11 +434,11 @@
       "version": "1.0.4"
     },
     {
-      "bom-ref": "pkg:cargo/chacha20@0.10.1",
+      "bom-ref": "pkg:cargo/chacha20@0.10.2",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "d524456ba66e72eb8b115ff89e01e497f8e6d11d78b70b1aa13c0fbd97540a81"
+          "content": "65c35e4b699c7e15ccbe7ee35c005e4fc0a278d22238a2857e6ce2dadeda1b06"
         }
       ],
       "licenses": [
@@ -453,9 +453,9 @@
           "value": "registry+https://github.com/rust-lang/crates.io-index"
         }
       ],
-      "purl": "pkg:cargo/chacha20@0.10.1",
+      "purl": "pkg:cargo/chacha20@0.10.2",
       "type": "library",
-      "version": "0.10.1"
+      "version": "0.10.2"
     },
     {
       "bom-ref": "pkg:cargo/compact_str@0.9.1",
@@ -5323,7 +5323,7 @@
         "pkg:cargo/cpufeatures@0.3.0",
         "pkg:cargo/rand_core@0.10.1"
       ],
-      "ref": "pkg:cargo/chacha20@0.10.1"
+      "ref": "pkg:cargo/chacha20@0.10.2"
     },
     {
       "dependsOn": [
@@ -5901,7 +5901,7 @@
     },
     {
       "dependsOn": [
-        "pkg:cargo/chacha20@0.10.1",
+        "pkg:cargo/chacha20@0.10.2",
         "pkg:cargo/getrandom@0.4.3",
         "pkg:cargo/rand_core@0.10.1"
       ],

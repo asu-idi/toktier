@@ -26,10 +26,22 @@ configuration-side added token are the two provably the same function;
 the gate re-verifies that premise, then compares the reference backend
 and the fallback loader object with the oracle on a CJK-heavy probe set.
 
+``--fingerprints`` adds the second computation behind the capability
+identities. Since 0.2.9 the registry records both capability
+fingerprints on the loader-face document
+(``docs/contracts/registry.md`` Section 1), and the values are written
+once by maintainer tooling. This step recomputes them here, on every
+cached family, and requires them to equal the ids the shipped registry
+records -- so a moved loader, a changed artifact, or a hand-edited table
+is caught by the release gates rather than by a reader. Families whose
+artifact is not cached on this machine are reported and skipped, exactly
+like the probe comparison above.
+
 Usage::
 
     python tools/check_loader_face_alignment.py
     python tools/check_loader_face_alignment.py --loaderless-dir <dir>
+    python tools/check_loader_face_alignment.py --fingerprints
 """
 
 from __future__ import annotations
@@ -190,6 +202,82 @@ def check_loaderless(root: Path) -> tuple[int, dict[str, object]]:
     return (1 if mismatches else 0), reading
 
 
+def check_fingerprints() -> tuple[int, dict[str, object]]:
+    """Recompute the capability ids of every cached family on the face.
+
+    The registry records the values a maintainer run computed; this
+    recomputes them from the artifact directories present on this
+    machine and compares. A family whose artifact is not cached cannot
+    be checked and is listed rather than passed over silently.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from artifact_identity import added_frontend_fingerprint, pipeline_fingerprint
+
+    from toktier import Config
+    from toktier.artifacts import ArtifactManifest
+    from toktier.artifacts.tables import ARTIFACT_MANIFEST
+    from toktier.backends.loader_face import (
+        live_tokenizer_json,
+        load_live_tokenizer,
+    )
+    from toktier.paths import artifact_cache_dir
+    from toktier.routing.tables import SUPPORT_REGISTRY
+
+    registry = json.loads(SUPPORT_REGISTRY.read_text(encoding="utf-8"))
+    pipelines = {
+        row["pipeline_id"]: row["pipeline_fingerprint"]
+        for row in registry["pipelines"]
+    }
+    frontends = {
+        row["added_frontend_id"]: row["added_frontend_fingerprint"]
+        for row in registry["added_frontends"]
+    }
+    config = Config(offline=True)
+    manifest = ArtifactManifest.load(ARTIFACT_MANIFEST)
+    cache = artifact_cache_dir(config)
+
+    checked: list[str] = []
+    absent: list[str] = []
+    mismatches: list[dict[str, object]] = []
+    for row in registry["artifacts"]:
+        family = str(row["family"])
+        entry = manifest.entries.get(family)
+        if entry is None:
+            absent.append(family)
+            continue
+        root = cache / entry.directory_name
+        if not (root / "tokenizer.json").is_file():
+            absent.append(family)
+            continue
+        face = json.loads(live_tokenizer_json(load_live_tokenizer(root)))
+        observed = {
+            "pipeline": pipeline_fingerprint(face),
+            "added_frontend": added_frontend_fingerprint(face),
+        }
+        recorded = {
+            "pipeline": pipelines.get(row["pipeline_id"]),
+            "added_frontend": frontends.get(row["added_frontend_id"]),
+        }
+        if observed != recorded:
+            mismatches.append(
+                {"family": family, "recorded": recorded, "recomputed": observed}
+            )
+        else:
+            checked.append(family)
+
+    reading: dict[str, object] = {
+        "checked": checked,
+        "absent": absent,
+        "mismatches": mismatches,
+    }
+    if mismatches:
+        return 1, reading
+    if not checked:
+        reading["skipped"] = "no artifact of the registry is cached here"
+        return ABSENT, reading
+    return 0, reading
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Loader-face alignment gate over real artifacts."
@@ -201,6 +289,14 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Frozen artifact directory with an unresolvable loader class.",
     )
+    parser.add_argument(
+        "--fingerprints",
+        action="store_true",
+        help=(
+            "Recompute the capability fingerprints of every cached family "
+            "on the loader face and compare them with the shipped registry."
+        ),
+    )
     arguments = parser.parse_args(argv)
     codes = []
     code, reading = check_family(arguments.family)
@@ -208,6 +304,10 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(reading, ensure_ascii=False))
     if arguments.loaderless_dir is not None:
         code, reading = check_loaderless(arguments.loaderless_dir)
+        codes.append(code)
+        print(json.dumps(reading, ensure_ascii=False))
+    if arguments.fingerprints:
+        code, reading = check_fingerprints()
         codes.append(code)
         print(json.dumps(reading, ensure_ascii=False))
     if 1 in codes:

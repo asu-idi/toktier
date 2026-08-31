@@ -71,7 +71,14 @@ def _install_resolver(
 
 @pytest.mark.parametrize(
     "basis",
-    ["equivalent_serialisation", "equivalent_canonicalisation"],
+    [
+        "equivalent_serialisation",
+        "equivalent_canonicalisation",
+        # Since 0.2.9: two artifacts that materialize the same loader face
+        # are one certified object, so this basis routes exactly like the
+        # other two -- admitted, executing the canonical anchor's bytes.
+        "equivalent_loader_face",
+    ],
 )
 def test_registered_equivalence_uses_the_canonical_artifact(
     rig: Rig,

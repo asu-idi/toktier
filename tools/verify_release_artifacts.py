@@ -57,7 +57,7 @@ def verify_metadata(raw: bytes) -> None:
     a gate being tested are two different things.
     """
     metadata = BytesParser(policy=default).parsebytes(raw)
-    if metadata["Name"] != "toktier" or metadata["Version"] != "0.2.8":
+    if metadata["Name"] != "toktier" or metadata["Version"] != "0.2.9":
         _fail("wheel metadata has the wrong distribution identity")
     requirements = metadata.get_all("Requires-Dist", failobj=[])
     if any(re.match(r"(?i)^gigatoken(?:\s|\[|;|$)", item) for item in requirements):

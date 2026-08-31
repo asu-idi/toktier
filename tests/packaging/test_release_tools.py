@@ -141,7 +141,7 @@ def test_requirement_key_reads_both_marker_spellings() -> None:
 REAL_WHEEL_METADATA = b"""\
 Metadata-Version: 2.4
 Name: toktier
-Version: 0.2.8
+Version: 0.2.9
 Classifier: Programming Language :: Rust
 Requires-Dist: tokenizers==0.22.2
 Requires-Dist: transformers==4.57.6

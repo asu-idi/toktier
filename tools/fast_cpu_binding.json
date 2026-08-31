@@ -28,9 +28,9 @@
   "legal": {
     "sbom_path": "packaging/fast_cpu/gigatoken.cyclonedx.json",
     "sbom_distribution_path": ".dist-info/sboms/gigatoken.cyclonedx.json",
-    "sbom_sha256": "1ac7c4d8d3ee1636cd01b8032020606f83b5f381272768f44de9030849a83ba6",
+    "sbom_sha256": "640c64bcc9be47f63520846d9a3ebc375bfb9b810cb3e5dbabe898a9ffcd7adb",
     "license_bundle_path": "packaging/fast_cpu/THIRD_PARTY_LICENSES-gigatoken.txt",
-    "license_bundle_sha256": "f78a05a6e439d0936e131736d6ea678c0b521f7596b846cc8c3aa9b31f1fc231"
+    "license_bundle_sha256": "5f8aef8bbc7b9442508bcd2232a8fae88111ac3d80d7abe8f499833258d9a637"
   },
   "lineage": {
     "campaign_id": "gigatoken-pinned-differential-v1",

@@ -41,6 +41,43 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 
 ## 最新动态
 
+- **2026.08.31** 🚀 **toktier 0.2.9** 发布——两个能力指纹现在都在钉住版 loader
+  物化出的 loader 面上计算，而不再在 artifact 文件上计算，因此能力 id 指称的
+  正是当初取认证读数的那份文档。随包注册表有六格因此移动：五个 `pipeline.*`
+  id，以及 `qwen3_5_08b` 的 `added-frontend.*` id；新旧对照表见发布说明。
+  对外返回的 id 在任何随包 artifact 的任何输入上都没有变化，`artifact_sha256`
+  仍是认证查询的键，两侧运行时都不会重算指纹。在这同一张 loader 面上，
+  `Qwen/Qwen3.8-27B` 与 `Qwen/Qwen3.8-Flash-Next` 现在可经 `from_pretrained()`
+  按内容准入到 `qwen3_5_08b` 锚点，并以第五种 sibling basis
+  `equivalent_loader_face` 记录（注册表 215 条、214 个 sibling、208 条随包）；
+  没有新增第十六个 family id，因此 `load("qwen3_8_27b")` 仍报
+  `ARTIFACT_NOT_FOUND`。本版还修复了已发布的 0.2.8 同样带有的一个缺陷：
+  随包 artifact 清单只点名 `tokenizer.json`，因此由 `artifacts fetch` 从零建起
+  的缓存缺少声明 `qwen3_5_08b` 那七个新增 token 的 sidecar（id 248070-248076，
+  其中 `<tts_pad>` 为 248072），于是 `toktier.load("qwen3_5_08b")` 会
+  fail-closed 报 `ARTIFACT_HASH_MISMATCH`，reason 为
+  `config_added_tokens_mismatch`。清单现在钉住 loader 面的完整输入闭包，由 15
+  个文件行扩到 46 个；这些分组是实测得出而非假定的，并通过"仅从记录下来的分组
+  重新物化"得到验证。离线部署因此需要在升级前先把这套更宽的文件集备好：例如
+  `qwen3_8b` 由一个文件变为三个。联网主机会在升级后第一次 `load()` 时自行
+  修复；离线主机则会报 `ARTIFACT_NOT_FOUND`，而 `toktier artifacts fetch
+  <family> --force` 需要网络。离线路径是：在一台联网的 0.2.9 主机上执行
+  `toktier artifacts export <family> --out <family>.tar`，再在离线主机上执行
+  `toktier artifacts import`——请先把已有的别名目录移开，否则导入会在那棵更旧
+  更小的树上报 `ALIAS_CONFLICT`。0.2.8 写下的持久 session store 会在打开时被
+  拒绝并报 `SESSION_STATE_MISMATCH`，原因与 0.2.8 当初拒绝 0.2.7 的 store 相同：
+  请将 `store=` 指向新目录并重放 transcript。其余较小的变化：导入现在会清掉
+  校验标记自己遗留的临时文件，而不再在它上面拒绝；既无 `config.json` 也无
+  `tokenizer_config.json` 的目录改为直接按 file-only 物化，不再交给会从目录
+  路径子串猜 loader 类的那条路径，因此解析结果不再取决于缓存放在哪里；
+  `doctor` 在给出 `automatic_effective_backend` 时会读取引擎绑定，并点名它所
+  拒绝的 CPU 车道；support-registry schema 删去两个从未被任何文档填写过的可选
+  carry-over 字段；`chacha20` 移到 0.10.2，即 crates.io 未撤回的那个版本。
+  注册表 schema 版本仍为 1，指纹的 preimage 与 domain tag 也没有变化，不过刚
+  点名的那两处 JSON 形状——sibling `basis` 词表与该 schema——确实在这个轴下发生
+  了移动。`ALIAS_CONFLICT` 错误码及其 details、store 格式、随包发布的 fatbin
+  与 kernel ABI 都没有变化。详见
+  [v0.2.9 发布说明](docs/releases/v0.2.9.md)（英文）。
 - **2026.08.30** 🚀 **toktier 0.2.8** 发布——Python 侧的认证主语现在是 loader
   面：`tokenizer.json` 加上钉住版 `transformers.AutoTokenizer` 物化出的
   config-only 新增 token。`qwen3_5_08b` 的七个 config-only 字面量（id

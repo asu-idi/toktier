@@ -45,6 +45,51 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
 
 ## News
 
+- **2026.08.31** 🚀 **toktier 0.2.9** released — both capability fingerprints
+  are now computed on the loader face the pinned loader materializes rather
+  than on the artifact file, so a capability id names the document the
+  certification readings were taken against. Six cells of the shipped registry
+  move — five `pipeline.*` ids and the `added-frontend.*` id of `qwen3_5_08b`
+  — and the release notes map old to new; no served id changes on any input
+  over any packaged artifact, `artifact_sha256` still keys every certification
+  lookup, and neither runtime recomputes a fingerprint. On that shared face
+  `Qwen/Qwen3.8-27B` and `Qwen/Qwen3.8-Flash-Next` are admitted by content
+  through `from_pretrained()` onto the `qwen3_5_08b` anchor, recorded on a
+  fifth sibling basis `equivalent_loader_face` (215 registry rows, 214
+  siblings, 208 packaged); no sixteenth family id is added, so
+  `load("qwen3_8_27b")` still reports `ARTIFACT_NOT_FOUND`. This release also
+  fixes a defect the published 0.2.8 carries: the shipped artifact manifest
+  named only `tokenizer.json`, so a cache built from nothing by `artifacts
+  fetch` lacked the sidecar that declares the seven added tokens of
+  `qwen3_5_08b` (ids 248070-248076, `<tts_pad>` at 248072), and
+  `toktier.load("qwen3_5_08b")` failed closed with `ARTIFACT_HASH_MISMATCH`,
+  reason `config_added_tokens_mismatch`. The manifest now pins the loader
+  face's whole input closure, 15 file lines to 46, measured rather than assumed
+  and proved by rematerializing from the recorded group alone. An offline
+  deployment wants that wider set staged before it upgrades: `qwen3_8b`, for
+  one, goes from one file to three. A connected host repairs itself on the
+  first `load()`; an offline host raises `ARTIFACT_NOT_FOUND`, and `toktier
+  artifacts fetch <family> --force` needs the network. Its route is `toktier
+  artifacts export <family> --out <family>.tar` on a connected 0.2.9 host, then
+  `toktier artifacts import` on the offline one — move the existing alias
+  directory aside first, or the import answers `ALIAS_CONFLICT` over the older,
+  smaller tree already there. A persistent session store written by 0.2.8 is
+  refused at open with `SESSION_STATE_MISMATCH`, as 0.2.8 was for 0.2.7 and for
+  the same reason: point `store=` at a new directory and replay the transcript.
+  Smaller movements: an import clears the verified marker's own leftover
+  temporary instead of refusing over it; a directory holding neither
+  `config.json` nor `tokenizer_config.json` is materialized file-only rather
+  than through a loader class guessed from the directory path, so resolution no
+  longer depends on where the cache sits; `doctor` reads the engine binding for
+  `automatic_effective_backend` and names the CPU lane it refuses; the
+  support-registry schema drops two optional carry-over fields no document ever
+  carried; and `chacha20` moves to 0.10.2, the version crates.io has not
+  withdrawn. The registry schema version stays 1 and the fingerprint preimages
+  and domain tags are unchanged, though the two JSON shapes just named — the
+  sibling `basis` vocabulary and that schema — do move under it. The
+  `ALIAS_CONFLICT` code and its details, the store format, the shipped fatbin,
+  and the kernel ABI are unchanged. See the
+  [v0.2.9 release notes](docs/releases/v0.2.9.md).
 - **2026.08.30** 🚀 **toktier 0.2.8** released — on the Python face the
   certified subject is now the loader face: `tokenizer.json` plus the
   configuration-only added tokens that the pinned

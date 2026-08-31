@@ -12,6 +12,10 @@ the executed object describe the same added-token vocabulary. For an
 artifact whose ``tokenizer_config.json`` declares no added token beyond the
 artifact file, the artifact document already is the loader face's added-token
 vocabulary and is executed as written, without importing ``transformers``.
+A directory carrying no loader configuration file at all is materialized as
+the file-only face directly, never through a tokenizer class inferred from
+the directory path (:data:`LOADER_CONFIGURATION_FILES`), so the loader face
+is the same object wherever the verified bytes sit.
 
 This module is the one place that answers three questions the two backends
 must answer identically:
@@ -44,6 +48,7 @@ from .protocol import TOKENIZER_FILE
 
 __all__ = [
     "CONFIG_ADDED_TOKENS_MISMATCH",
+    "LOADER_CONFIGURATION_FILES",
     "TOKENIZER_CONFIG_FILE",
     "config_added_token_rows",
     "config_added_tokens_sha256",
@@ -56,6 +61,15 @@ __all__ = [
 #: Name of the loader-side configuration sidecar; the file that can
 #: declare added tokens the artifact itself does not carry.
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
+
+#: Configuration files the pinned loader reads to choose a tokenizer
+#: class from content. When neither is present the loader's remaining
+#: rule infers a class from substrings of the directory *path*, which
+#: would make the materialized face depend on where the bytes sit
+#: rather than on what they are. Such a directory is therefore
+#: materialized as the file-only face directly (see
+#: :func:`load_live_tokenizer`).
+LOADER_CONFIGURATION_FILES = ("config.json", TOKENIZER_CONFIG_FILE)
 
 #: Named reason recorded when the observed configuration-side added-token
 #: subset does not match the subset the certification record declared.
@@ -236,25 +250,42 @@ def load_live_tokenizer(root: Path) -> object:
     makes configuration-only added tokens visible; the engine is then
     handed the live object, never a path.
 
-    When the pinned loader cannot construct the object at all, the
-    documented fallback is a ``PreTrainedTokenizerFast`` over the
-    artifact file alone. The case this fallback exists for is a
-    configuration naming a loader class the installed ``transformers``
-    does not know (a ``tokenizer_class`` from a newer release, say), but
-    the cause of the construction failure is not classified: every
-    failure reaches the same branch. The one condition tested before the
-    fallback is taken is the one the equivalence rests on -- the
-    configuration-side added-token subset is empty, which is exactly
-    when the file-only face and the loader face are provably the same
-    function, since a subset the artifact file does not carry is what a
-    file-only construction cannot see. Over an artifact with a non-empty
-    subset the original loading error propagates instead (and surfaces
-    as a recoverable fault, so the input runs on the reference backend).
+    A directory carrying none of the loader configuration files
+    (:data:`LOADER_CONFIGURATION_FILES`) is materialized as a
+    ``PreTrainedTokenizerFast`` over the artifact file directly, without
+    consulting ``AutoTokenizer``. With no configuration to read, the
+    loader's remaining resolution rule infers a tokenizer class from
+    substrings of the directory path, so the face it builds would depend
+    on where the bytes sit rather than on what they are. Such a
+    directory also cannot declare a configuration-side added token, so
+    the file-only face already is the loader face -- the same degenerate
+    form the fallback below produces, reached without the detour.
+
+    When a configuration file is present but the pinned loader cannot
+    construct the object, the documented fallback is a
+    ``PreTrainedTokenizerFast`` over the artifact file alone. The case
+    this fallback exists for is a configuration naming a loader class
+    the installed ``transformers`` does not know (a ``tokenizer_class``
+    from a newer release, say), but the cause of the construction
+    failure is not classified: every failure reaches the same branch.
+    The one condition tested before the fallback is taken is the one the
+    equivalence rests on -- the configuration-side added-token subset is
+    empty, which is exactly when the file-only face and the loader face
+    are provably the same function, since a subset the artifact file
+    does not carry is what a file-only construction cannot see. Over an
+    artifact with a non-empty subset the original loading error
+    propagates instead (and surfaces as a recoverable fault, so the
+    input runs on the reference backend).
     ``docs/contracts/facade.md`` Section 5 states the same rule.
     """
     from importlib import import_module
 
     transformers = import_module("transformers")
+    if not any((root / name).is_file() for name in LOADER_CONFIGURATION_FILES):
+        tokenizer: object = transformers.PreTrainedTokenizerFast(
+            tokenizer_file=str(root / TOKENIZER_FILE)
+        )
+        return _require_fast(tokenizer)
     try:
         tokenizer = transformers.AutoTokenizer.from_pretrained(
             str(root), use_fast=True, local_files_only=True
@@ -265,6 +296,11 @@ def load_live_tokenizer(root: Path) -> object:
         tokenizer = transformers.PreTrainedTokenizerFast(
             tokenizer_file=str(root / TOKENIZER_FILE)
         )
+    return _require_fast(tokenizer)
+
+
+def _require_fast(tokenizer: object) -> object:
+    """The engine consumes the fast backend object; refuse anything else."""
     if not getattr(tokenizer, "is_fast", False):
         raise UnsupportedConfig(
             "the loaded tokenizer object is not a fast tokenizer; the "

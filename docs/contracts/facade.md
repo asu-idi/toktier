@@ -362,7 +362,14 @@ fallback is taken is the one the equivalence rests on: the configuration-side
 subset is empty, which is exactly when the file-only face and the loader face
 are provably the same function. The cause of the construction failure is not
 classified, so any failure over an artifact with a non-empty configuration-side
-subset propagates rather than falling back.
+subset propagates rather than falling back. A directory carrying no loader
+configuration file at all (neither ``config.json`` nor
+``tokenizer_config.json``) is materialized file-only directly, without
+consulting the loader: with nothing content-bound to read, the loader's
+remaining rule would infer a tokenizer class from substrings of the
+directory path, and the face would then depend on where the bytes sit.
+Such a directory cannot declare a configuration-side token, so the direct
+construction is the same face the fallback produces (since 0.2.9).
 ``docs/support-matrix.md`` records the one packaged artifact whose two faces
 differ as documents and how its readings carry over. Since 0.2.9 the
 capability ids in the certification registry are computed on this same

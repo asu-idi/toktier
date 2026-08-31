@@ -49,10 +49,15 @@ Every certification claim attaches to one of three identity kinds:
    so an added token the configuration sidecar declares beyond the
    artifact file is part of the fingerprinted surface: the capability id
    and the certification subject describe the same added-token
-   vocabulary. For an artifact whose loader face degrades to the
-   file-only construction, the same rule reads that degenerate face;
-   there is no special case. The encoding and the domain tag are
-   unchanged.
+   vocabulary. For an artifact whose loader face is the file-only
+   construction -- a directory carrying no loader configuration file is
+   materialized that way directly, never through a tokenizer class
+   inferred from the directory path, and a configuration whose named
+   class cannot be constructed degrades to the same face when its
+   configuration-side subset is empty -- the same rule reads that
+   degenerate face; there is no special case, and the face does not
+   depend on where the verified bytes sit. The encoding and the domain
+   tag are unchanged.
 
 Both capability fingerprints are generation-time values: maintainer
 tooling computes them under the locked loader when the registry is

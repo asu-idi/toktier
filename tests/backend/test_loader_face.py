@@ -393,3 +393,67 @@ def test_unknown_loader_class_with_config_tokens_propagates(
     # The original loader error propagates; the fallback that would have
     # silently dropped the configuration-side token is not taken.
     assert not isinstance(caught.value, ArtifactHashMismatch)
+
+
+# ---------------------------------------------------------------------
+# artifacts with no loader configuration file at all
+# ---------------------------------------------------------------------
+
+
+def test_no_configuration_file_materializes_file_only_directly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Neither configuration file present: the loader is never consulted.
+
+    Without a configuration to read, ``AutoTokenizer`` infers a
+    tokenizer class from substrings of the directory path. A verified
+    artifact must materialize to the same face wherever its bytes sit,
+    so the file-only construction is taken directly.
+    """
+    transformers = pytest.importorskip("transformers")
+    artifact = support.write_artifact(
+        tmp_path / "artifact", support.byte_level_document()
+    )
+    consulted: list[tuple[Any, ...]] = []
+    original = transformers.AutoTokenizer.from_pretrained
+
+    def _record(*args: Any, **kwargs: Any) -> Any:
+        consulted.append(args)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", _record)
+    live: Any = load_live_tokenizer(artifact.root)
+    # A raising stub would be swallowed by the fallback's own error
+    # handling, so the proof is a recorded call count, not an exception.
+    assert consulted == []
+    assert type(live).__name__ == "PreTrainedTokenizerFast"
+    crate = tokenizers.Tokenizer.from_file(str(artifact.root / "tokenizer.json"))
+    text = "some text"
+    assert live.encode(text, add_special_tokens=False) == [
+        int(i) for i in crate.encode(text, add_special_tokens=False).ids
+    ]
+
+
+def test_no_configuration_face_does_not_depend_on_the_directory_path(
+    tmp_path: Path,
+) -> None:
+    """The same bytes materialize the same face under any directory name.
+
+    The three names cover the shapes that used to steer the loader's
+    path-name inference: a neutral one, one holding ``opt`` (any
+    directory name carrying that substring does it), and one holding
+    ``bert``. The serialized face must be byte-identical across them.
+    """
+    pytest.importorskip("transformers")
+    from toktier.backends.loader_face import live_tokenizer_json
+
+    document = support.byte_level_document()
+    faces: list[str] = []
+    classes: list[str] = []
+    for name in ("plain", "options_mirror", "bertish"):
+        artifact = support.write_artifact(tmp_path / name / "artifact", document)
+        live: Any = load_live_tokenizer(artifact.root)
+        classes.append(type(live).__name__)
+        faces.append(live_tokenizer_json(live))
+    assert classes == ["PreTrainedTokenizerFast"] * 3
+    assert len(set(faces)) == 1

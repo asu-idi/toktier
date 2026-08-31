@@ -54,7 +54,7 @@ tok.explain()                                # full plan, reasons, counters
   config=None, policy=None, manifest=None, cache_budget_bytes=None,
   repair_backend="auto", gpu_delivery="auto", gpu_min_bytes=65536) ->
   Tokenizer` is the model-repository entry point. The repository id is a
-  lookup hint, never a certification identity. For one of the 212 audited
+  lookup hint, never a certification identity. For one of the 214 audited
   sibling repositories, or for a canonical self-row, omitted `revision`
   selects the recorded revision;
   for a canonical repository it selects the artifact-manifest revision; for

@@ -146,9 +146,9 @@ tok = toktier.from_pretrained("Qwen/Qwen3-0.6B")
 对于已登记的 sibling 或 canonical 仓库，`from_pretrained()` 会下载经审计的
 不可变 revision，对解析出的文件计算 SHA-256，再查询由根摘要校验的
 sibling 注册表（214 个已审计仓库，另加 1 个 canonical 自指条目）。对于未登记的仓库，`from_pretrained()`
-在未显式传入 `revision=` 时解析 `main`。字节完全相同、经 canonicalization
-后等价、序列化等价或 loader 面等价的记录，会通过同一套 CPU/GPU 路由使用
-已经认证的 canonical 工件。已知仓库的字节内容一旦变化，或遇到任何未登记
+在未显式传入 `revision=` 时解析 `main`。字节完全相同、源码级相同、经
+canonicalization 后等价、序列化等价或 loader 面等价的记录，会通过同一套
+CPU/GPU 路由使用已经认证的 canonical 工件。已知仓库的字节内容一旦变化，或遇到任何未登记
 内容，在允许参考实现 fallback 的策略下都会继续使用 HF；
 `REQUIRE_ACCELERATED` 策略则会报错。`explain()["model_resolution"]` 会同时报告
 来源身份和实际执行的 canonical 身份。`load(family)` 仍是直接的 family API，
@@ -344,9 +344,9 @@ maturin build --locked --release
 当前构建信息所使用的逐字节 v1 视图。`compute_identity_v2.py` 仅归一化明确
 列出的工作区版本字段，随后在各自的新域中对同一批 fast-CPU、native-host 与
 Rust-API 覆盖集计算哈希；`--show-diff` 会逐行打印归一化后的内容，便于
-审阅。`tools/dev.py check` 还会拒绝受覆盖的 Rust 或 Python 代码在明确列出
-的构建信息报告位置之外读取包版本，从而确保允许的元数据变化不会影响运行时
-行为。
+审阅。`python3 tools/dev.py check` 还会拒绝受覆盖的 Rust 或 Python 代码在
+明确列出的构建信息报告位置之外读取包版本，从而确保允许的元数据变化不会
+影响运行时行为。
 
 [来源与构建记录](packaging/fast_cpu/README.md)中固定了上游 commit、补丁、Unicode
 数据、编译器和发布参数。运行中的扩展会报告经过域分隔的源码摘要、精确 Rust
@@ -656,8 +656,9 @@ kernel 的批量吞吐，与上表的端到端数据回答的是不同问题，�
 | 结构性排除 | 2 | 记录具体原因 |
 
 [`docs/support-matrix.md`](docs/support-matrix.md) 列出了每个锚点工件、
-SHA-256、后端状态，以及 **214 个已验证模型仓库**；这些仓库使用完全相同或
-仅序列化形式不同的 tokenizer。覆盖关系由 tokenizer 内容决定，而不是仓库名。
+SHA-256、后端状态，以及 **214 个已验证模型仓库**；这些仓库的 tokenizer 与
+已认证工件字节完全相同、源码级相同，或在 canonicalization 后、序列化形式上、
+loader 面上等价。覆盖关系由 tokenizer 内容决定，而不是仓库名。
 `toktier.from_pretrained(repo_id)` 会在运行时落实这条规则：对解析到的文件
 计算哈希，将登记内容映射到 canonical 工件，其他内容继续使用 HF。
 

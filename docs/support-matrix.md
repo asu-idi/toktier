@@ -245,9 +245,11 @@ what this package resolves.
 ## Sibling repositories
 
 Many model repositories ship a tokenizer that is byte-identical to one of the
-anchors above, or identical after JSON canonicalisation, or identical in its
+anchors above, or identical at the upstream source file an anchor is converted
+from, or identical after JSON canonicalisation, or identical in its
 core segments (`model`, `pre_tokenizer`, `normalizer`, `decoder`) while the
-added-token table or chat-template post-processor differs. The generated table
+added-token table or chat-template post-processor differs, or one that
+materializes a loader face byte-identical to the anchor's. The generated table
 records that comparison per repository, using these categories:
 
 | Category | Meaning for coverage |

@@ -177,9 +177,9 @@ sibling registry, which contains 214 audited repositories plus one canonical
 self-row and is itself covered by a root digest.
 For an unknown repository, `from_pretrained()` resolves `main` unless
 `revision=` is passed.
-Byte-identical, canonicalization-equivalent, serialization-equivalent, and
-loader-face-equivalent records run on the already certified canonical artifact
-through the same CPU/GPU router. A known repository whose bytes have changed — and any
+Byte-identical, source-level identical, canonicalization-equivalent,
+serialization-equivalent, and loader-face-equivalent records run on the already
+certified canonical artifact through the same CPU/GPU router. A known repository whose bytes have changed — and any
 unregistered content — stays on HF under policies that permit
 the reference fallback; `REQUIRE_ACCELERATED` raises an error instead. See
 `explain()["model_resolution"]` for both the source identity and the
@@ -392,10 +392,10 @@ The three established identity scripts (`fast_cpu_source_identity.py`,
 byte-exact v1 view used by current build facts. `compute_identity_v2.py` hashes those same fast-CPU,
 native-host, and Rust-API coverage sets under new domains after normalizing
 only the enumerated workspace version fields; `--show-diff` prints every
-normalized line for review. `tools/dev.py check` also rejects package-version
-reads in covered Rust or Python code outside the explicitly enumerated
-build-fact reporting sites, so tolerated metadata changes cannot select
-runtime behavior.
+normalized line for review. `python3 tools/dev.py check` also rejects
+package-version reads in covered Rust or Python code outside the explicitly
+enumerated build-fact reporting sites, so tolerated metadata changes cannot
+select runtime behavior.
 
 The [provenance and build record](packaging/fast_cpu/README.md) pins the
 upstream commit, patch, Unicode inputs, compiler, and release flags. The
@@ -758,8 +758,10 @@ document also shows the regimes where direct use of another engine is faster.
 | Structural exclusions | 2 | reason recorded |
 
 [`docs/support-matrix.md`](docs/support-matrix.md) lists every anchor artifact,
-SHA-256, backend status, and **214 verified model repositories** that share an
-identical or serialization-equivalent tokenizer. Coverage follows tokenizer
+SHA-256, backend status, and **214 verified model repositories** whose
+tokenizer is byte-identical to a certified one, identical at the upstream
+source file it is converted from, or equivalent after canonicalization, in
+serialization form, or on the loader face. Coverage follows tokenizer
 content, not repository naming. `toktier.from_pretrained(repo_id)` enforces
 that rule at runtime: it hashes the resolved file, maps registered content to
 the canonical artifact, and otherwise remains on HF.

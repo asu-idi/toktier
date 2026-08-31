@@ -325,7 +325,11 @@ are provably the same function. The cause of the construction failure is not
 classified, so any failure over an artifact with a non-empty configuration-side
 subset propagates rather than falling back.
 ``docs/support-matrix.md`` records the one packaged artifact whose two faces
-differ as documents and how its readings carry over.
+differ as documents and how its readings carry over. Since 0.2.9 the
+capability ids in the certification registry are computed on this same
+subject: both capability fingerprints read the loader-face document, so the
+certification subject and the capability identity name one object
+(``docs/contracts/registry.md`` Section 1).
 
 The registry-derived ``certification.state`` remains unchanged beside it, and
 its ``reference`` / ``reference_only`` values keep their existing meanings.

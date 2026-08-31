@@ -34,12 +34,31 @@ Every certification claim attaches to one of three identity kinds:
 2. **Pipeline capability identity** -- the pipeline fingerprint
    (`fingerprint.md` Section 5): the core pipeline excluding added tokens.
    Certifies that the accelerated engine implements this pipeline class.
+   Since 0.2.9 the fingerprint is computed on the **loader-face document**
+   -- the tokenizer JSON the pinned loader serializes after materializing
+   the verified artifact directory (`facade.md` Section 5) -- rather than
+   on the artifact file, so the capability id names the same subject the
+   certification readings are taken against. The preimage encoding and the
+   domain tag are unchanged; only the document they read moved.
 3. **Added-frontend capability identity** -- a fingerprint of the
    added-token frontend surface (the added-token table encoding of
    `fingerprint.md` Section 6, hashed with domain tag
    `toktier.added_frontend.v1\0`). Certifies handling of an added-token
    table shape by the added-token frontend (prefilter + literal
-   routing).
+   routing). Since 0.2.9 the table is read from the loader-face document,
+   so an added token the configuration sidecar declares beyond the
+   artifact file is part of the fingerprinted surface: the capability id
+   and the certification subject describe the same added-token
+   vocabulary. For an artifact whose loader face degrades to the
+   file-only construction, the same rule reads that degenerate face;
+   there is no special case. The encoding and the domain tag are
+   unchanged.
+
+Both capability fingerprints are generation-time values: maintainer
+tooling computes them under the locked loader when the registry is
+written, and refuses to write when the installed loader pair is not the
+locked one. The runtime consumes the recorded ids at the sha level only;
+no runtime path, Python or Rust, recomputes a capability fingerprint.
 
 ### 1.1 Routing eligibility (frozen rule)
 
@@ -305,12 +324,20 @@ accounting in `docs/support-matrix.md` counts the 212 siblings only; its
 dated audit equation counts the 210 that were in the snapshot, the other two
 having been published after it.
 
+Since 0.2.9 a fifth basis, `equivalent_loader_face`, admits a repository
+whose audited tokenizer file group materializes, under the pinned loader, a
+loader face byte-identical to the canonical family's (`facade.md` Section
+5): the two artifacts are then two spellings of one certified object and
+hold its capability ids. The audit step behind such a row materializes both
+faces and compares the serializations byte for byte before the row is
+written.
+
 The repository and revision only choose bytes to inspect. Runtime admission
 requires the sha256 of the bytes actually resolved to match a table row (or an
 exact packaged anchor); familiar names with changed bytes do not match. A
-canonicalisation or serialisation match selects and executes the recorded
-canonical anchor so existing backend certificates and binding checks remain
-unchanged. Conflicting digest-to-family mappings, duplicate repositories,
+canonicalisation, serialisation or loader-face match selects and executes the
+recorded canonical anchor so existing backend certificates and binding checks
+remain unchanged. Conflicting digest-to-family mappings, duplicate repositories,
 count drift, malformed identities, or disagreement with the artifact manifest
 raise `REGISTRY_INVALID`.
 

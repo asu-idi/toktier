@@ -150,6 +150,12 @@ taking the fallback, and they refuse it otherwise. They do not classify why
 the construction failed, and do not need to: the equivalence follows from the
 empty subset alone, whatever the cause.
 
+The same limiting case settles when two artifacts materialize byte-identical
+loader faces: the divergence set between the two subjects is empty, so they
+hold the same capability ids (since 0.2.9 computed on that shared face,
+`registry.md` Section 1) and their readings need no carry-over record at all
+-- there is no difference for one to annotate.
+
 ## 4. Add-only record
 
 This section and Section 5 govern the source-identity mechanisms of

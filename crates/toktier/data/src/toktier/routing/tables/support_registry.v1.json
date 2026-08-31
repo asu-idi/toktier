@@ -6,7 +6,7 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:7a5f5956641e4c8b931d990b5b7c6710e3d62a28fdf69b6b074e9750705bebc1",
+  "root_digest": "sha256:29d79fe9d931a0264e6b633f5a054d038a884bb69447517106f3609efb8d9942",
   "oracles": [
     {
       "oracle_id": "tokenizers",
@@ -24,6 +24,11 @@
       "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: ling_3_0_flash."
     },
     {
+      "pipeline_id": "pipeline.244da91e0b85bac5",
+      "pipeline_fingerprint": "244da91e0b85bac5e9f3fcd3e4c29ac58fb12910bacb1e44730509f86507baa8",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: qwen3_5_08b."
+    },
+    {
       "pipeline_id": "pipeline.3d2defaac44dd359",
       "pipeline_fingerprint": "3d2defaac44dd359bb7ddda6719dbe7031c37cf4128d88256a7d7c690a6de54f",
       "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: kimi_k3."
@@ -34,9 +39,9 @@
       "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: glm_5_2."
     },
     {
-      "pipeline_id": "pipeline.59b9c3a611148dad",
-      "pipeline_fingerprint": "59b9c3a611148dade3dd5c21f83db9abf0406a369ed6c1fedc14ad4562249f1b",
-      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: deepseek_v3, deepseek_v4_flash."
+      "pipeline_id": "pipeline.70d78ff23f735b25",
+      "pipeline_fingerprint": "70d78ff23f735b250e3afc54ab3537dddc59911f5f08117a39c7875af6fa14a2",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: minimax_m3."
     },
     {
       "pipeline_id": "pipeline.75aef07b9b165fa7",
@@ -49,14 +54,19 @@
       "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: qwen3_8b."
     },
     {
+      "pipeline_id": "pipeline.9f6d5117c3680d0e",
+      "pipeline_fingerprint": "9f6d5117c3680d0e42619d16a465b12b937e49d06f0f6b1ab38b4e1021502fce",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: deepseek_v3, deepseek_v4_flash."
+    },
+    {
+      "pipeline_id": "pipeline.a4722932ce483dfa",
+      "pipeline_fingerprint": "a4722932ce483dfabdb458ea58a0a6156232eea44087279470c630d653328c1c",
+      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: llama_3_1_8b."
+    },
+    {
       "pipeline_id": "pipeline.b02978f65dde5481",
       "pipeline_fingerprint": "b02978f65dde548132720e5e1d224921f024fd279a407bceaed1a1a113312734",
       "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: hy3."
-    },
-    {
-      "pipeline_id": "pipeline.bc687a3b57eba58b",
-      "pipeline_fingerprint": "bc687a3b57eba58b265c72735c25ba0d7c355985ef23516d002e0c6b201c5e9c",
-      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: qwen3_5_08b."
     },
     {
       "pipeline_id": "pipeline.c1f53da33939f469",
@@ -74,19 +84,9 @@
       "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: ministral_3_8b."
     },
     {
-      "pipeline_id": "pipeline.eb3b41ea275dabaa",
-      "pipeline_fingerprint": "eb3b41ea275dabaa6a8b5b76206ff5945dcfcf22b60ebe4826b72db7faa25e8a",
-      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: minimax_m3."
-    },
-    {
       "pipeline_id": "pipeline.ef65569b2ee98da3",
       "pipeline_fingerprint": "ef65569b2ee98da32f7181f3396cd69f4ca4779613c44670674476a1a869425a",
       "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: gpt_oss_120b."
-    },
-    {
-      "pipeline_id": "pipeline.ff6dd044a1cb9ba5",
-      "pipeline_fingerprint": "ff6dd044a1cb9ba5927beb58b080538dbedf397fad8b6aaf6c4a756ad4abade8",
-      "description": "Core pipeline (normalizer, pre-tokenizer, model, decoder) of: llama_3_1_8b."
     }
   ],
   "added_frontends": [
@@ -94,11 +94,6 @@
       "added_frontend_id": "added-frontend.091f91a7da522aa4",
       "added_frontend_fingerprint": "091f91a7da522aa43082218205f87a0c599b076f3e295b6605c13d78a6e7a611",
       "description": "Added-token table of olmo_3_7b (22 entries)."
-    },
-    {
-      "added_frontend_id": "added-frontend.2ad65676cbf6bb4d",
-      "added_frontend_fingerprint": "2ad65676cbf6bb4d5b1585bad5c58dac9a440daf41871d2d48a35bad590a376f",
-      "description": "Added-token table of qwen3_5_08b (26 entries)."
     },
     {
       "added_frontend_id": "added-frontend.2b0fa8d5e8acac7d",
@@ -124,6 +119,11 @@
       "added_frontend_id": "added-frontend.685a4802a948b81f",
       "added_frontend_fingerprint": "685a4802a948b81fbd82875d4bc258908548ded4506e82530edef616b5b48067",
       "description": "Added-token table of hy3 (818 entries)."
+    },
+    {
+      "added_frontend_id": "added-frontend.6f80a43b9fe6a15f",
+      "added_frontend_fingerprint": "6f80a43b9fe6a15fda93880fd7ad41589ae6cef1801ea74e8f581a78d516cced",
+      "description": "Added-token table of qwen3_5_08b (33 entries)."
     },
     {
       "added_frontend_id": "added-frontend.8212579fa65ce401",
@@ -170,7 +170,7 @@
     {
       "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
       "family": "deepseek_v3",
-      "pipeline_id": "pipeline.59b9c3a611148dad",
+      "pipeline_id": "pipeline.9f6d5117c3680d0e",
       "added_frontend_id": "added-frontend.39dc60b16a182c81",
       "oracle_id": "tokenizers",
       "suite_version": "gpu-e2e-differential-v1",
@@ -294,7 +294,7 @@
     {
       "artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
       "family": "deepseek_v4_flash",
-      "pipeline_id": "pipeline.59b9c3a611148dad",
+      "pipeline_id": "pipeline.9f6d5117c3680d0e",
       "added_frontend_id": "added-frontend.58c2cb163f177e71",
       "oracle_id": "tokenizers",
       "suite_version": "gpu-e2e-differential-v1",
@@ -1114,7 +1114,7 @@
     {
       "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
       "family": "llama_3_1_8b",
-      "pipeline_id": "pipeline.ff6dd044a1cb9ba5",
+      "pipeline_id": "pipeline.a4722932ce483dfa",
       "added_frontend_id": "added-frontend.8212579fa65ce401",
       "oracle_id": "tokenizers",
       "suite_version": "gpu-e2e-differential-v1",
@@ -1238,7 +1238,7 @@
     {
       "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
       "family": "minimax_m3",
-      "pipeline_id": "pipeline.eb3b41ea275dabaa",
+      "pipeline_id": "pipeline.70d78ff23f735b25",
       "added_frontend_id": "added-frontend.2b0fa8d5e8acac7d",
       "oracle_id": "tokenizers",
       "suite_version": "gpu-e2e-differential-v1",
@@ -1734,8 +1734,8 @@
     {
       "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
       "family": "qwen3_5_08b",
-      "pipeline_id": "pipeline.bc687a3b57eba58b",
-      "added_frontend_id": "added-frontend.2ad65676cbf6bb4d",
+      "pipeline_id": "pipeline.244da91e0b85bac5",
+      "added_frontend_id": "added-frontend.6f80a43b9fe6a15f",
       "oracle_id": "tokenizers",
       "suite_version": "gpu-e2e-differential-v1",
       "evidence_id": "ev-main-corpus-v1",
@@ -2015,6 +2015,12 @@
       "note": "Judged together in the differential campaign for: ling_3_0_flash."
     },
     {
+      "pipeline_id": "pipeline.244da91e0b85bac5",
+      "added_frontend_id": "added-frontend.6f80a43b9fe6a15f",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: qwen3_5_08b."
+    },
+    {
       "pipeline_id": "pipeline.3d2defaac44dd359",
       "added_frontend_id": "added-frontend.b0dac9b9e7956b0b",
       "evidence_id": "ev-kimi-band-v1",
@@ -2027,16 +2033,10 @@
       "note": "Judged together in the differential campaign for: glm_5_2."
     },
     {
-      "pipeline_id": "pipeline.59b9c3a611148dad",
-      "added_frontend_id": "added-frontend.39dc60b16a182c81",
+      "pipeline_id": "pipeline.70d78ff23f735b25",
+      "added_frontend_id": "added-frontend.2b0fa8d5e8acac7d",
       "evidence_id": "ev-main-corpus-v1",
-      "note": "Judged together in the differential campaign for: deepseek_v3."
-    },
-    {
-      "pipeline_id": "pipeline.59b9c3a611148dad",
-      "added_frontend_id": "added-frontend.58c2cb163f177e71",
-      "evidence_id": "ev-main-corpus-v1",
-      "note": "Judged together in the differential campaign for: deepseek_v4_flash."
+      "note": "Judged together in the differential campaign for: minimax_m3."
     },
     {
       "pipeline_id": "pipeline.75aef07b9b165fa7",
@@ -2051,16 +2051,28 @@
       "note": "Judged together in the differential campaign for: qwen3_8b."
     },
     {
+      "pipeline_id": "pipeline.9f6d5117c3680d0e",
+      "added_frontend_id": "added-frontend.39dc60b16a182c81",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: deepseek_v3."
+    },
+    {
+      "pipeline_id": "pipeline.9f6d5117c3680d0e",
+      "added_frontend_id": "added-frontend.58c2cb163f177e71",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: deepseek_v4_flash."
+    },
+    {
+      "pipeline_id": "pipeline.a4722932ce483dfa",
+      "added_frontend_id": "added-frontend.8212579fa65ce401",
+      "evidence_id": "ev-main-corpus-v1",
+      "note": "Judged together in the differential campaign for: llama_3_1_8b."
+    },
+    {
       "pipeline_id": "pipeline.b02978f65dde5481",
       "added_frontend_id": "added-frontend.685a4802a948b81f",
       "evidence_id": "ev-main-corpus-v1",
       "note": "Judged together in the differential campaign for: hy3."
-    },
-    {
-      "pipeline_id": "pipeline.bc687a3b57eba58b",
-      "added_frontend_id": "added-frontend.2ad65676cbf6bb4d",
-      "evidence_id": "ev-main-corpus-v1",
-      "note": "Judged together in the differential campaign for: qwen3_5_08b."
     },
     {
       "pipeline_id": "pipeline.c1f53da33939f469",
@@ -2081,22 +2093,10 @@
       "note": "Judged together in the differential campaign for: ministral_3_8b."
     },
     {
-      "pipeline_id": "pipeline.eb3b41ea275dabaa",
-      "added_frontend_id": "added-frontend.2b0fa8d5e8acac7d",
-      "evidence_id": "ev-main-corpus-v1",
-      "note": "Judged together in the differential campaign for: minimax_m3."
-    },
-    {
       "pipeline_id": "pipeline.ef65569b2ee98da3",
       "added_frontend_id": "added-frontend.b7e34a654da9e67e",
       "evidence_id": "ev-main-corpus-v1",
       "note": "Judged together in the differential campaign for: gpt_oss_120b."
-    },
-    {
-      "pipeline_id": "pipeline.ff6dd044a1cb9ba5",
-      "added_frontend_id": "added-frontend.8212579fa65ce401",
-      "evidence_id": "ev-main-corpus-v1",
-      "note": "Judged together in the differential campaign for: llama_3_1_8b."
     }
   ],
   "runtime_builds": [

@@ -459,9 +459,10 @@ SHA-256, and nothing undeclared beyond the verification marker toktier writes
 there itself — the import is idempotent and returns the
 directory that is already there, which is what running the recipe twice, or
 importing on the connected host where `fetch` just placed the same bytes,
-reaches. If it holds anything else the import stops and names the first file
-that does not match, rather than replacing bytes someone else may be using.
-The bundle itself verified either way.
+reaches. If it holds anything else the import stops and names one file, rather
+than replacing bytes someone else may be using: an entry the bundle does not
+declare, at any depth, if the tree holds one, and otherwise the first declared
+file that is missing or does not match. The bundle itself verified either way.
 
 This recipe transports tokenizer artifacts, and only those. A genuinely
 disconnected host also needs the TokTier wheel and every dependency wheel

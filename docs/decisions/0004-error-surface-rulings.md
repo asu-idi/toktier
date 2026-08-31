@@ -55,3 +55,20 @@
    needs the one-line update, as the 0.2.4 path-policy move did.
    Adding a code is a permitted minor-release extension by the same
    reasoning as item 1.
+6. **The path an `ALIAS_CONFLICT` names is chosen in two phases**
+   (added 2026-08-31, released in 0.2.9) - Item 5 describes `path` as
+   naming "the first file that does not match". That is the outcome
+   only for a tree whose sole disagreement is a declared file. The rule
+   both faces implement, which `bundle.rs::verify_installed` states in
+   its own rustdoc, has a phase in front of that one: anything the tree
+   holds that the bundle does not declare -- an undeclared file, a
+   symbolic link, a special file, at any depth -- is named first, and
+   only a tree with no such entry is searched for the first declared
+   path that is missing or does not match. Within either phase the
+   relative path that sorts first is the one named, so the same tree
+   names the same file on every run and on both faces. This corrects
+   item 5's description rather than changing anything: no code moved
+   for it, and the `ALIAS_CONFLICT` code, the `AliasConflict` class
+   name and the `details` key list are untouched.
+   `docs/contracts/errors.md`, `docs/contracts/facade.md` and
+   `docs/rust-lifecycle.md` state the rule in this form.

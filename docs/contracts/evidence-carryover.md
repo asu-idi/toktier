@@ -154,7 +154,12 @@ The same limiting case settles when two artifacts materialize byte-identical
 loader faces: the divergence set between the two subjects is empty, so they
 hold the same capability ids (since 0.2.9 computed on that shared face,
 `registry.md` Section 1) and their readings need no carry-over record at all
--- there is no difference for one to annotate.
+-- there is no difference for one to annotate. That is why the `carryover`
+node carries no cross-artifact members: 0.2.8 reserved two (the artifact
+whose readings were carried, and the readings the argument rested on) for a
+cross-artifact form that this limiting case makes unnecessary; neither was
+ever written, and 0.2.9 removes them. A future need for them is an additive
+change.
 
 ## 4. Add-only record
 

@@ -149,6 +149,25 @@ def test_unknown_carryover_members_are_rejected() -> None:
     assert _validate(_with_sections(carryover__reason="freeform"))
 
 
+def test_the_removed_cross_artifact_members_are_no_longer_accepted() -> None:
+    """0.2.9 removed two members 0.2.8 had reserved and nothing wrote.
+
+    Loader-face equality makes the cross-artifact form unnecessary (two
+    artifacts with equal faces have an empty divergence set and hold the
+    same capability ids), so the reservation went rather than staying as
+    dead configuration. They are rejected like any other unknown member,
+    which is what keeps them from creeping back in unvalidated.
+    """
+    assert _validate(_with_sections(carryover__from_artifact_sha256="a" * 64))
+    assert _validate(
+        _with_sections(
+            carryover__supporting_readings=[
+                {"path": "readings/example.json", "sha256": "b" * 64}
+            ]
+        )
+    )
+
+
 def test_config_added_tokens_needs_a_positive_count() -> None:
     assert _validate(_with_sections(config_added_tokens__count=0))
 

@@ -623,32 +623,6 @@
           "type": "string",
           "minLength": 1
         },
-        "from_artifact_sha256": {
-          "description": "For a cross-artifact carry-over: the artifact whose in-archive readings are being carried. Absent when the readings belong to this artifact and only the judge definition moved.",
-          "$ref": "#/$defs/sha256_hex"
-        },
-        "supporting_readings": {
-          "description": "Additional shipped readings the equivalence argument rests on (for example an added-table comparison), each named by path and digest.",
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "path",
-              "sha256"
-            ],
-            "properties": {
-              "path": {
-                "type": "string",
-                "pattern": "^readings/[^#]+\\.json$"
-              },
-              "sha256": {
-                "$ref": "#/$defs/sha256_hex"
-              }
-            }
-          }
-        },
         "divergence_set": {
           "type": "array",
           "minItems": 1,

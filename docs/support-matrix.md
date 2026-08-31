@@ -768,7 +768,8 @@ is not byte-identical to the `qwen3_5_08b` anchor file. What is byte-identical
 is the loader face: the pinned loader serializes their audited file group and
 the anchor's to equal bytes, which the maintainer materialization check
 re-establishes from the frozen directories before such a row is written
-(basis `equivalent (loader face)`, since 0.2.9). The Qwen3.8 section below
+(basis `equivalent (loader face)`, since 0.2.9). The section
+[The Qwen3.8 tokenizer](#the-qwen38-tokenizer-two-more-spellings-of-a-certified-object)
 records what was measured and what follows.
 
 These rows are in the shipped registry, so the packaged counts include them:
@@ -782,17 +783,17 @@ records a comparison made on a date, not a promise about the repository's
 current contents. What the package enforces is the digest comparison it
 performs at load time.
 
-### Examined and not certified: the Qwen3.8 tokenizer
+### The Qwen3.8 tokenizer: two more spellings of a certified object
 
 `Qwen/Qwen3.8-27B` and `Qwen/Qwen3.8-Flash-Next` ship one and the same
 tokenizer, `tokenizer.json` sha256 `0997f410c57a` (12,809,320 bytes),
-examined on 2026-08-27. It is recorded here rather than counted, because it is
-not certified in this release and the package routes it accordingly.
+examined on 2026-08-27. Since 0.2.9 both are admitted as siblings of
+`qwen3_5_08b` on the loader-face basis, and the paragraphs below say exactly
+what that rests on.
 
 What was established. Its `model`, `normalizer`, `pre_tokenizer`,
 `post_processor` and `decoder` sections are equal to the certified
-`qwen3_5_08b` artifact -- the two share the pipeline capability
-`pipeline.bc687a3b57eba58b` -- and its `vocab.json` and `merges.txt` are
+`qwen3_5_08b` artifact, and its `vocab.json` and `merges.txt` are
 byte-identical to that family's. The two `tokenizer.json` documents differ in
 one array: the added-token table, 33 entries here against 26 there, the seven
 extra ones being audio and text-to-speech specials at ids 248070-248076.
@@ -807,34 +808,32 @@ serializes them to byte-equal tokenizer JSON, and the resulting tokenizers
 answer identically. The difference between the two artifacts is where the
 seven rows are written, not what the object is.
 
-What follows from that, and what does not. What the reader can rely on is the
-equality just stated: on the loader face these two artifacts are one function,
-and this page's `qwen3_5_08b` readings describe that function. What does not
-follow is a coverage claim for `Qwen3.8`. Coverage is recorded per artifact
-and keyed by the artifact file, and every machine record that would have to
-name this one -- the capability fingerprints, which are still computed from
-the artifact file and so differ; the composition the registry requires behind
-an eligible route; the roster the hardware parity readings, the repair table
-and the evidence node are each checked against -- names only the fifteen
-certified artifacts. Certifying a sixteenth is a registry change with its own
-evidence and its own gates, not a consequence of this paragraph.
+What follows from that in 0.2.9. Because the capability fingerprints are now
+computed on the loader face rather than on the artifact file, the machine
+records that name this object name one object: the Qwen3.8 file and the
+`qwen3_5_08b` anchor hold the same pipeline id and the same added-frontend
+id, and the composition an eligible route requires is the one the
+`qwen3_5_08b` campaign judged. The sibling table records the two repositories
+on the `equivalent (loader face)` basis, and the maintainer audit step behind
+those rows materializes both faces from the frozen directories and compares
+the serializations byte for byte.
 
-So the routing answer is unchanged in this release. No accelerated route is
-eligible for either repository: wherever an accelerated backend is installed
-to be assessed, the plan records `R_UNCERTIFIED_ARTIFACT`, and
-`policy="require_accelerated"` refuses with that reason. Both repositories
-load and return the reference engine's ids, which is the same answer the
-package gives for any content it has not certified. (The unconditional form
-this paragraph carried in 0.2.7 -- that the two "report
-`R_UNCERTIFIED_ARTIFACT`" -- is not what a machine with no accelerated
-backend installed reads: there the first premise to fail is
-`R_BACKEND_UNAVAILABLE`, and the artifact is never reached.) They are not
-siblings of `qwen3_5_08b`, which is a statement about artifact bytes, and are
-not counted anywhere in this document's totals.
+`from_pretrained("Qwen/Qwen3.8-27B")` and
+`from_pretrained("Qwen/Qwen3.8-Flash-Next")` therefore resolve by content to
+the certified `qwen3_5_08b` anchor, execute its bytes, and are covered by its
+certificates, exactly as the other 213 sibling rows are. Admission is still by
+digest: a Qwen3.8 revision whose `tokenizer.json` differs from the audited
+bytes matches no row and stays on the reference route.
 
-This entry is here so that the boundary is visible: a reader looking for these
-repositories finds what was examined and what was concluded, rather than
-silence.
+What still does not follow is a sixteenth family. The registry keeps fifteen
+artifact rows, and coverage stays recorded per certified object rather than
+per repository name. There is no `qwen3_8_27b` family id in this release:
+`load("qwen3_8_27b")` and `toktier doctor --family qwen3_8_27b` report
+`ARTIFACT_NOT_FOUND`, because a family id names the certified family itself,
+and these repositories reach the same object through content resolution.
+(This is the treatment 0.2.8 could not give them: there the capability
+fingerprints were still computed from the artifact file, so the two spellings
+carried different ids and no accelerated route was eligible for either.)
 
 ### Examined and not certified: the Hy4-preview tokenizer
 
@@ -912,6 +911,19 @@ record's `carryover` node
 (`docs/contracts/evidence-carryover.md` Section 3). Every
 other artifact listed here declares its added tokens in `tokenizer.json`
 only, where the two faces coincide by construction.
+
+Since 0.2.9 the capability ids in the certification registry are computed on
+this same loader face rather than on the artifact file, so the object a
+capability id names is the object the readings were taken against. For
+`qwen3_5_08b` that means its added-frontend id covers all 33 added tokens of
+the materialized face, not the 26 the artifact file carries; four other
+families moved pipeline ids, where the pinned loader writes the same pipeline
+in the current serialisation form. Nothing about how any of them tokenizes
+changed -- the ids of the tokenizer are unaffected; what moved is which
+document the fingerprint reads. Two consequences are visible on this page:
+the Qwen3.8 repositories above are admitted as the same object, and any two
+artifacts that materialize equal loader faces will hold equal capability ids
+by construction.
 
 One degradation is part of the definition: when the pinned `transformers`
 cannot construct the loader object at all -- the case this exists for is a

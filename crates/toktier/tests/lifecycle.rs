@@ -396,13 +396,22 @@ fn artifact_lifecycle_is_concurrent_offline_and_rust_only() {
 fn artifact_hash_failure_never_publishes_a_verified_handle() {
     let temporary = tempfile::tempdir().unwrap();
     let source_root = temporary.path().join("source");
-    let source = source_root
-        .join("qwen3_8b-b968826d9c46")
-        .join("tokenizer.json");
-    std::fs::create_dir_all(source.parent().unwrap()).unwrap();
-    // The shipped qwen3 tokenizer is 11,422,654 bytes. Equal size with the
-    // wrong content distinguishes digest refusal from a short-read refusal.
-    std::fs::write(&source, vec![0u8; 11_422_654]).unwrap();
+    let directory = source_root.join("qwen3_8b-b968826d9c46");
+    std::fs::create_dir_all(&directory).unwrap();
+    // The manifest pins the loader-face input closure, so the fake
+    // source carries every pinned file at its recorded byte length with
+    // the wrong content. Equal size with the wrong content distinguishes
+    // digest refusal from a short-read refusal, whichever pinned file
+    // the fetch reaches first.
+    let manifest: serde_json::Value = serde_json::from_slice(include_bytes!(
+        "../data/src/toktier/artifacts/tables/artifact_manifest.v1.json"
+    ))
+    .unwrap();
+    let pinned = manifest["qwen3_8b"]["files"].as_object().unwrap();
+    for (name, row) in pinned {
+        let size = row["size"].as_u64().unwrap() as usize;
+        std::fs::write(directory.join(name), vec![0u8; size]).unwrap();
+    }
     let cache = temporary.path().join("cache");
     let manager = ArtifactManager::builder()
         .cache(&cache)
@@ -414,7 +423,9 @@ fn artifact_hash_failure_never_publishes_a_verified_handle() {
         ErrorCode::ArtifactHashMismatch
     );
     let visible = cache.join("qwen3_8b-b968826d9c46");
-    assert!(!visible.join("tokenizer.json").exists());
+    for name in pinned.keys() {
+        assert!(!visible.join(name).exists());
+    }
     assert!(!visible.join(".toktier-verified.json").exists());
 }
 

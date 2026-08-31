@@ -93,6 +93,39 @@ def test_the_shipped_manifest_passes_its_generator_check() -> None:
     assert _generator().main(["--check", "--out", str(ARTIFACT_MANIFEST)]) == 0
 
 
+def test_every_declared_sidecar_source_is_pinned() -> None:
+    """The manifest pins the source file of every added-token claim.
+
+    A registry record that declares configuration-side added tokens
+    names the file they come from. The certified loader face is
+    materialized with that file present, and its verification fails
+    closed without it -- so a manifest that does not pin it builds
+    caches on which the certified family cannot load at all (the 0.2.8
+    cold-cache defect this rule exists to keep out).
+    """
+    from toktier.routing.tables import SUPPORT_REGISTRY
+
+    registry = json.loads(SUPPORT_REGISTRY.read_text(encoding="utf-8"))
+    manifest = ArtifactManifest.load(ARTIFACT_MANIFEST)
+    declaring = []
+    for record in registry["artifacts"]:
+        claim = record.get("config_added_tokens")
+        if not isinstance(claim, dict):
+            continue
+        source = claim.get("source")
+        if not isinstance(source, str):
+            continue
+        family = str(record["family"])
+        declaring.append(family)
+        names = [item.name for item in manifest.get(family).files]
+        assert source in names, (
+            f"{family} declares configuration-side added tokens from "
+            f"{source}, which the manifest does not pin"
+        )
+    # The flagship family this rule was written for is among them.
+    assert "qwen3_5_08b" in declaring
+
+
 def test_the_generator_check_rejects_an_edited_digest(tmp_path: Path) -> None:
     """The green check above has teeth: a changed digest fails it."""
     document = json.loads(ARTIFACT_MANIFEST.read_text(encoding="utf-8"))
@@ -108,6 +141,29 @@ def test_the_generator_check_rejects_an_edited_digest(tmp_path: Path) -> None:
 
 def test_the_generator_check_reports_a_missing_manifest(tmp_path: Path) -> None:
     assert _generator().main(["--check", "--out", str(tmp_path / "absent.json")]) == 1
+
+
+def test_the_generator_check_rejects_a_dropped_sidecar_pin(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Removing a declared claim source from the manifest fails the check.
+
+    The edited file keeps the deterministic form, so the failure this
+    provokes is the closure rule itself, not a formatting complaint.
+    """
+    document = json.loads(ARTIFACT_MANIFEST.read_text(encoding="utf-8"))
+    removed = document["qwen3_5_08b"]["files"].pop("tokenizer_config.json")
+    assert removed is not None
+    edited = tmp_path / "artifact_manifest.v1.json"
+    edited.write_text(
+        json.dumps(document, indent=2, ensure_ascii=True) + "\n",
+        encoding="utf-8",
+    )
+
+    assert _generator().main(["--check", "--out", str(edited)]) == 1
+    message = capsys.readouterr().err
+    assert "does not pin that file" in message
+    assert "cold cache" in message
 
 
 @pytest.mark.parametrize("command", ["fetch", "verify"])

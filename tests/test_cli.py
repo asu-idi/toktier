@@ -906,6 +906,10 @@ def test_artifacts_verify_resolves_a_shipped_family(
     searched = (
         tmp_path / "toktier-home" / "cache" / "artifacts"
     )
+    # The manifest pins the loader-face input closure, checked in entry
+    # order; with an empty cache the first pinned file is the one the
+    # sentence names.
+    first_pinned = cli._artifact_manifest().get(family).files[0].name
 
     exit_code = cli.main(["artifacts", "verify", family])
 
@@ -914,7 +918,7 @@ def test_artifacts_verify_resolves_a_shipped_family(
     assert captured.out == ""
     message = captured.err
     assert message.startswith(
-        "error ARTIFACT_NOT_FOUND: artifact file 'tokenizer.json' of "
+        f"error ARTIFACT_NOT_FOUND: artifact file {first_pinned!r} of "
         f"{family!r} is not in the cache at {searched}"
     )
     assert "fetching is disabled (offline: no_source)" in message

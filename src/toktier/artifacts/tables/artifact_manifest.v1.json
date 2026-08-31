@@ -3,9 +3,17 @@
     "repo_id": "deepseek-ai/DeepSeek-V3",
     "revision": "e815299b0bcbac849fa540c768ef21845365c9eb",
     "files": {
+      "config.json": {
+        "sha256": "cbf0b95dc614de208a109bb5fd4e7eed11385e9c68411d2c17db5319443035d9",
+        "size": 1660
+      },
       "tokenizer.json": {
         "sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
         "size": 7847652
+      },
+      "tokenizer_config.json": {
+        "sha256": "637bcd1a08cf7c772ce6a383196b22930921c79c3c73223c5afc0c7f41545546",
+        "size": 3128
       }
     }
   },
@@ -13,9 +21,17 @@
     "repo_id": "deepseek-ai/DeepSeek-V4-Flash",
     "revision": "60d8d70770c6776ff598c94bb586a859a38244f1",
     "files": {
+      "config.json": {
+        "sha256": "b628e63398a645abc711d92207f8737dd8140f7a4ef1e0a5b3616019e0ddd818",
+        "size": 1749
+      },
       "tokenizer.json": {
         "sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
         "size": 6367146
+      },
+      "tokenizer_config.json": {
+        "sha256": "6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547",
+        "size": 801
       }
     }
   },
@@ -26,6 +42,10 @@
       "tokenizer.json": {
         "sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
         "size": 20217442
+      },
+      "tokenizer_config.json": {
+        "sha256": "98b1271574f41abf89427ae2dda030d94dc9478f0edc5a8bd240db213c6fd5fc",
+        "size": 761
       }
     }
   },
@@ -33,9 +53,21 @@
     "repo_id": "openai/gpt-oss-120b",
     "revision": "b5c939de8f754692c1647ca79fbf85e8c1e70f8a",
     "files": {
+      "chat_template.jinja": {
+        "sha256": "a4c9919cbbd4acdd51ccffe22da049264b1b73e59055fa58811a99efbd7c8146",
+        "size": 16738
+      },
+      "config.json": {
+        "sha256": "933aeb666a3fd851133ddd7686414f369bc564c4185fb5704416550879f10566",
+        "size": 2089
+      },
       "tokenizer.json": {
         "sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
         "size": 27868174
+      },
+      "tokenizer_config.json": {
+        "sha256": "9279e942392b742d633c7adbb89ebe002c98399db8926a7af5125c726f404070",
+        "size": 4200
       }
     }
   },
@@ -43,9 +75,21 @@
     "repo_id": "tencent/Hy3",
     "revision": "89ffd53fb6d74429378ba77b39c91c8cba02d288",
     "files": {
+      "chat_template.jinja": {
+        "sha256": "7fc351fee674c13754656ba7f33a3ca426bfb7231039f48444360a3f3c5ecf3e",
+        "size": 10223
+      },
+      "config.json": {
+        "sha256": "663036ceca3d8a178cd772739566c262caffdecebaed6c1d76b464d729bb2951",
+        "size": 1195
+      },
       "tokenizer.json": {
         "sha256": "446e0b59cd941637c0ddfd84e12ee1f49480fd12097f86a9d2fec8ebd0c7ff6c",
         "size": 9527406
+      },
+      "tokenizer_config.json": {
+        "sha256": "1af226fc70b260371ca1f08053768b80a9d58b9d79e8eab718160f52783f7ceb",
+        "size": 165971
       }
     }
   },
@@ -66,6 +110,10 @@
       "tokenizer.json": {
         "sha256": "809240f7a182cde859a4fc4ebc902e619a173d507e99304c1092aa04e7a6658e",
         "size": 7287677
+      },
+      "tokenizer_config.json": {
+        "sha256": "177718c1d4b04254e56eea493b5b208e5f3e3a8cc4e816749938073a02ebb0cc",
+        "size": 17072
       }
     }
   },
@@ -76,6 +124,10 @@
       "tokenizer.json": {
         "sha256": "40fb9d7d7795b8bd305aeff39ce9963f3f450915b9553f2938e009be9a1fed60",
         "size": 12205732
+      },
+      "tokenizer_config.json": {
+        "sha256": "2456b0372956cd3e82f17e33372148b115a94970bfd4878ba5e7e60cd3204f74",
+        "size": 49671
       }
     }
   },
@@ -83,9 +135,17 @@
     "repo_id": "meta-llama/Llama-3.1-8B",
     "revision": "d04e592bb4f6aa9cfee91e2e20afa771667e1d4b",
     "files": {
+      "config.json": {
+        "sha256": "54acfad3cffe057640904ca8a1e83525e6551c70c7a04c641f5a9eda0bbf64bd",
+        "size": 826
+      },
       "tokenizer.json": {
         "sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
         "size": 9085658
+      },
+      "tokenizer_config.json": {
+        "sha256": "8004530facf809ac432114de2a4dcc65fcb632da5ec16d666091aeb6a2ee444a",
+        "size": 50500
       }
     }
   },
@@ -93,9 +153,21 @@
     "repo_id": "MiniMaxAI/MiniMax-M3",
     "revision": "50942730318c7943fe83db7ec8e9f9177ecb1cf8",
     "files": {
+      "chat_template.jinja": {
+        "sha256": "11421244f67553498e5c8112dae02802025bcc4305ec45ad380af95c96f9fe64",
+        "size": 11756
+      },
+      "config.json": {
+        "sha256": "c9c97ce1e4eece60012d5a10ea87717458bfb1f19c2c7a615a3dbff83d090c6b",
+        "size": 5254
+      },
       "tokenizer.json": {
         "sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
         "size": 9731500
+      },
+      "tokenizer_config.json": {
+        "sha256": "15caca9f74fbce9b86dc014e9324cbefa56703d81ccd6d56020faa1c41d2eae5",
+        "size": 11288
       }
     }
   },
@@ -103,9 +175,21 @@
     "repo_id": "mistralai/Ministral-3-8B-Instruct-2512-BF16",
     "revision": "f6fae9795746f63c9be8344932f01275f3c63734",
     "files": {
+      "chat_template.jinja": {
+        "sha256": "74eeb55fd3341286ec3fd44e902b7120721acc81cd394e96b431f85e93a1ea56",
+        "size": 11912
+      },
+      "config.json": {
+        "sha256": "3953b565385881fe1e80980fa8f797ffef5dbcc170851b5f90d60ddcb1905f58",
+        "size": 1579
+      },
       "tokenizer.json": {
         "sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135",
         "size": 17078128
+      },
+      "tokenizer_config.json": {
+        "sha256": "f59f7294e4f26383d0ea93840fe21cf197784be0842a8301a0343e8c34ed0d6d",
+        "size": 198094
       }
     }
   },
@@ -113,9 +197,21 @@
     "repo_id": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
     "revision": "dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f",
     "files": {
+      "chat_template.jinja": {
+        "sha256": "ab7813c3abdd9cb655905a410728b26c7884eca45ddfab8d9f931553485a7862",
+        "size": 10504
+      },
+      "config.json": {
+        "sha256": "fde9241f66cd414458df444a80eb535f53aef2b4b240a91f092e651fa6f27219",
+        "size": 1430
+      },
       "tokenizer.json": {
         "sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
         "size": 17077484
+      },
+      "tokenizer_config.json": {
+        "sha256": "48de4056b0b17de26e03232fdc1f55b70595c9354ceb2ed061f724f45620aa41",
+        "size": 188034
       }
     }
   },
@@ -123,9 +219,17 @@
     "repo_id": "allenai/Olmo-3-1025-7B",
     "revision": "a81bae42db3975be1671e27b9c9a56da1a9f980f",
     "files": {
+      "config.json": {
+        "sha256": "277d7ea5c6159d4c2d6986a8a23757d1ef06acaa7abc2c40e0513446f7db0f85",
+        "size": 1620
+      },
       "tokenizer.json": {
         "sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca",
         "size": 7137177
+      },
+      "tokenizer_config.json": {
+        "sha256": "ffa5b2cfee6e73d5dc0a7d3b7e02eb6ed60a491dd782f2bd8ad2b4659b2aafc6",
+        "size": 4308
       }
     }
   },
@@ -133,9 +237,21 @@
     "repo_id": "Qwen/Qwen3.5-0.8B",
     "revision": "2fc06364715b967f1860aea9cf38778875588b17",
     "files": {
+      "chat_template.jinja": {
+        "sha256": "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
+        "size": 7755
+      },
+      "config.json": {
+        "sha256": "b90b86f35c8e6925ef74ee04d0e758f0a845c83a42089ad82bbaa948de9b4204",
+        "size": 2907
+      },
       "tokenizer.json": {
         "sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
         "size": 12807982
+      },
+      "tokenizer_config.json": {
+        "sha256": "49e2b6e395f959f077f1e992b338919c0d4a9732fc6e613995e06557f843500c",
+        "size": 16709
       }
     }
   },
@@ -143,9 +259,17 @@
     "repo_id": "Qwen/Qwen3-8B",
     "revision": "b968826d9c46dd6066d109eabc6255188de91218",
     "files": {
+      "config.json": {
+        "sha256": "f7c4eadfbbf522470667b797a3c89be2524832d2d599797248dc304fff447c30",
+        "size": 728
+      },
       "tokenizer.json": {
         "sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
         "size": 11422654
+      },
+      "tokenizer_config.json": {
+        "sha256": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+        "size": 9732
       }
     }
   }

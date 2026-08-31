@@ -205,9 +205,12 @@ def verify_declared_config_added_tokens(
             "observed_count": observed_count,
             "file": TOKENIZER_CONFIG_FILE,
             "remedy": (
-                "re-fetch the artifact directory; a configuration sidecar "
-                "that no longer declares the recorded added-token subset "
-                "is never accepted on a certified artifact"
+                f"run 'toktier artifacts fetch {family} --force' to rebuild "
+                "the artifact directory from the shipped manifest, which "
+                "pins the configuration sidecar alongside the artifact "
+                "file; a configuration sidecar that does not declare the "
+                "recorded added-token subset is never accepted on a "
+                "certified artifact"
             ),
         },
     )

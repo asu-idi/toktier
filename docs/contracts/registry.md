@@ -310,7 +310,14 @@ Artifact manifests (the fetch-side companion of the registry) pin
 **per-file sha256** for every file of an artifact, not merely a
 repository revision. Verification is per file against these digests;
 a revision pin without content digests is not sufficient under this
-contract.
+contract. Since 0.2.9 the pinned file set is the **loader-face input
+closure**: every file the pinned loader reads when materializing the
+certified loader face from the frozen artifact snapshot (the
+configuration files alongside `tokenizer.json`), measured and proven
+at generation time -- so a cache built from the manifest rebuilds the
+input group the certification subject was materialized on. A locally
+converted family pins exactly its conversion output, whose file-only
+face is proven byte-identical to the frozen snapshot's face.
 
 ### 4.1 Verified sibling mappings
 

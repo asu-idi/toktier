@@ -236,15 +236,21 @@ def load_live_tokenizer(root: Path) -> object:
     makes configuration-only added tokens visible; the engine is then
     handed the live object, never a path.
 
-    Some artifact configurations name loader classes the installed
-    ``transformers`` does not know (for example a ``tokenizer_class``
-    from a newer release). For those, the documented fallback is a
-    ``PreTrainedTokenizerFast`` over the artifact file alone -- taken
-    only after verifying that the configuration declares no added token
-    the artifact does not carry, since that is exactly what a
-    file-only construction cannot see. When the verification fails, the
-    original loading error propagates (and surfaces as a recoverable
-    fault, so the input runs on the reference backend).
+    When the pinned loader cannot construct the object at all, the
+    documented fallback is a ``PreTrainedTokenizerFast`` over the
+    artifact file alone. The case this fallback exists for is a
+    configuration naming a loader class the installed ``transformers``
+    does not know (a ``tokenizer_class`` from a newer release, say), but
+    the cause of the construction failure is not classified: every
+    failure reaches the same branch. The one condition tested before the
+    fallback is taken is the one the equivalence rests on -- the
+    configuration-side added-token subset is empty, which is exactly
+    when the file-only face and the loader face are provably the same
+    function, since a subset the artifact file does not carry is what a
+    file-only construction cannot see. Over an artifact with a non-empty
+    subset the original loading error propagates instead (and surfaces
+    as a recoverable fault, so the input runs on the reference backend).
+    ``docs/contracts/facade.md`` Section 5 states the same rule.
     """
     from importlib import import_module
 

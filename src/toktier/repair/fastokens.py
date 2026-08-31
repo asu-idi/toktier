@@ -696,7 +696,10 @@ def assess(
                 (
                     "the installed engine is the upstream fastokens distribution; "
                     "toktier's readings were taken on its own pinned build and do "
-                    "not carry over"
+                    "not carry over; to run the certified bytes, replace what is "
+                    "installed (the two distributions share one import name, so "
+                    "the plain install would leave the files belonging to "
+                    f"whichever wrote last): {_REINSTALL_COMMAND}"
                 ),
                 None,
             )

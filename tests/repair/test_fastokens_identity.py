@@ -444,7 +444,14 @@ def test_s3_upstream_build(site: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert stats["exact_id_guarantee"] is False
     assert stats["engine_distribution"] == UPSTREAM
     assert stats["engine_version"] == UPSTREAM_VERSION
-    assert "do not carry over" in str(stats["assurance_reason"])
+    reason = str(stats["assurance_reason"])
+    assert "do not carry over" in reason
+    # Since 0.2.9 the sentence finishes with something to run. The plain
+    # install is not it: the two distributions share an import name, so
+    # the replacement has to say so.
+    assert "pip uninstall -y fastokens toktier-fastokens" in reason
+    assert 'pip install "toktier[fastokens]"' in reason
+    assert "whichever wrote last" in reason
 
 
 def test_s4a_coinstalled_with_pinned_bytes_reports_and_does_not_refuse(

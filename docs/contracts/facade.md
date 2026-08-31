@@ -99,6 +99,45 @@ tok.explain()                                # full plan, reasons, counters
   (`tuple[int, ...]`). Additional diagnostic attributes may appear
   within 0.x; `.ids` is stable.
 
+### 1.1 Air-gap bundles (added in 0.2.9)
+
+`toktier.artifacts.export_bundle` and `import_bundle`, and the
+`toktier artifacts export` / `import` commands over them, move a verified
+artifact between machines without a network. They are the supply side of
+the `load(family)` entry point above: an import installs one alias into
+the artifact cache, and `load` then resolves through that cache like any
+other verified artifact. This section states the Python-face behaviour;
+`docs/rust-lifecycle.md` states the Rust face, which answers the same
+way, and `docs/contracts/errors.md` holds the error rows.
+
+- An import verifies the archive and every declared digest into a
+  private staging tree and publishes the alias with one rename, so a
+  rejected bundle leaves no partial artifact behind.
+- **Re-import is idempotent exactly when the installed tree still
+  authenticates as that bundle** (since 0.2.8, on both faces): every
+  declared path present with its declared byte count and SHA-256, no
+  undeclared file, nothing that is a symbolic or special file. The
+  already installed directory is then returned and its bytes are neither
+  read for content nor rewritten.
+- A tree that holds the alias and does not authenticate is refused with
+  `ALIAS_CONFLICT`, not overwritten and not reported as a missing
+  artifact. The refusal names one path -- the first that does not
+  authenticate in sorted order, so the same tree names the same file on
+  every run and on both faces -- together with `failure` and a `remedy`.
+- The cache's own `.toktier-verified.json` marker is exempt from the
+  undeclared-file rule: it is toktier's sidecar rather than bundle
+  content, so using an imported artifact once does not stop the tree
+  being that bundle. The exemption is that exact name at the top of the
+  tree and nothing else. Since 0.2.9 a leftover of that marker's own
+  write is cleared by the import instead of being counted against the
+  tree; a file of the marker's name deeper in the tree, and every other
+  undeclared file, are refused as before.
+- Neither call consults the configuration or reaches the network: an
+  export re-hashes the bytes it packs against the shipped manifest with
+  no source attached, and an import reads the archive the caller names
+  and writes the cache. `AirgapBundleSource` is the other way of using
+  the same file, as the source a store fetches from.
+
 ## 2. `encode` semantics
 
 ```python
@@ -511,7 +550,10 @@ is active; a guarded request takes the path
 same kind as the existing `hf_full_fastokens_guard`, not a routing
 fallback. `known_wheel` names the published wheel the bytes were
 recognised as, and `assurance_reason` carries the sentence for a `false`
-state. `advisory` reports one of two states beside the assurance, in the
+state. Since 0.2.9 the `upstream_build` sentence ends with the same
+reinstall command, and says why the plain install is not the one to run:
+the two distributions share an import name, so whichever was installed
+last owns the bytes. `advisory` reports one of two states beside the assurance, in the
 number of distributions it is actually about: a distribution installed
 beside the one whose bytes are on disk and recording the same files, or a
 RECORD that names those files without describing them, which is why no

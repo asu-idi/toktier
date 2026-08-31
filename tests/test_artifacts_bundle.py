@@ -236,12 +236,17 @@ def test_an_alias_holding_an_undeclared_file_is_a_conflict(
     (installed / "extra.json").unlink()
 
     # The one file the check passes over is the marker itself, by that
-    # exact name at the top of the tree. A leftover of the marker's own
-    # write, and a file of that name deeper in the tree, are undeclared
-    # like anything else.
+    # exact name at the top of the tree. A file of that name deeper in
+    # the tree, and a leftover of some other write, are undeclared like
+    # anything else -- including one whose name is close to the marker's
+    # own temporary shapes without being one of them.
     for extra in (
-        installed / f"{VERIFIED_MARKER_NAME}.4321.tmp",
         installed / "nested" / VERIFIED_MARKER_NAME,
+        installed / f"{VERIFIED_MARKER_NAME}.tmp",
+        installed / f"{VERIFIED_MARKER_NAME}.4321.part",
+        installed / f"{VERIFIED_MARKER_NAME}.later.tmp",
+        installed / "nested" / f"{VERIFIED_MARKER_NAME}.4321.tmp",
+        installed / "other.4321.tmp",
     ):
         extra.parent.mkdir(parents=True, exist_ok=True)
         extra.write_bytes(b"{}\n")
@@ -250,6 +255,70 @@ def test_an_alias_holding_an_undeclared_file_is_a_conflict(
         assert caught.value.details["failure"] == "undeclared_file"
         assert caught.value.details["path"] == str(extra)
         extra.unlink()
+
+
+def test_a_leftover_of_the_markers_own_write_is_cleared_by_an_import(
+    tmp_path: Path,
+) -> None:
+    """The friendly side of a refusal that was protecting nothing.
+
+    A process that stops between writing the verified marker and renaming
+    it into place leaves its temporary at the top of the alias. Nothing
+    reads that file, and until 0.2.9 the next import of the same bundle
+    refused the alias over it; the answer was to delete it by hand. Both
+    caches write the same marker, so both of their temporary shapes are
+    cleared, and the import goes on to be idempotent as usual.
+    """
+    bundle = _exported_bundle(tmp_path)
+    cache = artifact_cache_dir(Config(home=tmp_path / "home", offline=True))
+    installed = import_bundle(bundle, cache)
+    leftovers = [
+        installed / f"{VERIFIED_MARKER_NAME}.4321.tmp",
+        installed / f".{VERIFIED_MARKER_NAME}.4321.7.part",
+    ]
+    for leftover in leftovers:
+        leftover.write_bytes(b"{}\n")
+    declared = (installed / "tokenizer.json").stat()
+
+    assert import_bundle(bundle, cache) == installed
+
+    assert not any(leftover.exists() for leftover in leftovers)
+    # Clearing them is the whole of the change: the declared bytes are
+    # still the ones that were there, unread and unwritten.
+    assert (installed / "tokenizer.json").stat().st_ino == declared.st_ino
+    assert (installed / "tokenizer.json").stat().st_mtime_ns == declared.st_mtime_ns
+    assert not list(cache.glob(".toktier-bundle-import-*"))
+
+
+def test_the_leftover_pass_does_not_reach_the_marker_or_a_directory(
+    tmp_path: Path,
+) -> None:
+    """What the prune must not take with it.
+
+    The marker itself is not a leftover, and neither is a directory that
+    happens to carry a leftover's name; a tree still has to be judged as
+    the bundle it claims to be after the pass.
+    """
+    bundle = _exported_bundle(tmp_path)
+    cache = artifact_cache_dir(Config(home=tmp_path / "home", offline=True))
+    installed = import_bundle(bundle, cache)
+    marker = installed / VERIFIED_MARKER_NAME
+    marker.write_bytes(b"{}\n")
+    shaped_directory = installed / f"{VERIFIED_MARKER_NAME}.99.tmp"
+    shaped_directory.mkdir()
+
+    # An empty directory is not a file, so the walk finds nothing
+    # undeclared in it and the import is idempotent; the point here is
+    # that the prune did not remove the directory.
+    assert import_bundle(bundle, cache) == installed
+    assert shaped_directory.is_dir()
+    assert marker.read_bytes() == b"{}\n"
+
+    (shaped_directory / "inside.json").write_bytes(b"{}\n")
+    with pytest.raises(AliasConflict) as caught:
+        import_bundle(bundle, cache)
+    assert caught.value.details["failure"] == "undeclared_file"
+    assert caught.value.details["path"] == str(shaped_directory / "inside.json")
 
 
 def test_an_alias_missing_a_declared_file_is_a_conflict(

@@ -186,6 +186,7 @@ pub fn import_bundle(bundle: impl AsRef<Path>, cache_root: impl AsRef<Path>) -> 
         if target.exists() {
             // Duplicate imports are idempotent only if the visible tree still
             // authenticates as the exact bundle contents.
+            prune_marker_temporaries(&target);
             verify_installed(&target, &manifest)?;
             fs::remove_dir_all(&staging).map_err(|error| {
                 Error::new(ErrorCode::Io, error.to_string()).with_path(&staging)
@@ -448,12 +449,74 @@ fn copy_and_hash(
     Ok(())
 }
 
+/// Is this the name of a leftover from the verified marker's own write?
+///
+/// The marker is written through a temporary and renamed into place; a
+/// process that stops in between leaves the temporary behind. Both
+/// faces write the same marker under the same name, so either can meet
+/// either shape: `<marker>.<pid>.tmp` comes from the Python cache and
+/// `.<marker>.<pid>.<nonce>.part` from [`crate::fsutil::unique_temporary`].
+/// Nothing else is recognised, so the pass stays as narrow as the one
+/// for the marker itself.
+fn is_marker_temporary(name: &str) -> bool {
+    let numeric = |field: &str| !field.is_empty() && field.bytes().all(|b| b.is_ascii_digit());
+    if let Some(rest) = name.strip_prefix(&format!("{VERIFIED_MARKER_NAME}.")) {
+        if let Some(pid) = rest.strip_suffix(".tmp") {
+            return numeric(pid);
+        }
+    }
+    if let Some(rest) = name.strip_prefix(&format!(".{VERIFIED_MARKER_NAME}.")) {
+        if let Some(fields) = rest.strip_suffix(".part") {
+            if let Some((pid, nonce)) = fields.split_once('.') {
+                return numeric(pid) && numeric(nonce);
+            }
+        }
+    }
+    false
+}
+
+/// Clear leftovers of the verified marker's own write from an alias root.
+///
+/// Nothing ever reads such a file, but until 0.2.9 the next import of the
+/// same bundle counted it as an undeclared file and refused the alias,
+/// and the only way out was to go and delete it by hand. The import
+/// deletes it instead, which is the friendly side of a refusal that was
+/// never protecting anything.
+///
+/// The pass is narrow on purpose: only [`is_marker_temporary`] names,
+/// only regular files, and only at the top of the tree. A file of the
+/// marker's own name one level down, a leftover of some other write, and
+/// every other undeclared file are conflicts exactly as before. Failures
+/// are ignored: the file then stays, and [`verify_installed`] reports the
+/// conflict it used to.
+fn prune_marker_temporaries(root: &Path) {
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if !is_marker_temporary(name) {
+            continue;
+        }
+        let path = entry.path();
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            continue;
+        }
+        let _ = fs::remove_file(&path);
+    }
+}
+
 /// Re-read an installed alias against the manifest that claims it.
 ///
 /// The one file it passes over is [`VERIFIED_MARKER_NAME`], which the
 /// cache writes there itself and which is not bundle content: an
 /// artifact that has been used since it was imported still authenticates
-/// as the bundle it came from.
+/// as the bundle it came from. A leftover of that marker's own write is
+/// gone before this runs, cleared by [`prune_marker_temporaries`].
 ///
 /// Everything this refuses has the same subject -- the tree the cache
 /// already holds is not the bundle being imported -- so since 0.2.8 it

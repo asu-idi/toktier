@@ -32,7 +32,12 @@ The verified marker the cache writes beside an installed artifact
 (:data:`VERIFIED_MARKER_NAME`) is toktier's own sidecar, not bundle
 content, so it is passed over by that check and left as it is.  Using an
 imported artifact once is what puts it there, and a re-import after that
-is still the same tree.
+is still the same tree.  Since 0.2.9 a leftover of that marker's own
+write -- the temporary a process that stopped mid-write left at the top
+of the alias -- is removed before the check rather than counted against
+it: nothing reads that file, and refusing the import over it only sent
+the reader off to delete it by hand.  Nothing else is removed, and a
+file of the marker's name deeper in the tree is undeclared as before.
 
 Error mapping (``docs/contracts/errors.md``, decision 0004): violations
 of the bundle archive format -- the tar container and the embedded
@@ -83,6 +88,23 @@ BUNDLE_ROOT_DOMAIN = b"toktier.bundle.v1\0"
 #: has to be recognised, and one string in one place is what keeps the
 #: writer and the reader from drifting apart.
 VERIFIED_MARKER_NAME = ".toktier-verified.json"
+
+#: The two shapes a half-finished marker write leaves at an alias root.
+#: This package writes the marker through a temporary of its own and
+#: renames it into place; a process that stops in between leaves the
+#: temporary behind.  Both caches write the same marker under the same
+#: name, so either face can meet either shape: ``<marker>.<pid>.tmp``
+#: comes from :mod:`toktier.artifacts.store`, ``.<marker>.<pid>.<n>.part``
+#: from the Rust crate's ``unique_temporary``.
+_MARKER_TEMPORARY = re.compile(
+    r"\A(?:"
+    + re.escape(VERIFIED_MARKER_NAME)
+    + r"\.[0-9]+\.tmp"
+    + r"|\."
+    + re.escape(VERIFIED_MARKER_NAME)
+    + r"\.[0-9]+\.[0-9]+\.part"
+    + r")\Z"
+)
 
 MAX_BUNDLE_MEMBERS = 4096
 MAX_BUNDLE_UNCOMPRESSED_SIZE = 8 * 1024 * 1024 * 1024
@@ -243,8 +265,10 @@ def import_bundle(
     contents; the already installed directory is returned and its bytes
     are not touched.  The cache's own verified marker is not counted
     against that, so an artifact that has been used since the first
-    import still authenticates.  A tree that holds the alias but does not
-    authenticate is reported instead of overwritten.
+    import still authenticates, and since 0.2.9 a leftover of that
+    marker's own write is cleared from the top of the alias first rather
+    than being counted against it.  A tree that holds the alias but does
+    not authenticate is reported instead of overwritten.
     """
     bundle_path = Path(bundle)
     root = Path(cache_root)
@@ -263,6 +287,7 @@ def import_bundle(
             # Re-import is idempotent exactly when the visible tree still
             # authenticates as this bundle, which is the condition the
             # Rust face states and now the condition both faces apply.
+            _prune_marker_temporaries(target)
             _authenticate_installed_alias(target, manifest)
             shutil.rmtree(staging, ignore_errors=True)
             staging_removed = True
@@ -289,6 +314,38 @@ def import_bundle(
             if not root_existed:
                 with suppress(OSError):
                     root.rmdir()
+
+
+def _prune_marker_temporaries(target: Path) -> list[str]:
+    """Clear leftovers of the marker's own write from an alias root.
+
+    A process that stops between writing the verified marker and renaming
+    it into place leaves its temporary behind.  Nothing ever reads that
+    file, but until 0.2.9 the next import of the same bundle counted it
+    as an undeclared file and refused the alias, and the only way out was
+    to go and delete it by hand.  The import deletes it instead, which is
+    the friendly side of a choice that was never protecting anything.
+
+    The pass is narrow on purpose: exactly the two temporary shapes this
+    package writes for the marker, only regular files, and only at the
+    top of the tree.  A file of the marker's own name one level down, a
+    leftover of some other write, and every other undeclared file are
+    conflicts exactly as before.  Removal failures are left alone; the
+    file then simply stays, and the conflict is reported as it used to be.
+    """
+    if target.is_symlink() or not target.is_dir():
+        return []
+    removed: list[str] = []
+    with suppress(OSError):
+        for child in sorted(target.iterdir(), key=lambda path: path.name):
+            if not _MARKER_TEMPORARY.match(child.name):
+                continue
+            if child.is_symlink() or not child.is_file():
+                continue
+            with suppress(OSError):
+                child.unlink()
+                removed.append(child.name)
+    return removed
 
 
 def _authenticate_installed_alias(
@@ -336,6 +393,8 @@ def _authenticate_installed_alias(
                 # exactly as it is for the next verification to judge.
                 # Only this name, and only at the top of the tree:
                 # anything else, at any depth, is undeclared as before.
+                # A leftover of that marker's own write is gone by now,
+                # cleared by _prune_marker_temporaries before this walk.
                 continue
             else:
                 unexpected.append((relative, "undeclared_file", path))

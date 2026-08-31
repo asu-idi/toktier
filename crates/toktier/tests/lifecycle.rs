@@ -127,19 +127,53 @@ fn reimport_is_idempotent_across_the_cache_marker() {
         b"verified bytes\n"
     );
 
-    // The pass is exactly that name at the top of the tree: a leftover of
-    // the marker's own write, and a file of that name further down, are
-    // undeclared like anything else.
-    let leftover = installed.join(format!("{MARKER}.4321.tmp"));
-    std::fs::write(&leftover, b"{}\n").unwrap();
+    // Since 0.2.9 a leftover of the marker's own write is cleared rather
+    // than counted against the tree: nothing reads it, and refusing the
+    // import over it only sent the reader off to delete it by hand. Both
+    // caches write this marker, so both of their temporary shapes go.
+    let leftovers = [
+        installed.join(format!("{MARKER}.4321.tmp")),
+        installed.join(format!(".{MARKER}.4321.7.part")),
+    ];
+    for leftover in &leftovers {
+        std::fs::write(leftover, b"{}\n").unwrap();
+    }
+    assert_eq!(import_bundle(&bundle, &cache).unwrap(), installed);
+    for leftover in &leftovers {
+        assert!(!leftover.exists(), "{leftover:?} should have been cleared");
+    }
+    assert_eq!(
+        std::fs::read(installed.join("tokenizer.json")).unwrap(),
+        b"verified bytes\n"
+    );
+
+    // The pass stays exactly as narrow as it was: a file of the marker's
+    // name further down, and anything whose name is merely close to a
+    // temporary's, are undeclared like anything else.
+    for name in [
+        format!("{MARKER}.tmp"),
+        format!("{MARKER}.4321.part"),
+        format!("{MARKER}.later.tmp"),
+        format!(".{MARKER}.4321.part"),
+        "other.4321.tmp".to_owned(),
+    ] {
+        let extra = installed.join(&name);
+        std::fs::write(&extra, b"{}\n").unwrap();
+        assert_eq!(
+            import_bundle(&bundle, &cache).unwrap_err().code(),
+            ErrorCode::AliasConflict,
+            "{name} should still be undeclared"
+        );
+        std::fs::remove_file(&extra).unwrap();
+    }
+    let nested = installed.join("nested");
+    std::fs::create_dir(&nested).unwrap();
+    std::fs::write(nested.join(MARKER), b"{}\n").unwrap();
     assert_eq!(
         import_bundle(&bundle, &cache).unwrap_err().code(),
         ErrorCode::AliasConflict
     );
-    std::fs::remove_file(&leftover).unwrap();
-    let nested = installed.join("nested");
-    std::fs::create_dir(&nested).unwrap();
-    std::fs::write(nested.join(MARKER), b"{}\n").unwrap();
+    std::fs::write(nested.join(format!("{MARKER}.4321.tmp")), b"{}\n").unwrap();
     assert_eq!(
         import_bundle(&bundle, &cache).unwrap_err().code(),
         ErrorCode::AliasConflict

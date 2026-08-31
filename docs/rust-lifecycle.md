@@ -153,7 +153,11 @@ private staging tree, fsyncs every directory from leaves to root, and publishes
 the alias with one rename. Re-import is idempotent only when the visible tree
 still authenticates exactly; the cache's own `.toktier-verified.json` marker is
 not counted against that, so an artifact that has been used since it was
-imported still authenticates. Since 0.2.8 that is the rule on both faces: the
+imported still authenticates. Since 0.2.9 the same goes for a leftover of that
+marker's own write: an import clears the marker's temporary from the top of the
+alias before it reads the tree, on both faces, rather than refusing an alias
+over a file nothing reads. Only that temporary, only at the top of the tree; a
+file of the marker's name further down stays undeclared. Since 0.2.8 that is the rule on both faces: the
 Python `import_bundle` used to refuse every alias its cache already held, and
 now re-reads the installed tree against the manifest and answers the same way
 this one does. A tree that holds the alias and does not authenticate is

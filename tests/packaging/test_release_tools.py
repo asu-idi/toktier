@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import importlib.util
 import re
@@ -17,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 VERIFY_IDENTITY = ROOT / "tools" / "verify_release_identity.py"
 VERIFY_ARTIFACTS = ROOT / "tools" / "verify_release_artifacts.py"
 SMOKE_SCRIPT = ROOT / "tools" / "run_packaging_smoke.sh"
+PINNED_DIR = ROOT / "packaging" / "fastokens-pinned"
+SUMS = PINNED_DIR / "SHA256SUMS"
 
 
 def _artifact_verifier() -> ModuleType:
@@ -312,6 +315,57 @@ def test_the_refresh_refuses_a_flag_pair_that_means_nothing(
 
     with pytest.raises(SystemExit):
         refresh.main(["--check", "--allow-network-update"])
+
+
+def test_the_pinned_recipe_sums_match_the_files_they_record() -> None:
+    """Every line of `SHA256SUMS` that names a file kept here is recomputed.
+
+    Nothing checked these before. `publish-fastokens.yml` compares release
+    assets against the first lines only (`--ignore-missing`), so the
+    recipe's own digests were maintained by hand: a documentation change
+    in 0.2.8 left `README-dist.md` recorded at a digest it no longer had,
+    and the battery wave found it by hashing the directory by hand.
+
+    The four distribution lines are skipped by design -- the wheel and
+    the sdist of each published version are not kept in the repository,
+    which is what the recipe README says. Which lines those are is
+    asserted too, so a file that stops being present cannot quietly join
+    the skipped set.
+    """
+    lines = SUMS.read_text(encoding="utf-8").splitlines()
+    recorded: dict[str, str] = {}
+    for line in lines:
+        match = re.fullmatch(r"([0-9a-f]{64})  (\S.*)", line)
+        assert match is not None, f"malformed SHA256SUMS line: {line!r}"
+        name = match.group(2)
+        assert name not in recorded, f"recorded twice: {name}"
+        recorded[name] = match.group(1)
+
+    absent = sorted(name for name in recorded if not (PINNED_DIR / name).is_file())
+    assert absent == [
+        "toktier_fastokens-0.3.1.1-cp39-abi3-manylinux_2_28_x86_64.whl",
+        "toktier_fastokens-0.3.1.1.tar.gz",
+        "toktier_fastokens-0.3.1.2-cp39-abi3-manylinux_2_28_x86_64.whl",
+        "toktier_fastokens-0.3.1.2.tar.gz",
+    ]
+
+    for name, expected in sorted(recorded.items()):
+        path = PINNED_DIR / name
+        if not path.is_file():
+            continue
+        observed = hashlib.sha256(path.read_bytes()).hexdigest()
+        assert observed == expected, f"{name} is recorded at a digest it no longer has"
+
+    # The other direction: a file added to the recipe without a line is
+    # an unrecorded input, which the recipe README's own description of
+    # this file ("digests ... of the files above") would no longer be
+    # true of.
+    present = {
+        path.relative_to(PINNED_DIR).as_posix()
+        for path in PINNED_DIR.rglob("*")
+        if path.is_file()
+    } - {SUMS.name}
+    assert present <= set(recorded), sorted(present - set(recorded))
 
 
 def _archive_builder() -> ModuleType:

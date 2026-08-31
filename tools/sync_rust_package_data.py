@@ -1,14 +1,27 @@
 #!/usr/bin/env python3
-"""Synchronize the self-contained data payload of the public Rust crate."""
+"""Synchronize the self-contained data payload of the public Rust crate.
+
+Besides copying, this tool checks the digests the crate pins by hand over
+the payload it embeds.  ``crates/toktier/src/manifest.rs`` refuses to
+load its embedded data when a payload does not hash to the constant
+written beside it, and no generator writes those constants: a data file
+synchronized here without its constant moving with it is a refusal that
+only a Rust test run reports.  The constants are read back out of the
+source, so one added later is covered the day it is added.
+"""
 
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
+from hashlib import sha256
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DESTINATION = ROOT / "crates" / "toktier" / "data"
+CRATE = ROOT / "crates" / "toktier"
+DESTINATION = CRATE / "data"
+MANIFEST_SOURCE = CRATE / "src" / "manifest.rs"
 
 FILES = (
     "THIRD_PARTY_NOTICES",
@@ -60,8 +73,95 @@ GENERATED = (
 )
 
 
+#: An embedded payload: the constant naming it, and the path it is
+#: included from, relative to the crate directory.
+_EMBEDDED_PAYLOAD = re.compile(
+    r"const\s+(?P<name>[A-Z0-9_]+)_BYTES\s*:\s*&\[u8\]\s*="
+    r"\s*include_bytes!\(\s*concat!\(\s*"
+    r'env!\("CARGO_MANIFEST_DIR"\)\s*,\s*"(?P<path>[^"]+)"\s*,?\s*\)\s*\)\s*;'
+)
+#: A digest constant beside those payloads.  The value is matched loosely
+#: on purpose: a constant that is neither a build-script value nor a
+#: well-formed literal is reported rather than passed over.
+_PINNED_DIGEST = re.compile(
+    r"const\s+(?P<name>[A-Z0-9_]+)_SHA256\s*:\s*&str\s*=\s*(?P<value>[^;]+);"
+)
+_HEX_LITERAL = re.compile(r'^"([0-9a-f]{64})"$')
+
+
 def target(relative: str) -> Path:
     return DESTINATION / relative
+
+
+def hand_pinned_digest_names(source: str) -> list[str]:
+    """Digest constants the crate source pins by hand, in file order.
+
+    A constant whose value comes from ``env!`` is left out: the build
+    script hashes the file it reads, so nothing there is written by hand.
+    """
+    return [
+        match["name"]
+        for match in _PINNED_DIGEST.finditer(source)
+        if not match["value"].strip().startswith("env!")
+    ]
+
+
+def embedded_digest_problems(
+    source: str | None = None, crate: Path | None = None
+) -> list[str]:
+    """Recompute every hand-pinned digest over the payload it pins.
+
+    Each ``<NAME>_SHA256`` constant is paired with the ``<NAME>_BYTES``
+    payload declared in the same file, and the payload is hashed from
+    disk.  A constant with no payload to check it against, a value that
+    is neither a build-script value nor a lowercase hex literal, and a
+    source that has stopped declaring any hand-pinned constant at all are
+    each reported: this check is worth nothing if it can pass by finding
+    nothing to do.
+    """
+    crate = CRATE if crate is None else crate
+    if source is None:
+        source = MANIFEST_SOURCE.read_text(encoding="utf-8")
+    payloads = {
+        match["name"]: match["path"] for match in _EMBEDDED_PAYLOAD.finditer(source)
+    }
+    values = {
+        match["name"]: match["value"].strip()
+        for match in _PINNED_DIGEST.finditer(source)
+    }
+    issues: list[str] = []
+    names = hand_pinned_digest_names(source)
+    if not names:
+        issues.append(
+            f"no hand-pinned digest constant found in {MANIFEST_SOURCE.name}; "
+            f"this check has nothing to compare"
+        )
+    for name in names:
+        literal = _HEX_LITERAL.match(values[name])
+        if literal is None:
+            issues.append(
+                f"pinned digest {name}_SHA256 is neither a build-script value "
+                f"nor a lowercase 64-character hex literal: {values[name]}"
+            )
+            continue
+        relative = payloads.get(name)
+        if relative is None:
+            issues.append(
+                f"pinned digest {name}_SHA256 has no {name}_BYTES payload "
+                f"declared beside it to check it against"
+            )
+            continue
+        embedded = crate / relative.lstrip("/")
+        if not embedded.is_file():
+            issues.append(f"embedded payload is missing: {relative.lstrip('/')}")
+            continue
+        observed = sha256(embedded.read_bytes()).hexdigest()
+        if observed != literal.group(1):
+            issues.append(
+                f"pinned digest {name}_SHA256 is stale: "
+                f"{relative.lstrip('/')} hashes to {observed}"
+            )
+    return issues
 
 
 def problems() -> list[str]:
@@ -91,6 +191,7 @@ def problems() -> list[str]:
         }
         for relative in sorted(observed - expected):
             issues.append(f"unexpected packaged file: {relative}")
+    issues.extend(embedded_digest_problems())
     return issues
 
 
@@ -115,7 +216,13 @@ def main() -> int:
         print(f"error: {issue}")
     if issues:
         return 1
-    print(f"{DESTINATION}: {'check passed' if arguments.check else 'updated'}")
+    pinned = len(
+        hand_pinned_digest_names(MANIFEST_SOURCE.read_text(encoding="utf-8"))
+    )
+    print(
+        f"{DESTINATION}: {'check passed' if arguments.check else 'updated'} "
+        f"({pinned} hand-pinned embedded digests verified)"
+    )
     return 0
 
 

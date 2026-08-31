@@ -50,20 +50,32 @@ _FIELD_ROW = re.compile(
 #: the directory layout of Section 5, which ``test_paths.py`` covers.
 _DERIVED = object()
 
+#: The rows allowed to state their default in prose, and the only ones.
+#: A directory the platform decides has no single value to write, so
+#: those three are covered by ``test_paths.py`` instead. Naming them
+#: here is what keeps the comparison honest in the other direction: a
+#: row rewritten from a literal into prose would silently drop out of
+#: the value comparison below, and the table would go on looking
+#: checked. It is declared rather than inferred so the failure says
+#: which rule was broken.
+PROSE_DEFAULTS = frozenset({"home", "cache_dir", "state_dir"})
 
-def _section(number: str) -> list[str]:
+
+def _section(number: str, document: str | None = None) -> list[str]:
     """The lines of one numbered section of the contract document."""
-    lines = CONTRACT.read_text(encoding="utf-8").splitlines()
+    if document is None:
+        document = CONTRACT.read_text(encoding="utf-8")
+    lines = document.splitlines()
     start = next(i for i, line in enumerate(lines) if line.startswith(f"## {number}. "))
     rest = lines[start + 1 :]
     end = next((i for i, line in enumerate(rest) if line.startswith("## ")), len(rest))
     return rest[:end]
 
 
-def contract_defaults() -> dict[str, object]:
+def contract_defaults(document: str | None = None) -> dict[str, object]:
     """Field name to documented default, as written in the field table."""
     defaults: dict[str, object] = {}
-    for line in _section("7"):
+    for line in _section("7", document):
         match = _FIELD_ROW.match(line)
         if match is None:
             continue
@@ -77,6 +89,15 @@ def contract_defaults() -> dict[str, object]:
         else:
             defaults[match.group("field")] = ast.literal_eval(literal)
     return defaults
+
+
+def prose_rows(document: str | None = None) -> set[str]:
+    """Rows of the field table whose default is not written as a value."""
+    return {
+        name
+        for name, value in contract_defaults(document).items()
+        if value is _DERIVED
+    }
 
 
 # -- layer 6: built-in defaults ---------------------------------------
@@ -94,19 +115,41 @@ def test_documented_defaults_are_the_defaults(isolated_home: Path) -> None:
     config = Config.resolve()
 
     assert set(documented) == {field.name for field in dataclasses.fields(Config)}
-    # The three directory rows are prose; every other row states a value.
-    stated = {
-        name: value for name, value in documented.items() if value is not _DERIVED
-    }
-    assert set(stated) == {
-        "offline",
-        "log_level",
-        "disable_gpu",
-        "diagnostics",
-        "routing_policy",
-    }
-    for name, expected in stated.items():
+    # Exactly the declared rows are prose; every other row has to be
+    # readable as a value, and is then compared against the real one.
+    assert prose_rows() == PROSE_DEFAULTS
+    for name, expected in sorted(documented.items()):
+        if name in PROSE_DEFAULTS:
+            continue
         assert getattr(config, name) == expected, name
+
+
+def test_a_row_rewritten_into_prose_does_not_slip_past_the_comparison() -> None:
+    """The way out of the comparison, closed.
+
+    A row that states its default as a value is compared against the
+    resolved config; one that states it in prose is not. So the set of
+    prose rows is itself part of the contract: rewriting `offline` as
+    "off unless configured" would leave the table looking checked while
+    that row no longer was. This drives that edit and asks for the
+    refusal, so the guard cannot be dropped without a red test.
+    """
+    document = CONTRACT.read_text(encoding="utf-8")
+    rewritten = document.replace(
+        "| `offline` | bool | `False` |",
+        "| `offline` | bool | off unless configured |",
+    )
+    assert rewritten != document, "the row this test rewrites has moved"
+
+    assert prose_rows(rewritten) == PROSE_DEFAULTS | {"offline"}
+    # And the other direction: a prose row written as a value is a row
+    # this suite must start comparing, not one it may keep skipping.
+    stated = document.replace(
+        "| `home` | path | platform convention (Section 5) |",
+        "| `home` | path | `None` |",
+    )
+    assert stated != document, "the row this test rewrites has moved"
+    assert prose_rows(stated) == PROSE_DEFAULTS - {"home"}
 
 
 def test_defaults_when_nothing_is_set(isolated_home: Path) -> None:

@@ -161,8 +161,11 @@ file of the marker's name further down stays undeclared. Since 0.2.8 that is the
 Python `import_bundle` used to refuse every alias its cache already held, and
 now re-reads the installed tree against the manifest and answers the same way
 this one does. A tree that holds the alias and does not authenticate is
-`ALIAS_CONFLICT` on both faces, with the path of the first file that does not
-match; before 0.2.8 this face answered with whichever of `BUNDLE_INVALID`,
+`ALIAS_CONFLICT` on both faces, naming one path in two phases: an entry the
+tree holds that the bundle does not declare, at any depth, if there is one, and
+otherwise the first declared file that is missing or does not match, each phase
+taking the relative path that sorts first; before 0.2.8 this face answered with
+whichever of `BUNDLE_INVALID`,
 `ARTIFACT_NOT_FOUND` or `ARTIFACT_HASH_MISMATCH` fitted the part that
 disagreed.
 

@@ -91,7 +91,7 @@ impl Backend {
 /// plan-time variants describe admission decisions this crate makes for
 /// itself and are not claimed to be the same codes; they are documented
 /// as their own vocabulary in `docs/contracts/routing.md` Section 5.6,
-/// two of them having no Python counterpart at all.
+/// one of them having no Python counterpart at all.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]

@@ -117,13 +117,22 @@ way, and `docs/contracts/errors.md` holds the error rows.
   authenticates as that bundle** (since 0.2.8, on both faces): every
   declared path present with its declared byte count and SHA-256, no
   undeclared file, nothing that is a symbolic or special file. The
-  already installed directory is then returned and its bytes are neither
-  read for content nor rewritten.
+  already installed directory is then returned. Establishing that
+  premise reads the bytes of every declared file back, because the
+  SHA-256 it compares is recomputed rather than taken on trust: a
+  re-import costs one full read of the installed tree. No declared file
+  is written, renamed or removed by it.
 - A tree that holds the alias and does not authenticate is refused with
   `ALIAS_CONFLICT`, not overwritten and not reported as a missing
-  artifact. The refusal names one path -- the first that does not
-  authenticate in sorted order, so the same tree names the same file on
-  every run and on both faces -- together with `failure` and a `remedy`.
+  artifact. The refusal names one path, together with `failure` and a
+  `remedy`. Which path is a decision rather than an accident of the
+  filesystem, and it is taken in two phases: anything present that the
+  bundle does not declare -- an undeclared file, a symbolic link, a
+  special file, at any depth -- is named first, and only a tree with no
+  such entry is searched for the first declared path that is missing or
+  does not match. Within either phase the relative path that sorts
+  first is the one named, so the same tree names the same file on every
+  run and on both faces.
 - The cache's own `.toktier-verified.json` marker is exempt from the
   undeclared-file rule: it is toktier's sidecar rather than bundle
   content, so using an imported artifact once does not stop the tree

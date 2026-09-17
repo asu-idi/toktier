@@ -11,7 +11,10 @@ use toktier_store_core::{
     TailState, WitnessCategory,
 };
 
-use crate::{FastCpuEngine, FastEncodeSource, FastSeedPayload, ReferenceEngine};
+use crate::{
+    ChunkEncoder, ChunkPlan, ChunkedIds, FastCpuEngine, FastEncodeSource, FastSeedPayload,
+    ReferenceEngine, R_CPE_ROUTE_NOT_FAST_CPU,
+};
 
 pub const BACKEND_GPU: &str = "gpu";
 pub const BACKEND_FAST_CPU: &str = "fast_cpu";
@@ -1270,6 +1273,111 @@ impl NativeRouter {
             );
         }
         Ok(output)
+    }
+}
+
+impl NativeRouter {
+    /// The certified chunk-parallel planner of the corrected CPU engine,
+    /// when this route has one.
+    pub fn chunk_encoder(&self) -> Result<&ChunkEncoder, EngineError> {
+        self.fast_cpu
+            .as_ref()
+            .ok_or_else(|| {
+                EngineError("this route has no corrected CPU engine to chunk on".to_owned())
+            })?
+            .chunk_encoder()
+    }
+
+    /// The cut plan the chunked route would use for `text`.
+    pub fn chunked_plan(
+        &self,
+        text: &str,
+        k: usize,
+        min_chunk: Option<usize>,
+        scan_budget: usize,
+    ) -> Result<ChunkPlan, EngineError> {
+        self.fast_cpu
+            .as_ref()
+            .ok_or_else(|| {
+                EngineError("this route has no corrected CPU engine to chunk on".to_owned())
+            })?
+            .chunked_plan(text, k, min_chunk, scan_budget)
+    }
+
+    /// Fork (and optionally pre-warm) the chunk worker pool.
+    pub fn chunked_warm(&self, workers: usize, text: Option<&str>) -> Result<usize, EngineError> {
+        self.fast_cpu
+            .as_ref()
+            .ok_or_else(|| {
+                EngineError("this route has no corrected CPU engine to chunk on".to_owned())
+            })?
+            .chunked_warm(workers, text)
+    }
+
+    /// Core-stream ids of `text` through the certified chunk-parallel
+    /// encoder, with every row recorded in the execution ledger exactly
+    /// as a batch row is. An input whose starting backend is not the
+    /// corrected CPU engine (a GPU-headed plan above its crossover) is
+    /// encoded serially through the normal route and says so.
+    pub fn chunked_encode_ids(
+        &self,
+        text: &str,
+        k: usize,
+        min_chunk: Option<usize>,
+        scan_budget: usize,
+    ) -> Result<ChunkedIds, EngineError> {
+        let input_bytes = text.len() as u64;
+        let start = self.start_index(input_bytes);
+        let fast = match &self.fast_cpu {
+            Some(fast) if self.chain[start] == BackendKind::FastCpu => fast,
+            _ => {
+                let started = std::time::Instant::now();
+                let routed = self.route_ids_internal(text)?;
+                let encode_ns = started.elapsed().as_nanos() as u64;
+                return Ok(ChunkedIds {
+                    ids: routed.ids,
+                    chunks: 1,
+                    k_requested: k,
+                    cuts: Vec::new(),
+                    cut_misses: 0,
+                    literal_rejects: 0,
+                    norm_rejects: 0,
+                    serial_reason: Some(R_CPE_ROUTE_NOT_FAST_CPU),
+                    below_threshold: false,
+                    sources: Vec::new(),
+                    row_bytes: vec![text.len()],
+                    plan_ns: 0,
+                    encode_ns,
+                    concat_ns: 0,
+                    worker_ns_max: encode_ns,
+                    worker_ns_min: encode_ns,
+                    cold_forks: 0,
+                });
+            }
+        };
+        let encoded = fast.chunked_encode_ids(text, k, min_chunk, scan_budget)?;
+        for (source, bytes) in encoded.sources.iter().zip(&encoded.row_bytes) {
+            match source {
+                FastEncodeSource::Gigatoken => self.record_execution(
+                    BACKEND_FAST_CPU,
+                    *bytes as u64,
+                    start,
+                    Some("gigatoken"),
+                    Some("gigatoken_full"),
+                ),
+                source => {
+                    let (path, _code) = self.fast_cpu_reference_path(*source);
+                    self.record_execution(
+                        BACKEND_REFERENCE,
+                        *bytes as u64,
+                        start,
+                        None,
+                        Some(path),
+                    );
+                }
+            }
+        }
+        Ok(encoded)
     }
 }
 

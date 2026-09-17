@@ -713,3 +713,15 @@ well-formed-but-newer records, in the contract's explicit-verify split.
   every fallback is serial on the plain route with the reason named. It does not consult the store and it
   returns the core stream. `docs/serving.md` Section 3 describes the
   chunk table and the parallelism it relies on.
+- `chunked_encode(..., native=True)`, `plan_chunks(..., native=True)`,
+  `cpe.warm`, `cpe.native_admission`, `cpe.native_available` and the
+  `Tokenizer.encode(..., parallel=None)` keyword (research build,
+  `dev-031`) run the same plan and the chunk encodes inside the native
+  runtime. `parallel` is `None` by default and then changes nothing;
+  `"auto"` or a positive integer returns a `ChunkedEncoding` for a
+  stateless core-stream call (no `session`, `lookup` omitted or
+  `"off"`, `add_special_tokens=False`; anything else is a
+  `ValueError`). The native path is used when the loaded runtime has
+  it, the Python path otherwise. `ChunkedEncoding` gains
+  `native_facts` (`None` on the Python path) and `explain()["cpe"]`
+  gains `native_calls` and `last["native"]`.

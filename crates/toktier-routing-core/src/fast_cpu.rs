@@ -247,6 +247,9 @@ pub struct FastCpuEngine {
     boundary: BpeSyncBoundary,
     added_gate: AddedTokenGate,
     stats: Mutex<FastRepairStats>,
+    /// The certified chunk-parallel planner and its worker pool, built on
+    /// first use (`cpe.rs`).
+    cpe: crate::cpe::ChunkEncoderCell,
 }
 
 impl fmt::Debug for FastCpuEngine {
@@ -327,6 +330,7 @@ impl FastCpuEngine {
             boundary,
             added_gate,
             stats: Mutex::new(FastRepairStats::default()),
+            cpe: OnceLock::new(),
         };
         // Pay the single-core parse/verification cost at construction. This
         // keeps the first session append bounded while preserving lazy,
@@ -738,7 +742,7 @@ impl FastCpuEngine {
         )
     }
 
-    fn full_ids_with_source(
+    pub(crate) fn full_ids_with_source(
         &self,
         text: &str,
         engine: &mut Gigatoken,
@@ -750,6 +754,25 @@ impl FastCpuEngine {
             |reference, text| reference.encode_ids_with_added_flag(text),
             |this, text, engine| this.fast_ids_with(text, engine),
         )
+    }
+
+    /// A fresh corrected-Gigatoken worker sharing the primary's model
+    /// tables, for the chunk-parallel pool.
+    pub(crate) fn fork_worker(&self) -> Result<Gigatoken, EngineError> {
+        Ok(self.locked_primary()?.fork())
+    }
+
+    pub(crate) fn boundary(&self) -> &BpeSyncBoundary {
+        &self.boundary
+    }
+
+    /// The exact tokenizer document this engine was constructed over.
+    pub(crate) fn tokenizer_json_bytes(&self) -> &[u8] {
+        &self.tokenizer_json
+    }
+
+    pub(crate) fn cpe_cell(&self) -> &crate::cpe::ChunkEncoderCell {
+        &self.cpe
     }
 
     /// Reconstruct character spans for an externally produced exact ID stream

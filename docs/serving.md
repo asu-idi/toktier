@@ -172,6 +172,24 @@ Two things the chunked call does not do. It does not consult the store
 that will grow), and it returns the core stream only -- special tokens
 are a read-time template around it, as for sessions.
 
+Native chunk encoder (research build, `dev-031`). The same plan --
+position for position, including the literal guard and the
+normalization-stability condition -- is also implemented inside the
+native runtime (`crates/toktier-routing-core/src/cpe.rs`), where the
+chunks are encoded on a persistent pool of corrected-Gigatoken workers
+(checked out per chunk, no prefix sharing between concurrent callers,
+pool size independent of the chunk count) and concatenated before the
+ids cross into Python. `cpe.chunked_encode(..., native=True)` and
+`Tokenizer.encode(text, parallel="auto" | k)` select it; the default
+of both remains the Python path above. `cpe.warm(tokenizer, workers=,
+text=)` forks and pre-warms the pool ahead of the first request;
+`cpe.native_admission(tokenizer)` reads the native planner's admission
+facts, and `ChunkedEncoding.native_facts` carries the per-call row
+sources and phase timings. This build is not a certified release: its
+fast_cpu source identity has moved, so the corrected CPU route is
+admitted only under the experimental policy until the identity is
+registered.
+
 ## 4. Process shape
 
 - A `Session` object has one owner; the tokenizer itself may be shared

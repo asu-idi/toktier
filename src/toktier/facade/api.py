@@ -799,6 +799,7 @@ class Tokenizer:
         session: str | None = None,
         lookup: str | None = None,
         add_special_tokens: bool = False,
+        parallel: str | int | None = None,
     ) -> Encoding:
         """Encode one document.
 
@@ -815,7 +816,24 @@ class Tokenizer:
         the ids a from-scratch reference encode would return; an
         explicitly selected experimental repair backend labels itself
         outside that guarantee.
+
+        ``parallel`` (research build; off by default) encodes the
+        document in certified chunks through :mod:`toktier.cpe`:
+        ``"auto"`` takes the chunk count from the document length, an
+        integer names it. The call is stateless (no ``session``,
+        ``lookup`` omitted or ``"off"``, core stream only) and returns a
+        :class:`toktier.cpe.ChunkedEncoding`, whose ids equal the plain
+        encode; the native chunk encoder is used when the loaded runtime
+        has one, the Python-level one otherwise.
         """
+        if parallel is not None:
+            return self._encode_parallel(
+                text,
+                parallel,
+                session=session,
+                lookup=lookup,
+                add_special_tokens=add_special_tokens,
+            )
         return Encoding(
             ids=tuple(
                 self._encode_ids(
@@ -826,6 +844,35 @@ class Tokenizer:
                 )
             )
         )
+
+    def _encode_parallel(
+        self,
+        text: str,
+        parallel: str | int,
+        *,
+        session: str | None,
+        lookup: str | None,
+        add_special_tokens: bool,
+    ) -> Encoding:
+        """The ``parallel=`` branch of :meth:`encode`."""
+        from ..cpe import chunked_encode, native_available
+
+        self._require_open()
+        if session is not None:
+            raise ValueError("parallel encode is stateless; it does not take a session")
+        if lookup not in (None, "off"):
+            raise ValueError(
+                "parallel encode is stateless; lookup must be omitted or 'off'"
+            )
+        if add_special_tokens:
+            raise ValueError("parallel encode returns the core stream")
+        if parallel == "auto":
+            k: int | None = None
+        elif type(parallel) is int and parallel >= 1:
+            k = parallel
+        else:
+            raise ValueError("parallel must be 'auto' or a positive integer")
+        return chunked_encode(self, text, k=k, native=native_available(self) or None)
 
     def _encode_ids(
         self,

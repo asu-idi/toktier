@@ -155,7 +155,11 @@ normalizer the rule reasons about (none, the empty sequence, NFC); the
 chunk table was measured on three of them and four corpus types.
 
 What remains is native, and is registered for 0.2.11 as a Rust
-`ChunkEncoder`: the cut search and the concatenation below PyO3, so the
+`ChunkEncoder` (a research prototype exists on `dev-031`:
+`crates/toktier-routing-core/src/cpe.rs`, reachable through
+`cpe.chunked_encode(native=True)` and `Tokenizer.encode(parallel=)`;
+its identity is not registered, so it is not a release): the cut
+search and the concatenation below PyO3, so the
 per-chunk Python boundary (each row handed over and concatenated) stops
 being the floor -- on the faster engines it is most of what is left --
 together with the batch-path items the same measurement surfaced: fork

@@ -1159,6 +1159,7 @@ pub fn fast_cpu_source_paths(root: &Path) -> Vec<PathBuf> {
             "rust-toolchain.toml",
             "crates/toktier/build_support/source_identity.rs",
             "crates/toktier-routing-core/Cargo.toml",
+            "crates/toktier-routing-core/src/cpe.rs",
             "crates/toktier-routing-core/src/fast_cpu.rs",
             "crates/toktier-routing-core/src/lib.rs",
             "crates/toktier-routing-core/src/reference.rs",

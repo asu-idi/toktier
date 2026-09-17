@@ -16,12 +16,17 @@
 use memchr::{memchr, memchr2, memchr3};
 use std::fmt;
 
+mod cpe;
 mod entry_store;
 mod fast_cpu;
 mod gpu;
 mod reference;
 mod runtime;
 
+pub use cpe::{
+    default_chunk_workers, ChunkEncoder, ChunkPlan, ChunkedIds, NormalizerMode,
+    CPE_DEFAULT_SCAN_BUDGET, R_CPE_FAMILY_UNSUPPORTED, R_CPE_NO_CUT, R_CPE_ROUTE_NOT_FAST_CPU,
+};
 pub use entry_store::{
     EntryStoreOpenError, EntryStoreStats, NativeEntryStore, AUTO_MIN_BYTES,
     DEFAULT_CACHE_BUDGET_BYTES, MAX_AUTO_ENTRIES,
@@ -305,12 +310,12 @@ impl BpeSyncBoundary {
     }
 
     #[inline]
-    fn class(&self, value: char) -> u8 {
+    pub(crate) fn class(&self, value: char) -> u8 {
         self.classes[value as usize]
     }
 
     #[inline]
-    fn accepts(&self, previous: char, current: char) -> bool {
+    pub(crate) fn accepts(&self, previous: char, current: char) -> bool {
         // O=0, S=1, L=2, N=3, M=4. These eight pairs and the two
         // carve-outs are the frozen global sync profile used by the eleven
         // certified corrected-Gigatoken artifacts.

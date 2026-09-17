@@ -53,11 +53,19 @@ Two things this module deliberately is not. It is not a new route: the
 chunks run through the tokenizer's own batch path, so the plan, the
 per-input guards and the fallback ledger apply to each chunk exactly as
 they apply to a whole document (a chunk that trips a guard is routed to
-the reference on its own, which localizes that cost to one chunk). And it
-is not a native change: the cut search and the concatenation are Python,
-so the parallelism available is the batch worker pool of the native
-engine -- the Rayon thread count at first use, and at most one worker per
-64 KiB of payload.
+the reference on its own, which localizes that cost to one chunk). And
+by default it is not a native change: the cut search and the
+concatenation are Python, so the parallelism available is the batch
+worker pool of the native engine -- the Rayon thread count at first use,
+and at most one worker per 64 KiB of payload.
+
+A native counterpart exists in this research build (``native=True``, and
+``Tokenizer.encode(..., parallel=...)``): the same plan, position for
+position, computed inside the native runtime, with the chunks encoded on
+a persistent pool of corrected-Gigatoken workers and concatenated there
+(``crates/toktier-routing-core/src/cpe.rs``). Its facts come back in
+``ChunkedEncoding.native_facts``; the counters of this module count both
+paths.
 
 Admission is the certified repair roster, narrowed to the normalizers
 this module reasons about. A tokenizer whose family and artifact digest
@@ -85,6 +93,7 @@ import weakref
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import chain
+from typing import Any
 
 from .facade.api import Encoding, Tokenizer
 from .policy import ReasonCode
@@ -101,8 +110,11 @@ __all__ = [
     "chunked_encode",
     "default_chunks",
     "is_admitted",
+    "native_admission",
+    "native_available",
     "plan_chunks",
     "stats",
+    "warm",
 ]
 
 # Class indices of the frozen O/S/L/N/M property table.
@@ -425,6 +437,9 @@ class ChunkedEncoding(Encoding):
     literal_rejects: int = 0
     norm_rejects: int = 0
     serial_reason: str | None = None
+    #: The native encoder's own facts (row sources, phase timings) when
+    #: the native path produced this result; ``None`` otherwise.
+    native_facts: Mapping[str, object] | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -474,6 +489,7 @@ class _Planner:
         self._cut_misses = 0
         self._literal_rejects = 0
         self._norm_rejects = 0
+        self._native_calls = 0
         self._fallback_counts: dict[str, int] = {}
         self._last: dict[str, object] | None = None
 
@@ -547,6 +563,7 @@ class _Planner:
         plan: ChunkPlan | None,
         serial_reason: str | None,
         below_threshold: bool,
+        native: bool = False,
     ) -> None:
         with self._lock:
             self._calls += 1
@@ -564,6 +581,8 @@ class _Planner:
                 self._cut_misses += plan.cut_misses
                 self._literal_rejects += plan.literal_rejects
                 self._norm_rejects += plan.norm_rejects
+            if native:
+                self._native_calls += 1
             self._last = {
                 "chars": chars,
                 "tokens": tokens,
@@ -573,6 +592,7 @@ class _Planner:
                 "cut_misses": plan.cut_misses if plan is not None else 0,
                 "literal_rejects": plan.literal_rejects if plan is not None else 0,
                 "norm_rejects": plan.norm_rejects if plan is not None else 0,
+                "native": native,
             }
 
     def report(self) -> dict[str, object]:
@@ -591,6 +611,7 @@ class _Planner:
                 "cut_misses": self._cut_misses,
                 "literal_rejects": self._literal_rejects,
                 "norm_rejects": self._norm_rejects,
+                "native_calls": self._native_calls,
                 "fallback_counts": dict(sorted(self._fallback_counts.items())),
                 "last": dict(self._last) if self._last is not None else None,
             }
@@ -630,11 +651,14 @@ def plan_chunks(
     k: int | None = None,
     min_chunk: int | None = None,
     scan_budget: int = DEFAULT_SCAN_BUDGET,
+    native: bool | None = None,
 ) -> ChunkPlan:
     """The cut plan :func:`chunked_encode` would use, without encoding.
 
     Raises ``ValueError`` for a tokenizer outside the admitted set; the
     encode entry point prefers to fall back, this one prefers to say so.
+    ``native=True`` asks the native runtime for its plan instead (research
+    build); the two are meant to agree position for position.
     """
     planner = _planner_for(tokenizer)
     if not planner.admitted:
@@ -642,7 +666,52 @@ def plan_chunks(
             f"{tokenizer.family!r} has no certified chunk-cut rule: {planner.refusal}"
         )
     chunks = _resolve_k(k, len(text))
-    return planner.plan(text, chunks, min_chunk, _check_budget(scan_budget))
+    budget = _check_budget(scan_budget)
+    if native:
+        if not isinstance(text, str):
+            raise TypeError("text must be a str")
+        facts = _native_runtime(tokenizer).chunked_plan(text, chunks, min_chunk, budget)
+        return ChunkPlan(
+            spans=tuple((int(low), int(high)) for low, high in facts["spans"]),
+            k=chunks,
+            cut_misses=int(facts["cut_misses"]),
+            literal_rejects=int(facts["literal_rejects"]),
+            norm_rejects=int(facts["norm_rejects"]),
+        )
+    return planner.plan(text, chunks, min_chunk, budget)
+
+
+def _native_runtime(tokenizer: Tokenizer) -> Any:
+    """The native request runtime with the chunked surface, or raise."""
+    runtime = tokenizer._native_request_runtime()
+    if runtime is None or not callable(getattr(runtime, "chunked_encode", None)):
+        raise RuntimeError(
+            "the loaded runtime has no native chunked encoder (research build)"
+        )
+    return runtime
+
+
+def native_available(tokenizer: Tokenizer) -> bool:
+    """Whether the native chunked encoder is reachable for ``tokenizer``."""
+    runtime = tokenizer._native_request_runtime()
+    return runtime is not None and callable(getattr(runtime, "chunked_encode", None))
+
+
+def native_admission(tokenizer: Tokenizer) -> dict[str, object]:
+    """The native chunk encoder's admission facts."""
+    facts: dict[str, object] = dict(_native_runtime(tokenizer).chunked_admission())
+    return facts
+
+
+def warm(
+    tokenizer: Tokenizer, *, workers: int | None = None, text: str | None = None
+) -> int:
+    """Fork (and, with ``text``, pre-warm) the native chunk worker pool.
+
+    Returns the pool size. Without the call the pool is forked on first use.
+    """
+    size: int = _native_runtime(tokenizer).chunked_warm(workers, text)
+    return size
 
 
 def _resolve_k(k: int | None, chars: int) -> int:
@@ -674,6 +743,7 @@ def chunked_encode(
     k: int | None = None,
     min_chunk: int | None = None,
     scan_budget: int = DEFAULT_SCAN_BUDGET,
+    native: bool | None = None,
 ) -> ChunkedEncoding:
     """Encode ``text`` in certified chunks; ids equal ``tokenizer.encode``.
 
@@ -690,6 +760,10 @@ def chunked_encode(
     certified cut exists, are encoded serially on the tokenizer's plain
     route; the result says so in ``serial_reason`` and the tokenizer's
     ``explain()["cpe"]`` block counts it.
+
+    ``native=True`` runs the plan and the chunk encodes inside the native
+    runtime (research build; raises ``RuntimeError`` when the loaded
+    runtime has no such surface). The default keeps the Python path.
     """
     if not isinstance(text, str):
         raise TypeError("text must be a str")
@@ -697,6 +771,10 @@ def chunked_encode(
     chars = len(text)
     requested = _resolve_k(k, chars)
     budget = _check_budget(scan_budget)
+    if native:
+        return _native_chunked_encode(
+            tokenizer, planner, text, requested, min_chunk, budget
+        )
     if not planner.admitted:
         ids = tokenizer.encode(text, lookup="off").ids
         planner.record(
@@ -763,4 +841,47 @@ def chunked_encode(
         cut_misses=plan.cut_misses,
         literal_rejects=plan.literal_rejects,
         norm_rejects=plan.norm_rejects,
+    )
+
+
+def _native_chunked_encode(
+    tokenizer: Tokenizer,
+    planner: _Planner,
+    text: str,
+    requested: int,
+    min_chunk: int | None,
+    budget: int,
+) -> ChunkedEncoding:
+    """The native path of :func:`chunked_encode`."""
+    runtime = _native_runtime(tokenizer)
+    ids, facts = runtime.chunked_encode(text, requested, min_chunk, budget)
+    serial_reason = facts["serial_reason"]
+    below = bool(facts["below_threshold"])
+    plan = ChunkPlan(
+        spans=(),
+        k=requested,
+        cut_misses=int(facts["cut_misses"]),
+        literal_rejects=int(facts["literal_rejects"]),
+        norm_rejects=int(facts["norm_rejects"]),
+    )
+    planner.record(
+        chunks=int(facts["chunks"]),
+        k=requested,
+        chars=len(text),
+        tokens=len(ids),
+        plan=None if below or serial_reason == _R_FAMILY else plan,
+        serial_reason=None if serial_reason is None else str(serial_reason),
+        below_threshold=below,
+        native=True,
+    )
+    return ChunkedEncoding(
+        ids=tuple(ids),
+        chunks=int(facts["chunks"]),
+        k_requested=requested,
+        cuts=tuple(int(cut) for cut in facts["cuts"]),
+        cut_misses=plan.cut_misses,
+        literal_rejects=plan.literal_rejects,
+        norm_rejects=plan.norm_rejects,
+        serial_reason=None if serial_reason is None else str(serial_reason),
+        native_facts=dict(facts),
     )

@@ -36,10 +36,10 @@ use pyo3::sync::GILOnceCell;
 use pyo3::types::{PyBytes, PyDict, PyList, PyString, PyStringMethods};
 
 use toktier_routing_core::{
-    BpeSyncBoundary, EntryStoreOpenError, FastCpuEngine, FastRepairSpec, LiteralMode,
-    LiteralPrefix, NativeEntryStore, NativeGpuEngine, NativeGpuOpener, NativeGpuSource,
-    NativePrebuiltGpu, NativePrebuiltGpuConfig, NativeRouter, ReferenceEngine,
-    RouteSelector as CoreRouteSelector,
+    default_chunk_workers, BpeSyncBoundary, ChunkedIds, EntryStoreOpenError, FastCpuEngine,
+    FastEncodeSource, FastRepairSpec, LiteralMode, LiteralPrefix, NativeEntryStore,
+    NativeGpuEngine, NativeGpuOpener, NativeGpuSource, NativePrebuiltGpu, NativePrebuiltGpuConfig,
+    NativeRouter, ReferenceEngine, RouteSelector as CoreRouteSelector, CPE_DEFAULT_SCAN_BUDGET,
 };
 use toktier_store_core::{
     AppendReport, BoundaryCut, Encoding, EngineError, KeyId, RecoveryMaterial, SemanticFingerprint,
@@ -1330,6 +1330,153 @@ impl PyNativeRuntime {
     fn fallback_chain(&self) -> Vec<&'static str> {
         self.router.chain()
     }
+
+    // -- certified chunk-parallel encode (research build) ----------------
+
+    /// Core-stream ids of `text` through the certified chunk-parallel
+    /// encoder of the corrected CPU engine, plus the facts of the call
+    /// (chunks, cuts, rejects, per-row sources, phase timings). `k` is the
+    /// requested chunk count; `min_chunk` and `scan_budget` are the plan
+    /// bounds of `toktier.cpe`. The ids equal `encode(text, lookup_auto=False)`.
+    #[pyo3(signature = (text, k, min_chunk = None, scan_budget = CPE_DEFAULT_SCAN_BUDGET))]
+    fn chunked_encode<'py>(
+        &self,
+        py: Python<'py>,
+        text: PyBackedStr,
+        k: usize,
+        min_chunk: Option<usize>,
+        scan_budget: usize,
+    ) -> PyResult<(Vec<u32>, Bound<'py, PyDict>)> {
+        self.calls
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let encoded = py
+            .allow_threads(|| {
+                self.router
+                    .chunked_encode_ids(&text, k, min_chunk, scan_budget)
+            })
+            .map_err(reference_err)?;
+        let facts = chunked_facts(py, &encoded)?;
+        Ok((encoded.ids, facts))
+    }
+
+    /// [`Self::chunked_encode`] with the ids returned as little-endian
+    /// `u32` bytes instead of a Python list (the boundary cost of the list
+    /// is then the caller's choice).
+    #[pyo3(signature = (text, k, min_chunk = None, scan_budget = CPE_DEFAULT_SCAN_BUDGET))]
+    fn chunked_encode_bytes<'py>(
+        &self,
+        py: Python<'py>,
+        text: PyBackedStr,
+        k: usize,
+        min_chunk: Option<usize>,
+        scan_budget: usize,
+    ) -> PyResult<(Bound<'py, PyBytes>, Bound<'py, PyDict>)> {
+        self.calls
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let encoded = py
+            .allow_threads(|| {
+                self.router
+                    .chunked_encode_ids(&text, k, min_chunk, scan_budget)
+            })
+            .map_err(reference_err)?;
+        let facts = chunked_facts(py, &encoded)?;
+        Ok((ids_to_bytes(py, &encoded.ids), facts))
+    }
+
+    /// The cut plan `chunked_encode` would use, without encoding: character
+    /// spans, byte spans and the reject counters. Raises for a tokenizer
+    /// outside the admitted set.
+    #[pyo3(signature = (text, k, min_chunk = None, scan_budget = CPE_DEFAULT_SCAN_BUDGET))]
+    fn chunked_plan<'py>(
+        &self,
+        py: Python<'py>,
+        text: PyBackedStr,
+        k: usize,
+        min_chunk: Option<usize>,
+        scan_budget: usize,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let started = std::time::Instant::now();
+        let plan = py
+            .allow_threads(|| self.router.chunked_plan(&text, k, min_chunk, scan_budget))
+            .map_err(reference_err)?;
+        let plan_ns = started.elapsed().as_nanos() as u64;
+        let output = PyDict::new(py);
+        output.set_item("spans", plan.spans.clone())?;
+        output.set_item("byte_spans", plan.byte_spans.clone())?;
+        output.set_item("k", plan.k)?;
+        output.set_item("chars", plan.chars)?;
+        output.set_item("cut_misses", plan.cut_misses)?;
+        output.set_item("literal_rejects", plan.literal_rejects)?;
+        output.set_item("norm_rejects", plan.norm_rejects)?;
+        output.set_item("plan_ns", plan_ns)?;
+        Ok(output)
+    }
+
+    /// Fork the chunk worker pool up to `workers` workers (the Rayon
+    /// thread count when omitted), running each new worker over `text`
+    /// when one is given so its caches are warm. Returns the pool size.
+    #[pyo3(signature = (workers = None, text = None))]
+    fn chunked_warm(
+        &self,
+        py: Python<'_>,
+        workers: Option<usize>,
+        text: Option<PyBackedStr>,
+    ) -> PyResult<usize> {
+        let workers = workers.unwrap_or_else(default_chunk_workers);
+        py.allow_threads(|| self.router.chunked_warm(workers, text.as_deref()))
+            .map_err(reference_err)
+    }
+
+    /// The chunk encoder's admission facts: whether this tokenizer may be
+    /// chunked, the refusal otherwise, the normalizer shape it reasons
+    /// about, the literal count of its guard and the workers forked so far.
+    fn chunked_admission<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let encoder = self.router.chunk_encoder().map_err(reference_err)?;
+        let output = PyDict::new(py);
+        output.set_item("admitted", encoder.admitted())?;
+        output.set_item("refusal", encoder.refusal())?;
+        output.set_item("normalizer", encoder.normalizer().map(|mode| mode.as_str()))?;
+        output.set_item("literals", encoder.literal_count())?;
+        output.set_item("workers", encoder.worker_count())?;
+        output.set_item("default_workers", default_chunk_workers())?;
+        Ok(output)
+    }
+}
+
+/// The facts of one chunked encode as a dictionary.
+fn chunked_facts<'py>(py: Python<'py>, encoded: &ChunkedIds) -> PyResult<Bound<'py, PyDict>> {
+    let output = PyDict::new(py);
+    output.set_item("chunks", encoded.chunks)?;
+    output.set_item("k_requested", encoded.k_requested)?;
+    output.set_item("cuts", encoded.cuts.clone())?;
+    output.set_item("cut_misses", encoded.cut_misses)?;
+    output.set_item("literal_rejects", encoded.literal_rejects)?;
+    output.set_item("norm_rejects", encoded.norm_rejects)?;
+    output.set_item("serial_reason", encoded.serial_reason)?;
+    output.set_item("below_threshold", encoded.below_threshold)?;
+    let mut gigatoken = 0usize;
+    let mut added = 0usize;
+    let mut guard = 0usize;
+    for source in &encoded.sources {
+        match source {
+            FastEncodeSource::Gigatoken => gigatoken += 1,
+            FastEncodeSource::ReferenceAddedToken => added += 1,
+            FastEncodeSource::ReferenceEngineGuard => guard += 1,
+        }
+    }
+    let sources = PyDict::new(py);
+    sources.set_item("gigatoken", gigatoken)?;
+    sources.set_item("hf_added_token", added)?;
+    sources.set_item("hf_engine_guard", guard)?;
+    output.set_item("sources", sources)?;
+    output.set_item("row_bytes", encoded.row_bytes.clone())?;
+    output.set_item("plan_ns", encoded.plan_ns)?;
+    output.set_item("encode_ns", encoded.encode_ns)?;
+    output.set_item("concat_ns", encoded.concat_ns)?;
+    output.set_item("worker_ns_max", encoded.worker_ns_max)?;
+    output.set_item("worker_ns_min", encoded.worker_ns_min)?;
+    output.set_item("cold_forks", encoded.cold_forks)?;
+    Ok(output)
 }
 
 // ---------------------------------------------------------------- store --

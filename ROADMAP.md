@@ -142,15 +142,17 @@ fifteen the evidence covers is later work.
 **Python-level shipped in 0.2.10** (`toktier.cpe.chunked_encode`,
 `docs/serving.md` Section 3): a long input is cut at certified stable
 boundaries -- the synchronizing-transition rule the session-repair
-witness already uses, plus an added-token literal guard -- the chunks
-run as one batch on the certified CPU engine's worker pool, and the id
-rows are concatenated. Because no pre-token can span a certified cut,
-there is no boundary to repair and nothing to retry: the result is the
-serial encoding by construction, and an input in which no certified cut
-exists is encoded serially with the reason named. Admission is the
-certified repair roster (the eleven byte-level BPE artifacts the sync
-profile was certified on); the chunk table was measured on three of
-them and four corpus types.
+witness already uses, plus an added-token literal guard and, for an NFC
+family, the requirement that the cut also be a certified cut of the
+normalized text -- the chunks run as one batch on the certified CPU
+engine's worker pool, and the id rows are concatenated. Because no
+pre-token can span a certified cut, there is no boundary to repair and
+nothing to retry: the result is the serial encoding by construction,
+and an input in which no certified cut exists is encoded serially with
+the reason named. Admission is the certified repair roster (the eleven
+byte-level BPE artifacts the sync profile was certified on) with a
+normalizer the rule reasons about (none, the empty sequence, NFC); the
+chunk table was measured on three of them and four corpus types.
 
 What remains is native, and is registered for 0.2.11 as a Rust
 `ChunkEncoder`: the cut search and the concatenation below PyO3, so the

@@ -89,8 +89,11 @@ contextvar`), or left to content lookup (`auto`, no protocol change at all),
 or turned off (`off`, stateless encode). A shadow mode
 (`TOKTIER_SGLANG_SHADOW=sync|async`) re-encodes each request with the
 wrapped tokenizer and compares id by id; `sync` corrects on the spot and
-counts, `async` counts after the fact. A JSONL timing log records each
-encode next to SGLang's own tokenize window.
+counts, `async` counts after the fact, judged against an independent
+copy of the wrapped object (never a fresh load by name, which could
+differ from it), or synchronously against the object itself when no copy
+can be made (`stats()["shadow"]` says which). A JSONL timing log records
+each encode next to SGLang's own tokenize window.
 
 The same wrapper can be attached without patching anything, for evaluation:
 a `sitecustomize` on `PYTHONPATH` calls
@@ -148,7 +151,9 @@ the fields `cpe_k`, `cpe_chunks` and `cpe_serial_reason` (`null` when the
 chunks ran; a reason code such as `R_CPE_NO_CUT` when the document was
 encoded serially after all), and the stats file carries the tokenizer's
 `cpe` diagnostics block. Correctness posture is unchanged: the chunked
-result equals the from-scratch reference encode, and the shadow check
+result equals the from-scratch reference encode (for an NFC family such
+as qwen3_8b, cuts are made only where they are also cuts of the
+normalized text; `docs/serving.md` Section 3), and the shadow check
 compares it like any other.
 
 ## Correctness posture, briefly
@@ -165,6 +170,32 @@ the wrapper delegate those calls rather than guess. The wrapper loads the
 family by id (`TOKTIER_SGLANG_FAMILY`) or by resolving the tokenizer's
 `name_or_path` through `toktier.from_pretrained`, which admits acceleration
 only for tokenizer bytes it has certified.
+
+## The wrapped tokenizer must be the one toktier loaded
+
+A family or repository name alone cannot establish that the Hugging Face
+object SGLang hands the wrapper is the tokenizer toktier loaded: the
+supplied object may carry another revision, other loader options, or
+live vocabulary changes (`add_tokens` after loading is the concrete
+case, and a token added that way is one id on the supplied object and
+several on toktier's). So before the wrapper accelerates anything it
+serializes the supplied object's fast backend (`backend_tokenizer.
+to_str()`, which includes tokens added after loading) and the loader
+face toktier executes against, and compares the sections that decide
+the core id stream: model, normalizer, pre-tokenizer, added tokens, and
+the truncation and padding state (`check_core_identity`). When the two
+are not equivalent, or one side cannot be serialized, the wrapper
+delegates every call to the supplied tokenizer for its whole life; the
+outcome is in `stats()["identity"]` (`status`, `reason`, the differing
+`sections`) and in the init record of the timing log, and `mode` then
+reads `passthrough`. `TOKTIER_SGLANG_IDENTITY=skip` turns the check off
+for a tokenizer that cannot be serialized, at the operator's risk (the
+shadow check is then the only guard).
+
+Attribute writes follow attribute reads: an assignment SGLang makes on
+the tokenizer -- `tokenizer.chat_template = ...` in its template manager
+when a chat template is installed -- lands on the wrapped object, where
+the delegated `apply_chat_template` reads it.
 
 ## What we are not proposing
 

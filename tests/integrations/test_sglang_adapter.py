@@ -3,16 +3,28 @@
 The toktier path itself is exercised end to end by the PLAN/184 smoke
 (shadow check against the Hugging Face stream on a live server); these
 tests pin the pure-Python contract: delegation, the session-key plumbing,
-the special-token template derivation, and the manager attachment.
+the special-token template derivation, the identity gate, attribute
+forwarding, the shadow reference, and the manager attachment. One test
+at the end uses a real artifact when ``TOKTIER_TEST_ARTIFACTS`` names a
+directory of local artifacts (the convention of ``tests/test_cpe.py``).
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
+import shutil
+import time
+from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+import toktier
+from toktier import Config
+from toktier.artifacts.manifest import ArtifactManifest
+from toktier.artifacts.tables import ARTIFACT_MANIFEST
 from toktier.integrations.sglang import (
     SESSION_KEY,
     AdapterConfig,
@@ -20,13 +32,37 @@ from toktier.integrations.sglang import (
     _derive_special_template,
     attach_to_tokenizer_manager,
     bind_session_key,
+    check_core_identity,
     session_key_from_request,
     wrap_tokenizer,
 )
+from toktier.paths import artifact_cache_dir
+
+_ARTIFACTS = os.environ.get("TOKTIER_TEST_ARTIFACTS")
+
+
+def _tiny_tokenizer() -> Any:
+    """A real (Rust) fast tokenizer with a five-entry vocabulary."""
+    from tokenizers import Tokenizer, models, pre_tokenizers
+
+    tokenizer = Tokenizer(
+        models.BPE(
+            vocab={"<unk>": 0, "a": 1, "b": 2, "ab": 3, "c": 4},
+            merges=[("a", "b")],
+            unk_token="<unk>",
+        )
+    )
+    tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+    return tokenizer
 
 
 class _StubHf:
-    """A tiny tokenizer: one id per character; optional BOS/EOS template."""
+    """A tiny tokenizer: one id per character; optional BOS/EOS template.
+
+    Its ``backend_tokenizer`` is a real fast tokenizer whose serialization
+    the fake toktier below reports as its loader face, so the identity
+    gate finds the two equivalent unless a test changes one of them.
+    """
 
     name_or_path = "stub/model"
     eos_token_id = 999
@@ -34,6 +70,7 @@ class _StubHf:
 
     def __init__(self, bos: int | None = None, eos: int | None = None) -> None:
         self._bos, self._eos = bos, eos
+        self.backend_tokenizer = _tiny_tokenizer()
 
     def _core(self, text: str) -> list[int]:
         return [ord(c) for c in text]
@@ -191,8 +228,15 @@ class _FakeToktier:
     class plan:  # mirrors the attribute the wrapper reads
         backend = "fast_cpu"
 
+    class _backend:  # the loader face the identity gate reads
+        @staticmethod
+        def materialized_tokenizer_json() -> str:
+            face: str = _tiny_tokenizer().to_str()
+            return face
+
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
+        self.closed = False
 
     def encode(self, text: str, **kwargs: object) -> _Ids:
         self.calls.append(dict(kwargs))
@@ -202,7 +246,7 @@ class _FakeToktier:
         return {"store": None, "fallback_counts": {}, "cpe": {"calls": 1}}
 
     def close(self) -> None:
-        pass
+        self.closed = True
 
 
 class _Chunked:
@@ -298,3 +342,219 @@ def test_explicit_long_request_encoder_takes_precedence(
     )
     assert w.encode("x" * 8, add_special_tokens=False) == [1, 2, 3]
     assert w.stats()["how"] == {"long_request_encoder": 1}
+
+
+# -- identity gate (release-candidate review, finding 2) ----------------------
+
+
+def test_identity_equivalent_accelerates_and_drift_delegates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
+    hf = _StubHf()
+    w = wrap_tokenizer(hf, AdapterConfig(session_key="off"))
+    assert w.identity == {"status": "equivalent", "reason": None, "sections": []}
+    assert w.family == "fake_family" and w.toktier is fake
+    assert w.encode("ab", add_special_tokens=False) == [97, 98]
+    assert fake.calls == [{"lookup": "off"}]
+    assert w.stats()["mode"] == "off" and w.stats()["identity"]["status"] == (
+        "equivalent"
+    )
+    # A token added after loading: the supplied object is no longer the
+    # tokenizer toktier loaded, so the wrapper delegates for good.
+    drifted = _StubHf()
+    drifted.backend_tokenizer.add_tokens(["toktierprobeunique"])
+    fake2 = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake2)
+    w2 = wrap_tokenizer(drifted, AdapterConfig(session_key="off"))
+    assert w2.identity == {
+        "status": "mismatch",
+        "reason": "core configuration differs in added_tokens",
+        "sections": ["added_tokens"],
+    }
+    assert w2.toktier is None and w2.family is None and fake2.closed
+    assert w2.stats()["mode"] == "passthrough"
+    assert w2.encode("ab", add_special_tokens=False) == drifted.encode(
+        "ab", add_special_tokens=False
+    )
+    assert w2("ab")["input_ids"] == drifted("ab")["input_ids"]
+    assert w2.stats()["delegated"] == 2 and fake2.calls == []
+
+
+def test_identity_compares_every_core_section() -> None:
+    from tokenizers import normalizers
+
+    fake = _FakeToktier()
+    same = _StubHf()
+    assert check_core_identity(same, fake)["status"] == "equivalent"
+    normalized = _StubHf()
+    normalized.backend_tokenizer.normalizer = normalizers.NFC()
+    assert check_core_identity(normalized, fake)["sections"] == ["normalizer"]
+    truncating = _StubHf()
+    truncating.backend_tokenizer.enable_truncation(4)
+    assert check_core_identity(truncating, fake)["sections"] == ["truncation"]
+    padding = _StubHf()
+    padding.backend_tokenizer.enable_padding(length=8)
+    assert check_core_identity(padding, fake)["sections"] == ["padding"]
+    both = _StubHf()
+    both.backend_tokenizer.normalizer = normalizers.NFC()
+    both.backend_tokenizer.add_tokens(["x"])
+    assert check_core_identity(both, fake)["sections"] == ["normalizer", "added_tokens"]
+
+
+def test_identity_unavailable_delegates_and_skip_mode_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
+    hf = _StubHf()
+    del hf.backend_tokenizer
+    w = wrap_tokenizer(hf, AdapterConfig(session_key="off"))
+    assert w.identity["status"] == "unavailable" and w.toktier is None
+    assert w.identity["reason"] == (
+        "the supplied tokenizer has no serializable fast backend"
+    )
+    fake2 = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake2)
+    w2 = wrap_tokenizer(hf, AdapterConfig(session_key="off", identity="skip"))
+    assert w2.identity["status"] == "skipped" and w2.toktier is fake2
+    with pytest.raises(ValueError):
+        AdapterConfig(identity="maybe")
+    assert AdapterConfig.from_env({"TOKTIER_SGLANG_IDENTITY": "skip"}).identity == (
+        "skip"
+    )
+    assert AdapterConfig.from_env({}).identity == "require"
+    # passthrough never loads toktier, so there is nothing to compare
+    w3 = wrap_tokenizer(_StubHf(), AdapterConfig(session_key="passthrough"))
+    assert w3.identity["status"] == "skipped"
+
+
+# -- attribute writes (release-candidate review, finding 3) ------------------
+
+
+def test_attribute_writes_follow_attribute_reads() -> None:
+    hf: Any = _StubHf()
+    hf.chat_template = "old"
+    w = wrap_tokenizer(hf, AdapterConfig(session_key="passthrough"))
+    w.chat_template = "new"
+    assert hf.chat_template == "new" and w.chat_template == "new"
+    assert "chat_template" not in w.__dict__
+    w.brand_new = 1
+    assert hf.brand_new == 1 and w.brand_new == 1
+    del w.brand_new
+    assert not hasattr(hf, "brand_new") and not hasattr(w, "brand_new")
+    w._private = 2  # wrapper state stays on the wrapper
+    assert w.__dict__["_private"] == 2 and not hasattr(hf, "_private")
+    with pytest.raises(AttributeError):
+        w.family = "x"  # a read-only wrapper property
+
+
+# -- shadow reference (release-candidate review, finding 4) -------------------
+
+
+def _wait_for_shadow(w: SGLangToktierTokenizer, count: int) -> None:
+    deadline = time.perf_counter() + 5.0
+    while w.stats()["shadow_checked"] < count and time.perf_counter() < deadline:
+        time.sleep(0.01)
+
+
+def test_async_shadow_judges_against_a_copy_of_the_supplied_tokenizer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
+    hf: Any = _StubHf()
+    # A live difference the identity gate does not see (the serialized
+    # backend is unchanged): only a copy of this very object carries it.
+    hf._core = lambda text: [1] * len(text)
+    w = wrap_tokenizer(hf, AdapterConfig(session_key="off", shadow="async"))
+    assert w.identity["status"] == "equivalent"
+    assert w._shadow_ref is not hf and isinstance(w._shadow_ref, _StubHf)
+    assert w.stats()["shadow"] == "async"
+    assert w.encode("ab", add_special_tokens=False) == [97, 98]
+    _wait_for_shadow(w, 1)
+    assert w.stats()["shadow_checked"] == 1 and w.stats()["shadow_mismatch"] == 1
+    w.close()
+
+
+def test_async_shadow_without_a_copy_checks_synchronously(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Uncopyable(_StubHf):
+        def __deepcopy__(self, memo: dict[int, Any]) -> Any:
+            raise TypeError("no copy")
+
+        def __reduce__(self) -> Any:
+            raise TypeError("no pickle")
+
+    fake = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
+    hf = _Uncopyable()
+    w = wrap_tokenizer(hf, AdapterConfig(session_key="off", shadow="async"))
+    assert w.stats()["shadow"] == "sync" and w._shadow_ref is hf
+    assert w._shadow_q is None
+    assert w.encode("ab", add_special_tokens=False) == [97, 98]
+    assert w.stats()["shadow_checked"] == 1 and w.stats()["shadow_mismatch"] == 0
+
+
+# -- a real artifact: the reviewed add_tokens sequence ------------------------
+
+
+@pytest.fixture(scope="module")
+def qwen3_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Config]:
+    artifacts = _ARTIFACTS
+    if not artifacts:
+        pytest.skip("TOKTIER_TEST_ARTIFACTS is not set")
+    root = Path(artifacts or "")
+    manifest = ArtifactManifest.load(ARTIFACT_MANIFEST)
+    entry = manifest.get("qwen3_8b")
+    source: Path | None = None
+    for name in (entry.directory_name, "qwen3_8b"):
+        candidate = root / name
+        if (candidate / "tokenizer.json").is_file():
+            source = candidate
+    if source is None:
+        pytest.skip("qwen3_8b artifact not available under TOKTIER_TEST_ARTIFACTS")
+    assert source is not None
+    home = tmp_path_factory.mktemp("sglang-identity")
+    config = Config(home=home, offline=True)
+    cache = artifact_cache_dir(config)
+    cache.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, cache / entry.directory_name)
+    yield config
+
+
+def test_real_tokenizer_drift_after_add_tokens_is_delegated(
+    qwen3_home: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import tokenizers
+    from transformers import PreTrainedTokenizerFast
+
+    subject = toktier.load("qwen3_8b", config=qwen3_home, device="cpu")
+    face = subject._backend.materialized_tokenizer_json()
+    hf = PreTrainedTokenizerFast(tokenizer_object=tokenizers.Tokenizer.from_str(face))
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: subject)
+    w = wrap_tokenizer(hf, AdapterConfig(session_key="off"))
+    assert w.identity["status"] == "equivalent" and w.family == "qwen3_8b"
+    probe = "toktierprobeunique in a sentence"
+    assert w.encode(probe, add_special_tokens=False) == hf.encode(
+        probe, add_special_tokens=False
+    )
+    assert w.stats()["how"] == {"off": 1}
+    # release-candidate review, finding 2: the literal becomes one token on
+    # the supplied object; the wrapper must answer with that object.
+    hf.add_tokens(["toktierprobeunique"])
+    second = toktier.load("qwen3_8b", config=qwen3_home, device="cpu")
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: second)
+    w2 = wrap_tokenizer(hf, AdapterConfig(session_key="off"))
+    assert w2.identity["status"] == "mismatch"
+    assert w2.identity["sections"] == ["added_tokens"]
+    expected = hf.encode("toktierprobeunique", add_special_tokens=False)
+    assert len(expected) == 1
+    assert w2.encode("toktierprobeunique", add_special_tokens=False) == expected
+    assert (
+        w2("toktierprobeunique")["input_ids"] == hf("toktierprobeunique")["input_ids"]
+    )
+    assert w2.stats()["mode"] == "passthrough" and w2.stats()["delegated"] == 2
+    w.close()

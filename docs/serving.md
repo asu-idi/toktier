@@ -100,9 +100,35 @@ What decides whether it is worth it:
 
 - **Admission.** Only a tokenizer whose family and artifact digest have
   an entry in the certified repair roster may be chunked (those are the
-  eleven byte-level BPE artifacts the sync profile was certified on).
-  Any other tokenizer is encoded serially, and the result says so in
-  `serial_reason` (`R_CPE_FAMILY_UNSUPPORTED`).
+  eleven byte-level BPE artifacts the sync profile was certified on),
+  and only when its loader face carries no normalizer, the empty
+  normalizer sequence, or NFC with every added token matched on the
+  input text (`normalized: false`) -- the normalizer shapes the cut rule
+  reasons about. Any other tokenizer is encoded serially, and the result
+  says so in `serial_reason` (`R_CPE_FAMILY_UNSUPPORTED`; the `cpe`
+  block of `explain()` names the refusal).
+- **Normalization.** The cut rule speaks about the text the
+  pre-tokenizer sees, which for an NFC family is the normalized text,
+  not the input. A letter such as U+0958, which NFC writes as a letter
+  followed by a combining mark, shows why that matters: as written it
+  forms a letter-to-punctuation transition with a following slash;
+  normalized, the mark and the slash share one pre-token. For an NFC
+  family a candidate cut is therefore accepted only when it is also a
+  certified cut of the normalized text: the input on each side is
+  anchored at the nearest stable split point (a character that is not a
+  mark, is unchanged by NFC on its own, does not reorder against a
+  combining mark on either side and does not compose after a Hangul
+  jamo or syllable -- decided with the artifact's own normalizer, the
+  reference engine's object, so there is no Unicode-version skew; ASCII
+  qualifies without a test), no added-token literal touches the
+  anchored window (the reference normalizes each literal-free segment
+  on its own), the normalizer maps the window to the concatenation of
+  its two halves, and the rule holds on the two normalized characters
+  that meet at the cut. Three stable characters around a cut satisfy
+  this without any window, the common case in prose, code and CJK text.
+  A candidate that fails is counted (`norm_rejects`) and the search
+  moves on; the normalizer is used for equality only, and every
+  character class is read from the frozen property table.
 - **The chunk table.** With `k=None` the chunk count follows a
   staircase measured on three families and four corpus types: one chunk
   below 256 K characters, 4 up to 1 M, 16 up to 4 M, 32 above, capped
@@ -131,10 +157,11 @@ What decides whether it is worth it:
   measurement behind the table).
 
 Diagnostics. Once `chunked_encode` has served a tokenizer, its
-`explain()` report carries a `cpe` block: calls, how many were chunked,
-serial fallbacks by reason code (`R_CPE_NO_CUT`,
-`R_CPE_FAMILY_UNSUPPORTED`), positions given up and literal rejections,
-and the last call's facts. These counters live in that block and not in
+`explain()` report carries a `cpe` block: the admission decision and
+the normalizer shape, calls, how many were chunked, serial fallbacks by
+reason code (`R_CPE_NO_CUT`, `R_CPE_FAMILY_UNSUPPORTED`), positions
+given up, literal and normalization rejections, and the last call's
+facts. These counters live in that block and not in
 the routing ledger's top-level `fallback_counts`, because a serial
 fallback here runs the same certified backend the chunks would have
 used: nothing fell back between backends

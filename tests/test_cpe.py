@@ -12,9 +12,11 @@ from-scratch encode by the oracle package on the certified families it
 finds there, over three corpus types and three document lengths.
 ``TOKTIER_TEST_CPE_CORPUS`` may name a directory whose subdirectories
 each hold UTF-8 text files (one corpus type per subdirectory); when it
-is unset, the three corpora are generated and labelled as such. Both
-variables are development inputs, read once at import, and every
-artifact is copied into an isolated home before it is loaded.
+is unset, the three corpora are generated and labelled as such.
+``TOKTIER_TEST_CPE_ADVERSARIAL`` scales the generated normalization
+corpus (strings per family; default 400). All three variables are
+development inputs, read once at import, and every artifact is copied
+into an isolated home before it is loaded.
 
 Source text in this repository is ASCII, so the non-ASCII probe
 characters below are written as escapes.
@@ -28,7 +30,7 @@ import os
 import random
 import re
 import shutil
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
 import pytest
@@ -49,11 +51,20 @@ from .facade.conftest import build_rig
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _ARTIFACTS = os.environ.get("TOKTIER_TEST_ARTIFACTS")
 _CORPUS = os.environ.get("TOKTIER_TEST_CPE_CORPUS")
+_ADVERSARIAL = int(os.environ.get("TOKTIER_TEST_CPE_ADVERSARIAL", "400"))
 
 #: Families judged in the artifact tier, in this order, when their
 #: artifacts are present; the first three are the ones the shipped chunk
-#: table was measured on.
-CANDIDATE_FAMILIES = ("qwen3_8b", "llama_3_1_8b", "gpt_oss_120b", "deepseek_v3")
+#: table was measured on, the last two the other NFC-normalizing roster
+#: members.
+CANDIDATE_FAMILIES = (
+    "qwen3_8b",
+    "llama_3_1_8b",
+    "gpt_oss_120b",
+    "deepseek_v3",
+    "qwen3_5_08b",
+    "minimax_m3",
+)
 SIZES = (64_000, 256_000, 1_000_000)
 
 _O, _S, _L, _N, _M = 0, 1, 2, 3, 4
@@ -209,6 +220,217 @@ def corpora(chars: int) -> dict[str, str]:
     return out
 
 
+# -- adversarial normalization corpus ----------------------------------------
+
+#: Characters NFC rewrites: letters that decompose into a letter and a
+#: combining mark (composition exclusions), singletons whose NFC form is
+#: another character, marks that decompose into two marks, compatibility
+#: ideographs, and musical symbols with combining parts.
+_DECOMPOSING = (
+    "\u0958\u0959\u095a\u095b\u095c\u095d\u095e\u095f\u09dc\u09dd\u09df"
+    "\u0a33\u0a36\u0a59\u0a5a\u0a5b\u0a5e\u0b5c\u0b5d"
+    "\ufb1d\ufb1f\ufb2a\ufb2b\ufb2c\ufb2d\ufb2e\ufb2f\ufb30\ufb31\ufb32\ufb33"
+    "\ufb34\ufb35\ufb36\ufb38\ufb39\ufb3a\ufb3b\ufb3c\ufb3e\ufb40\ufb41\ufb43"
+    "\ufb44\ufb46\ufb47\ufb48\ufb49\ufb4a\ufb4b\ufb4c\ufb4d\ufb4e"
+    "\u0f43\u0f4d\u0f52\u0f57\u0f5c\u0f69\u0f76\u0f78\u0f93\u0f9d\u0fa2\u0fa7"
+    "\u0fac\u0fb9"
+    "\u2126\u212a\u212b\u037e\u0387\u1fef\u1ffd\u1fee\u2000\u2001\u2329\u232a"
+    "\u0340\u0341\u0343\u0344\u0374\u1f71\u1f73\u1f75\u1f77\u1f79\u1f7b\u1f7d"
+    "\u1fbb\u0f73\u0f75\u0f81\u2adc"
+    "\uf900\uf901\uf902\uf90a\uf95f\ufa10\ufa12\ufa15\ufa30\ufa6a"
+    "\U0001d15e\U0001d15f\U0001d160\U0001d1bb\U0001d1bc"
+)
+#: Combining marks (and a few spacing marks that compose with a preceding
+#: vowel sign) across scripts, plus variation selectors.
+_MARKS = (
+    "\u0300\u0301\u0302\u0303\u0304\u0306\u0307\u0308\u030a\u030b\u030c\u0323"
+    "\u0324\u0325\u0327\u0328\u0331\u0338\u0345\u034f"
+    "\u0483\u0484\u0591\u0592\u05b0\u05b4\u05b7\u05bc"
+    "\u064b\u064c\u064d\u064e\u064f\u0650\u0651\u0652\u0670"
+    "\u093c\u093e\u093f\u0940\u0941\u0942\u0947\u0948\u094b\u094c\u094d\u0951"
+    "\u0952\u09be\u09bf\u09c7\u09c8\u09cb\u09cc\u09cd\u09d7\u0b3e\u0b47\u0b4b"
+    "\u0b56\u0b57\u0bbe\u0bc6\u0bc7\u0bca\u0bd7\u0d3e\u0d46\u0d4a\u0d57\u0dca"
+    "\u0dcf\u0dd9\u0ddc\u0ddf"
+    "\u0e31\u0e34\u0e35\u0e38\u0e39\u0e3a\u0e47\u0e48\u0e49\u0e4a\u0e4b"
+    "\u0f71\u0f72\u0f74\u0f7a\u0f7b\u0f7c\u0f7d\u0f80"
+    "\u1ab0\u1dc0\u1dc1\u20d0\u20d1\u20dd\u20e3\u3099\u309a"
+    "\ufe00\ufe0e\ufe0f\U000e0100\U0001d165\U0001d16e"
+)
+_SCRIPT_BASES = (
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    "".join(chr(c) for c in range(0x0391, 0x03AA))
+    + "".join(chr(c) for c in range(0x03B1, 0x03CA)),
+    "".join(chr(c) for c in range(0x0410, 0x0450)),
+    "".join(chr(c) for c in range(0x0915, 0x093A)),  # Devanagari consonants
+    "".join(chr(c) for c in range(0x0995, 0x09A9)),  # Bengali consonants
+    "".join(chr(c) for c in range(0x0B15, 0x0B29)),  # Oriya consonants
+    "".join(chr(c) for c in range(0x0B95, 0x0B9A))
+    + "\u0b9e\u0b9f\u0ba3\u0ba4",  # Tamil
+    "".join(chr(c) for c in range(0x0D15, 0x0D29)),  # Malayalam consonants
+    "".join(chr(c) for c in range(0x0D9A, 0x0DB2)),  # Sinhala consonants
+    "".join(chr(c) for c in range(0x0E01, 0x0E2F)),  # Thai
+    "".join(chr(c) for c in range(0x0621, 0x064B)),  # Arabic
+    "".join(chr(c) for c in range(0x05D0, 0x05EB)),  # Hebrew
+    "".join(chr(c) for c in range(0x0F40, 0x0F6B)),  # Tibetan
+    "".join(chr(c) for c in range(0x3041, 0x3097)),  # Hiragana
+    "".join(chr(c) for c in range(0x30A1, 0x30FB)),  # Katakana
+    "".join(chr(c) for c in range(0x4E00, 0x4E00 + 200)),  # CJK
+    "".join(chr(c) for c in range(0xAC00, 0xAC00 + 300, 7)),  # Hangul syllables
+)
+_JAMO_L = "".join(chr(c) for c in range(0x1100, 0x1113))
+_JAMO_V = "".join(chr(c) for c in range(0x1161, 0x1176))
+_JAMO_T = "".join(chr(c) for c in range(0x11A8, 0x11C3))
+_DIGIT_POOLS = (
+    "0123456789",
+    "".join(chr(c) for c in range(0x0660, 0x066A)),  # Arabic-Indic
+    "".join(chr(c) for c in range(0x0966, 0x0970)),  # Devanagari
+    "".join(chr(c) for c in range(0xFF10, 0xFF1A)),  # fullwidth
+    "\u00bd\u00bc\u217b\u2167",
+)
+_FORMATS = "\u200b\u200c\u200d\ufeff\u200e\u200f\u202a\u202e\u202c\u2066\u2069"
+_CONTROLS = (
+    "".join(chr(c) for c in range(0x00, 0x09))
+    + "\x0b\x0c"
+    + "".join(chr(c) for c in range(0x0E, 0x20))
+    + "\x7f"
+)
+_SPACES = (
+    " ",
+    " ",
+    " ",
+    " ",
+    "\u00a0",
+    "\u2003",
+    "\u3000",
+    "\t",
+    "\n",
+    "\r\n",
+    "\u2028",
+    "\x0b",
+)
+_ASCII_PUNCT = ".,;:!?()[]{}<>/\\'\"`~@#$%^&*-_=+|"
+_EMOJI = (
+    "\U0001f642",
+    "\U0001f680",
+    "\u2764\ufe0f",
+    "\u2728",
+    "\U0001f469\u200d\U0001f4bb",
+    "\U0001f468\u200d\U0001f469\u200d\U0001f467",
+    "\U0001f3f3\ufe0f\u200d\U0001f308",
+    "\U0001f1fa\U0001f1f8",
+    "\U0001f44d\U0001f3fd",
+)
+
+
+def _adversarial(rng: random.Random, chars: int, literals: Sequence[str]) -> str:
+    """A string of about ``chars`` characters built from pieces that stress
+    NFC: decomposing characters against ASCII punctuation (the reviewed shape),
+    Zalgo runs, jamo that compose across a cut, kana voicing marks,
+    ``<=>`` with U+0338, added-token literals beside marks, contraction
+    suffixes after marks, digits of several scripts, formats, controls,
+    emoji sequences and plain prose, joined by assorted separators."""
+    parts: list[str] = []
+    length = 0
+    lits = [item for item in literals if item] or ["<|endoftext|>"]
+    while length < chars:
+        kind = rng.random()
+        if kind < 0.18:
+            piece = "".join(
+                rng.choice("abcdefghijklmnopqrstuvwxyz")
+                for _ in range(rng.randint(1, 9))
+            )
+            if rng.random() < 0.15:
+                piece += rng.choice(("'s", "'t", "n't", "'re", "'ll"))
+        elif kind < 0.26:
+            pool = rng.choice(_DIGIT_POOLS)
+            piece = "".join(rng.choice(pool) for _ in range(rng.randint(1, 6)))
+            if rng.random() < 0.2:
+                piece += rng.choice(("'x", "'", "."))
+        elif kind < 0.44:
+            bases = rng.choice(_SCRIPT_BASES)
+            out: list[str] = []
+            for _ in range(rng.randint(1, 8)):
+                out.append(
+                    rng.choice(_DECOMPOSING)
+                    if rng.random() < 0.2
+                    else rng.choice(bases)
+                )
+                if rng.random() < 0.35:
+                    out.extend(rng.choice(_MARKS) for _ in range(rng.randint(1, 3)))
+            piece = "".join(out)
+        elif kind < 0.50:
+            piece = (
+                rng.choice(_DECOMPOSING) + rng.choice(_ASCII_PUNCT) + rng.choice("kx1 ")
+            )
+        elif kind < 0.56:
+            piece = rng.choice(_SCRIPT_BASES[0] + _SCRIPT_BASES[1]) + "".join(
+                rng.choice(_MARKS) for _ in range(rng.randint(1, 40))
+            )
+        elif kind < 0.62:
+            out = []
+            for _ in range(rng.randint(1, 4)):
+                out.append(rng.choice(_JAMO_L))
+                out.append(rng.choice(_JAMO_V))
+                if rng.random() < 0.5:
+                    out.append(rng.choice(_JAMO_T))
+                if rng.random() < 0.3:
+                    out.append(rng.choice(_SCRIPT_BASES[-1]))
+            piece = "".join(out)
+        elif kind < 0.66:
+            piece = "".join(
+                rng.choice(_SCRIPT_BASES[13] + _SCRIPT_BASES[14])
+                + rng.choice("\u3099\u309a")
+                for _ in range(rng.randint(1, 4))
+            )
+        elif kind < 0.70:
+            piece = rng.choice("<=>") + "\u0338" + rng.choice("ab1 ")
+        elif kind < 0.76:
+            literal = rng.choice(lits)
+            piece = rng.choice(
+                (
+                    literal + rng.choice(_MARKS),
+                    rng.choice(_MARKS) + literal,
+                    rng.choice(_DECOMPOSING) + literal + rng.choice(_DECOMPOSING),
+                    literal,
+                    literal[: len(literal) // 2]
+                    + rng.choice(_MARKS)
+                    + literal[len(literal) // 2 :],
+                )
+            )
+        elif kind < 0.80:
+            piece = (
+                rng.choice(("don", "isn", "we", "12", "x"))
+                + rng.choice(_MARKS)
+                + rng.choice(("'t", "'re", "'s", "'"))
+            )
+        elif kind < 0.84:
+            piece = (
+                rng.choice(_FORMATS)
+                + rng.choice(_SCRIPT_BASES[0])
+                + rng.choice(_FORMATS)
+            )
+        elif kind < 0.87:
+            piece = rng.choice(_CONTROLS)
+        elif kind < 0.92:
+            piece = rng.choice(_EMOJI)
+        elif kind < 0.96:
+            piece = "".join(rng.choice(_ASCII_PUNCT) for _ in range(rng.randint(1, 4)))
+        else:
+            piece = rng.choice(_MARKS) * rng.randint(1, 5)
+        separator = rng.random()
+        if separator < 0.30:
+            joiner = ""
+        elif separator < 0.75:
+            joiner = " "
+        elif separator < 0.90:
+            joiner = rng.choice(_SPACES)
+        else:
+            joiner = rng.choice(_ASCII_PUNCT)
+        parts.append(piece + joiner)
+        length += len(piece) + len(joiner)
+    return "".join(parts)
+
+
 # -- artifact tier fixtures -------------------------------------------------
 
 
@@ -318,6 +540,141 @@ def test_literal_guard_is_conservative_over_overlaps() -> None:
     assert cpe._LiteralGuard(["a"]).forbidden(text, 0, 15) == set()
 
 
+def test_literal_guard_touch_reports_any_intersecting_occurrence() -> None:
+    guard = cpe._LiteralGuard(["ab", "bcd", "<|x|>", "z"])
+    text = "xabcdy <|x|> ab z"
+    assert guard.touches(text, 0, 1) is False  # before "ab"
+    assert guard.touches(text, 1, 2)  # "ab" starts at 1
+    assert guard.touches(text, 5, 7) is False  # "y " between occurrences
+    assert guard.touches(text, 5, 8)  # reaches into "<|x|>"
+    assert guard.touches(text, 12, 13) is False  # the space after "<|x|>"
+    assert guard.touches(text, 12, 14)  # reaches the "ab" at 13
+    assert guard.touches(text, 16, 17)  # the single-character literal
+    assert cpe._LiteralGuard([]).touches(text, 0, len(text)) is False
+
+
+def test_normalization_stability_predicate() -> None:
+    """The condition NFC families add to the input predicate."""
+    from tokenizers.normalizers import NFC
+
+    table = pclass_table()
+    rule = cpe._NfcRule(table, cpe._LiteralGuard(["<|x|>"]), NFC().normalize_str)
+    stable = rule.accepts
+
+    # release-candidate review, finding 1: letter / punctuation as written,
+    # mark / punctuation once normalized (U+0958 -> U+0915 U+093C).
+    text = "a" * 127 + "\u0958" + "/k" + " " * 126
+    assert cpe._boundary_ok(table, text, 128)
+    assert stable(text, 128) is False
+    # Three stable characters around the cut need no window: ASCII, and
+    # CJK ideographs with full-width punctuation alike.
+    assert stable("ab 12", 2) and stable("x\u0958b /k", 3)
+    assert stable("\u5b57\u5b57\uff0c\u5b57", 2)
+    # Jamo compose across the cut: not a cut of the normalized text.
+    assert stable("12\u1100\u1161" + "3", 3) is False
+    # A digit before a vowel jamo: nothing composes, (N, L) holds.
+    assert stable("12\u1161" + "3", 2)
+    # The character left of the cut is judged on its normalized self: a
+    # composing sequence becomes the letter (L, S); a mark that composes
+    # with nothing stays a mark (M, S).
+    assert stable("caf\u00e9 x", 4)
+    assert stable("cafe\u0301 x", 5)
+    assert stable("cafb\u0301 x", 5) is False
+    # A literal touching the anchored window: the reference normalizes the
+    # segment after the literal on its own, so the window is not judged
+    # (U+0338 composes with the literal's closing bracket into U+226F,
+    # which would pass as punctuation / space).
+    assert stable("x>\u00e9 1", 3)
+    assert stable("ab>\u0338 1", 4)
+    assert stable("<|x|>\u0338 1", 6) is False
+    # No stable split point within reach (vowel jamo compose after a
+    # consonant jamo, so they never anchor): the candidate is given up;
+    # the start and the end of the text anchor.
+    assert stable("\u1161" * 300 + " a", 300) is False
+    assert stable("\u1161" * 30 + " a", 30)
+    assert stable("ab " + "\u1161" * 300, 2) is False
+    assert stable("ab " + "\u1161" * 100, 2)
+    # A mark right of the cut is refused by the class predicate.
+    assert stable("ab\u0301 c", 2) is False
+    # The stable-split-point test itself.
+    for char in "a \u5b57\u00e9\u0915\u3042\u0627\u05d0\u1100\uac00":
+        assert rule.stable(char), hex(ord(char))
+    for char in "\u0301\u093c\u0958\u1161\u11a8\u0b3e\u3099\u0344\u2126":
+        assert not rule.stable(char), hex(ord(char))
+
+
+def test_stable_split_point_probes_agree_with_the_reference_crate() -> None:
+    """The facts the stable-split-point test rests on, re-checked against
+    the installed reference crate and the frozen property table: every
+    second element of a canonical composition is a mark or a Hangul
+    vowel/trailing jamo; the two reorder probes flag no NFC-invariant
+    non-mark; the Hangul probes flag exactly the vowel and trailing
+    jamo."""
+    from tokenizers.normalizers import NFC, NFD
+
+    nfc = NFC().normalize_str
+    nfd = NFD().normalize_str
+    table = pclass_table()
+    before, after = cpe._PROBE_BEFORE, cpe._PROBE_AFTER
+    jamo_l, syllable = cpe._PROBE_JAMO_L, cpe._PROBE_SYLLABLE
+    vowels = {chr(c) for c in range(0x1161, 0x1176)}
+    trailing = {chr(c) for c in range(0x11A8, 0x11C3)}
+    seconds: set[str] = set()
+    reacting_inert: list[int] = []
+    after_l: set[str] = set()
+    after_lv: set[str] = set()
+    for cp in range(0x110000):
+        if 0xD800 <= cp <= 0xDFFF:
+            continue
+        char = chr(cp)
+        decomposed = nfd(char)
+        if len(decomposed) >= 2 and nfc(decomposed) == char:
+            seconds.update(decomposed[1:])
+        normalized = nfc(char)
+        if (
+            (
+                nfc(before + char) != before + normalized
+                or nfc(char + after) != normalized + after
+            )
+            and normalized == char
+            and table[cp] != _M
+        ):
+            reacting_inert.append(cp)
+        if nfc(jamo_l + char) != jamo_l + normalized:
+            after_l.add(char)
+        if nfc(syllable + char) != syllable + normalized:
+            after_lv.add(char)
+    assert all(table[ord(c)] == _M or c in vowels | trailing for c in seconds)
+    assert reacting_inert == []
+    assert after_l == vowels and after_lv == trailing
+
+
+def test_normalizer_mode_admits_none_identity_and_nfc_only() -> None:
+    assert cpe._normalizer_mode({}) == ("none", None)
+    assert cpe._normalizer_mode({"normalizer": None}) == ("none", None)
+    assert cpe._normalizer_mode(
+        {"normalizer": {"type": "Sequence", "normalizers": []}}
+    ) == ("none", None)
+    assert cpe._normalizer_mode({"normalizer": {"type": "NFC"}}) == ("nfc", None)
+    assert cpe._normalizer_mode(
+        {
+            "normalizer": {"type": "NFC"},
+            "added_tokens": [{"content": "x", "normalized": True}],
+        }
+    ) == (None, "nfc_with_normalized_added_tokens")
+    assert cpe._normalizer_mode({"normalizer": {"type": "NFKC"}}) == (
+        None,
+        "normalizer_not_supported:NFKC",
+    )
+    assert cpe._normalizer_mode(
+        {"normalizer": {"type": "Sequence", "normalizers": [{"type": "NFC"}]}}
+    ) == (None, "normalizer_not_supported:Sequence")
+    assert cpe._normalizer_mode({"normalizer": "NFC"}) == (
+        None,
+        "normalizer_not_supported",
+    )
+
+
 def test_default_chunks_follows_the_table_and_the_worker_floor() -> None:
     assert cpe.default_chunks(0) == 1
     assert cpe.default_chunks(255_999) == 1
@@ -418,7 +775,7 @@ def test_plan_invariants(loaded: dict[str, Tokenizer], family: str) -> None:
         )
         assert len(plan.spans) <= k
         floor = max(16, min(1024, len(text) // (4 * k)))
-        assert all(b - a >= floor for a, b in plan.spans[:-1])
+        assert all(b - a >= floor for a, b in plan.spans)
         for cut in plan.cuts:
             assert cpe._boundary_ok(table, text, cut)
             assert cut not in planner.guard.forbidden(text, cut, cut)
@@ -503,6 +860,7 @@ def test_no_certified_cut_falls_back_to_serial(
         "serial_reason": "R_CPE_NO_CUT",
         "cut_misses": 3,
         "literal_rejects": 0,
+        "norm_rejects": 0,
     }
 
 
@@ -539,6 +897,7 @@ def test_explain_carries_the_cpe_block(
     assert isinstance(block, dict)
     assert block["admitted"] is True and block["refusal"] is None
     assert block["family"] == family
+    assert block["normalizer"] in ("none", "nfc")
     assert block["literals"] >= 1
     assert block["chunked"] >= 1 and block["chunks_total"] >= 2
     assert set(block) >= {
@@ -549,12 +908,82 @@ def test_explain_carries_the_cpe_block(
         "chunks_total",
         "cut_misses",
         "literal_rejects",
+        "norm_rejects",
         "fallback_counts",
         "last",
     }
     ledger = report["fallback_counts"]
     assert isinstance(ledger, dict)
     assert "R_CPE_NO_CUT" not in ledger
+
+
+@pytest.mark.parametrize("family", CANDIDATE_FAMILIES)
+def test_min_chunk_and_scan_budget_bound_the_plan(
+    loaded: dict[str, Tokenizer], family: str
+) -> None:
+    """release-candidate review, notes 5 and 6: the documented bounds hold."""
+    tokenizer = _family(loaded, family)
+    text = "a" * 110 + " " + "b" * 189
+    plan = cpe.plan_chunks(tokenizer, text, k=2, scan_budget=1)
+    assert plan.spans == ((0, 300),) and plan.cut_misses == 1
+    assert cpe.plan_chunks(tokenizer, text, k=2, scan_budget=40).cuts == (110,)
+    text = "ab 12 " * 50
+    plan = cpe.plan_chunks(tokenizer, text, k=3, min_chunk=150)
+    assert plan.spans == ((0, 300),) and plan.cut_misses == 2
+    plan = cpe.plan_chunks(tokenizer, text, k=3, min_chunk=100)
+    assert len(plan.spans) == 2 and all(b - a >= 100 for a, b in plan.spans)
+
+
+@pytest.mark.parametrize("family", CANDIDATE_FAMILIES)
+def test_cut_the_normalizer_moves_is_not_made(
+    loaded: dict[str, Tokenizer], family: str
+) -> None:
+    """release-candidate review, finding 1.
+
+    Between U+0958 and ``/`` the input shows a letter-to-punctuation
+    transition; NFC writes U+0958 as U+0915 U+093C, and the mark then
+    shares a pre-token with the slash. An NFC family must not cut there;
+    a family without a normalizer sees the input as the pre-tokenizer
+    does and may.
+    """
+    tokenizer = _family(loaded, family)
+    reference = _reference(tokenizer)
+    text = "a" * 127 + "\u0958" + "/k" + " " * 126
+    assert cpe._boundary_ok(pclass_table(), text, 128)
+    encoded = cpe.chunked_encode(tokenizer, text, k=2)
+    assert list(encoded.ids) == reference(text), family
+    assert list(encoded.ids) == list(tokenizer.encode(text, lookup="off").ids)
+    if cpe.stats(tokenizer)["normalizer"] == "nfc":
+        assert encoded.chunks == 1
+        assert encoded.serial_reason == ReasonCode.R_CPE_NO_CUT.value
+        assert encoded.norm_rejects >= 1
+    else:
+        assert encoded.chunks == 2 and encoded.cuts == (128,)
+    # The same shape with plain letters at the cut is chunked, exactly.
+    healthy = "a" * 120 + "\u0958" + "b" * 7 + "/k" + " " * 126
+    encoded = cpe.chunked_encode(tokenizer, healthy, k=2)
+    assert encoded.chunks == 2 and encoded.cuts == (128,)
+    assert list(encoded.ids) == reference(healthy)
+
+
+@pytest.mark.parametrize("family", CANDIDATE_FAMILIES)
+def test_adversarial_normalization_corpus_is_exact(
+    loaded: dict[str, Tokenizer], family: str
+) -> None:
+    tokenizer = _family(loaded, family)
+    reference = _reference(tokenizer)
+    face = json.loads(tokenizer._backend.materialized_tokenizer_json())
+    literals = [str(row["content"]) for row in face["added_tokens"]]
+    rng = random.Random(sum(ord(c) for c in family) * 7919 + 0x5EED)
+    chunked = 0
+    for index in range(_ADVERSARIAL):
+        text = _adversarial(rng, rng.randint(300, 1500), literals)
+        k = rng.choice((2, 3, 4, 8))
+        encoded = cpe.chunked_encode(tokenizer, text, k=k)
+        assert list(encoded.ids) == reference(text), (family, index, k)
+        chunked += encoded.chunks >= 2
+    # The corpus must actually exercise cuts, not only refusals.
+    assert chunked >= _ADVERSARIAL // 4, (family, chunked, _ADVERSARIAL)
 
 
 def test_roster_families_are_the_admitted_set() -> None:

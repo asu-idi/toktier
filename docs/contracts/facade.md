@@ -256,9 +256,10 @@ be distinguished without parsing messages.
 Since 0.2.10 the full report may also carry blocks contributed by helpers
 layered over the facade, under the helper's name. The one shipped helper is
 `toktier.cpe` (chunk-parallel encode, Section 7), whose `cpe` block appears
-once it has served the tokenizer: call counts, how many calls were chunked,
-serial fallbacks by reason code (`R_CPE_NO_CUT`, `R_CPE_FAMILY_UNSUPPORTED`),
-cut positions given up, literal rejections, and the last call's facts. Those
+once it has served the tokenizer: the admission decision and the normalizer
+shape, call counts, how many calls were chunked, serial fallbacks by reason
+code (`R_CPE_NO_CUT`, `R_CPE_FAMILY_UNSUPPORTED`), cut positions given up,
+literal and normalization rejections, and the last call's facts. Those
 reason codes are counted there and not in the top-level `fallback_counts`,
 because a serial fallback of the chunked path runs the same certified backend
 the chunks would have used; nothing fell back between backends. The summary
@@ -701,11 +702,14 @@ well-formed-but-newer records, in the contract's explicit-verify split.
   scan_budget=4096)` (added in 0.2.10) returns a `ChunkedEncoding`, an
   `Encoding` whose `ids` equal `encode(text, lookup="off").ids` and which
   additionally reports `chunks`, `k_requested`, `cuts`, `cut_misses`,
-  `literal_rejects` and `serial_reason`. It is a helper over the public
-  batch path rather than a new route: admission is the certified repair
-  roster (family and artifact digest), the cut predicate is the
+  `literal_rejects`, `norm_rejects` and `serial_reason`. It is a helper
+  over the public batch path rather than a new route: admission is the
+  certified repair roster (family and artifact digest) narrowed to the
+  normalizer shapes the rule reasons about (none, the empty sequence,
+  NFC with input-matched added tokens), the cut predicate is the
   session-repair witness's synchronizing-transition rule plus an
-  added-token literal guard, and every fallback is serial on the plain
-  route with the reason named. It does not consult the store and it
+  added-token literal guard and, for an NFC family, the requirement
+  that the cut also be a certified cut of the normalized text, and
+  every fallback is serial on the plain route with the reason named. It does not consult the store and it
   returns the core stream. `docs/serving.md` Section 3 describes the
   chunk table and the parallelism it relies on.

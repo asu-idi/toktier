@@ -30,11 +30,29 @@ Session state can be keyed two ways, selected by ``AdapterConfig.session_key``:
   the calls (a measurement aid for the baseline arm, not a toktier path).
 
 Correctness posture: every path above returns the ids a from-scratch
-reference encode would return (the facade contract). The optional shadow
-check re-encodes each request with the wrapped Hugging Face tokenizer and
-compares id by id; in ``"sync"`` mode a difference is corrected on the spot
-(the reference ids are returned) and counted; in ``"async"`` mode it is
-counted after the fact. Special tokens: the store holds the core stream, so
+reference encode would return (the facade contract). That contract is about
+the tokenizer toktier loaded, so before the wrapper accelerates anything it
+establishes that the supplied Hugging Face object *is* that tokenizer: the
+supplied object's serialized fast backend (which includes tokens added
+after loading) and the loader face toktier executes against are compared
+section by section -- model, normalizer, pre-tokenizer, added tokens,
+truncation and padding state (:func:`check_core_identity`). A family or
+repository name alone cannot establish this: the supplied object may carry
+another revision, other loader options or live vocabulary changes. When the
+two are not equivalent, or the comparison cannot be made, the wrapper
+delegates every call to the supplied tokenizer for its whole life and
+records the reason (``stats()["identity"]``; ``TOKTIER_SGLANG_IDENTITY=skip``
+turns the check off for tokenizers that cannot be serialized, at the
+operator's risk). The optional shadow check re-encodes each request with
+the supplied tokenizer and compares id by id; in ``"sync"`` mode a
+difference is corrected on the spot (the reference ids are returned) and
+counted; in ``"async"`` mode it is counted after the fact, judged against an
+independent copy of the supplied object (never a fresh load by name, which
+could differ from it), or synchronously against the object itself when no
+copy can be made. Attribute writes follow attribute reads: an assignment
+SGLang makes on the tokenizer (``tokenizer.chat_template = ...`` in its
+template manager) lands on the wrapped object, where the delegated methods
+read it. Special tokens: the store holds the core stream, so
 ``add_special_tokens=True`` is served by applying the wrapped tokenizer's
 single-sequence template (prefix/suffix ids derived once from probes and
 re-verified) around the core ids; a tokenizer whose template cannot be
@@ -80,6 +98,7 @@ __all__ = [
     "SGLangToktierTokenizer",
     "attach_to_tokenizer_manager",
     "bind_session_key",
+    "check_core_identity",
     "session_key_from_request",
     "wrap_tokenizer",
 ]
@@ -92,7 +111,22 @@ SESSION_KEY: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 
 _KEY_MODES = ("contextvar", "auto", "off", "passthrough")
 _SHADOW_MODES = ("off", "sync", "async")
+_IDENTITY_MODES = ("require", "skip")
 _ENV_PREFIX = "TOKTIER_SGLANG_"
+
+#: Loader-face sections that decide the core id stream of a fast tokenizer:
+#: the model (vocabulary, merges, byte fallback ...), what it normalizes and
+#: pre-tokenizes with, the added-token table, and the truncation and padding
+#: state (absent on the toktier side, so it must be absent on the supplied
+#: object as well).
+_CORE_SECTIONS = (
+    "model",
+    "normalizer",
+    "pre_tokenizer",
+    "added_tokens",
+    "truncation",
+    "padding",
+)
 
 
 @dataclass(frozen=True)
@@ -115,6 +149,9 @@ class AdapterConfig:
     an explicit ``long_request_encoder`` takes precedence over it. Stateless
     means: every request in ``"off"`` mode, and a request without a key in
     ``"contextvar"`` mode (which otherwise takes content lookup).
+    ``identity`` is ``"require"`` (the wrapper accelerates only when
+    :func:`check_core_identity` finds the supplied tokenizer equivalent to
+    the toktier subject, and delegates otherwise) or ``"skip"``.
     """
 
     family: str | None = None
@@ -135,6 +172,7 @@ class AdapterConfig:
     cpe_min_chars: int = 0
     cpe_k: int = 0
     device: str = "cpu"
+    identity: str = "require"
 
     def __post_init__(self) -> None:
         if self.session_key not in _KEY_MODES:
@@ -149,6 +187,10 @@ class AdapterConfig:
             raise ValueError("shadow_rate must lie in [0, 1]")
         if self.cpe_min_chars < 0 or self.cpe_k < 0:
             raise ValueError("cpe_min_chars and cpe_k must be non-negative")
+        if self.identity not in _IDENTITY_MODES:
+            raise ValueError(
+                f"identity must be one of {_IDENTITY_MODES!r}, not {self.identity!r}"
+            )
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> AdapterConfig:
@@ -159,7 +201,7 @@ class AdapterConfig:
         (``FAMILY``, ``REPO``, ``SESSION_KEY``, ``STORE``, ``SHADOW_RATE``,
         ``SHADOW_DUMP_DIR``, ``TIMING_LOG``, ``STATS_FILE``,
         ``EXPLAIN_EVERY``, ``RID_SEPARATOR``, ``PER_PROCESS_STORE``,
-        ``CPE_MIN_CHARS``, ``CPE_K``).
+        ``CPE_MIN_CHARS``, ``CPE_K``, ``IDENTITY``).
         """
         e = os.environ if env is None else env
 
@@ -187,7 +229,78 @@ class AdapterConfig:
             rid_separator=get("RID_SEPARATOR"),
             cpe_min_chars=int(get("CPE_MIN_CHARS", 0)),
             cpe_k=int(get("CPE_K", 0)),
+            identity=str(get("IDENTITY", "require")),
         )
+
+
+# -- identity of the wrapped tokenizer ------------------------------------
+
+
+def _core_sections(document: Mapping[str, Any]) -> dict[str, Any]:
+    return {name: document.get(name) for name in _CORE_SECTIONS}
+
+
+def check_core_identity(hf_tokenizer: Any, toktier_tokenizer: Any) -> dict[str, Any]:
+    """Compare the supplied tokenizer's core configuration with toktier's.
+
+    Serializes the supplied fast tokenizer (``backend_tokenizer.to_str()``,
+    which includes tokens added after loading) and the loader face toktier
+    executes against, and compares the sections that decide the core id
+    stream (:data:`_CORE_SECTIONS`). The artifact file may predate the
+    live crate's serializer defaults, so on a first difference the face is
+    canonicalized through the live crate once before deciding.
+
+    Returns ``{"status", "reason", "sections"}``: ``status`` is
+    ``"equivalent"``, ``"mismatch"`` (``sections`` names the differing
+    ones) or ``"unavailable"`` (one side cannot be serialized). The wrapper
+    accelerates only on ``"equivalent"``.
+    """
+    backend = getattr(hf_tokenizer, "backend_tokenizer", None)
+    to_str = getattr(backend, "to_str", None)
+    if not callable(to_str):
+        return {
+            "status": "unavailable",
+            "reason": "the supplied tokenizer has no serializable fast backend",
+            "sections": [],
+        }
+    materialize = getattr(
+        getattr(toktier_tokenizer, "_backend", None),
+        "materialized_tokenizer_json",
+        None,
+    )
+    if not callable(materialize):
+        return {
+            "status": "unavailable",
+            "reason": "the toktier subject exposes no loader face",
+            "sections": [],
+        }
+    try:
+        live = _core_sections(json.loads(to_str()))
+        face_text = materialize()
+        face = _core_sections(json.loads(face_text))
+    except Exception as ex:
+        return {
+            "status": "unavailable",
+            "reason": f"serialization failed: {type(ex).__name__}",
+            "sections": [],
+        }
+    if live != face:
+        try:
+            import tokenizers
+
+            face = _core_sections(
+                json.loads(tokenizers.Tokenizer.from_str(face_text).to_str())
+            )
+        except Exception:  # the raw comparison then decides
+            pass
+    differing = [name for name in _CORE_SECTIONS if live[name] != face[name]]
+    if not differing:
+        return {"status": "equivalent", "reason": None, "sections": []}
+    return {
+        "status": "mismatch",
+        "reason": "core configuration differs in " + ", ".join(differing),
+        "sections": differing,
+    }
 
 
 # -- session key plumbing -------------------------------------------------
@@ -296,8 +409,23 @@ class SGLangToktierTokenizer:
         )
         self._tok: Any = None
         self._store_dir: str | None = None
+        self._identity: dict[str, Any] = {
+            "status": "skipped",
+            "reason": None,
+            "sections": [],
+        }
         if self._mode != "passthrough":
             self._tok = self._load_toktier()
+            if self._cfg.identity == "require":
+                self._identity = check_core_identity(hf_tokenizer, self._tok)
+                if self._identity["status"] != "equivalent":
+                    # Not the tokenizer toktier loaded (or not provably so):
+                    # the supplied object answers everything, for good.
+                    self._tok.close()
+                    self._tok = None
+                    self._mode = "passthrough"
+        self._stats["mode"] = self._mode
+        self._stats["identity"] = dict(self._identity)
         self._log_fh = None
         if self._cfg.timing_log:
             Path(self._cfg.timing_log).parent.mkdir(parents=True, exist_ok=True)
@@ -307,16 +435,30 @@ class SGLangToktierTokenizer:
         self._shadow_ref: Any = None
         self._shadow_q: queue.Queue[Any] | None = None
         self._shadow_thread: threading.Thread | None = None
-        if self._cfg.shadow == "sync":
+        self._shadow_mode = self._cfg.shadow
+        shadow_note: str | None = None
+        if self._shadow_mode == "sync":
             self._shadow_ref = hf_tokenizer
-        elif self._cfg.shadow == "async":
+        elif self._shadow_mode == "async":
             factory = shadow_reference or self._default_shadow_factory
-            self._shadow_ref = factory()
-            self._shadow_q = queue.Queue(maxsize=self._cfg.shadow_queue_size)
-            self._shadow_thread = threading.Thread(
-                target=self._shadow_worker, name="toktier-sglang-shadow", daemon=True
-            )
-            self._shadow_thread.start()
+            try:
+                self._shadow_ref = factory()
+            except Exception as ex:
+                # No independent copy of the supplied object: check
+                # synchronously against the object itself rather than
+                # asynchronously against something else.
+                self._shadow_ref = hf_tokenizer
+                self._shadow_mode = "sync"
+                shadow_note = f"async reference unavailable ({type(ex).__name__})"
+            else:
+                self._shadow_q = queue.Queue(maxsize=self._cfg.shadow_queue_size)
+                self._shadow_thread = threading.Thread(
+                    target=self._shadow_worker,
+                    name="toktier-sglang-shadow",
+                    daemon=True,
+                )
+                self._shadow_thread.start()
+        self._stats["shadow"] = self._shadow_mode
         atexit.register(self.flush)
         self._record(
             {
@@ -328,7 +470,9 @@ class SGLangToktierTokenizer:
                 "template_ok": self._template_ok,
                 "prefix": self._prefix,
                 "suffix": self._suffix,
-                "shadow": self._cfg.shadow,
+                "shadow": self._shadow_mode,
+                "shadow_note": shadow_note,
+                "identity": dict(self._identity),
                 "hf_class": type(hf_tokenizer).__name__,
                 "cpe_min_chars": self._cfg.cpe_min_chars,
                 "cpe_k": self._cfg.cpe_k,
@@ -355,11 +499,22 @@ class SGLangToktierTokenizer:
         return toktier.from_pretrained(repo, store=store, device=self._cfg.device)
 
     def _default_shadow_factory(self) -> Any:
-        """A second loader-face instance for the shadow thread."""
-        from transformers import AutoTokenizer
+        """An independent copy of the supplied tokenizer for the shadow thread.
 
-        repo = self._cfg.repo_id or getattr(self._hf, "name_or_path", None)
-        return AutoTokenizer.from_pretrained(repo)
+        A copy of the object SGLang supplied -- configuration, revision and
+        tokens added after loading included -- so the asynchronous check
+        judges against the same reference the synchronous one does. A
+        fresh load by name could differ from the supplied object and would
+        then certify agreement with the wrong tokenizer.
+        """
+        import copy
+
+        try:
+            return copy.deepcopy(self._hf)
+        except Exception:
+            import pickle
+
+            return pickle.loads(pickle.dumps(self._hf))
 
     # -- identity ------------------------------------------------------
 
@@ -388,11 +543,39 @@ class SGLangToktierTokenizer:
     def config(self) -> AdapterConfig:
         return self._cfg
 
+    @property
+    def identity(self) -> dict[str, Any]:
+        """The outcome of :func:`check_core_identity` at construction."""
+        return dict(self._identity)
+
     def __getattr__(self, name: str) -> Any:
         hf = self.__dict__.get("_hf")
         if hf is None:
             raise AttributeError(name)
         return getattr(hf, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        # The wrapper's own state is private (underscore) or declared on
+        # the class; any other assignment is the caller configuring the
+        # tokenizer it was given (``tokenizer.chat_template = ...``) and
+        # lands on the wrapped object, where the delegated methods read it.
+        if name.startswith("_") or hasattr(type(self), name):
+            object.__setattr__(self, name, value)
+            return
+        hf = self.__dict__.get("_hf")
+        if hf is None:
+            object.__setattr__(self, name, value)
+        else:
+            setattr(hf, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if name.startswith("_") or hasattr(type(self), name) or name in self.__dict__:
+            object.__delattr__(self, name)
+            return
+        hf = self.__dict__.get("_hf")
+        if hf is None:
+            raise AttributeError(name)
+        delattr(hf, name)
 
     def __len__(self) -> int:
         return len(self._hf)
@@ -553,7 +736,7 @@ class SGLangToktierTokenizer:
                 rec["exec_backend"] = summary.get("last_execution_backend")
             except Exception as ex:  # diagnostics never change the answer
                 rec["path"] = f"explain_error:{type(ex).__name__}"
-        if self._cfg.shadow != "off" and self._sample_shadow():
+        if self._shadow_mode != "off" and self._sample_shadow():
             ids = self._shadow(text, add_special_tokens, ids, key, rec)
         self._record(rec)
         return ids
@@ -575,7 +758,7 @@ class SGLangToktierTokenizer:
         key: str | None,
         rec: dict[str, Any],
     ) -> list[int]:
-        if self._cfg.shadow == "sync":
+        if self._shadow_mode == "sync":
             ref = list(
                 self._shadow_ref(text, add_special_tokens=add_special_tokens)[
                     "input_ids"

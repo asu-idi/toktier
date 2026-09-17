@@ -842,6 +842,8 @@ layers together.
 
 - [`docs/releases/v0.2.9.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/releases/v0.2.9.md) — release notes for this version.
 - [`ARCHITECTURE.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/ARCHITECTURE.md) — layers, routing, and store format.
+- [`docs/serving.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/serving.md) — which encode call for which request shape, patch-only appends, and chunk-parallel encode for long requests.
+- [`docs/integration/sglang.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/integration/sglang.md) — using toktier as an SGLang tokenizer backend.
 - [`ROADMAP.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/ROADMAP.md) — release scope and planned integration.
 - [`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/support-matrix.md) — artifacts and covered repositories.
 - [`docs/gpu-jit.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/gpu-jit.md) — prebuilt and JIT GPU deliveries.

@@ -6,6 +6,10 @@ pre-postprocessor core token stream, and the splice invariant
 ``all_ids == old_ids[:replace_from] + replacement_ids`` is enforced at
 construction so an inconsistent update cannot be built, only refused.
 
+``SessionPatch`` (added in 0.2.10) is the same splice without the
+``all_ids`` field: what ``Session.append_patch`` returns to a caller who
+keeps the stream itself and only wants to know what to replace.
+
 This module is dependency-free (standard library only).
 """
 
@@ -14,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-__all__ = ["SessionUpdate"]
+__all__ = ["SessionPatch", "SessionUpdate"]
 
 
 @dataclass(frozen=True)
@@ -43,3 +47,23 @@ class SessionUpdate:
             raise ValueError(
                 "all_ids must equal the kept prefix plus replacement_ids"
             )
+
+
+@dataclass(frozen=True)
+class SessionPatch:
+    """One append's effect on the core token stream, as a splice only.
+
+    Apply as ``stream[replace_from:] = replacement_ids``: the tokens at
+    indices ``>= replace_from`` of the stream held before the append are
+    replaced, and ``replace_from`` is the longest surviving prefix. A full
+    re-encode reports ``replace_from == 0``. The object carries no copy of
+    the whole stream; ``Session.ids`` still answers with it on request.
+    """
+
+    replace_from: int
+    replacement_ids: Sequence[int]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "replacement_ids", tuple(self.replacement_ids))
+        if self.replace_from < 0:
+            raise ValueError("replace_from must be a non-negative token index")

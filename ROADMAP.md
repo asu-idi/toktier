@@ -139,13 +139,33 @@ fifteen the evidence covers is later work.
 
 ## CPU parallel BPE for long requests
 
-Long requests on the certified CPU path are encoded serially today. The
-planned direction is chunk-parallel BPE: split a long input into chunks,
-encode the chunks on multiple cores, and repair the chunk boundaries so that
-the merged result is byte-for-byte the serial encoding. The exact-ID contract
-shapes the design: boundary repair has to be verified, an input that fails a
-safety check falls back to the serial path, and the feature ships only behind
-the same differential evidence as the engine it accelerates.
+**Python-level shipped in 0.2.10** (`toktier.cpe.chunked_encode`,
+`docs/serving.md` Section 3): a long input is cut at certified stable
+boundaries -- the synchronizing-transition rule the session-repair
+witness already uses, plus an added-token literal guard -- the chunks
+run as one batch on the certified CPU engine's worker pool, and the id
+rows are concatenated. Because no pre-token can span a certified cut,
+there is no boundary to repair and nothing to retry: the result is the
+serial encoding by construction, and an input in which no certified cut
+exists is encoded serially with the reason named. Admission is the
+certified repair roster (the eleven byte-level BPE artifacts the sync
+profile was certified on); the chunk table was measured on three of
+them and four corpus types.
+
+What remains is native, and is registered for 0.2.11 as a Rust
+`ChunkEncoder`: the cut search and the concatenation below PyO3, so the
+per-chunk Python boundary (each row handed over and concatenated) stops
+being the floor -- on the faster engines it is most of what is left --
+together with the batch-path items the same measurement surfaced: fork
+and warm the batch workers at construction instead of on the first
+batch (about 20 ms per worker today), let concurrent `encode_batch`
+callers take disjoint idle workers instead of sharing a prefix of the
+pool, make the 64 KiB-per-worker floor a parameter, and judge the
+per-input guards per chunk inside `encode` so that a single unchunked
+request only pays reference speed for the passage that tripped a guard.
+A patch-shaped native return for session appends
+(`Session.append_patch` ships the Python surface in 0.2.10) is on the
+same list.
 
 ## Routing large session deltas to the GPU
 

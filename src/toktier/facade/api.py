@@ -24,7 +24,7 @@ import json
 import os
 import threading
 import warnings
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib.util import find_spec
@@ -75,7 +75,7 @@ from ..routing.plan import plan as build_plan
 from ..routing.probe import probe
 from ..routing.registry_load import shipped_registry
 from ..routing.registry_view import ArtifactRecord
-from ..session import SessionUpdate
+from ..session import SessionPatch, SessionUpdate
 from .store import DEFAULT_CACHE_BUDGET_BYTES, EntryStore
 
 if TYPE_CHECKING:
@@ -310,9 +310,7 @@ class Encoding:
 _PREFIX_BLOCK = 4096
 
 
-def _first_difference(
-    previous: tuple[int, ...], current: tuple[int, ...]
-) -> int:
+def _first_difference(previous: Sequence[int], current: Sequence[int]) -> int:
     """The first index the two streams disagree on, or their shared length.
 
     This is exactly ``next(i for i in range(shared) if previous[i] !=
@@ -320,7 +318,9 @@ def _first_difference(
     the same definition. It is written as a block search because an
     append otherwise pays an element-by-element Python loop over the
     whole accumulated stream, which grows without bound as a session
-    does while the append itself stays small.
+    does while the append itself stays small. Both arguments must be of
+    one sequence type (two lists, or two tuples): the block comparison
+    is a slice equality, and a list never equals a tuple.
     """
     shared = min(len(previous), len(current))
     start = 0
@@ -347,13 +347,23 @@ class Session:
     reference encode of the accumulated text.
 
     A session has one owner: it is not safe to share across threads.
+
+    Two ways to append. :meth:`append` returns the frozen
+    :class:`~toktier.SessionUpdate`, which carries the whole stream;
+    :meth:`append_patch` (added in 0.2.10) returns only the splice, for a
+    caller who keeps the stream itself. Both report the same
+    ``replace_from`` and the same replacement.
     """
 
     def __init__(self, tokenizer: Tokenizer, session_id: str) -> None:
         self._tokenizer = tokenizer
         self._session_id = session_id
         self._text = ""
-        self._ids: tuple[int, ...] = ()
+        # The stream as the engine handed it over. The tuple the public
+        # ``ids`` property answers with is made on demand and cached, so
+        # a patch-only caller never pays for it.
+        self._ids: list[int] = []
+        self._ids_view: tuple[int, ...] | None = ()
         self._writes = 0
 
     @property
@@ -363,8 +373,12 @@ class Session:
 
     @property
     def ids(self) -> Sequence[int]:
-        """The current core token stream."""
-        return self._ids
+        """The current core token stream, as an immutable snapshot."""
+        view = self._ids_view
+        if view is None:
+            view = tuple(self._ids)
+            self._ids_view = view
+        return view
 
     @property
     def text(self) -> str:
@@ -390,9 +404,8 @@ class Session:
         Opening is not a write: when the stored record recognizes this
         text the store serves it, and the revision stays the store's.
         """
-        self._ids = tuple(
-            self._tokenizer.encode(text, session=self._session_id).ids
-        )
+        self._ids = self._tokenizer._encode_ids(text, session=self._session_id)
+        self._ids_view = None
         self._text = text
 
     def append(self, text: str) -> SessionUpdate:
@@ -406,18 +419,44 @@ class Session:
         """
         previous = self._ids
         combined = self._text + text
-        current = tuple(
-            self._tokenizer.encode(combined, session=self._session_id).ids
-        )
+        current = self._tokenizer._encode_ids(combined, session=self._session_id)
         cut = _first_difference(previous, current)
+        everything = tuple(current)
         self._text = combined
         self._ids = current
+        self._ids_view = everything
         self._writes += 1
         return SessionUpdate(
             replace_from=cut,
-            replacement_ids=current[cut:],
-            all_ids=current,
+            replacement_ids=everything[cut:],
+            all_ids=everything,
         )
+
+    def append_patch(self, text: str) -> SessionPatch:
+        """Extend the session and report only the splice.
+
+        Same append, same ``replace_from`` and the same replacement as
+        :meth:`append`; what differs is the answer, which carries no copy
+        of the whole stream. The caller applies it as
+        ``stream[patch.replace_from:] = patch.replacement_ids``. The
+        session still holds the full stream, and :attr:`ids` still
+        answers with it when asked.
+
+        On the native request path the engine hands over the whole
+        stream as one Python list on every append, so this call is not
+        yet proportional to the append; what it saves over
+        :meth:`append` is the frozen update object and its copy of the
+        stream. A patch-shaped native return is the remaining step.
+        """
+        previous = self._ids
+        combined = self._text + text
+        current = self._tokenizer._encode_ids(combined, session=self._session_id)
+        cut = _first_difference(previous, current)
+        self._text = combined
+        self._ids = current
+        self._ids_view = None
+        self._writes += 1
+        return SessionPatch(replace_from=cut, replacement_ids=tuple(current[cut:]))
 
     def final_ids(self, add_special_tokens: bool = True) -> list[int]:
         """The read-time view: postprocessor applied over the core stream."""
@@ -652,6 +691,10 @@ class Tokenizer:
         self._state_encode_counts: dict[str, int] = {}
         self._last_state_encode: dict[str, object] | None = None
         self._model_resolution: ModelResolution | None = None
+        # Diagnostics blocks contributed by helpers layered over the
+        # facade (``toktier.cpe`` registers one); ``explain()`` appends
+        # each under its name.
+        self._extra_reports: dict[str, Callable[[], Mapping[str, object]]] = {}
         self._closed = False
 
     # -- identity ------------------------------------------------------
@@ -773,6 +816,31 @@ class Tokenizer:
         explicitly selected experimental repair backend labels itself
         outside that guarantee.
         """
+        return Encoding(
+            ids=tuple(
+                self._encode_ids(
+                    text,
+                    session=session,
+                    lookup=lookup,
+                    add_special_tokens=add_special_tokens,
+                )
+            )
+        )
+
+    def _encode_ids(
+        self,
+        text: str,
+        *,
+        session: str | None = None,
+        lookup: str | None = None,
+        add_special_tokens: bool = False,
+    ) -> list[int]:
+        """The body of :meth:`encode`, answering with the engine's own list.
+
+        The public method wraps this list in an :class:`Encoding`, which
+        costs one copy per call; the session object and the chunked
+        encoder read the list directly.
+        """
         self._require_open()
         if lookup not in _LOOKUP_VALUES:
             raise ValueError(
@@ -803,7 +871,7 @@ class Tokenizer:
             )
             if self._native_gpu_prepared is not None:
                 self._observe_native_gpu_open(native)
-            return Encoding(ids=tuple(native_ids))
+            return native_ids if type(native_ids) is list else list(native_ids)
         ids: list[int] | None = None
         if session is not None:
             ids = self._store().encode_session(session, text)
@@ -811,7 +879,7 @@ class Tokenizer:
             ids = self._store().encode_auto(text)
         if ids is None:
             ids = self._executor.encode(text, add_special_tokens=add_special_tokens)
-        return Encoding(ids=tuple(ids))
+        return ids if type(ids) is list else list(ids)
 
     def encode_batch(
         self,
@@ -824,6 +892,20 @@ class Tokenizer:
         Batches run the plain routed path; per-document content lookup
         belongs to :meth:`encode`.
         """
+        return [
+            Encoding(ids=tuple(row))
+            for row in self._encode_batch_core(
+                texts, add_special_tokens=add_special_tokens
+            )
+        ]
+
+    def _encode_batch_core(
+        self,
+        texts: Sequence[str],
+        *,
+        add_special_tokens: bool = False,
+    ) -> list[list[int]]:
+        """The body of :meth:`encode_batch`, answering with the engine's rows."""
         self._require_open()
         native = self._native_request_runtime()
         if native is not None:
@@ -832,9 +914,22 @@ class Tokenizer:
             )
             if self._native_gpu_prepared is not None:
                 self._observe_native_gpu_open(native)
-            return [Encoding(ids=tuple(row)) for row in rows]
-        rows = self._executor.encode_batch(texts, add_special_tokens=add_special_tokens)
-        return [Encoding(ids=tuple(row)) for row in rows]
+            return [row if type(row) is list else list(row) for row in rows]
+        executed = self._executor.encode_batch(
+            texts, add_special_tokens=add_special_tokens
+        )
+        return [row if type(row) is list else list(row) for row in executed]
+
+    def _register_report(
+        self, name: str, provider: Callable[[], Mapping[str, object]]
+    ) -> None:
+        """Add a named diagnostics block to :meth:`explain`.
+
+        For helpers layered over the facade that keep their own counters
+        (``toktier.cpe`` is one); the block appears under ``name`` in the
+        full report, evaluated at each ``explain()`` call.
+        """
+        self._extra_reports[name] = provider
 
     def decode(self, ids: Sequence[int], *, skip_special_tokens: bool = True) -> str:
         """Decode token ids back to text through the reference oracle."""
@@ -1026,6 +1121,8 @@ class Tokenizer:
         )
         if self._native_request_guard is not None:
             report["native_request_guard"] = dict(self._native_request_guard)
+        for name, provider in self._extra_reports.items():
+            report[name] = dict(provider())
         return _explanation_summary(report) if summary else report
 
     @contextmanager

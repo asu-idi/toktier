@@ -196,6 +196,16 @@ class ReasonCode(enum.Enum):
     #: ``ReasonCode::InvalidPriorState``. Registered here in 0.2.7 so the
     #: two faces name it from one vocabulary.
     R_INVALID_PRIOR_STATE = "R_INVALID_PRIOR_STATE"
+    #: Chunk-parallel encode (``toktier.cpe``) found no certified cut in
+    #: the document, so it was encoded serially on the plain route.
+    #: Counted in ``explain()["cpe"]``, not in the routing ledger: the
+    #: serial route is the same certified backend, not a fallback of it.
+    R_CPE_NO_CUT = "R_CPE_NO_CUT"
+    #: Chunk-parallel encode was asked for a tokenizer outside the
+    #: certified repair roster (no certified chunk-cut rule), so the
+    #: document was encoded serially on the plain route. Counted in
+    #: ``explain()["cpe"]``.
+    R_CPE_FAMILY_UNSUPPORTED = "R_CPE_FAMILY_UNSUPPORTED"
 
 
 @dataclass(frozen=True)

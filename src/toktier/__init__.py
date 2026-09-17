@@ -17,7 +17,7 @@ from .config import Config
 from .errors import ToktierError
 from .facade import Encoding, Session, Tokenizer, from_pretrained, load
 from .policy import ReasonCode, RoutePlan, RoutingPolicy
-from .session import SessionUpdate
+from .session import SessionPatch, SessionUpdate
 
 __all__ = [
     "API_VERSION",
@@ -27,6 +27,7 @@ __all__ = [
     "RoutePlan",
     "RoutingPolicy",
     "Session",
+    "SessionPatch",
     "SessionUpdate",
     "Tokenizer",
     "ToktierError",

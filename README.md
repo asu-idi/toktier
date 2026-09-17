@@ -847,6 +847,8 @@ layers together.
 
 - [`docs/releases/v0.2.9.md`](docs/releases/v0.2.9.md) — release notes for this version.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — layers, routing, and store format.
+- [`docs/serving.md`](docs/serving.md) — which encode call for which request shape, patch-only appends, and chunk-parallel encode for long requests.
+- [`docs/integration/sglang.md`](docs/integration/sglang.md) — using toktier as an SGLang tokenizer backend.
 - [`ROADMAP.md`](ROADMAP.md) — release scope and planned integration.
 - [`docs/support-matrix.md`](docs/support-matrix.md) — artifacts and covered repositories.
 - [`docs/gpu-jit.md`](docs/gpu-jit.md) — prebuilt and JIT GPU deliveries.

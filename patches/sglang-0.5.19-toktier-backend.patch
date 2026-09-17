@@ -1,0 +1,110 @@
+From: toktier maintainers
+Subject: [PATCH] Add a `toktier` tokenizer backend (CPU, per-session reuse)
+
+Adds `--tokenizer-backend toktier`, shaped like the `fastokens` branch:
+the tokenizer SGLang loads is wrapped after the post-load fixes, encode
+calls run on toktier's certified CPU route (ids equal to a from-scratch
+reference encode), and the request's `session_id` (else `cache_salt`) is
+bound around the tokenize call so a conversation's transcript is served
+as a verified prefix append instead of a full re-encode. No other code
+path changes. Requires `toktier >= 0.2.10` (toktier.integrations.sglang).
+Baseline: sglang 0.5.19 (PyPI wheel).
+---
+--- a/python/sglang/srt/server_args.py
++++ b/python/sglang/srt/server_args.py
+@@ -420,9 +420,11 @@
+         str,
+         Arg(
+             help="Tokenizer backend. 'huggingface' uses the default HuggingFace "
+-            "tokenizers library, and 'fastokens' uses the fastokens library "
+-            "for faster tokenization. Requires the fastokens package to be installed.",
+-            choices=["huggingface", "fastokens"],
++            "tokenizers library, 'fastokens' uses the fastokens library "
++            "for faster tokenization (requires the fastokens package), and "
++            "'toktier' runs encode calls on toktier's certified CPU route with "
++            "per-session reuse (requires the toktier package).",
++            choices=["huggingface", "fastokens", "toktier"],
+         ),
+         NS("serving"),
+     ] = "huggingface"
+--- a/python/sglang/srt/utils/hf_transformers/tokenizer.py
++++ b/python/sglang/srt/utils/hf_transformers/tokenizer.py
+@@ -467,6 +467,25 @@
+     logger.info("fastokens backend enabled - transformers patched successfully")
+ 
+ 
++def _wrap_with_toktier(tokenizer):
++    """Wrap an already loaded tokenizer so encode calls run on toktier (CPU).
++
++    Every other attribute is delegated to the wrapped tokenizer; the wrapper
++    reads its options from TOKTIER_SGLANG_* (see toktier.integrations.sglang).
++    """
++    try:
++        from toktier.integrations.sglang import wrap_tokenizer
++    except ImportError:
++        raise ImportError(
++            "The toktier package is required when --tokenizer-backend=toktier. "
++            "Install it with: pip install toktier"
++        ) from None
++
++    wrapped = wrap_tokenizer(tokenizer)
++    logger.info("toktier backend enabled - %r", wrapped)
++    return wrapped
++
++
+ def get_tokenizer(
+     tokenizer_name: str,
+     *args,
+@@ -550,7 +569,12 @@
+                     tokenizer_name, *args, **common_kwargs
+                 )
+ 
+-        return _apply_post_load_fixes(tokenizer, tokenizer_name, tokenizer_revision)
++        tokenizer = _apply_post_load_fixes(
++            tokenizer, tokenizer_name, tokenizer_revision
++        )
++        if tokenizer_backend == "toktier":
++            tokenizer = _wrap_with_toktier(tokenizer)
++        return tokenizer
+     except Exception as e:
+         if tokenizer_backend == "fastokens":
+             raise RuntimeError(
+--- a/python/sglang/srt/managers/tokenizer_manager.py
++++ b/python/sglang/srt/managers/tokenizer_manager.py
+@@ -958,6 +958,22 @@
+             input_ids, token_type_ids, input_format, original_batch_size
+         )
+ 
++    def _tokenizer_request_scope(self, obj):
++        """Scope for backends that keep per-session tokenizer state.
++
++        The toktier backend reads the request's session key (session_id,
++        else cache_salt) from a context variable while it encodes; other
++        backends get a no-op scope.
++        """
++        if get_serving().tokenizer_backend != "toktier":
++            return nullcontext()
++        from toktier.integrations.sglang import (
++            bind_session_key,
++            session_key_from_request,
++        )
++
++        return bind_session_key(session_key_from_request(obj))
++
+     async def _tokenize_one_request(
+         self,
+         obj: Union[GenerateReqInput, EmbeddingReqInput],
+@@ -995,9 +1011,10 @@
+                 # Use empty placeholder - multimodal processor will override
+                 input_ids = []
+             else:
+-                input_ids, token_type_ids = await self._tokenize_texts(
+-                    input_text, is_cross_encoder_request
+-                )
++                with self._tokenizer_request_scope(obj):
++                    input_ids, token_type_ids = await self._tokenize_texts(
++                        input_text, is_cross_encoder_request
++                    )
+ 
+         contains_mm_input = obj.contains_mm_input()
+         if contains_mm_input and get_disagg().language_model_only:

@@ -346,6 +346,13 @@ def test_package_never_reads_the_environment() -> None:
             # inputs already honored by that system; the shared probe
             # observes them, never treats them as TokTier configuration.
             continue
+        if path.parts[-2:] == ("integrations", "sglang.py"):
+            # The SGLang adapter is configured by the serving process's
+            # environment (``TOKTIER_SGLANG_*``): attached from a
+            # ``sitecustomize`` hook, it has no other channel. It reads
+            # the environment in one place, ``AdapterConfig.from_env``,
+            # and only when no explicit mapping is given.
+            continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Attribute) and node.attr in {

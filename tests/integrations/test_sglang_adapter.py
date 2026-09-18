@@ -72,8 +72,14 @@ class _StubHf:
         self._bos, self._eos = bos, eos
         self.backend_tokenizer = _tiny_tokenizer()
 
+    split_special_tokens = False
+
     def _core(self, text: str) -> list[int]:
         return [ord(c) for c in text]
+
+    def add_tokens(self, tokens: list[str]) -> int:
+        added: int = self.backend_tokenizer.add_tokens(tokens)
+        return added
 
     def __call__(
         self, text: Any, add_special_tokens: bool = True, **kwargs: Any
@@ -558,3 +564,162 @@ def test_real_tokenizer_drift_after_add_tokens_is_delegated(
     )
     assert w2.stats()["mode"] == "passthrough" and w2.stats()["delegated"] == 2
     w.close()
+
+
+# -- identity gate, second review: split_special_tokens, post_processor, drift ----
+
+
+def test_split_special_tokens_is_part_of_admission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        SGLangToktierTokenizer, "_load_toktier", lambda self: _FakeToktier()
+    )
+    flagged = _StubHf()
+    flagged.split_special_tokens = True
+    w = wrap_tokenizer(flagged, AdapterConfig(session_key="off"))
+    assert w.identity["status"] == "mismatch"
+    assert "split_special_tokens" in str(w.identity["reason"])
+    assert w.toktier is None and w.stats()["mode"] == "passthrough"
+    # The backend-level flag alone (what transformers sets on the Rust
+    # object before an encode) is caught as well.
+    monkeypatch.setattr(
+        SGLangToktierTokenizer, "_load_toktier", lambda self: _FakeToktier()
+    )
+    backend_flagged = _StubHf()
+    backend_flagged.backend_tokenizer.encode_special_tokens = True
+    w2 = wrap_tokenizer(backend_flagged, AdapterConfig(session_key="off"))
+    assert w2.identity["status"] == "mismatch" and w2.toktier is None
+
+
+def test_post_processor_is_part_of_admission(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tokenizers import processors
+
+    monkeypatch.setattr(
+        SGLangToktierTokenizer, "_load_toktier", lambda self: _FakeToktier()
+    )
+    doubled = _StubHf()
+    doubled.backend_tokenizer.post_processor = processors.TemplateProcessing(
+        single="$A $A"
+    )
+    w = wrap_tokenizer(doubled, AdapterConfig(session_key="off"))
+    assert w.identity["status"] == "mismatch"
+    assert w.identity["sections"] == ["post_processor"]
+    assert w.toktier is None and w.stats()["mode"] == "passthrough"
+    assert check_core_identity(_StubHf(), _FakeToktier())["status"] == "equivalent"
+
+
+def test_drift_after_construction_latches_passthrough(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # (a) a mutation forwarded through the wrapper
+    fake = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
+    hf = _StubHf()
+    w = wrap_tokenizer(hf, AdapterConfig(session_key="off"))
+    assert w.encode("ab", add_special_tokens=False) == [97, 98] and fake.calls
+    w.add_tokens(["toktierprobeunique"])
+    expected = hf.encode("ab", add_special_tokens=False)
+    assert w.encode("ab", add_special_tokens=False) == expected
+    assert w.identity["status"] == "mismatch"
+    assert w.identity["sections"] == ["added_tokens"]
+    assert w.toktier is None and fake.closed and w.stats()["mode"] == "passthrough"
+    assert w.stats()["delegated"] == 1 and len(fake.calls) == 1
+    # (b) a forwarded assignment of the flag
+    fake2 = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake2)
+    hf2 = _StubHf()
+    w2 = wrap_tokenizer(hf2, AdapterConfig(session_key="off"))
+    assert w2.encode("ab", add_special_tokens=False) == [97, 98]
+    w2.split_special_tokens = True
+    assert hf2.split_special_tokens is True  # forwarded, as before
+    assert w2("ab")["input_ids"] == hf2("ab")["input_ids"]
+    assert w2.identity["status"] == "mismatch" and w2.toktier is None
+    # (c) a change made on the retained object, behind the wrapper's back
+    fake3 = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake3)
+    hf3 = _StubHf()
+    w3 = wrap_tokenizer(hf3, AdapterConfig(session_key="off"))
+    assert w3.encode("ab", add_special_tokens=False) == [97, 98]
+    hf3.backend_tokenizer.add_tokens(["toktierprobeunique"])
+    expected3 = hf3.encode("ab", add_special_tokens=False)
+    assert w3.encode("ab", add_special_tokens=False) == expected3
+    assert w3.identity["status"] == "mismatch" and w3.toktier is None
+    # (d) an async wrapper over a pool: the pool is closed with the latch
+    fake4 = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake4)
+    hf4 = _StubHf()
+    w4 = wrap_tokenizer(hf4, AdapterConfig(session_key="off", shadow="async"))
+    assert w4.stats()["shadow"] == "async" and w4._shadow_ref is not hf4
+    assert asyncio.run(w4.encode_async("ab", add_special_tokens=False)) == [97, 98]
+    hf4.backend_tokenizer.post_processor = None
+    hf4.backend_tokenizer.add_tokens(["toktierprobeunique"])
+    assert asyncio.run(w4.encode_async("ab", add_special_tokens=False)) == hf4.encode(
+        "ab", add_special_tokens=False
+    )
+    assert w4.identity["status"] == "mismatch" and w4.toktier is None
+    w4.close()
+
+
+def test_equivalent_change_refreshes_the_shadow_reference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
+    hf = _StubHf()
+    w = wrap_tokenizer(hf, AdapterConfig(session_key="off", shadow="async"))
+    old_ref = w._shadow_ref
+    assert old_ref is not hf
+    w.chat_template = "a template"  # forwarded; does not touch the id stream
+    assert getattr(hf, "chat_template", None) == "a template"
+    assert w.encode("ab", add_special_tokens=False) == [97, 98]
+    assert w.identity["status"] == "equivalent" and w.toktier is fake
+    assert w._shadow_ref is not old_ref
+    assert getattr(w._shadow_ref, "chat_template", None) == "a template"
+    w.close()
+
+
+def test_byte_level_trim_offsets_is_not_an_identity_fact() -> None:
+    # transformers 5 sets trim_offsets=True on the live ByteLevel pre-tokenizer
+    # (and post-processor); offsets change, ids do not: still equivalent.
+    from tokenizers import pre_tokenizers, processors
+
+    fake = _FakeToktier()
+    live = _StubHf()
+    plain = pre_tokenizers.ByteLevel(add_prefix_space=False, use_regex=False)
+    live.backend_tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+        [pre_tokenizers.Whitespace(), plain]
+    )
+    live.backend_tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
+    face_shape = _StubHf()
+    face_shape.backend_tokenizer.pre_tokenizer = live.backend_tokenizer.pre_tokenizer
+    face_shape.backend_tokenizer.post_processor = live.backend_tokenizer.post_processor
+
+    class _Face(_FakeToktier):
+        class _backend:  # the artifact face: the same components, trim_offsets off
+            @staticmethod
+            def materialized_tokenizer_json() -> str:
+                text: str = face_shape.backend_tokenizer.to_str()
+                return text
+
+    assert check_core_identity(live, _Face())["status"] == "equivalent"
+    trimmed = _StubHf()
+    trimmed.backend_tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+        [
+            pre_tokenizers.Whitespace(),
+            pre_tokenizers.ByteLevel(
+                add_prefix_space=False, use_regex=False, trim_offsets=True
+            ),
+        ]
+    )
+    trimmed.backend_tokenizer.post_processor = processors.ByteLevel(trim_offsets=True)
+    assert check_core_identity(trimmed, _Face())["status"] == "equivalent"
+    # a fact that does change ids (the byte-level regex) is still caught
+    regex = _StubHf()
+    with_regex = pre_tokenizers.ByteLevel(add_prefix_space=False, use_regex=True)
+    regex.backend_tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+        [pre_tokenizers.Whitespace(), with_regex]
+    )
+    regex.backend_tokenizer.post_processor = processors.ByteLevel(trim_offsets=True)
+    assert check_core_identity(regex, _Face())["sections"] == ["pre_tokenizer"]
+    del fake

@@ -35,15 +35,28 @@ the tokenizer toktier loaded, so before the wrapper accelerates anything it
 establishes that the supplied Hugging Face object *is* that tokenizer: the
 supplied object's serialized fast backend (which includes tokens added
 after loading) and the loader face toktier executes against are compared
-section by section -- model, normalizer, pre-tokenizer, added tokens,
-truncation and padding state (:func:`check_core_identity`). A family or
-repository name alone cannot establish this: the supplied object may carry
-another revision, other loader options or live vocabulary changes. When the
-two are not equivalent, or the comparison cannot be made, the wrapper
-delegates every call to the supplied tokenizer for its whole life and
-records the reason (``stats()["identity"]``; ``TOKTIER_SGLANG_IDENTITY=skip``
-turns the check off for tokenizers that cannot be serialized, at the
-operator's risk). The optional shadow check re-encodes each request with
+section by section -- model, normalizer, pre-tokenizer, post-processor,
+added tokens, truncation and padding state -- and the supplied object's
+``split_special_tokens`` setting, which is not in the serialization and
+changes how added tokens are matched, must be off (:func:`check_core_
+identity`). A family or repository name alone cannot establish this: the
+supplied object may carry another revision, other loader options or live
+vocabulary changes. When the two are not equivalent, or the comparison
+cannot be made, the wrapper delegates every call to the supplied tokenizer
+for its whole life and records the reason (``stats()["identity"]``;
+``TOKTIER_SGLANG_IDENTITY=skip`` turns the check off for tokenizers that
+cannot be serialized, at the operator's risk). Admission is not a one-time
+fact: the supplied object can change after construction -- ``add_tokens``
+through the wrapper, an assignment such as ``split_special_tokens = True``,
+or a change made on the retained object directly -- so before every
+accelerated encode the wrapper compares a cheap fingerprint of the
+object's mutable surface (added tokens, the split flag, normalizer,
+pre-tokenizer, post-processor, truncation and padding) with the one taken
+at admission, and a forwarded mutation marks it stale outright; on any
+difference the full comparison runs again, and a supplied object that is
+no longer equivalent latches passthrough for good (the pool, if any, is
+closed), while one that still is has its shadow reference rebuilt from the
+current state. The optional shadow check re-encodes each request with
 the supplied tokenizer and compares id by id; in ``"sync"`` mode a
 difference is corrected on the spot (the reference ids are returned) and
 counted; in ``"async"`` mode it is counted after the fact, judged against an
@@ -74,10 +87,23 @@ because a toktier session has one owner. ``loop.run_in_executor`` does not
 carry context variables, so with ``--enable-dynamic-batch-tokenizer`` the
 ``"contextvar"`` mode degrades to content lookup; that is recorded per call
 (``how`` field of the timing log) rather than hidden.
+
+Scheduled encodes (``TOKTIER_SGLANG_SCHED_WORKERS`` > 0): the wrapper
+starts the process pool of :mod:`toktier.integrations.sglang_sched` and
+sends every encode to it -- keyed requests to their home worker's session
+path, stateless ones to the shared queue, long stateless ones as certified
+chunk tasks. Form Z also patches ``_tokenize_texts`` so a single-string
+(or list-of-strings) request is awaited (:meth:`SGLangToktierTokenizer.
+encode_async`) instead of encoded on the event loop's thread; other entry
+points use the pool synchronously. Whatever the pool answers passes through
+the same template, shadow and timing path as a serial encode, and a request
+the pool cannot answer is encoded in-process on the route it would have
+taken without the pool.
 """
 
 from __future__ import annotations
 
+import asyncio
 import atexit
 import contextlib
 import contextvars
@@ -92,6 +118,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from .sglang_sched import SchedResult, Scheduler, SchedulerConfig
+
 __all__ = [
     "SESSION_KEY",
     "AdapterConfig",
@@ -102,6 +130,9 @@ __all__ = [
     "session_key_from_request",
     "wrap_tokenizer",
 ]
+
+#: "Read the context variable" marker for the explicit-key parameter.
+_KEY_FROM_CONTEXT = object()
 
 #: The session key the current request carries, bound by the caller around
 #: the tokenize call (see :func:`bind_session_key`). ``None`` means "no key".
@@ -123,9 +154,27 @@ _CORE_SECTIONS = (
     "model",
     "normalizer",
     "pre_tokenizer",
+    "post_processor",
     "added_tokens",
     "truncation",
     "padding",
+)
+
+#: Forwarded methods of the supplied tokenizer that change what an encode
+#: returns; a call through the wrapper marks admission stale.
+_MUTATORS = frozenset(
+    {
+        "add_tokens",
+        "add_special_tokens",
+        "sanitize_special_tokens",
+        "set_truncation_and_padding",
+        "enable_truncation",
+        "enable_padding",
+        "no_truncation",
+        "no_padding",
+        "train",
+        "train_from_iterator",
+    }
 )
 
 
@@ -152,6 +201,9 @@ class AdapterConfig:
     ``identity`` is ``"require"`` (the wrapper accelerates only when
     :func:`check_core_identity` finds the supplied tokenizer equivalent to
     the toktier subject, and delegates otherwise) or ``"skip"``.
+    ``scheduler`` (a :class:`~toktier.integrations.sglang_sched.
+    SchedulerConfig` with ``workers`` > 0) starts the process-pool
+    scheduler; ``None`` keeps every encode in this process.
     """
 
     family: str | None = None
@@ -173,6 +225,7 @@ class AdapterConfig:
     cpe_k: int = 0
     device: str = "cpu"
     identity: str = "require"
+    scheduler: SchedulerConfig | None = None
 
     def __post_init__(self) -> None:
         if self.session_key not in _KEY_MODES:
@@ -191,6 +244,8 @@ class AdapterConfig:
             raise ValueError(
                 f"identity must be one of {_IDENTITY_MODES!r}, not {self.identity!r}"
             )
+        if self.scheduler is not None and self.scheduler.workers < 1:
+            raise ValueError("scheduler, when given, needs at least one worker")
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> AdapterConfig:
@@ -201,7 +256,9 @@ class AdapterConfig:
         (``FAMILY``, ``REPO``, ``SESSION_KEY``, ``STORE``, ``SHADOW_RATE``,
         ``SHADOW_DUMP_DIR``, ``TIMING_LOG``, ``STATS_FILE``,
         ``EXPLAIN_EVERY``, ``RID_SEPARATOR``, ``PER_PROCESS_STORE``,
-        ``CPE_MIN_CHARS``, ``CPE_K``, ``IDENTITY``).
+        ``CPE_MIN_CHARS``, ``CPE_K``, ``IDENTITY``). The scheduler is read
+        from ``TOKTIER_SGLANG_SCHED_*`` when ``TOKTIER_SGLANG_SCHED_WORKERS``
+        is set to a positive number (:meth:`SchedulerConfig.from_env`).
         """
         e = os.environ if env is None else env
 
@@ -213,6 +270,9 @@ class AdapterConfig:
         shadow = {"0": "off", "1": "sync", "true": "sync", "false": "off"}.get(
             shadow_raw, shadow_raw
         )
+        scheduler: SchedulerConfig | None = None
+        if int(get("SCHED_WORKERS", 0)) > 0:
+            scheduler = SchedulerConfig.from_env(e)
         return cls(
             family=get("FAMILY"),
             repo_id=get("REPO"),
@@ -230,14 +290,43 @@ class AdapterConfig:
             cpe_min_chars=int(get("CPE_MIN_CHARS", 0)),
             cpe_k=int(get("CPE_K", 0)),
             identity=str(get("IDENTITY", "require")),
+            scheduler=scheduler,
         )
 
 
 # -- identity of the wrapped tokenizer ------------------------------------
 
 
+def _without_offset_facts(component: Any) -> Any:
+    """``component`` with the facts that decide character offsets, not ids,
+    removed: ``trim_offsets`` of a ``ByteLevel`` pre-tokenizer or
+    post-processor (transformers 5 sets it to ``true`` on the live object
+    where the artifact file says ``false``; the id stream is the same).
+    ``Sequence`` components are handled member by member."""
+    if not isinstance(component, Mapping):
+        return component
+    kind = component.get("type")
+    if kind == "Sequence":
+        out = dict(component)
+        for key in ("pretokenizers", "processors", "normalizers"):
+            members = component.get(key)
+            if isinstance(members, list):
+                out[key] = [_without_offset_facts(member) for member in members]
+        return out
+    if kind == "ByteLevel":
+        return {key: value for key, value in component.items() if key != "trim_offsets"}
+    return component
+
+
 def _core_sections(document: Mapping[str, Any]) -> dict[str, Any]:
-    return {name: document.get(name) for name in _CORE_SECTIONS}
+    return {
+        name: (
+            _without_offset_facts(document.get(name))
+            if name in ("pre_tokenizer", "post_processor")
+            else document.get(name)
+        )
+        for name in _CORE_SECTIONS
+    }
 
 
 def check_core_identity(hf_tokenizer: Any, toktier_tokenizer: Any) -> dict[str, Any]:
@@ -248,7 +337,14 @@ def check_core_identity(hf_tokenizer: Any, toktier_tokenizer: Any) -> dict[str, 
     executes against, and compares the sections that decide the core id
     stream (:data:`_CORE_SECTIONS`). The artifact file may predate the
     live crate's serializer defaults, so on a first difference the face is
-    canonicalized through the live crate once before deciding.
+    canonicalized through the live crate once before deciding. A
+    ``ByteLevel`` component's ``trim_offsets`` decides character offsets,
+    not ids, and is left out of the comparison on both sides (transformers
+    5 sets it on the live object where the artifact file does not). The
+    supplied object's ``split_special_tokens`` setting (and the backend's
+    ``encode_special_tokens`` flag it drives) is not in the serialization;
+    when it is on, added tokens are split like ordinary text, which the
+    toktier subject never does, so it is a mismatch on its own.
 
     Returns ``{"status", "reason", "sections"}``: ``status`` is
     ``"equivalent"``, ``"mismatch"`` (``sections`` names the differing
@@ -262,6 +358,12 @@ def check_core_identity(hf_tokenizer: Any, toktier_tokenizer: Any) -> dict[str, 
             "status": "unavailable",
             "reason": "the supplied tokenizer has no serializable fast backend",
             "sections": [],
+        }
+    if _splits_special_tokens(hf_tokenizer):
+        return {
+            "status": "mismatch",
+            "reason": "split_special_tokens is set on the supplied tokenizer",
+            "sections": ["split_special_tokens"],
         }
     materialize = getattr(
         getattr(toktier_tokenizer, "_backend", None),
@@ -301,6 +403,56 @@ def check_core_identity(hf_tokenizer: Any, toktier_tokenizer: Any) -> dict[str, 
         "reason": "core configuration differs in " + ", ".join(differing),
         "sections": differing,
     }
+
+
+def _splits_special_tokens(hf_tokenizer: Any) -> bool:
+    """The effective ``split_special_tokens`` setting of the supplied object."""
+    if bool(getattr(hf_tokenizer, "split_special_tokens", False)):
+        return True
+    backend = getattr(hf_tokenizer, "backend_tokenizer", None)
+    return bool(getattr(backend, "encode_special_tokens", False))
+
+
+def _live_fingerprint(hf_tokenizer: Any) -> tuple[Any, ...] | None:
+    """A cheap digest of the supplied object's mutable, encode-affecting
+    surface: the added-token table, the split flag, and the serialized
+    normalizer, pre-tokenizer, post-processor, truncation and padding
+    state. Tens of microseconds on a real tokenizer (the model itself is
+    not read; it is replaced only by an assignment the wrapper marks
+    stale). ``None`` when the object does not expose that surface."""
+    backend = getattr(hf_tokenizer, "backend_tokenizer", None)
+    if backend is None:
+        return None
+    try:
+        added = tuple(
+            sorted(
+                (
+                    int(index),
+                    str(token.content),
+                    bool(token.special),
+                    bool(token.normalized),
+                    bool(token.lstrip),
+                    bool(token.rstrip),
+                    bool(token.single_word),
+                )
+                for index, token in backend.get_added_tokens_decoder().items()
+            )
+        )
+
+        def state(component: Any) -> Any:
+            return None if component is None else component.__getstate__()
+
+        return (
+            added,
+            _splits_special_tokens(hf_tokenizer),
+            state(backend.normalizer),
+            state(backend.pre_tokenizer),
+            state(backend.post_processor),
+            repr(backend.truncation),
+            repr(backend.padding),
+        )
+    except Exception:
+        return None
 
 
 # -- session key plumbing -------------------------------------------------
@@ -414,6 +566,8 @@ class SGLangToktierTokenizer:
             "reason": None,
             "sections": [],
         }
+        self._fingerprint: tuple[Any, ...] | None = None
+        self._stale = False
         if self._mode != "passthrough":
             self._tok = self._load_toktier()
             if self._cfg.identity == "require":
@@ -424,8 +578,15 @@ class SGLangToktierTokenizer:
                     self._tok.close()
                     self._tok = None
                     self._mode = "passthrough"
+                else:
+                    self._fingerprint = _live_fingerprint(hf_tokenizer)
         self._stats["mode"] = self._mode
         self._stats["identity"] = dict(self._identity)
+        self._stats["sched_fallback"] = 0
+        self._sched: Scheduler | None = None
+        self._sched_note: str | None = None
+        if self._cfg.scheduler is not None and self._tok is not None:
+            self._sched = self._start_scheduler(self._cfg.scheduler)
         self._log_fh = None
         if self._cfg.timing_log:
             Path(self._cfg.timing_log).parent.mkdir(parents=True, exist_ok=True)
@@ -476,10 +637,50 @@ class SGLangToktierTokenizer:
                 "hf_class": type(hf_tokenizer).__name__,
                 "cpe_min_chars": self._cfg.cpe_min_chars,
                 "cpe_k": self._cfg.cpe_k,
+                "scheduler": (
+                    None if self._sched is None else self._sched.stats()["policy"]
+                ),
+                "scheduler_note": self._sched_note,
             }
         )
 
     # -- construction helpers ------------------------------------------
+
+    def _start_scheduler(self, config: SchedulerConfig) -> Scheduler | None:
+        """Start the pool; on any failure keep the serial path and say why."""
+        planner: Callable[[str, int], Sequence[tuple[int, int]]] | None = None
+        try:
+            from toktier import cpe
+
+            if cpe.is_admitted(self._tok):
+                subject = self._tok
+
+                def planner(text: str, k: int) -> Sequence[tuple[int, int]]:
+                    return cpe.plan_chunks(subject, text, k=k).spans
+
+            else:
+                self._sched_note = (
+                    "chunking off: " + str(cpe.stats(self._tok).get("refusal"))
+                )
+        except Exception as ex:  # no chunking, but the pool is still worth having
+            self._sched_note = f"chunking off: {type(ex).__name__}"
+        store = self._cfg.store
+        if store and self._cfg.per_process_store:
+            store = os.path.join(store, f"pid{os.getpid()}")
+        try:
+            sched = Scheduler(
+                config,
+                family=self._cfg.family or self.family,
+                repo_id=self._cfg.repo_id or getattr(self._hf, "name_or_path", None),
+                device=self._cfg.device,
+                store=store,
+                planner=planner,
+            )
+            sched.start()
+        except Exception as ex:
+            self._sched_note = f"pool not started: {type(ex).__name__}: {ex}"[:300]
+            return None
+        return sched
 
     def _load_toktier(self) -> Any:
         import toktier
@@ -548,11 +749,28 @@ class SGLangToktierTokenizer:
         """The outcome of :func:`check_core_identity` at construction."""
         return dict(self._identity)
 
+    @property
+    def scheduler(self) -> Scheduler | None:
+        """The running pool scheduler, or ``None`` (serial encodes)."""
+        return self._sched if self._sched is not None and self._sched.active else None
+
     def __getattr__(self, name: str) -> Any:
         hf = self.__dict__.get("_hf")
         if hf is None:
             raise AttributeError(name)
-        return getattr(hf, name)
+        attr = getattr(hf, name)
+        if name in _MUTATORS and callable(attr):
+            # A forwarded call that changes what the supplied object
+            # encodes: admission is re-established before the next
+            # accelerated encode.
+            def forwarded(*args: Any, **kwargs: Any) -> Any:
+                try:
+                    return attr(*args, **kwargs)
+                finally:
+                    self._stale = True
+
+            return forwarded
+        return attr
 
     def __setattr__(self, name: str, value: Any) -> None:
         # The wrapper's own state is private (underscore) or declared on
@@ -567,6 +785,7 @@ class SGLangToktierTokenizer:
             object.__setattr__(self, name, value)
         else:
             setattr(hf, name, value)
+            self._stale = True
 
     def __delattr__(self, name: str) -> None:
         if name.startswith("_") or hasattr(type(self), name) or name in self.__dict__:
@@ -576,6 +795,7 @@ class SGLangToktierTokenizer:
         if hf is None:
             raise AttributeError(name)
         delattr(hf, name)
+        self._stale = True
 
     def __len__(self) -> int:
         return len(self._hf)
@@ -585,6 +805,66 @@ class SGLangToktierTokenizer:
             f"SGLangToktierTokenizer(mode={self._mode!r}, family={self.family!r}, "
             f"wrapped={type(self._hf).__name__})"
         )
+
+    # -- admission after construction -------------------------------------
+
+    def _admitted(self) -> bool:
+        """Whether the toktier path may answer the next encode.
+
+        Cheap on the common path (a fingerprint compare); the full
+        comparison runs only after a forwarded mutation or a fingerprint
+        change. Drift latches passthrough; an equivalent object rebuilds
+        the shadow reference.
+        """
+        if self._tok is None:
+            return False
+        if self._cfg.identity != "require":
+            return True
+        with self._lock:
+            if self._tok is None:
+                return False
+            if not self._stale:
+                current = _live_fingerprint(self._hf)
+                if current == self._fingerprint:
+                    return True
+            verdict = check_core_identity(self._hf, self._tok)
+            self._stale = False
+            if verdict["status"] == "equivalent":
+                self._fingerprint = _live_fingerprint(self._hf)
+                self._refresh_shadow_reference()
+                return True
+            self._latch_passthrough(verdict)
+            return False
+
+    def _latch_passthrough(self, verdict: dict[str, Any]) -> None:
+        """The supplied object is no longer the tokenizer toktier loaded:
+        delegate everything from now on (caller holds the lock)."""
+        self._identity = dict(verdict)
+        self._stats["identity"] = dict(verdict)
+        self._mode = "passthrough"
+        self._stats["mode"] = "passthrough"
+        if self._sched is not None:
+            with contextlib.suppress(Exception):
+                self._sched.close()
+            self._sched = None
+        if self._tok is not None:
+            with contextlib.suppress(Exception):
+                self._tok.close()
+            self._tok = None
+        self._record({"kind": "identity_drift", **verdict})
+
+    def _refresh_shadow_reference(self) -> None:
+        """Rebuild the asynchronous shadow copy from the current object
+        (caller holds the lock, so nothing is enqueued meanwhile)."""
+        if self._shadow_mode != "async" or self._shadow_q is None:
+            return
+        self._shadow_q.join()
+        try:
+            self._shadow_ref = self._default_shadow_factory()
+        except Exception:
+            self._shadow_ref = self._hf
+            self._shadow_mode = "sync"
+            self._stats["shadow"] = "sync"
 
     # -- the tokenizer surface SGLang calls -----------------------------
 
@@ -664,18 +944,55 @@ class SGLangToktierTokenizer:
 
     # -- the toktier path --------------------------------------------------
 
-    def _encode_one(self, text: str, add_special_tokens: bool) -> list[int]:
-        if add_special_tokens and not self._template_ok:
-            t0 = time.perf_counter()
-            out = list(self._hf(text, add_special_tokens=True)["input_ids"])
-            self._note_delegated(text, out, (time.perf_counter() - t0) * 1e3)
-            return out
-        t0 = time.perf_counter()
-        key: str | None = None
+    def _resolve_key(self, key: Any) -> str | None:
+        """The session key for this call: the explicit one, or the bound
+        context variable; only ``"contextvar"`` mode carries keys."""
+        if self._mode != "contextvar":
+            return None
+        if key is _KEY_FROM_CONTEXT:
+            return SESSION_KEY.get()
+        return key if isinstance(key, str) and key else None
+
+    def _pool_kind(self, text: str, key: str | None) -> str | None:
+        """Which pool call serves this request; ``None`` keeps it here.
+
+        A keyed request takes the session path on its home worker; a
+        request in ``"off"`` mode is stateless; a keyless request in
+        ``"contextvar"`` mode keeps the content lookup the serial route
+        gives it unless it is long enough to be chunked (then it is
+        stateless, as for the in-process chunk-parallel encode); ``"auto"``
+        mode is content lookup by design. An explicit
+        ``long_request_encoder`` keeps precedence over the pool for the
+        requests it was configured for.
+        """
+        sched = self._sched
+        if sched is None or not sched.active:
+            return None
+        stateless = key is None and self._mode in ("off", "contextvar")
+        if (
+            stateless
+            and self._cfg.long_request_encoder is not None
+            and len(text) >= self._cfg.long_request_min_chars
+        ):
+            return None
+        if key is not None:
+            return "session"
+        if self._mode == "off":
+            return "free"
+        if (
+            self._mode == "contextvar"
+            and sched.policy.planner is not None
+            and len(text) >= sched.config.chunk_min_chars
+        ):
+            return "free"
+        return "auto"
+
+    def _serial_core(
+        self, text: str, key: str | None
+    ) -> tuple[list[int], str, dict[str, Any]]:
+        """The in-process routes: ``(core ids, how, extra facts)``."""
         extra: dict[str, Any] = {}
         with self._lock:
-            if self._mode == "contextvar":
-                key = SESSION_KEY.get()
             # A request that would be a stateless full encode: every
             # request in "off" mode, and a keyless one in "contextvar" mode.
             stateless = key is None and self._mode in ("off", "contextvar")
@@ -710,6 +1027,132 @@ class SGLangToktierTokenizer:
             else:
                 core = list(self._tok.encode(text).ids)
                 how = "auto"
+        return core, how, extra
+
+    def _note_sched_fallback(self, result: SchedResult) -> None:
+        self._stats["sched_fallback"] += 1
+        self._record(
+            {
+                "kind": "sched_fallback",
+                "error": result.error,
+                "how": result.how,
+                "sojourn_ms": round(result.sojourn_ms, 4),
+            }
+        )
+
+    @staticmethod
+    def _sched_extra(result: SchedResult) -> dict[str, Any]:
+        return {
+            "sched_k": result.k,
+            "sched_chunks": result.chunks,
+            "sched_wait_ms": round(result.wait_ms, 4),
+            "sched_service_ms": round(result.service_ms, 4),
+            "sched_sojourn_ms": round(result.sojourn_ms, 4),
+            "sched_wids": list(result.wids),
+        }
+
+    def _encode_one(
+        self, text: str, add_special_tokens: bool, key: Any = _KEY_FROM_CONTEXT
+    ) -> list[int]:
+        if not self._admitted():
+            return list(
+                self._delegate_call(text, add_special_tokens=add_special_tokens)[
+                    "input_ids"
+                ]
+            )
+        if add_special_tokens and not self._template_ok:
+            t0 = time.perf_counter()
+            out = list(self._hf(text, add_special_tokens=True)["input_ids"])
+            self._note_delegated(text, out, (time.perf_counter() - t0) * 1e3)
+            return out
+        t0 = time.perf_counter()
+        key = self._resolve_key(key)
+        kind = self._pool_kind(text, key)
+        if kind is not None:
+            assert self._sched is not None
+            limit = self._cfg.scheduler.worker_timeout_s if self._cfg.scheduler else 0
+            result = self._sched.encode_sync(
+                text, key, kind=kind, timeout=(2 * limit) if limit > 0 else None
+            )
+            if result.error is None and result.ids is not None:
+                return self._complete(
+                    text,
+                    add_special_tokens,
+                    result.ids,
+                    "sched_" + result.how,
+                    self._sched_extra(result),
+                    key,
+                    t0,
+                )
+            self._note_sched_fallback(result)
+            if self._tok is None:  # passthrough latched while this call waited
+                return list(
+                    self._delegate_call(text, add_special_tokens=add_special_tokens)[
+                        "input_ids"
+                    ]
+                )
+        core, how, extra = self._serial_core(text, key)
+        return self._complete(text, add_special_tokens, core, how, extra, key, t0)
+
+    async def encode_async(
+        self, text: str, add_special_tokens: bool = True, key: Any = _KEY_FROM_CONTEXT
+    ) -> list[int]:
+        """Encode one text with the pool, without blocking the event loop.
+
+        Same answer as ``__call__``; the encode runs on a worker process
+        and this coroutine waits for it, so other requests proceed
+        meanwhile. Without a running pool (or for a request the pool
+        does not serve) this is the synchronous encode, as before.
+        ``key`` is the session key; by default the bound context
+        variable is read, which the form Z hook binds around the
+        request.
+        """
+        if not self._admitted():
+            return list(
+                self._delegate_call(text, add_special_tokens=add_special_tokens)[
+                    "input_ids"
+                ]
+            )
+        if add_special_tokens and not self._template_ok:
+            return self._encode_one(text, add_special_tokens, key=key)
+        t0 = time.perf_counter()
+        key = self._resolve_key(key)
+        kind = self._pool_kind(text, key)
+        if kind is None:
+            return self._encode_one(text, add_special_tokens, key=key)
+        assert self._sched is not None
+        result = await self._sched.encode_async(text, key, kind=kind)
+        if result.error is None and result.ids is not None:
+            return self._complete(
+                text,
+                add_special_tokens,
+                result.ids,
+                "sched_" + result.how,
+                self._sched_extra(result),
+                key,
+                t0,
+            )
+        self._note_sched_fallback(result)
+        if self._tok is None:  # passthrough latched while this call waited
+            return list(
+                self._delegate_call(text, add_special_tokens=add_special_tokens)[
+                    "input_ids"
+                ]
+            )
+        core, how, extra = self._serial_core(text, key)
+        return self._complete(text, add_special_tokens, core, how, extra, key, t0)
+
+    def _complete(
+        self,
+        text: str,
+        add_special_tokens: bool,
+        core: list[int],
+        how: str,
+        extra: dict[str, Any],
+        key: str | None,
+        t0: float,
+    ) -> list[int]:
+        """Template, counters, timing record and shadow check, one place."""
         ids = (self._prefix + core + self._suffix) if add_special_tokens else core
         ms = (time.perf_counter() - t0) * 1e3
         self._calls += 1
@@ -785,6 +1228,7 @@ class SGLangToktierTokenizer:
         while True:
             item = self._shadow_q.get()
             if item is None:
+                self._shadow_q.task_done()
                 return
             text, add_special_tokens, ids, key = item
             try:
@@ -795,6 +1239,7 @@ class SGLangToktierTokenizer:
                 )
             except Exception as ex:
                 self._record({"kind": "shadow_error", "error": repr(ex)[:200]})
+                self._shadow_q.task_done()
                 continue
             self._stats["shadow_checked"] += 1
             if ref != ids:
@@ -806,6 +1251,7 @@ class SGLangToktierTokenizer:
                 self._record(
                     {"kind": "shadow_async", "shadow": "eq", "chars": len(text)}
                 )
+            self._shadow_q.task_done()
 
     def _on_mismatch(
         self,
@@ -868,6 +1314,10 @@ class SGLangToktierTokenizer:
                     out["cpe"] = report["cpe"]
             except Exception as ex:
                 out["store"] = f"explain_error:{type(ex).__name__}"
+        if self._sched is not None:
+            out["scheduler"] = self._sched.stats()
+        if self._sched_note is not None:
+            out["scheduler_note"] = self._sched_note
         return out
 
     def flush(self) -> None:
@@ -887,6 +1337,8 @@ class SGLangToktierTokenizer:
 
     def close(self) -> None:
         self.flush()
+        if self._sched is not None:
+            self._sched.close()
         if self._shadow_q is not None:
             self._shadow_q.put(None)
         if self._tok is not None:
@@ -926,13 +1378,19 @@ def attach_to_tokenizer_manager(
     ``_tokenize_one_request`` the request's session key is bound, and the
     manager's own tokenize timing (``created_time`` to
     ``tokenize_finish_time``) is appended to the timing log so the SGLang
-    view and the adapter view of the same request sit side by side.
+    view and the adapter view of the same request sit side by side. When
+    the wrapper runs the pool scheduler, ``_tokenize_texts`` is patched
+    as well: a single string, or a list of strings, is awaited through
+    :meth:`SGLangToktierTokenizer.encode_async` (keeping the method's
+    ``(input_ids, token_type_ids)`` contract); cross-encoder inputs and
+    every other shape take the original path.
     """
     if getattr(manager_cls, "_toktier_attached", False):
         return False
     cfg = config if config is not None else AdapterConfig.from_env()
     orig_init = manager_cls.__init__
     orig_tokenize = manager_cls._tokenize_one_request
+    orig_tokenize_texts = getattr(manager_cls, "_tokenize_texts", None)
 
     def __init__(self: Any, *args: Any, **kwargs: Any) -> None:
         orig_init(self, *args, **kwargs)
@@ -972,7 +1430,35 @@ def attach_to_tokenizer_manager(
                 pass
         return out
 
+    async def _tokenize_texts(
+        self: Any, texts: Any, is_cross_encoder: bool = False, *args: Any, **kwargs: Any
+    ) -> Any:
+        wrapper = getattr(self, "tokenizer", None)
+        if (
+            isinstance(wrapper, SGLangToktierTokenizer)
+            and wrapper.scheduler is not None
+            and not is_cross_encoder
+            and not args
+            and not kwargs
+            and not getattr(
+                getattr(self, "model_config", None), "is_embedding_gemma", False
+            )
+        ):
+            if isinstance(texts, str) and texts:
+                return await wrapper.encode_async(texts), None
+            if (
+                isinstance(texts, list)
+                and texts
+                and all(isinstance(t, str) for t in texts)
+            ):
+                rows = await asyncio.gather(*(wrapper.encode_async(t) for t in texts))
+                return list(rows), None
+        assert orig_tokenize_texts is not None
+        return await orig_tokenize_texts(self, texts, is_cross_encoder, *args, **kwargs)
+
     manager_cls.__init__ = __init__
     manager_cls._tokenize_one_request = _tokenize_one_request
+    if orig_tokenize_texts is not None:
+        manager_cls._tokenize_texts = _tokenize_texts
     manager_cls._toktier_attached = True
     return True

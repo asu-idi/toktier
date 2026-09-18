@@ -156,6 +156,72 @@ as qwen3_8b, cuts are made only where they are also cuts of the
 normalized text; `docs/serving.md` Section 3), and the shadow check
 compares it like any other.
 
+## Scheduled encodes: a process pool behind the wrapper (0.2.10)
+
+Everything above runs the encode on the thread of SGLang's event loop,
+one request after another, so the tokenizer is a serial stage of the
+request path: while one long transcript is being encoded every other
+request waits, and a long request occupies one core however many the
+host has (`--tokenizer-worker-num` overlaps requests across HTTP
+processes but cannot shorten one, and each worker keeps its own session
+store). The certified CPU engine adds a constraint of its own: its main
+engine is serialized inside one process, so parallel encodes need one
+process each.
+
+`toktier.integrations.sglang_sched` gives the wrapper a pool of worker
+processes, each holding one loaded tokenizer (about 320 MB each), and a
+policy that decides what each idle worker takes next:
+
+- keyed requests go to a *home* worker chosen from the key and take the
+  session path there (`encode(text, session=key)`: only the new turn is
+  encoded), because the store is one directory with one writer;
+- stateless requests go to a shared queue ordered by an estimate of
+  their service time (shortest first, aged so nothing waits without
+  bound; `fifo` is available);
+- a stateless request of at least `chunk_min_chars` is cut at certified
+  stable boundaries (`toktier.cpe.plan_chunks`, the same cuts as the
+  chunk-parallel encoder) into `min(workers, kmax, ceil(N /
+  chunk_target))` chunk tasks that any worker may take, so a long
+  request neither monopolizes one worker nor holds the short ones behind
+  it; the ids are concatenated, which is the serial encoding by
+  construction.
+
+Form Z also patches `_tokenize_texts`: a single string (or a list of
+strings) is awaited through `SGLangToktierTokenizer.encode_async`, so the
+event loop stays free while the pool works and several requests are in
+flight at once; cross-encoder inputs and other shapes take the original
+path, and other entry points (`__call__`, the dynamic-batch executor)
+use the pool synchronously.
+
+```
+TOKTIER_SGLANG_SCHED_WORKERS=4        # 0 (default) = no pool
+TOKTIER_SGLANG_SCHED_CORES=0-3        # optional: pin worker i to cores[i]
+TOKTIER_SGLANG_SCHED_POLICY=srpt      # or fifo
+TOKTIER_SGLANG_SCHED_CHUNK_MIN_CHARS=131072
+TOKTIER_SGLANG_SCHED_CHUNK_TARGET=65536
+TOKTIER_SGLANG_SCHED_KMAX=16
+```
+
+Correctness posture is unchanged: the pool decides where and in what
+order the same encodes run, never what they return. Whatever a worker
+answers passes through the wrapper's template, shadow check and timing
+log like a serial encode (`how: "sched_session" | "sched_auto" |
+"sched_free" | "sched_cpe"`, with the chunk count, the wait and the
+service time per request), and a request the pool cannot answer -- a
+worker that failed to start, exited, raised, or did not answer within
+`worker_timeout_s` -- is encoded in-process on the route it would have
+taken without the pool and counted (`stats()["sched_fallback"]`). A
+keyless request in `contextvar` mode keeps its content lookup (on a home
+worker chosen from the text's start) unless it is long enough to be
+chunked; `auto` mode is content lookup by design and is never chunked.
+
+What the pool costs: the text and the ids cross a process boundary on
+every request, which on the host of `docs/serving.md` is about 0.6 ms at
+100 K characters and 6 ms at 1 M on the session path (0.4 and 4.8 ms
+serial), so the pool pays for itself on long or concurrent requests, not
+on short sequential ones. The registered patch-shaped native return
+(`docs/releases/v0.2.10.md`) is what removes the per-request stream copy.
+
 ## Correctness posture, briefly
 
 Every toktier path returns the ids a from-scratch reference encode would

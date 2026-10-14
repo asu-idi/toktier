@@ -399,6 +399,13 @@ def test_the_source_archive_carries_what_its_readme_links_to() -> None:
     assert "evidence" in trees
     # `generate_sibling_aliases.py --check` is in the same README block.
     assert "data" in trees
+    # The SGLang backend patches ship in no wheel or crate; the integration
+    # guide names them by their repository paths, so they travel here.
+    assert "patches" in trees
+    for patch in sorted((ROOT / "patches").glob("*.patch")):
+        assert f"patches/{patch.name}" in (
+            ROOT / "docs" / "integration" / "sglang.md"
+        ).read_text(encoding="utf-8"), patch.name
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for target in (

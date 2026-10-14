@@ -72,6 +72,9 @@ TREES = (
     "packaging",
     "docs",
     "tools",
+    # The SGLang backend patches: docs/integration/sglang.md names them by
+    # their repository paths, and they ship in no wheel or crate.
+    "patches",
 )
 INTERNAL_PACKAGES = (
     "toktier-cuda-driver",

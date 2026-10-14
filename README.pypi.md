@@ -1,6 +1,6 @@
 # toktier
 
-**English** | [简体中文](https://github.com/asu-idi/toktier/blob/v0.2.9/README.zh-CN.md)
+**English** | [简体中文](https://github.com/asu-idi/toktier/blob/v0.3.0/README.zh-CN.md)
 
 **Tokenize the conversation once — after that, only what's new.**
 
@@ -16,7 +16,7 @@ offers a certified GPU path for fresh or large requests. Both fast paths return 
   encodes a fresh 4-million-character request (~786K tokens) in **3.88 ms**,
   and the bounded CPU repair for a 256-character append to a
   4.19M-character session takes **1.68 ms**. The
-  [benchmark protocol](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/benchmarks.md) excludes engine construction,
+  [benchmark protocol](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/benchmarks.md) excludes engine construction,
   so the **3.88 ms** result assumes an already constructed and prepared
   engine; it is not a cold first-call figure. The repair reading measures the repair
   operation itself; it excludes materializing the full historical token
@@ -25,7 +25,7 @@ offers a certified GPU path for fresh or large requests. Both fast paths return 
   tokenizer artifact, oracle version, kernel delivery, and architecture covered
   by recorded evidence. `explain()` reports the route and its reasons.
 
-![Latency head-to-head: TokTier versus full re-encode across three workloads of a 4M-character session](https://raw.githubusercontent.com/asu-idi/toktier/v0.2.9/docs/figures/hero_session_vs_reencode.svg)
+![Latency head-to-head: TokTier versus full re-encode across three workloads of a 4M-character session](https://raw.githubusercontent.com/asu-idi/toktier/v0.3.0/docs/figures/hero_session_vs_reencode.svg)
 
 Every bar is a measured median. The 1.68 ms reading above comes from the
 `toktier repair (HF tokenizers window)` lane, which is the repair window
@@ -35,8 +35,8 @@ under the routing table below, and the figure data names the lane of each bar.
 A native Rust serving integration can avoid the full-sequence materialization
 by retaining session state and consuming only the repaired suffix. Exact
 values, workload sizes, and sample counts are in
-[`hero_session_vs_reencode.data.json`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/figures/hero_session_vs_reencode.data.json);
-the complete sweeps are in [`docs/benchmarks.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/benchmarks.md).
+[`hero_session_vs_reencode.data.json`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/figures/hero_session_vs_reencode.data.json);
+the complete sweeps are in [`docs/benchmarks.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/benchmarks.md).
 
 ## News
 
@@ -84,7 +84,7 @@ the complete sweeps are in [`docs/benchmarks.md`](https://github.com/asu-idi/tok
   sibling `basis` vocabulary and that schema — do move under it. The
   `ALIAS_CONFLICT` code and its details, the store format, the shipped fatbin,
   and the kernel ABI are unchanged. See the
-  [v0.2.9 release notes](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/releases/v0.2.9.md).
+  [v0.2.9 release notes](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/releases/v0.2.9.md).
 - **2026.08.30** 🚀 **toktier 0.2.8** released — on the Python face the
   certified subject is now the loader face: `tokenizer.json` plus the
   configuration-only added tokens that the pinned
@@ -106,7 +106,7 @@ the complete sweeps are in [`docs/benchmarks.md`](https://github.com/asu-idi/tok
   `store=` at a new directory and replay the transcript. The store format,
   the shipped fatbin, and the kernel ABI are unchanged, and existing Python
   facade calls remain source-compatible. See the
-  [v0.2.8 release notes](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/releases/v0.2.8.md).
+  [v0.2.8 release notes](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/releases/v0.2.8.md).
 - **2026.08.27** 🚀 **toktier 0.2.7** released — `pip install
   "toktier[fastokens]"` now installs `toktier-fastokens`, a pinned build of
   fastokens 0.3.1 with five patches from this project. The project publishes
@@ -119,7 +119,7 @@ the complete sweeps are in [`docs/benchmarks.md`](https://github.com/asu-idi/tok
   premise that does not hold. The 154-code-point Unicode guard moved from
   the judge into the adapter. Served
   IDs, the store format, and the kernel ABI are unchanged. See the
-  [v0.2.7 release notes](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/releases/v0.2.7.md).
+  [v0.2.7 release notes](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/releases/v0.2.7.md).
 - **2026.08.27** 🚀 **toktier 0.2.6** released — Rust certification now
   speaks for the certified core (TokTier's own crates, the packages they call
   directly, and the text-semantics libraries beneath them). Drift elsewhere in
@@ -138,7 +138,7 @@ the complete sweeps are in [`docs/benchmarks.md`](https://github.com/asu-idi/tok
   faces) compares such a route with the reference engine on your own
   text and records the answer as `locally_verified`. Served
   IDs, the store format, and the kernel ABI are unchanged. See the
-  [v0.2.6 release notes](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/releases/v0.2.6.md).
+  [v0.2.6 release notes](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/releases/v0.2.6.md).
 - **2026.08.15** 🚀 **toktier 0.2.5** released — the Rust crate's `network`
   feature is now opt-in, which takes sixteen packages and the whole TLS
   stack out of a default build that may never fetch; add
@@ -152,7 +152,7 @@ the complete sweeps are in [`docs/benchmarks.md`](https://github.com/asu-idi/tok
   `None`. Diagnostics gain an execution `reason` and a
   `network_compiled` build fact. Served IDs, the store format, and the
   kernel ABI are unchanged. See the
-  [v0.2.5 release notes](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/releases/v0.2.5.md).
+  [v0.2.5 release notes](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/releases/v0.2.5.md).
 - **2026.08.14** 🚀 **toktier 0.2.4** released — the Han family (`kimi_k3`)
   joins the certified roster with the product's own end-to-end GPU engine;
   Rust certification now judges the packages a build actually compiles, not
@@ -163,12 +163,12 @@ the complete sweeps are in [`docs/benchmarks.md`](https://github.com/asu-idi/tok
   `artifacts check-conversion`, and the last-execution diagnostic all answer
   inside their contracts. Served IDs, the store format, and the kernel ABI
   are unchanged. See the
-  [v0.2.4 release notes](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/releases/v0.2.4.md).
+  [v0.2.4 release notes](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/releases/v0.2.4.md).
 - **2026.08.11** 🚀 **toktier 0.2.1** released — a maintenance update: richer
   diagnostics (`doctor` now reports JIT toolchain eligibility, and `explain()`
   summaries state the time window each field covers) plus documentation fixes.
   Served IDs, the store format, and the kernel ABI are unchanged. See the
-  [v0.2.1 release notes](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/releases/v0.2.1.md).
+  [v0.2.1 release notes](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/releases/v0.2.1.md).
 - **2026.08.10** 🚀 **toktier 0.2.0** released — the first public release:
   certified exact-ID sessions with bounded CPU repair, a prebuilt GPU path,
   and the Rust serving API, shipped as a Python wheel on
@@ -289,7 +289,7 @@ and labels that route `supported_untested` rather than certified;
 text. The strict `CERTIFIED` policy refuses it instead, so those rows fall
 to the row above them. Either way `explain()` records the reason. The
 evidence scale per architecture is in
-[`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/support-matrix.md#status-vocabulary).
+[`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/support-matrix.md#status-vocabulary).
 
 `explain(summary=True)` reports:
 
@@ -332,15 +332,15 @@ truncated; `patch.replacement_ids()` is the exact repaired suffix. The append
 does not allocate the complete historical ID sequence unless the caller asks
 for `snapshot()`. The crate is published on crates.io from 0.2.0 onward and
 tracks the package version, so `cargo add toktier` resolves it from the
-registry. See [`docs/rust-api.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/rust-api.md) for the serving surface and
-[`docs/rust-lifecycle.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/rust-lifecycle.md) for acquisition, JIT,
+registry. See [`docs/rust-api.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/rust-api.md) for the serving surface and
+[`docs/rust-lifecycle.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/rust-lifecycle.md) for acquisition, JIT,
 concurrency, and reproducible offline distribution.
 
 Since 0.1.1, the UTF-8 crossover and no-hit added-token prefilter execute in
 one allocation-free Rust selector call. On the recorded RTX 5090 host, its
 4M-byte control-plane microprofile fell from 2.97 ms to 0.052 ms (57.5x); this
 is a routing-only measurement, separate from tokenization and Python result
-materialization. See [`docs/native-routing.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/native-routing.md).
+materialization. See [`docs/native-routing.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/native-routing.md).
 
 ## Install
 
@@ -437,7 +437,7 @@ package-version reads in covered Rust or Python code outside the explicitly
 enumerated build-fact reporting sites, so tolerated metadata changes cannot
 select runtime behavior.
 
-The [provenance and build record](https://github.com/asu-idi/toktier/blob/v0.2.9/packaging/fast_cpu/README.md) pins the
+The [provenance and build record](https://github.com/asu-idi/toktier/blob/v0.3.0/packaging/fast_cpu/README.md) pins the
 upstream commit, patch, Unicode inputs, compiler, and release flags. The
 executing extension reports its domain-separated source digest, exact Rust
 toolchain, and build flags; the registry verifies all of them together with the
@@ -466,7 +466,7 @@ backend executes. JIT delivery keeps the Python host, whose GPU backend opens
 the same way on the first input that routes to the GPU. The
 JIT delivery is `certified_source` on `sm_89` and `sm_120`, meaning its
 certificate binds source, class tables, flags, and toolchain constraints rather
-than a machine-local binary. See [`docs/gpu-jit.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/gpu-jit.md) for the
+than a machine-local binary. See [`docs/gpu-jit.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/gpu-jit.md) for the
 automatic facade, explicit engine API, and delivery diagnostics.
 
 ### Tokenizer artifacts, mirrors, and air-gapped hosts
@@ -528,7 +528,7 @@ tokenizer or compiling anything:
 | `jit_toolchain_satisfied` | under JIT delivery, whether the observed compiler/runtime triple is one the registry judged; `null` under prebuilt delivery, which has no such premise |
 | `jit_toolchain_observed` / `jit_toolchain_constraint` | the triple this machine presents, and the judged set it is compared against |
 | `automatic_routing_policy` | which policy the two answers below were computed under, since 0.2.8. The same machine reads a different effective backend under three of the five policies, so the answers only mean something beside the policy that produced them |
-| `automatic_gpu_eligible` | the conjunction the policy in effect applies: candidate, an observed device, and that delivery's own materials, plus — under `CERTIFIED` — a judged architecture and a judged toolchain. The default `SUPPORTED` policy treats those last two as coverage gaps, runs them, and labels the route `supported_untested`, so the field follows suit |
+| `automatic_gpu_eligible` | the conjunction the policy in effect applies: candidate, an observed device, that delivery's own materials, a driver at or above the certified floor and, for a prebuilt delivery, the Rust host the fatbin is paired with matching its binding (since 0.3.0, read from the list the plan refuses from), plus — under `CERTIFIED` — a judged architecture and a judged toolchain. The default `SUPPORTED` policy treats those last two as coverage gaps, runs them, and labels the route `supported_untested`, so the field follows suit. Waivers are not counted: under `EXPERIMENTAL`, which only an explicit argument selects, a plan may run the GPU past a driver-floor or host-binding refusal, or the corrected Gigatoken CPU engine past an engine-binding refusal, with a recorded waiver, and this field and `automatic_effective_backend` still answer `false` and `fast_cpu` or `hf` there; the loaded tokenizer's `explain()["experimental_waivers"]` lists what was waived |
 | `automatic_effective_backend` | what an at-or-above-crossover automatic request would use for a CPU-fast-certified family: `gpu`, `fast_cpu`, or `hf` |
 | `directory_roots_usable` / `directory_roots_problem` | whether the three resolved roots above can hold what they are for, and what stands in the way when they cannot — the same judgement the next command would answer with `CONFIG_INVALID`, read without creating anything |
 
@@ -548,6 +548,14 @@ that policy runs the unjudged combination and labels it `supported_untested`;
 under `CERTIFIED` the same machine reads `false` and `fast_cpu`. Either way it
 is the conclusion `toktier gpu compile` and the next request reach, before you
 run them.
+
+`certified_cpu_profile_ready` says whether the installed `tokenizers` and
+`transformers` are exactly the pair the loader-face readings were taken with
+(0.22.2 and 4.57.6), not whether a route is open. Beside SGLang, whose
+`transformers` pin differs, it reads `false` and the effective-backend fields
+built on it answer `hf` where they would otherwise answer `fast_cpu`, while a
+loaded tokenizer's `explain()` and `family.plan_reasons` show what actually runs
+([Installing beside SGLang](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/integration/sglang.md#installing-beside-sglang)).
 
 ### Caches, state, and directory layout
 
@@ -571,7 +579,7 @@ product's, JIT products in `jit-rust`, deliberately apart from the Python
 `kernels` directory, because the two hold different things. Persistent
 sessions with no resolvable home are refused rather than placed by
 guesswork: state is not a cache. See
-[`docs/rust-lifecycle.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/rust-lifecycle.md).
+[`docs/rust-lifecycle.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/rust-lifecycle.md).
 
 ### Experimental: the pinned Fastokens adapter
 
@@ -646,7 +654,7 @@ routes read that one subject and return the same IDs for inputs holding such
 a literal; the existing campaign readings carry over unchanged because a
 dedicated scan found zero occurrences of every affected literal in the
 certified corpora.
-[`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/support-matrix.md#configuration-only-added-tokens)
+[`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/support-matrix.md#configuration-only-added-tokens)
 records the one artifact whose two faces differ as documents and the
 carry-over evidence.
 
@@ -666,10 +674,10 @@ usually belong to different axes.
 | Corrected Gigatoken CPU repair | 11 unique artifacts × 3,800,016,491 documents = **41,800,181,401 checks** (12 model families by exact-artifact inheritance) | 0 |
 
 The machine-readable records are
-[`evidence/evidence_manifest.json`](https://github.com/asu-idi/toktier/blob/v0.2.9/evidence/evidence_manifest.json),
-[`evidence/evidence_manifest_added_families.json`](https://github.com/asu-idi/toktier/blob/v0.2.9/evidence/evidence_manifest_added_families.json),
-[`evidence/evidence_manifest_kimi_band.json`](https://github.com/asu-idi/toktier/blob/v0.2.9/evidence/evidence_manifest_kimi_band.json),
-and [`tables/support_registry.json`](https://github.com/asu-idi/toktier/blob/v0.2.9/tables/support_registry.json). Shipped
+[`evidence/evidence_manifest.json`](https://github.com/asu-idi/toktier/blob/v0.3.0/evidence/evidence_manifest.json),
+[`evidence/evidence_manifest_added_families.json`](https://github.com/asu-idi/toktier/blob/v0.3.0/evidence/evidence_manifest_added_families.json),
+[`evidence/evidence_manifest_kimi_band.json`](https://github.com/asu-idi/toktier/blob/v0.3.0/evidence/evidence_manifest_kimi_band.json),
+and [`tables/support_registry.json`](https://github.com/asu-idi/toktier/blob/v0.3.0/tables/support_registry.json). Shipped
 per-artifact readings account for 53,720,215,504 checks; an archived earlier
 phase accounts for the remaining 3,280,031,861. Together they produce the
 headline total above. What ships is that per-artifact summary: the
@@ -677,10 +685,10 @@ document-by-document ledger the campaigns were reduced from lives in the
 audit records behind this document and does not ship inside the package.
 A focused end-to-end rerun through the historical public session API is
 kept in
-[`readings/fast_cpu_focused_parity.json`](https://github.com/asu-idi/toktier/blob/v0.2.9/readings/fast_cpu_focused_parity.json).
+[`readings/fast_cpu_focused_parity.json`](https://github.com/asu-idi/toktier/blob/v0.3.0/readings/fast_cpu_focused_parity.json).
 The executing one-call Rust front end is separately checked across all 11
 CPU-fast artifacts in
-[`readings/fast_cpu_native_frontend_parity.json`](https://github.com/asu-idi/toktier/blob/v0.2.9/readings/fast_cpu_native_frontend_parity.json).
+[`readings/fast_cpu_native_frontend_parity.json`](https://github.com/asu-idi/toktier/blob/v0.3.0/readings/fast_cpu_native_frontend_parity.json).
 
 Three status values keep evidence and runtime behavior distinct:
 
@@ -692,6 +700,12 @@ Three status values keep evidence and runtime behavior distinct:
 
 These are empirical differential results, not a proof over all possible inputs.
 Per-request checks and the reference fallback remain part of the contract.
+
+The chunk-parallel encode added in 0.3.0 has evidence of its own, kept apart
+from the table above, whose campaigns encode whole documents and never cut
+one: an adversarial battery and a corpus cut comparison on the chunked path,
+from which a shipped admission table decides, artifact by artifact, what may be
+chunked ([`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/support-matrix.md#certified-chunk-cuts)).
 
 Repository self-checks:
 
@@ -765,7 +779,7 @@ same-host throughput measurement:
 
 This pair uses 2.2 GB of RAM-resident real web text and reports UTF-8 bytes over
 wall clock with host ID arrays materialized. Full protocols, all cells, and
-provenance are in [`docs/benchmarks.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/benchmarks.md).
+provenance are in [`docs/benchmarks.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/benchmarks.md).
 
 The primary study used an RTX PRO 6000 Blackwell, but a consumer RTX 5090
 sweep using the same protocol was **11–17% faster** (4.24–5.50 GB/s across the
@@ -780,13 +794,13 @@ The figures name Hugging Face (HF) `tokenizers` explicitly and link to the
 corresponding machine-readable `docs/figures/*.data.json` files. The benchmark
 document also shows the regimes where direct use of another engine is faster.
 
-![Single-request latency](https://raw.githubusercontent.com/asu-idi/toktier/v0.2.9/docs/figures/f1_single_request_latency.svg)
+![Single-request latency](https://raw.githubusercontent.com/asu-idi/toktier/v0.3.0/docs/figures/f1_single_request_latency.svg)
 
-![Session tail latency](https://raw.githubusercontent.com/asu-idi/toktier/v0.2.9/docs/figures/f2_session_tail_latency.svg)
+![Session tail latency](https://raw.githubusercontent.com/asu-idi/toktier/v0.3.0/docs/figures/f2_session_tail_latency.svg)
 
-![Session state memory](https://raw.githubusercontent.com/asu-idi/toktier/v0.2.9/docs/figures/f3_session_state_memory.svg)
+![Session state memory](https://raw.githubusercontent.com/asu-idi/toktier/v0.3.0/docs/figures/f3_session_state_memory.svg)
 
-![Repair-path equivalent throughput](https://raw.githubusercontent.com/asu-idi/toktier/v0.2.9/docs/figures/f4_repair_equivalent_throughput.svg)
+![Repair-path equivalent throughput](https://raw.githubusercontent.com/asu-idi/toktier/v0.3.0/docs/figures/f4_repair_equivalent_throughput.svg)
 
 ## Support matrix
 
@@ -797,7 +811,7 @@ document also shows the regimes where direct use of another engine is faster.
 | WordPiece | 3 | CPU evidence |
 | Structural exclusions | 2 | reason recorded |
 
-[`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/support-matrix.md) lists every anchor artifact,
+[`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/support-matrix.md) lists every anchor artifact,
 SHA-256, backend status, and **214 verified model repositories** whose
 tokenizer is byte-identical to a certified one, identical at the upstream
 source file it is converted from, or equivalent after canonicalization, in
@@ -835,22 +849,22 @@ Serving projects such as `llm-tokenizer` and NVIDIA Dynamo's
 | Reuse boundary | certified tokenizer boundary | typically special-token boundary |
 | Surface | Python library for session-owning applications | serving-gateway component |
 
-See [`docs/integration/dynamo.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/integration/dynamo.md) for using the two
+See [`docs/integration/dynamo.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/integration/dynamo.md) for using the two
 layers together.
 
 ## Documentation
 
-- [`docs/releases/v0.2.9.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/releases/v0.2.9.md) — release notes for this version.
-- [`ARCHITECTURE.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/ARCHITECTURE.md) — layers, routing, and store format.
-- [`docs/serving.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/serving.md) — which encode call for which request shape, patch-only appends, and chunk-parallel encode for long requests.
-- [`docs/integration/sglang.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/integration/sglang.md) — using toktier as an SGLang tokenizer backend.
-- [`ROADMAP.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/ROADMAP.md) — release scope and planned integration.
-- [`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/support-matrix.md) — artifacts and covered repositories.
-- [`docs/gpu-jit.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/gpu-jit.md) — prebuilt and JIT GPU deliveries.
-- [`docs/rust-api.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/rust-api.md) — Python-free Rust serving API.
-- [`docs/rust-lifecycle.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/rust-lifecycle.md) — native artifacts, direct JIT, concurrency, and offline distribution.
-- [`docs/integration/dynamo.md`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/integration/dynamo.md) — Dynamo integration.
-- [`docs/paper/toktier-preprint.pdf`](https://github.com/asu-idi/toktier/blob/v0.2.9/docs/paper/toktier-preprint.pdf) — current preprint.
+- [`docs/releases/v0.3.0.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/releases/v0.3.0.md) — release notes for this version.
+- [`ARCHITECTURE.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/ARCHITECTURE.md) — layers, routing, and store format.
+- [`docs/serving.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/serving.md) — which encode call for which request shape, patch-only appends, and chunk-parallel encode for long requests.
+- [`docs/integration/sglang.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/integration/sglang.md) — using toktier as an SGLang tokenizer backend.
+- [`ROADMAP.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/ROADMAP.md) — release scope and planned integration.
+- [`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/support-matrix.md) — artifacts and covered repositories.
+- [`docs/gpu-jit.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/gpu-jit.md) — prebuilt and JIT GPU deliveries.
+- [`docs/rust-api.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/rust-api.md) — Python-free Rust serving API.
+- [`docs/rust-lifecycle.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/rust-lifecycle.md) — native artifacts, direct JIT, concurrency, and offline distribution.
+- [`docs/integration/dynamo.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/integration/dynamo.md) — Dynamo integration.
+- [`docs/paper/toktier-preprint.pdf`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/paper/toktier-preprint.pdf) — current preprint.
 
 ## Acknowledgements
 
@@ -873,12 +887,12 @@ The toktier project publishes toktier-fastokens, a pinned build of Fastokens
 adapter. The upstream project is a separate implementation and does not
 endorse this build. Fastokens is Apache-2.0 and Gigatoken is MIT; exact
 revisions, license copies, patch series, and modification notices are in
-[`THIRD_PARTY_NOTICES`](https://github.com/asu-idi/toktier/blob/v0.2.9/THIRD_PARTY_NOTICES) and [`packaging/`](https://github.com/asu-idi/toktier/tree/v0.2.9/packaging).
+[`THIRD_PARTY_NOTICES`](https://github.com/asu-idi/toktier/blob/v0.3.0/THIRD_PARTY_NOTICES) and [`packaging/`](https://github.com/asu-idi/toktier/tree/v0.3.0/packaging).
 
 ## License and citation
 
-toktier is licensed under the [Apache License 2.0](https://github.com/asu-idi/toktier/blob/v0.2.9/LICENSE); see
-[`NOTICE`](https://github.com/asu-idi/toktier/blob/v0.2.9/NOTICE) for attribution information.
+toktier is licensed under the [Apache License 2.0](https://github.com/asu-idi/toktier/blob/v0.3.0/LICENSE); see
+[`NOTICE`](https://github.com/asu-idi/toktier/blob/v0.3.0/NOTICE) for attribution information.
 
 **Paper:** [*TokTier: Exact Stateful CPU+GPU Tokenization for Agentic LLM
 Serving*](https://arxiv.org/abs/2607.29678) ·
@@ -900,4 +914,4 @@ If you use toktier in your research, please cite:
 ```
 
 Machine-readable citation metadata is available in
-[`CITATION.cff`](https://github.com/asu-idi/toktier/blob/v0.2.9/CITATION.cff).
+[`CITATION.cff`](https://github.com/asu-idi/toktier/blob/v0.3.0/CITATION.cff).

@@ -854,7 +854,11 @@ def test_no_certified_cut_falls_back_to_serial(
     report = tokenizer.explain()["chunked"]
     assert isinstance(report, dict)
     assert report["fallback_counts"]["R_CHUNK_NO_CUT"] == before + 1
-    assert report["last"] == {
+    last = report["last"]
+    assert isinstance(last, dict)
+    # Judged key by key: the block may grow keys (the native path added
+    # ``native``), and each fact of this call is checked on its own.
+    expected = {
         "chars": len(text),
         "tokens": len(encoded.ids),
         "k_requested": 4,
@@ -863,7 +867,11 @@ def test_no_certified_cut_falls_back_to_serial(
         "cut_misses": 3,
         "literal_rejects": 0,
         "norm_rejects": 0,
+        "native": False,
     }
+    for key, value in expected.items():
+        assert key in last, key
+        assert last[key] == value, (key, last[key], value)
 
 
 @pytest.mark.parametrize("family", CANDIDATE_FAMILIES)

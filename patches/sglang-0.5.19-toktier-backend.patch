@@ -6,8 +6,11 @@ the tokenizer SGLang loads is wrapped after the post-load fixes, encode
 calls run on toktier's certified CPU route (ids equal to a from-scratch
 reference encode), and the request's `session_id` (else `cache_salt`) is
 bound around the tokenize call so a conversation's transcript is served
-as a verified prefix append instead of a full re-encode. No other code
-path changes. Requires `toktier >= 0.3.0` (toktier.integrations.sglang).
+as a verified prefix append instead of a full re-encode. With the
+adapter's process pool enabled (TOKTIER_SGLANG_SCHED_WORKERS > 0),
+`_tokenize_texts` awaits the pool for plain text inputs instead of
+encoding on the event loop's thread. No other code path changes.
+Requires `toktier >= 0.3.0` (toktier.integrations.sglang).
 Baseline: sglang 0.5.19 (PyPI wheel).
 ---
 --- a/python/sglang/srt/server_args.py
@@ -71,7 +74,21 @@ Baseline: sglang 0.5.19 (PyPI wheel).
              raise RuntimeError(
 --- a/python/sglang/srt/managers/tokenizer_manager.py
 +++ b/python/sglang/srt/managers/tokenizer_manager.py
-@@ -958,6 +958,22 @@
+@@ -895,6 +895,13 @@
+         if not texts or self.tokenizer is None:
+             raise ValueError("texts cannot be empty and tokenizer must be initialized")
+ 
++        if get_serving().tokenizer_backend == "toktier":
++            from toktier.integrations.sglang import tokenize_texts_with_pool
++
++            pooled = await tokenize_texts_with_pool(self, texts, is_cross_encoder)
++            if pooled is not None:
++                return pooled
++
+         # Step 1: Detect input format and prepare for tokenization
+         input_format = self._detect_input_format(texts, is_cross_encoder)
+         tokenizer_input = self._prepare_tokenizer_input(texts, input_format)
+@@ -958,6 +965,22 @@
              input_ids, token_type_ids, input_format, original_batch_size
          )
  
@@ -94,7 +111,7 @@ Baseline: sglang 0.5.19 (PyPI wheel).
      async def _tokenize_one_request(
          self,
          obj: Union[GenerateReqInput, EmbeddingReqInput],
-@@ -995,9 +1011,10 @@
+@@ -995,9 +1018,10 @@
                  # Use empty placeholder - multimodal processor will override
                  input_ids = []
              else:

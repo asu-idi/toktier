@@ -31,6 +31,7 @@ from toktier.integrations.sglang import (
     SGLangToktierTokenizer,
     attach_to_tokenizer_manager,
     bind_session_key,
+    tokenize_texts_with_pool,
     wrap_tokenizer,
 )
 from toktier.integrations.sglang_sched import (
@@ -116,6 +117,14 @@ def test_config_validation_and_env() -> None:
     # the process environment once and passes it on.
     with pytest.raises(TypeError):
         SchedulerConfig.from_env()  # type: ignore[call-arg]
+    # The worker loader is a constructor argument for tests, not a setting.
+    loaded = SchedulerConfig.from_env(
+        {
+            "TOKTIER_SGLANG_SCHED_LOADER": "module:attribute",
+            "TOKTIER_SGLANG_SCHED_LOADER_PATH": "/somewhere",
+        }
+    )
+    assert loaded.loader is None and loaded.loader_path is None
     # The adapter reads the scheduler only when a worker count is set.
     assert AdapterConfig.from_env({}).scheduler is None
     adapter = AdapterConfig.from_env({"TOKTIER_SGLANG_SCHED_WORKERS": "2"})
@@ -515,6 +524,47 @@ def test_manager_hook_awaits_the_pool(monkeypatch: pytest.MonkeyPatch) -> None:
         assert hows == {"sched_session": 1, "sched_auto": 2}
     finally:
         m.tokenizer.close()
+
+
+def test_patched_manager_offers_texts_to_the_pool_first(
+    wrapped: SGLangToktierTokenizer,
+) -> None:
+    """The form P hunk: ``_tokenize_texts`` asks the pool hook, then
+    tokenizes as before when the hook declines."""
+    calls: list[Any] = []
+
+    class Manager:
+        def __init__(self, tokenizer: Any, model_config: Any = None) -> None:
+            self.tokenizer = tokenizer
+            self.model_config = model_config
+
+        async def _tokenize_texts(
+            self, texts: Any, is_cross_encoder: bool = False
+        ) -> Any:
+            pooled = await tokenize_texts_with_pool(self, texts, is_cross_encoder)
+            if pooled is not None:
+                return pooled
+            calls.append((texts, is_cross_encoder))
+            out = self.tokenizer(texts, return_token_type_ids=is_cross_encoder)
+            return out["input_ids"], out.get("token_type_ids")
+
+    m = Manager(wrapped)
+    assert asyncio.run(m._tokenize_texts("hi")) == ([1, 104, 105], None)
+    assert asyncio.run(m._tokenize_texts(["ab", "c"])) == ([[1, 97, 98], [1, 99]], None)
+    assert calls == []
+    assert wrapped.stats()["how"] == {"sched_auto": 3}
+    # Declined: cross-encoder pairs, EmbeddingGemma, a tokenizer without a pool.
+    asyncio.run(m._tokenize_texts([["q", "d"]], True))
+    gemma = type("ModelConfig", (), {"is_embedding_gemma": True})()
+    asyncio.run(Manager(wrapped, gemma)._tokenize_texts("hi"))
+    asyncio.run(Manager(_StubHf(bos=1))._tokenize_texts("hi"))
+    assert [texts for texts, _ in calls] == [[["q", "d"]], "hi", "hi"]
+    # Declined as well: an empty input and a row that is not a string.
+    assert asyncio.run(tokenize_texts_with_pool(m, "")) is None
+    assert asyncio.run(tokenize_texts_with_pool(m, ["ab", 7])) is None
+    # The EmbeddingGemma request took the original path, where the wrapper
+    # still serves it (through the pool, synchronously).
+    assert wrapped.stats()["how"] == {"sched_auto": 4}
 
 
 # -- artifact tier ------------------------------------------------------------

@@ -9,9 +9,13 @@ toktier's certified CPU route and delegates every other attribute to the
 wrapped tokenizer. Nothing here imports ``sglang``; the two ways to attach
 the wrapper are:
 
-* form P -- a small patch to ``sglang.srt.utils.hf_transformers.tokenizer.
-  get_tokenizer`` that adds ``tokenizer_backend == "toktier"`` and calls
-  :func:`wrap_tokenizer` (``patches/sglang-0.5.19-toktier-backend.patch``);
+* form P -- a small patch to SGLang that adds ``--tokenizer-backend
+  toktier``: ``get_tokenizer`` (``sglang.srt.utils.hf_transformers.
+  tokenizer``) calls :func:`wrap_tokenizer`, ``_tokenize_one_request``
+  binds the request's session key, and ``_tokenize_texts`` offers the
+  request to :func:`tokenize_texts_with_pool` first
+  (``patches/sglang-0.5.19-toktier-backend.patch`` and
+  ``patches/sglang-0.5.21-toktier-backend.patch``);
 * form Z -- no change to SGLang: an injector (``sitecustomize`` on
   ``PYTHONPATH``) calls :func:`attach_to_tokenizer_manager` on the
   ``TokenizerManager`` class, which wraps the tokenizer after construction
@@ -95,10 +99,11 @@ Scheduled encodes (``TOKTIER_SGLANG_SCHED_WORKERS`` > 0): the wrapper
 starts the process pool of :mod:`toktier.integrations.sglang_sched` and
 sends every encode to it -- keyed requests to their home worker's session
 path, stateless ones to the shared queue, long stateless ones as certified
-chunk tasks. Form Z also patches ``_tokenize_texts`` so a single-string
-(or list-of-strings) request is awaited (:meth:`SGLangToktierTokenizer.
-encode_async`) instead of encoded on the event loop's thread; other entry
-points use the pool synchronously. Whatever the pool answers passes through
+chunk tasks. Both forms route ``_tokenize_texts`` through
+:func:`tokenize_texts_with_pool`, so a single-string (or list-of-strings)
+request is awaited (:meth:`SGLangToktierTokenizer.encode_async`) instead
+of encoded on the event loop's thread; other entry points use the pool
+synchronously. Whatever the pool answers passes through
 the same template, shadow and timing path as a serial encode, and a request
 the pool cannot answer is encoded in-process on the route it would have
 taken without the pool.
@@ -133,6 +138,7 @@ __all__ = [
     "check_core_identity",
     "check_manager_shape",
     "session_key_from_request",
+    "tokenize_texts_with_pool",
     "wrap_tokenizer",
 ]
 
@@ -1457,6 +1463,37 @@ def _append_record(path: str | None, record: dict[str, Any]) -> None:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+async def tokenize_texts_with_pool(
+    manager: Any, texts: Any, is_cross_encoder: bool = False
+) -> tuple[Any, None] | None:
+    """The pool path of ``TokenizerManager._tokenize_texts`` (forms Z and P).
+
+    When ``manager.tokenizer`` is this module's wrapper with a running pool
+    scheduler and ``texts`` is a non-empty string or a non-empty list of
+    strings, the encodes are awaited through
+    :meth:`SGLangToktierTokenizer.encode_async` (the event loop stays free
+    while a worker encodes) and ``(input_ids, None)`` is returned, the
+    method's ``(input_ids, token_type_ids)`` contract. Otherwise -- a
+    cross-encoder input, an EmbeddingGemma model (SGLang appends EOS
+    there), any other input shape, or no pool -- it returns ``None`` and
+    the caller tokenizes as before.
+    """
+    wrapper = getattr(manager, "tokenizer", None)
+    if (
+        not isinstance(wrapper, SGLangToktierTokenizer)
+        or wrapper.scheduler is None
+        or is_cross_encoder
+        or getattr(getattr(manager, "model_config", None), "is_embedding_gemma", False)
+    ):
+        return None
+    if isinstance(texts, str) and texts:
+        return await wrapper.encode_async(texts), None
+    if isinstance(texts, list) and texts and all(isinstance(t, str) for t in texts):
+        rows = await asyncio.gather(*(wrapper.encode_async(t) for t in texts))
+        return list(rows), None
+    return None
+
+
 def attach_to_tokenizer_manager(
     manager_cls: Any,
     config: AdapterConfig | None = None,
@@ -1480,12 +1517,9 @@ def attach_to_tokenizer_manager(
     manager's own tokenize timing (``created_time`` to
     ``tokenize_finish_time``) is appended to the timing log so the SGLang
     view and the adapter view of the same request sit side by side.
-    ``_tokenize_texts`` is patched as well: when the wrapper runs the
-    pool scheduler, a single string, or a list of strings, is awaited
-    through :meth:`SGLangToktierTokenizer.encode_async` (keeping the
-    method's ``(input_ids, token_type_ids)`` contract); cross-encoder
-    inputs, every other shape, and a wrapper without a pool take the
-    original path. The wrapper's ``stats()``
+    ``_tokenize_texts`` is patched as well: a call without extra
+    arguments is offered to :func:`tokenize_texts_with_pool` first, and
+    whatever it declines takes the original path. The wrapper's ``stats()``
     then carries ``sglang_shape: "verified"`` next to ``sglang_version``,
     and an ``attach`` record goes to the timing log.
     """
@@ -1549,26 +1583,10 @@ def attach_to_tokenizer_manager(
     async def _tokenize_texts(
         self: Any, texts: Any, is_cross_encoder: bool = False, *args: Any, **kwargs: Any
     ) -> Any:
-        wrapper = getattr(self, "tokenizer", None)
-        if (
-            isinstance(wrapper, SGLangToktierTokenizer)
-            and wrapper.scheduler is not None
-            and not is_cross_encoder
-            and not args
-            and not kwargs
-            and not getattr(
-                getattr(self, "model_config", None), "is_embedding_gemma", False
-            )
-        ):
-            if isinstance(texts, str) and texts:
-                return await wrapper.encode_async(texts), None
-            if (
-                isinstance(texts, list)
-                and texts
-                and all(isinstance(t, str) for t in texts)
-            ):
-                rows = await asyncio.gather(*(wrapper.encode_async(t) for t in texts))
-                return list(rows), None
+        if not args and not kwargs:
+            pooled = await tokenize_texts_with_pool(self, texts, is_cross_encoder)
+            if pooled is not None:
+                return pooled
         return await orig_tokenize_texts(self, texts, is_cross_encoder, *args, **kwargs)
 
     manager_cls.__init__ = __init__

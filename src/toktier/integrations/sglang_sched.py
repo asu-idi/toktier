@@ -155,7 +155,8 @@ class SchedulerConfig:
     ``"module:attribute"`` callable ``(family, store, device) ->
     tokenizer`` for the workers to use instead of ``toktier.load``
     (``loader_path`` is prepended to their ``sys.path``); the tests use
-    it, a deployment does not need it.
+    it, a deployment does not need it, and it is a constructor argument
+    only (:meth:`from_env` does not read it).
     """
 
     workers: int = 0
@@ -214,7 +215,8 @@ class SchedulerConfig:
         ``CHUNK_MIN_CHARS``, ``CHUNK_TARGET``, ``KMAX``, ``K_RULE``,
         ``AFFINITY``, ``MS_FIXED``, ``MS_PER_CHAR``, ``NON_ASCII_RATIO``,
         ``MS_PER_CHAR_SESSION``, ``CALIBRATE``, ``WORKER_TIMEOUT_S``,
-        ``START_TIMEOUT_S``, ``RAYON_THREADS``, ``LOADER``, ``LOADER_PATH``.
+        ``START_TIMEOUT_S``, ``RAYON_THREADS``. The test-only ``loader``
+        and ``loader_path`` fields keep their defaults here.
         """
 
         def get(name: str, default: Any) -> Any:
@@ -245,8 +247,6 @@ class SchedulerConfig:
             worker_timeout_s=float(get("WORKER_TIMEOUT_S", base.worker_timeout_s)),
             start_timeout_s=float(get("START_TIMEOUT_S", base.start_timeout_s)),
             rayon_threads=int(get("RAYON_THREADS", base.rayon_threads)),
-            loader=get("LOADER", None),
-            loader_path=get("LOADER_PATH", None),
         )
 
 

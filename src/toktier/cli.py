@@ -48,6 +48,7 @@ from .policy import BACKEND_FAST_CPU, BACKEND_GPU, RoutingPolicy
 
 if TYPE_CHECKING:
     from .backends.fast_cpu import FastCpuEngineFacts
+    from .engine.gpu.native import NativeHostBuildFacts
     from .engine.gpu.toolchain import NvccFacts
     from .routing.probe import DeviceInfo, KernelCacheState
 
@@ -234,6 +235,7 @@ def _plan_reasons(
     config: Config,
     devices: Sequence[DeviceInfo],
     driver_version: str | None,
+    importable_backends: frozenset[str] | None = None,
 ) -> list[dict[str, object]] | None:
     """The planner's own reasons for this family, as ``explain()`` gives them.
 
@@ -248,7 +250,14 @@ def _plan_reasons(
     package is not installed, or the registry cannot be read); the plan
     is then not a fact this command can report, and saying nothing is
     better than printing an empty list as "no reasons".
+
+    ``importable_backends`` is the availability fact the report already
+    read for its own answers. The plan is handed that same set rather
+    than looking again, so the two cannot disagree about whether a
+    backend is installed.
     """
+    from dataclasses import replace
+
     from .routing.explain import reason_to_dict
     from .routing.plan import plan as build_plan
     from .routing.probe import probe
@@ -262,6 +271,8 @@ def _plan_reasons(
             artifact_sha256=artifact_sha256,
             device_probe=_PlanProbe(devices, driver_version),
         )
+        if importable_backends is not None:
+            snapshot = replace(snapshot, importable_backends=importable_backends)
         route = build_plan(snapshot, config.routing_policy, registry, config)
     except ToktierError:
         return None
@@ -298,6 +309,8 @@ def _family_report(
     config: Config,
     devices: Sequence[DeviceInfo] = (),
     driver_version: str | None = None,
+    importable_backends: frozenset[str] | None = None,
+    native_host: NativeHostBuildFacts | None = None,
 ) -> dict[str, object]:
     """What this machine would do with one named family.
 
@@ -307,6 +320,8 @@ def _family_report(
     their CPU work to the reference engine by design -- so the effective
     backend is only exact once the family is named.
     """
+    from .engine.gpu.native import NativeHostBuildFacts
+    from .routing.plan import prebuilt_host_binding_mismatches
     from .routing.registry_load import shipped_registry
     from .routing.registry_view import STATUS_CERTIFIED, STATUS_CERTIFIED_SOURCE
 
@@ -321,6 +336,8 @@ def _family_report(
     gpu_status: str | None = None
     fast_cpu = None
     architecture_certification: dict[str, str] = {}
+    host = native_host if native_host is not None else NativeHostBuildFacts()
+    gpu_binding_verifies = False
     if match is not None:
         fast_cpu = match.record.backends.get("fast_cpu")
         gpu = match.record.backends.get("gpu")
@@ -328,6 +345,15 @@ def _family_report(
         if gpu is not None:
             delivery = gpu.for_delivery(automatic_delivery)
             gpu_status = delivery.status
+            # The driver floor and the prebuilt host binding of this
+            # family's row, read from the list the plan refuses from.
+            gpu_binding_verifies = not prebuilt_host_binding_mismatches(
+                delivery,
+                host_source_digest=host.source_digest,
+                host_build_flags=host.build_flags,
+                host_toolchain=host.toolchain,
+                driver_version=driver_version,
+            )
             statuses = delivery.architecture_statuses()
             architecture_certification = {
                 architecture: statuses.get(architecture, "uncertified")
@@ -345,6 +371,7 @@ def _family_report(
         gpu_eligible
         and gpu_status in certified
         and (architecture_admitted or coverage_admitted)
+        and gpu_binding_verifies
     )
     # Under REFERENCE the plan admits no accelerated backend at all, so
     # neither half of this family's answer survives it. ``gpu_eligible``
@@ -397,6 +424,7 @@ def _family_report(
             config=config,
             devices=devices,
             driver_version=driver_version,
+            importable_backends=importable_backends,
         ),
     }
 
@@ -518,7 +546,19 @@ def _doctor_report(
     # Installation-level candidacy: the GPU runtime is installed and no
     # configuration excluded the backend. It says nothing about this
     # machine's devices or, under JIT, its compiler.
-    automatic_gpu_candidate = torch_available and not config.disable_gpu
+    #
+    # "Installed" is the planner's own fact (check 3 of
+    # ``routing/plan.py``), read once through the function its probe
+    # calls and handed to the family plan below, the way
+    # ``fast_cpu_binding_mismatches`` is one list both read. Asking it
+    # separately let one JSON object call the GPU a candidate beside a
+    # plan reason refusing the GPU as not installed.
+    from .routing.probe import importable_backends
+
+    installed_backends = importable_backends()
+    automatic_gpu_candidate = (
+        BACKEND_GPU in installed_backends and not config.disable_gpu
+    )
     jit_satisfied, jit_observed, jit_constraint = _jit_toolchain_judgement(
         delivery=automatic_delivery, ninja_available=ninja_available
     )
@@ -540,6 +580,25 @@ def _doctor_report(
     # eligible GPU, or a fast CPU lane, on an installation whose next
     # request goes straight to the reference engine.
     accelerated_planned = config.routing_policy is not RoutingPolicy.REFERENCE
+    # The machine-side bindings the plan verifies for the delivery in
+    # effect: the driver floor and, for a prebuilt certificate, the Rust
+    # host the fatbin is paired with (checks 11 and 13 of
+    # ``routing/plan.py``). Read from the one list the plan refuses from,
+    # as the CPU engine binding is below. "Ready" above only says these
+    # facts were reported; with no family named, the question is whether
+    # they verify against any record eligible to take the GPU route.
+    from .routing.plan import prebuilt_host_binding_mismatches
+
+    gpu_binding_verifies = any(
+        not prebuilt_host_binding_mismatches(
+            entry.for_delivery(automatic_delivery),
+            host_source_digest=native_host.source_digest,
+            host_build_flags=native_host.build_flags,
+            host_toolchain=native_host.toolchain,
+            driver_version=driver_version,
+        )
+        for entry in shipped_registry().eligible_entries(BACKEND_GPU)
+    )
     automatic_gpu_eligible = (
         accelerated_planned
         and automatic_gpu_candidate
@@ -547,6 +606,7 @@ def _doctor_report(
         and delivery_ready
         and (architecture_admitted or coverage_admitted)
         and (jit_satisfied is not False or coverage_admitted)
+        and gpu_binding_verifies
     )
     directory_roots_problem = _directory_roots_problem(config)
     family_artifact_sha256: str | None = None
@@ -603,6 +663,8 @@ def _doctor_report(
                 config=config,
                 devices=probed_devices,
                 driver_version=driver_version,
+                importable_backends=installed_backends,
+                native_host=native_host,
             )
         ),
         "artifact_cache_dir": str(artifact_cache_dir(config)),

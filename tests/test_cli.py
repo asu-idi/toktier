@@ -113,6 +113,88 @@ def _set_engine_facts(
     monkeypatch.setattr(probe_module, "fast_cpu_engine_facts", facts)
 
 
+#: The interpreter's module finder, taken before any test replaces it.
+_REAL_FIND_SPEC = importlib.util.find_spec
+
+#: The modules whose presence a doctor fixture decides; every other name
+#: is answered by the real finder.
+_FIXTURE_MODULES = frozenset({"torch", "cuda", "transformers", "ninja"})
+
+
+def _set_module_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+    present: frozenset[str] | set[str],
+    *,
+    strict: bool = True,
+) -> None:
+    """One answer to "is this module installed?" for the report and the plan.
+
+    ``doctor`` asks through ``importlib.util.find_spec``; the plan whose
+    reasons it prints asks through the copy ``toktier.routing.probe``
+    bound at import, for the backend modules and this package's own. A
+    fixture that answered only the first described a machine with torch
+    for the report and without it for the plan -- which no machine is,
+    and which is the disagreement the report must not show.
+
+    ``strict`` keeps the report to the modules a fixture decides; the
+    cases that install no other doctor probe pass ``False``, and every
+    other name the report asks about is then absent.
+    """
+
+    def doctor_find_spec(name: str) -> object | None:
+        assert not strict or name in _FIXTURE_MODULES, name
+        return object() if name in present else None
+
+    def plan_find_spec(name: str) -> object | None:
+        if name in _FIXTURE_MODULES:
+            return object() if name in present else None
+        return _REAL_FIND_SPEC(name)
+
+    # By name: ``toktier.routing.probe`` the module is shadowed on the
+    # package by ``probe`` the function it exports.
+    probe_module = importlib.import_module("toktier.routing.probe")
+    monkeypatch.setattr(importlib.util, "find_spec", doctor_find_spec)
+    monkeypatch.setattr(probe_module, "find_spec", plan_find_spec)
+
+
+def _bound_native_host_facts(**overrides: object) -> Any:
+    """Native-host facts that verify against the shipped prebuilt binding.
+
+    Read from the registry for the reason the engine facts are: the
+    report verifies the host the plan verifies, so invented values
+    describe a machine whose prebuilt route the plan refuses.
+    ``overrides`` moves one field off the bound value.
+    """
+    from toktier.engine.gpu.native import NativeHostBuildFacts
+    from toktier.policy import BACKEND_GPU
+    from toktier.routing.registry_load import shipped_registry
+
+    bound = next(
+        view
+        for entry in shipped_registry().eligible_entries(BACKEND_GPU)
+        if (view := entry.for_delivery("prebuilt")).host_source_digest is not None
+    )
+    facts: dict[str, object] = {
+        "source_digest": bound.host_source_digest,
+        "build_flags": tuple(bound.host_build_flags),
+        "toolchain": bound.host_toolchain,
+    }
+    facts.update(overrides)
+    return NativeHostBuildFacts(**facts)  # type: ignore[arg-type]
+
+
+def _set_native_host_facts(
+    monkeypatch: pytest.MonkeyPatch, facts: Callable[[], Any]
+) -> None:
+    """Install one native-host reading for the report and the plan.
+
+    Both read ``native_host_build_facts`` from its module at call time.
+    """
+    from toktier.engine.gpu import native as native_gpu
+
+    monkeypatch.setattr(native_gpu, "native_host_build_facts", facts)
+
+
 def _bound_entry() -> Any:
     """The shipped registry's engine binding for the CPU fast path."""
     from toktier.policy import BACKEND_FAST_CPU
@@ -142,21 +224,15 @@ def _bound_engine_facts(**overrides: object) -> Any:
 
 
 def _set_doctor_probes(monkeypatch: pytest.MonkeyPatch) -> None:
-    from toktier.engine.gpu import native as native_gpu
-    from toktier.engine.gpu.native import NativeHostBuildFacts
     from toktier.repair import fastokens
 
     _set_doctor_device_probe(monkeypatch)
-
-    def find_spec(name: str) -> object | None:
-        assert name in {"torch", "cuda", "transformers", "ninja"}
-        return object() if name in {"torch", "transformers"} else None
+    _set_module_lookup(monkeypatch, {"torch", "transformers"})
 
     def which(name: str) -> str:
         assert name == "nvcc"
         return "/opt/cuda/bin/nvcc"
 
-    monkeypatch.setattr(importlib.util, "find_spec", find_spec)
     monkeypatch.setattr(shutil, "which", which)
     monkeypatch.setattr(
         subprocess,
@@ -178,15 +254,8 @@ def _set_doctor_probes(monkeypatch: pytest.MonkeyPatch) -> None:
     # refuses, which is not the machine these cases are about. Reading
     # the values keeps the fixture from going stale when they move.
     _set_engine_facts(monkeypatch, _bound_engine_facts)
-    monkeypatch.setattr(
-        native_gpu,
-        "native_host_build_facts",
-        lambda: NativeHostBuildFacts(
-            source_digest="a" * 64,
-            build_flags=("profile=release", "opt-level=3"),
-            toolchain="rustc 1.93.1 (test fixture)",
-        ),
-    )
+    # The prebuilt request host the registry binds, for the same reason.
+    _set_native_host_facts(monkeypatch, _bound_native_host_facts)
     # The adapter resolves the engine by its import package; the doctor
     # fixture stands in for an environment where the upstream distribution
     # owns the bytes on disk and the registry lists no published wheel.
@@ -297,6 +366,7 @@ def test_doctor_human(
     monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
     _set_doctor_probes(monkeypatch)
     _bound = _bound_entry()
+    _host = _bound_native_host_facts()
 
     exit_code = cli.main(["doctor"])
 
@@ -341,9 +411,9 @@ def test_doctor_human(
         "prebuilt_fatbin_available: true\n"
         f"prebuilt_fatbin_digest: {_shipped_prebuilt_digest()}\n"
         "prebuilt_native_host_ready: true\n"
-        f"prebuilt_host_source_digest: {'a' * 64}\n"
-        "prebuilt_host_build_flags: profile=release; opt-level=3\n"
-        "prebuilt_host_toolchain: rustc 1.93.1 (test fixture)\n"
+        f"prebuilt_host_source_digest: {_host.source_digest}\n"
+        f"prebuilt_host_build_flags: {'; '.join(_host.build_flags)}\n"
+        f"prebuilt_host_toolchain: {_host.toolchain}\n"
         "gigatoken_available: true\n"
         "gigatoken_delivery: integrated\n"
         "gigatoken_module: toktier._native\n"
@@ -434,6 +504,7 @@ def test_doctor_json(
     monkeypatch.setattr(importlib.metadata, "version", lambda name: "2.0.0")
     _set_doctor_probes(monkeypatch)
     _bound = _bound_entry()
+    _host = _bound_native_host_facts()
     expected = {
         "python_version": platform.python_version(),
         "toktier_version": "2.0.0",
@@ -483,9 +554,9 @@ def test_doctor_json(
         "prebuilt_fatbin_available": True,
         "prebuilt_fatbin_digest": _shipped_prebuilt_digest(),
         "prebuilt_native_host_ready": True,
-        "prebuilt_host_source_digest": "a" * 64,
-        "prebuilt_host_build_flags": ["profile=release", "opt-level=3"],
-        "prebuilt_host_toolchain": "rustc 1.93.1 (test fixture)",
+        "prebuilt_host_source_digest": _host.source_digest,
+        "prebuilt_host_build_flags": list(_host.build_flags),
+        "prebuilt_host_toolchain": _host.toolchain,
         "gigatoken_available": True,
         "gigatoken_delivery": "integrated",
         "gigatoken_module": "toktier._native",
@@ -540,12 +611,7 @@ def test_doctor_certification_follows_the_selected_jit_delivery(
     monkeypatch.setenv("TOKTIER_OFFLINE", "1")
     monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
     _set_doctor_probes(monkeypatch)
-
-    def find_spec(name: str) -> object | None:
-        assert name in {"torch", "cuda", "transformers", "ninja"}
-        return object() if name in {"torch", "transformers", "ninja"} else None
-
-    monkeypatch.setattr(importlib.util, "find_spec", find_spec)
+    _set_module_lookup(monkeypatch, {"torch", "transformers", "ninja"})
 
     exit_code = cli.main(["doctor", "--json"])
 
@@ -566,12 +632,7 @@ def _set_certified_oracle_versions(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _select_jit_profile(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make ninja importable, which is what selects the JIT delivery."""
-
-    def find_spec(name: str) -> object | None:
-        assert name in {"torch", "cuda", "transformers", "ninja"}
-        return object() if name in {"torch", "transformers", "ninja"} else None
-
-    monkeypatch.setattr(importlib.util, "find_spec", find_spec)
+    _set_module_lookup(monkeypatch, {"torch", "transformers", "ninja"})
 
 
 def test_doctor_reports_a_judged_jit_toolchain_as_eligible(
@@ -876,7 +937,7 @@ def test_doctor_nvcc_follows_the_build_system_search_order(
     monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
     monkeypatch.setenv("TOKTIER_OFFLINE", "1")
     monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
-    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+    _set_module_lookup(monkeypatch, set(), strict=False)
     monkeypatch.setattr(shutil, "which", lambda name: None)
     cuda_home = tmp_path / "cuda-home"
     nvcc = cuda_home / "bin" / "nvcc"
@@ -912,7 +973,7 @@ def test_doctor_treats_a_set_cuda_home_as_authoritative(
     monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
     monkeypatch.setenv("TOKTIER_OFFLINE", "1")
     monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
-    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+    _set_module_lookup(monkeypatch, set(), strict=False)
     monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/nvcc")
     empty_home = tmp_path / "cuda-home-empty"
     empty_home.mkdir()
@@ -2010,15 +2071,16 @@ def test_doctor_answers_for_one_family_when_asked(
     assert family["automatic_effective_backend_below_gpu_threshold"] == "fast_cpu"
 
 
-def _assert_cpu_answer_agrees_with_the_plan(report: dict[str, Any]) -> set[str]:
-    """The CPU lane the report names is the CPU lane the plan allowed.
+def _assert_answer_agrees_with_the_plan(report: dict[str, Any]) -> set[str]:
+    """No backend the report names is one its plan refused.
 
     The relation, not a particular answer: ``doctor --family`` carries
     both what it says will run and the planner's own reasons, and a
     backend named in ``plan_reasons`` is one the plan did not select. So
-    the report may name ``fast_cpu`` exactly when the plan did not refuse
-    it -- an equivalence that holds whichever engine is installed, which
-    is why it is asserted instead of an expected backend.
+    neither effective-backend field may name any backend the plan
+    refused, the GPU as much as the CPU fast path -- a relation that
+    holds whichever engine, host and driver are installed, which is why
+    it is asserted instead of an expected backend.
     """
     family = report["family"]
     refused = {reason["backend"] for reason in (family["plan_reasons"] or ())}
@@ -2027,10 +2089,9 @@ def _assert_cpu_answer_agrees_with_the_plan(report: dict[str, Any]) -> set[str]:
         "automatic_effective_backend",
         "automatic_effective_backend_below_gpu_threshold",
     ):
-        if not allowed:
-            assert family[key] != "fast_cpu", (
-                f"{key} names fast_cpu, which plan_reasons refuses"
-            )
+        assert family[key] not in refused, (
+            f"{key} names {family[key]}, which plan_reasons refuses"
+        )
     # The other direction, which keeps the check from passing by never
     # saying fast_cpu at all: below the GPU threshold this family's CPU
     # lane is the fast one whenever the plan left it open.
@@ -2064,7 +2125,7 @@ def test_doctor_family_json_does_not_contradict_its_own_plan_reasons(
     # not name a backend the plan refused.
     assert cli.main(["doctor", "--json", "--family", "qwen3_8b"]) == 0
     bound_report = json.loads(capsys.readouterr().out)
-    _assert_cpu_answer_agrees_with_the_plan(bound_report)
+    _assert_answer_agrees_with_the_plan(bound_report)
 
     # An engine off the bound source digest by one axis. This is the
     # shape the report used to misread: the entry is still
@@ -2076,7 +2137,7 @@ def test_doctor_family_json_does_not_contradict_its_own_plan_reasons(
 
     assert cli.main(["doctor", "--json", "--family", "qwen3_8b"]) == 0
     drifted = json.loads(capsys.readouterr().out)
-    refused = _assert_cpu_answer_agrees_with_the_plan(drifted)
+    refused = _assert_answer_agrees_with_the_plan(drifted)
 
     # The fixture really does exercise the binding check, so this test
     # cannot pass by the plan having refused nothing.
@@ -2090,6 +2151,122 @@ def test_doctor_family_json_does_not_contradict_its_own_plan_reasons(
     assert "source_digest" in engine_axes
     # Both levels of the report follow the same premise.
     assert drifted["automatic_effective_backend"] != "fast_cpu"
+
+
+def _drift_native_host_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_native_host_facts(
+        monkeypatch, lambda: _bound_native_host_facts(source_digest="c" * 64)
+    )
+
+
+def _drift_native_host_toolchain(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_native_host_facts(
+        monkeypatch, lambda: _bound_native_host_facts(toolchain="rustc 0.0.0")
+    )
+
+
+def _drift_driver_below_the_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_doctor_device_probe(monkeypatch, driver_version="570.1")
+
+
+def _drift_gpu_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_module_lookup(monkeypatch, {"transformers"})
+
+
+def _drift_gpu_backend_not_importable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """torch is present, and the plan's availability list still lacks the GPU.
+
+    The report used to ask about torch on its own, so it named the GPU
+    here; it now reads the list the plan reads.
+    """
+    probe_module = importlib.import_module("toktier.routing.probe")
+    listed = probe_module.importable_backends
+    monkeypatch.setattr(
+        probe_module,
+        "importable_backends",
+        lambda **kwargs: listed(**kwargs) - {"gpu"},
+    )
+
+
+@pytest.mark.parametrize(
+    ("drift", "code", "detail"),
+    [
+        (
+            _drift_native_host_source,
+            "R_KERNEL_DIGEST_MISMATCH",
+            {"digest": "host_source"},
+        ),
+        (
+            _drift_native_host_toolchain,
+            "R_UNCERTIFIED_ARTIFACT",
+            {"cause": "host_toolchain_mismatch"},
+        ),
+        (_drift_driver_below_the_floor, "R_DRIVER_TOO_OLD", {"installed": "570.1"}),
+        (_drift_gpu_not_installed, "R_BACKEND_UNAVAILABLE", {"missing": "gpu"}),
+        (
+            _drift_gpu_backend_not_importable,
+            "R_BACKEND_UNAVAILABLE",
+            {"missing": "gpu"},
+        ),
+    ],
+    ids=[
+        "host-source",
+        "host-toolchain",
+        "driver-floor",
+        "not-installed",
+        "backend-not-importable",
+    ],
+)
+def test_doctor_never_names_a_gpu_its_own_plan_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    drift: Callable[[pytest.MonkeyPatch], None],
+    code: str,
+    detail: dict[str, object],
+) -> None:
+    """The GPU half of the relation the CPU half already keeps.
+
+    The machine facts the plan verifies before it routes to the GPU --
+    that the backend is installed, the driver floor, the prebuilt
+    request host -- are read from the lists the plan refuses from, so
+    moving any one of them moves the report with the plan. Each case
+    starts from the fixture machine, where the GPU is named and the plan
+    refuses nothing, and moves one fact.
+    """
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    certified = {"tokenizers": "0.22.2", "transformers": "4.57.6"}
+    monkeypatch.setattr(
+        importlib.metadata, "version", lambda name: certified.get(name, "1.2.3")
+    )
+    _set_doctor_probes(monkeypatch)
+
+    assert cli.main(["doctor", "--json", "--family", "qwen3_8b"]) == 0
+    bound = json.loads(capsys.readouterr().out)
+    assert _assert_answer_agrees_with_the_plan(bound) == set()
+    assert bound["automatic_effective_backend"] == "gpu"
+    assert bound["family"]["automatic_effective_backend"] == "gpu"
+
+    drift(monkeypatch)
+
+    assert cli.main(["doctor", "--json", "--family", "qwen3_8b"]) == 0
+    drifted = json.loads(capsys.readouterr().out)
+    refused = _assert_answer_agrees_with_the_plan(drifted)
+
+    # The case really moves a fact the plan reads.
+    assert "gpu" in refused
+    (reason,) = (
+        item
+        for item in drifted["family"]["plan_reasons"]
+        if item["backend"] == "gpu"
+    )
+    assert reason["code"] == code
+    assert detail.items() <= reason["detail"].items()
+    # Both levels of the report follow the same premise.
+    assert drifted["family"]["automatic_gpu_eligible"] is False
+    assert drifted["automatic_gpu_eligible"] is False
+    assert drifted["automatic_effective_backend"] != "gpu"
 
 
 def test_doctor_applies_the_family_premise_the_adapter_actually_has(

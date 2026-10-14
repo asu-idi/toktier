@@ -202,20 +202,23 @@ class SchedulerConfig:
             raise ValueError("cores must be non-negative")
 
     @classmethod
-    def from_env(cls, env: Mapping[str, str] | None = None) -> SchedulerConfig:
-        """Read ``TOKTIER_SGLANG_SCHED_*``; unset names keep the defaults.
+    def from_env(cls, env: Mapping[str, str]) -> SchedulerConfig:
+        """Read ``TOKTIER_SGLANG_SCHED_*`` from ``env``; unset names keep
+        the defaults.
 
-        Names map onto the fields: ``WORKERS``, ``CORES`` (``"0-3,8"``),
-        ``POLICY``, ``AGING``, ``CHUNK_MIN_CHARS``, ``CHUNK_TARGET``,
-        ``KMAX``, ``K_RULE``, ``AFFINITY``, ``MS_FIXED``, ``MS_PER_CHAR``,
-        ``NON_ASCII_RATIO``, ``MS_PER_CHAR_SESSION``, ``CALIBRATE``,
-        ``WORKER_TIMEOUT_S``, ``START_TIMEOUT_S``, ``RAYON_THREADS``,
-        ``LOADER``, ``LOADER_PATH``.
+        ``env`` is required: the adapter reads the process environment
+        once (:meth:`toktier.integrations.sglang.AdapterConfig.from_env`)
+        and passes the same mapping here, so this module never reads the
+        environment itself. Names map onto the fields: ``WORKERS``,
+        ``CORES`` (``"0-3,8"``), ``POLICY``, ``AGING``,
+        ``CHUNK_MIN_CHARS``, ``CHUNK_TARGET``, ``KMAX``, ``K_RULE``,
+        ``AFFINITY``, ``MS_FIXED``, ``MS_PER_CHAR``, ``NON_ASCII_RATIO``,
+        ``MS_PER_CHAR_SESSION``, ``CALIBRATE``, ``WORKER_TIMEOUT_S``,
+        ``START_TIMEOUT_S``, ``RAYON_THREADS``, ``LOADER``, ``LOADER_PATH``.
         """
-        e = os.environ if env is None else env
 
         def get(name: str, default: Any) -> Any:
-            value = e.get(_ENV_PREFIX + name)
+            value = env.get(_ENV_PREFIX + name)
             return default if value in (None, "") else value
 
         def flag(name: str, default: bool) -> bool:
@@ -579,6 +582,8 @@ def _worker_main(
     qin: Any,
     qres: Any,
 ) -> None:
+    # The child sets the native libraries' thread-count variables before
+    # anything loads them; it writes the environment and never reads it.
     for name, value in env.items():
         os.environ[name] = value
     if core is not None:

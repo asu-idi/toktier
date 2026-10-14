@@ -354,7 +354,19 @@ def test_package_never_reads_the_environment() -> None:
             # and only when no explicit mapping is given.
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
+        allowed: set[int] = set()
+        if path.parts[-2:] == ("integrations", "sglang_sched.py"):
+            # The scheduler's worker bootstrap sets the native libraries'
+            # thread-count variables in the child process before they
+            # load (``os.environ[name] = value`` in ``_worker_main``); it
+            # never reads the environment. Configuration reaches this
+            # module only through the adapter's mapping
+            # (``SchedulerConfig.from_env(env)``), so only those writes
+            # are exempt.
+            allowed = _worker_bootstrap_environment_writes(tree)
         for node in ast.walk(tree):
+            if id(node) in allowed:
+                continue
             if isinstance(node, ast.Attribute) and node.attr in {
                 "environ",
                 "getenv",
@@ -363,3 +375,42 @@ def test_package_never_reads_the_environment() -> None:
             if isinstance(node, ast.Name) and node.id in {"environ", "getenv"}:
                 offenders.append((str(path), node.id))
     assert not offenders, offenders
+
+
+def _worker_bootstrap_environment_writes(tree: ast.AST) -> set[int]:
+    """Ids of the ``os.environ`` nodes that are item-assignment targets
+    inside the scheduler's ``_worker_main``."""
+    allowed: set[int] = set()
+    for func in ast.walk(tree):
+        if not (isinstance(func, ast.FunctionDef) and func.name == "_worker_main"):
+            continue
+        for node in ast.walk(func):
+            if (
+                isinstance(node, ast.Subscript)
+                and isinstance(node.ctx, ast.Store)
+                and isinstance(node.value, ast.Attribute)
+                and node.value.attr == "environ"
+            ):
+                allowed.add(id(node.value))
+    return allowed
+
+
+def test_the_worker_exemption_admits_only_bootstrap_writes() -> None:
+    """A read, or a write outside the worker bootstrap, is still reported."""
+    tree = ast.parse(
+        "import os\n"
+        "def _worker_main(env):\n"
+        "    for k, v in env.items():\n"
+        "        os.environ[k] = v\n"
+        "    return os.environ.get('X')\n"
+        "def elsewhere():\n"
+        "    os.environ['Y'] = '1'\n"
+    )
+    allowed = _worker_bootstrap_environment_writes(tree)
+    environ_nodes = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute) and node.attr == "environ"
+    ]
+    assert len(environ_nodes) == 3
+    assert sorted(node.lineno for node in environ_nodes if id(node) in allowed) == [4]

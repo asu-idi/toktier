@@ -258,7 +258,9 @@ class AdapterConfig:
         ``EXPLAIN_EVERY``, ``RID_SEPARATOR``, ``PER_PROCESS_STORE``,
         ``CHUNKED_MIN_CHARS``, ``CHUNKED_K``, ``IDENTITY``). The scheduler is read
         from ``TOKTIER_SGLANG_SCHED_*`` when ``TOKTIER_SGLANG_SCHED_WORKERS``
-        is set to a positive number (:meth:`SchedulerConfig.from_env`).
+        is set to a positive number (:meth:`SchedulerConfig.from_env`, given
+        the same mapping). With ``env`` omitted the process environment is
+        read, here and nowhere else in the adapter.
         """
         e = os.environ if env is None else env
 

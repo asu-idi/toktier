@@ -112,6 +112,10 @@ def test_config_validation_and_env() -> None:
     assert cfg.chunk_min_chars == 1000 and cfg.kmax == 3 and cfg.k_rule == "idle"
     assert cfg.worker_timeout_s == 0
     assert parse_cores("") == ()
+    # The scheduler reads only the mapping it is given; the adapter reads
+    # the process environment once and passes it on.
+    with pytest.raises(TypeError):
+        SchedulerConfig.from_env()  # type: ignore[call-arg]
     # The adapter reads the scheduler only when a worker count is set.
     assert AdapterConfig.from_env({}).scheduler is None
     adapter = AdapterConfig.from_env({"TOKTIER_SGLANG_SCHED_WORKERS": "2"})

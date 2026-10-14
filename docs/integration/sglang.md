@@ -76,19 +76,26 @@ The backend patch (about fifty added lines) adds
 release line: `patches/sglang-0.5.19-toktier-backend.patch` for 0.5.19,
 and `patches/sglang-0.5.21-toktier-backend.patch` for 0.5.20 and 0.5.21
 (0.5.20 moved the `--tokenizer-backend` option to
-`arg_groups/fields/serving.py`). Each patch touches three files:
+`arg_groups/fields/serving.py`). Each patch touches two files:
 
 - `server_args.py` (0.5.19) or `arg_groups/fields/serving.py` (0.5.20
   and 0.5.21): the choice and its help text;
-- `utils/hf_transformers/tokenizer.py`: after the post-load fixes,
-  `get_tokenizer` wraps the loaded tokenizer with
-  `toktier.integrations.sglang.wrap_tokenizer`;
-- `managers/tokenizer_manager.py`: `_tokenize_one_request` binds the
-  request's `session_id` (else `cache_salt`) in a context variable around
-  the tokenize call, so the backend can serve the transcript as a verified
-  prefix append; and `_tokenize_texts` first offers the request to the
-  adapter's worker pool (`toktier.integrations.sglang.tokenize_texts_with_pool`)
-  and otherwise runs as before.
+- `managers/tokenizer_manager.py`: `init_tokenizer_and_processor` wraps
+  the tokenizer it has loaded with
+  `toktier.integrations.sglang.wrap_tokenizer`, before the dynamic-batch
+  tokenizer is built, so that one holds the wrapper as well;
+  `_tokenize_one_request` binds the request's `session_id` (else
+  `cache_salt`) in a context variable around the tokenize call, so the
+  backend can serve the transcript as a verified prefix append; and
+  `_tokenize_texts` first offers the request to the adapter's worker pool
+  (`toktier.integrations.sglang.tokenize_texts_with_pool`) and otherwise
+  runs as before.
+
+`get_tokenizer` is not patched. SGLang's scheduler, TP worker and
+detokenizer load their own tokenizer through it, and they keep the plain
+Hugging Face object, so the wrapper, and the worker pool when it is on,
+exist only in the `TokenizerManager` process (with
+`--tokenizer-worker-num N`, once in each of the N worker processes).
 
 The wrapper (`src/toktier/integrations/sglang.py`) is a duck-typed
 tokenizer: `__call__` and `encode` run on toktier's certified CPU route,
@@ -111,13 +118,17 @@ The same wrapper can be attached without patching anything, for evaluation:
 a `sitecustomize` on `PYTHONPATH` calls
 `attach_to_tokenizer_manager(TokenizerManager)` once the module is
 imported. That is how the numbers below were taken. The patch produces the
-same wrapper through the supported option, in the `TokenizerManager`. It
-also wraps the tokenizer that SGLang's scheduler and detokenizer
-processes load through `get_tokenizer`, where the attach form leaves
-them alone; each of those processes then holds a wrapper of its own and,
-with the worker pool on, starts a pool of its own. The ids are the same
-either way.
-<!-- TODO(fill): P3 moves the form P wrap point to TokenizerManager.init_tokenizer_and_processor; update this paragraph. -->
+same wrapper through the supported option, at the same place: the
+attach form wraps the `TokenizerManager`'s tokenizer once its
+constructor returns, the patch does so inside the constructor right
+after loading it, and neither touches the tokenizers of SGLang's other
+processes. We checked this on 2026-10-13 with each patch applied to the
+published wheels of 0.5.19, 0.5.20 and 0.5.21, running SGLang's own
+tokenizer-loading code of each process on the CPU side, without a model
+server: the `TokenizerManager` holds the wrapper and the one worker
+pool, its dynamic-batch tokenizer holds the same wrapper, and the loads
+of the scheduler, the TP worker and the detokenizer return the plain
+Hugging Face tokenizer.
 
 Two things the wrapper deliberately does not do. It does not touch
 `--tokenizer-worker-num` semantics: each worker process gets its own
@@ -269,7 +280,7 @@ provisional in 0.3.0.
 | `TOKTIER_SGLANG_SESSION_KEY` | `auto` | `auto` (content lookup), `contextvar` (the request's key), `off` (stateless) or `passthrough` (the wrapped tokenizer answers, the wrapper only times) |
 | `TOKTIER_SGLANG_RID_SEPARATOR` | unset | when set, the part of the request id before it is a key of last resort (attach form only; the backend patch keys on `session_id`, else `cache_salt`) |
 | `TOKTIER_SGLANG_STORE` | unset | a directory for persistent session state |
-| `TOKTIER_SGLANG_PER_PROCESS_STORE` | `1` | append the process id to the store directory, so tokenizer worker processes never share one |
+| `TOKTIER_SGLANG_PER_PROCESS_STORE` | `1` | `1`, `true` or `yes` (any letter case) appends the process id to the store directory, so tokenizer worker processes never share one; `0`, `false` or `no` turns that off; any other value is refused |
 | `TOKTIER_SGLANG_IDENTITY` | `require` | the identity check is always on and `require` is the only accepted value; any other value is refused (the attach form does not attach and logs why; with the backend patch SGLang stops at startup) |
 | `TOKTIER_SGLANG_SHADOW` | `off` | `off`, `sync` (re-encode with the wrapped tokenizer, compare and correct) or `async` (compare after the fact) |
 | `TOKTIER_SGLANG_SHADOW_RATE` | `1.0` | the share of requests the shadow check takes |
@@ -290,12 +301,12 @@ provisional in 0.3.0.
 | `TOKTIER_SGLANG_SCHED_CHUNK_TARGET` | `65536` | the chunk size the cut aims for, in characters |
 | `TOKTIER_SGLANG_SCHED_KMAX` | `16` | the most chunks one request is cut into; never more than the workers |
 | `TOKTIER_SGLANG_SCHED_K_RULE` | `fixed` | `idle` also caps the chunk count by the idle workers at arrival |
-| `TOKTIER_SGLANG_SCHED_AFFINITY` | `1` | keep keyed requests on their home worker; off, they are encoded stateless on any worker |
+| `TOKTIER_SGLANG_SCHED_AFFINITY` | `1` | `1`, `true` or `yes` (any letter case) keeps keyed requests on their home worker; `0`, `false` or `no` turns that off, and they are then encoded stateless on any worker; any other value is refused |
 | `TOKTIER_SGLANG_SCHED_MS_FIXED` | `0.2` | the fixed part of the service-time estimate, in milliseconds |
 | `TOKTIER_SGLANG_SCHED_MS_PER_CHAR` | `3e-5` | the per-character estimate for stateless work and chunks |
 | `TOKTIER_SGLANG_SCHED_MS_PER_CHAR_SESSION` | `1e-5` | the per-character estimate for session work |
 | `TOKTIER_SGLANG_SCHED_NON_ASCII_RATIO` | `5.0` | how much more a non-ASCII character is estimated to cost |
-| `TOKTIER_SGLANG_SCHED_CALIBRATE` | `1` | let measured service times move the per-character estimates |
+| `TOKTIER_SGLANG_SCHED_CALIBRATE` | `1` | `1`, `true` or `yes` (any letter case) lets measured service times move the per-character estimates; `0`, `false` or `no` keeps the configured estimates; any other value is refused |
 | `TOKTIER_SGLANG_SCHED_WORKER_TIMEOUT_S` | `60` | how long one task may take before its request is served in-process; `0` is no bound |
 | `TOKTIER_SGLANG_SCHED_START_TIMEOUT_S` | `300` | how long the pool may take to start |
 | `TOKTIER_SGLANG_SCHED_RAYON_THREADS` | `1` | the Rayon thread count each worker starts with |

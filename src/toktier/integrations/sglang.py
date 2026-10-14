@@ -10,12 +10,16 @@ wrapped tokenizer. Nothing here imports ``sglang``; the two ways to attach
 the wrapper are:
 
 * form P -- a small patch to SGLang that adds ``--tokenizer-backend
-  toktier``: ``get_tokenizer`` (``sglang.srt.utils.hf_transformers.
-  tokenizer``) calls :func:`wrap_tokenizer`, ``_tokenize_one_request``
-  binds the request's session key, and ``_tokenize_texts`` offers the
-  request to :func:`tokenize_texts_with_pool` first
+  toktier``: ``TokenizerManager.init_tokenizer_and_processor`` calls
+  :func:`wrap_tokenizer` on the tokenizer it has loaded (before the
+  dynamic-batch tokenizer is built, so that one holds the wrapper too),
+  ``_tokenize_one_request`` binds the request's session key, and
+  ``_tokenize_texts`` offers the request to
+  :func:`tokenize_texts_with_pool` first
   (``patches/sglang-0.5.19-toktier-backend.patch`` for 0.5.19,
-  ``patches/sglang-0.5.21-toktier-backend.patch`` for 0.5.20 and 0.5.21);
+  ``patches/sglang-0.5.21-toktier-backend.patch`` for 0.5.20 and 0.5.21).
+  ``get_tokenizer`` is not patched, so the scheduler, TP worker and
+  detokenizer processes keep the plain tokenizer they load;
 * form Z -- no change to SGLang: an injector (``sitecustomize`` on
   ``PYTHONPATH``) calls :func:`attach_to_tokenizer_manager` on the
   ``TokenizerManager`` class, which wraps the tokenizer after construction
@@ -23,6 +27,10 @@ the wrapper are:
   The class is checked first (:func:`check_manager_shape`); when the
   methods it wraps are shaped differently, SGLang is left unchanged and
   the reason is recorded with the SGLang version.
+
+In both forms the wrapper lives in the ``TokenizerManager`` process (one
+per ``--tokenizer-worker-num`` worker), and so does its pool when one is
+configured.
 
 Both forms were checked against SGLang 0.5.19, 0.5.20 and 0.5.21 on
 2026-10-13 (CPU side: the class shape, the attachment, the patched
@@ -1404,9 +1412,11 @@ def wrap_tokenizer(
 
     ``config`` defaults to :meth:`AdapterConfig.from_env`; keyword arguments
     override individual fields. Returns the wrapper (or the tokenizer itself
-    when it is already wrapped). An invalid ``TOKTIER_SGLANG_*`` setting
-    raises ``ValueError``; with the backend patch, SGLang then stops at
-    startup instead of serving with the setting ignored.
+    when it is already wrapped). The backend patch calls this from
+    ``TokenizerManager.init_tokenizer_and_processor``, once per tokenizer
+    process. An invalid ``TOKTIER_SGLANG_*`` setting raises ``ValueError``;
+    with the backend patch, SGLang then stops at startup instead of serving
+    with the setting ignored.
     """
     if isinstance(hf_tokenizer, SGLangToktierTokenizer):
         return hf_tokenizer

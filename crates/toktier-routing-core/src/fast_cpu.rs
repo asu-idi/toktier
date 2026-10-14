@@ -248,8 +248,8 @@ pub struct FastCpuEngine {
     added_gate: AddedTokenGate,
     stats: Mutex<FastRepairStats>,
     /// The certified chunk-parallel planner and its worker pool, built on
-    /// first use (`cpe.rs`).
-    cpe: crate::cpe::ChunkEncoderCell,
+    /// first use (`chunked.rs`).
+    chunked: crate::chunked::ChunkEncoderCell,
 }
 
 impl fmt::Debug for FastCpuEngine {
@@ -330,7 +330,7 @@ impl FastCpuEngine {
             boundary,
             added_gate,
             stats: Mutex::new(FastRepairStats::default()),
-            cpe: OnceLock::new(),
+            chunked: OnceLock::new(),
         };
         // Pay the single-core parse/verification cost at construction. This
         // keeps the first session append bounded while preserving lazy,
@@ -771,8 +771,8 @@ impl FastCpuEngine {
         &self.tokenizer_json
     }
 
-    pub(crate) fn cpe_cell(&self) -> &crate::cpe::ChunkEncoderCell {
-        &self.cpe
+    pub(crate) fn chunked_cell(&self) -> &crate::chunked::ChunkEncoderCell {
+        &self.chunked
     }
 
     /// Reconstruct character spans for an externally produced exact ID stream

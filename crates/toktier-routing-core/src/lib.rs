@@ -16,16 +16,17 @@
 use memchr::{memchr, memchr2, memchr3};
 use std::fmt;
 
-mod cpe;
+mod chunked;
 mod entry_store;
 mod fast_cpu;
 mod gpu;
 mod reference;
 mod runtime;
 
-pub use cpe::{
+pub use chunked::{
     default_chunk_workers, ChunkEncoder, ChunkPlan, ChunkedIds, NormalizerMode,
-    CPE_DEFAULT_SCAN_BUDGET, R_CPE_FAMILY_UNSUPPORTED, R_CPE_NO_CUT, R_CPE_ROUTE_NOT_FAST_CPU,
+    CHUNKED_DEFAULT_SCAN_BUDGET, R_CHUNK_FAMILY_UNSUPPORTED, R_CHUNK_NO_CUT,
+    R_CHUNK_ROUTE_NOT_FAST_CPU,
 };
 pub use entry_store::{
     EntryStoreOpenError, EntryStoreStats, NativeEntryStore, AUTO_MIN_BYTES,

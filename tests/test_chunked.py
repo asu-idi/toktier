@@ -7,13 +7,13 @@ the chunk table, the admission refusal and the input edge cases that do
 not need a certified family. The artifact tier runs when
 ``TOKTIER_TEST_ARTIFACTS`` names a directory of local artifacts (the
 backend tier's convention: one subdirectory per artifact, each holding
-the manifest's files) and judges ``chunked_encode`` against a
+the manifest's files) and judges ``chunked.encode`` against a
 from-scratch encode by the oracle package on the certified families it
 finds there, over three corpus types and three document lengths.
-``TOKTIER_TEST_CPE_CORPUS`` may name a directory whose subdirectories
+``TOKTIER_TEST_CHUNKED_CORPUS`` may name a directory whose subdirectories
 each hold UTF-8 text files (one corpus type per subdirectory); when it
 is unset, the three corpora are generated and labelled as such.
-``TOKTIER_TEST_CPE_ADVERSARIAL`` scales the generated normalization
+``TOKTIER_TEST_CHUNKED_ADVERSARIAL`` scales the generated normalization
 corpus (strings per family; default 400). All three variables are
 development inputs, read once at import, and every artifact is copied
 into an isolated home before it is loaded.
@@ -39,7 +39,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 os.environ.setdefault("RAYON_NUM_THREADS", "1")
 
 import toktier
-from toktier import Config, ReasonCode, Tokenizer, cpe
+from toktier import Config, ReasonCode, Tokenizer, chunked
 from toktier.artifacts.manifest import ArtifactManifest
 from toktier.artifacts.tables import ARTIFACT_MANIFEST
 from toktier.paths import artifact_cache_dir
@@ -50,8 +50,8 @@ from .facade.conftest import build_rig
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _ARTIFACTS = os.environ.get("TOKTIER_TEST_ARTIFACTS")
-_CORPUS = os.environ.get("TOKTIER_TEST_CPE_CORPUS")
-_ADVERSARIAL = int(os.environ.get("TOKTIER_TEST_CPE_ADVERSARIAL", "400"))
+_CORPUS = os.environ.get("TOKTIER_TEST_CHUNKED_CORPUS")
+_ADVERSARIAL = int(os.environ.get("TOKTIER_TEST_CHUNKED_ADVERSARIAL", "400"))
 
 #: Families judged in the artifact tier, in this order, when their
 #: artifacts are present; the first three are the ones the shipped chunk
@@ -458,7 +458,7 @@ def loaded(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, Token
     for family in available_families():
         source = _artifact_source(family)
         assert source is not None
-        home = tmp_path_factory.mktemp(f"cpe-{family}")
+        home = tmp_path_factory.mktemp(f"chunked-{family}")
         config = Config(home=home, offline=True)
         cache = artifact_cache_dir(config)
         cache.mkdir(parents=True, exist_ok=True)
@@ -501,7 +501,7 @@ def test_sync_pairs_match_the_routing_core_profile() -> None:
     body = text[text.index("fn accepts(&self, previous: char, current: char)") :]
     body = body[: body.index("}\n")]
     pairs = {(int(a), int(b)) for a, b in re.findall(r"\((\d), (\d)\)", body)}
-    assert pairs == set(cpe.SYNC_PAIRS)
+    assert pairs == set(chunked.SYNC_PAIRS)
     assert "'\\r' | '\\n'" in body and "== '\\''" in body
 
 
@@ -512,7 +512,7 @@ def test_boundary_predicate_examples() -> None:
     assert table[ord("\u0301")] == _M
 
     def ok(text: str, position: int) -> bool:
-        return cpe._boundary_ok(table, text, position)
+        return chunked._boundary_ok(table, text, position)
 
     assert ok("ab 12", 2)  # L -> S
     assert ok("ab 12", 3) is False  # S -> N: a leading space belongs right
@@ -530,18 +530,18 @@ def test_boundary_predicate_examples() -> None:
 
 
 def test_literal_guard_is_conservative_over_overlaps() -> None:
-    guard = cpe._LiteralGuard(["ab", "bcd", "<|x|>"])
+    guard = chunked._LiteralGuard(["ab", "bcd", "<|x|>"])
     text = "xabcdy <|x|> ab"
     assert guard.forbidden(text, 0, len(text)) == {2, 3, 4, 8, 9, 10, 11, 14}
     assert guard.forbidden(text, 3, 3) == {3}
     assert guard.forbidden(text, 5, 7) == set()
     assert guard.forbidden(text, 12, 15) == {14}
-    assert cpe._LiteralGuard([]).forbidden(text, 0, 15) == set()
-    assert cpe._LiteralGuard(["a"]).forbidden(text, 0, 15) == set()
+    assert chunked._LiteralGuard([]).forbidden(text, 0, 15) == set()
+    assert chunked._LiteralGuard(["a"]).forbidden(text, 0, 15) == set()
 
 
 def test_literal_guard_touch_reports_any_intersecting_occurrence() -> None:
-    guard = cpe._LiteralGuard(["ab", "bcd", "<|x|>", "z"])
+    guard = chunked._LiteralGuard(["ab", "bcd", "<|x|>", "z"])
     text = "xabcdy <|x|> ab z"
     assert guard.touches(text, 0, 1) is False  # before "ab"
     assert guard.touches(text, 1, 2)  # "ab" starts at 1
@@ -550,7 +550,7 @@ def test_literal_guard_touch_reports_any_intersecting_occurrence() -> None:
     assert guard.touches(text, 12, 13) is False  # the space after "<|x|>"
     assert guard.touches(text, 12, 14)  # reaches the "ab" at 13
     assert guard.touches(text, 16, 17)  # the single-character literal
-    assert cpe._LiteralGuard([]).touches(text, 0, len(text)) is False
+    assert chunked._LiteralGuard([]).touches(text, 0, len(text)) is False
 
 
 def test_normalization_stability_predicate() -> None:
@@ -558,13 +558,15 @@ def test_normalization_stability_predicate() -> None:
     from tokenizers.normalizers import NFC
 
     table = pclass_table()
-    rule = cpe._NfcRule(table, cpe._LiteralGuard(["<|x|>"]), NFC().normalize_str)
+    rule = chunked._NfcRule(
+        table, chunked._LiteralGuard(["<|x|>"]), NFC().normalize_str
+    )
     stable = rule.accepts
 
     # release-candidate review, finding 1: letter / punctuation as written,
     # mark / punctuation once normalized (U+0958 -> U+0915 U+093C).
     text = "a" * 127 + "\u0958" + "/k" + " " * 126
-    assert cpe._boundary_ok(table, text, 128)
+    assert chunked._boundary_ok(table, text, 128)
     assert stable(text, 128) is False
     # Three stable characters around the cut need no window: ASCII, and
     # CJK ideographs with full-width punctuation alike.
@@ -615,8 +617,8 @@ def test_stable_split_point_probes_agree_with_the_reference_crate() -> None:
     nfc = NFC().normalize_str
     nfd = NFD().normalize_str
     table = pclass_table()
-    before, after = cpe._PROBE_BEFORE, cpe._PROBE_AFTER
-    jamo_l, syllable = cpe._PROBE_JAMO_L, cpe._PROBE_SYLLABLE
+    before, after = chunked._PROBE_BEFORE, chunked._PROBE_AFTER
+    jamo_l, syllable = chunked._PROBE_JAMO_L, chunked._PROBE_SYLLABLE
     vowels = {chr(c) for c in range(0x1161, 0x1176)}
     trailing = {chr(c) for c in range(0x11A8, 0x11C3)}
     seconds: set[str] = set()
@@ -650,76 +652,76 @@ def test_stable_split_point_probes_agree_with_the_reference_crate() -> None:
 
 
 def test_normalizer_mode_admits_none_identity_and_nfc_only() -> None:
-    assert cpe._normalizer_mode({}) == ("none", None)
-    assert cpe._normalizer_mode({"normalizer": None}) == ("none", None)
-    assert cpe._normalizer_mode(
+    assert chunked._normalizer_mode({}) == ("none", None)
+    assert chunked._normalizer_mode({"normalizer": None}) == ("none", None)
+    assert chunked._normalizer_mode(
         {"normalizer": {"type": "Sequence", "normalizers": []}}
     ) == ("none", None)
-    assert cpe._normalizer_mode({"normalizer": {"type": "NFC"}}) == ("nfc", None)
-    assert cpe._normalizer_mode(
+    assert chunked._normalizer_mode({"normalizer": {"type": "NFC"}}) == ("nfc", None)
+    assert chunked._normalizer_mode(
         {
             "normalizer": {"type": "NFC"},
             "added_tokens": [{"content": "x", "normalized": True}],
         }
     ) == (None, "nfc_with_normalized_added_tokens")
-    assert cpe._normalizer_mode({"normalizer": {"type": "NFKC"}}) == (
+    assert chunked._normalizer_mode({"normalizer": {"type": "NFKC"}}) == (
         None,
         "normalizer_not_supported:NFKC",
     )
-    assert cpe._normalizer_mode(
+    assert chunked._normalizer_mode(
         {"normalizer": {"type": "Sequence", "normalizers": [{"type": "NFC"}]}}
     ) == (None, "normalizer_not_supported:Sequence")
-    assert cpe._normalizer_mode({"normalizer": "NFC"}) == (
+    assert chunked._normalizer_mode({"normalizer": "NFC"}) == (
         None,
         "normalizer_not_supported",
     )
 
 
 def test_default_chunks_follows_the_table_and_the_worker_floor() -> None:
-    assert cpe.default_chunks(0) == 1
-    assert cpe.default_chunks(255_999) == 1
-    assert cpe.default_chunks(256_000) == 4
-    assert cpe.default_chunks(400_000) == 4
-    assert cpe.default_chunks(1_000_000) == 16  # 16 started 64 KiB units
-    assert cpe.default_chunks(1_000_001) == 16
-    assert cpe.default_chunks(2_000_000) == 16
-    assert cpe.default_chunks(4_000_000) == 32
-    assert cpe.default_chunks(40_000_000) == 32
+    assert chunked.default_chunks(0) == 1
+    assert chunked.default_chunks(255_999) == 1
+    assert chunked.default_chunks(256_000) == 4
+    assert chunked.default_chunks(400_000) == 4
+    assert chunked.default_chunks(1_000_000) == 16  # 16 started 64 KiB units
+    assert chunked.default_chunks(1_000_001) == 16
+    assert chunked.default_chunks(2_000_000) == 16
+    assert chunked.default_chunks(4_000_000) == 32
+    assert chunked.default_chunks(40_000_000) == 32
     with pytest.raises(ValueError):
-        cpe.default_chunks(-1)
+        chunked.default_chunks(-1)
 
 
 def test_tiny_family_is_refused_and_encoded_serially(tmp_path: Path) -> None:
     rig = build_rig(tmp_path)
     tokenizer = rig.tokenizer()
     text = "hello world " * 30_000
-    assert cpe.is_admitted(tokenizer) is False
-    encoded = cpe.chunked_encode(tokenizer, text, k=8)
-    assert encoded.serial_reason == ReasonCode.R_CPE_FAMILY_UNSUPPORTED.value
+    assert chunked.is_admitted(tokenizer) is False
+    encoded = chunked.encode(tokenizer, text, k=8)
+    assert encoded.serial_reason == ReasonCode.R_CHUNK_FAMILY_UNSUPPORTED.value
     assert encoded.chunks == 1
     assert list(encoded.ids) == list(tokenizer.encode(text, lookup="off").ids)
     with pytest.raises(ValueError):
-        cpe.plan_chunks(tokenizer, text)
-    report = tokenizer.explain()["cpe"]
+        chunked.plan(tokenizer, text)
+    report = tokenizer.explain()["chunked"]
     assert isinstance(report, dict)
     assert report["admitted"] is False
-    assert report["fallback_counts"] == {"R_CPE_FAMILY_UNSUPPORTED": 1}
+    assert report["fallback_counts"] == {"R_CHUNK_FAMILY_UNSUPPORTED": 1}
     assert report["calls"] == 1 and report["serial"] == 1
-    assert cpe.stats(tokenizer) == report
-    assert "cpe" not in tokenizer.explain(summary=True)
+    assert chunked.stats(tokenizer) == report
+    assert "chunked" not in tokenizer.explain(summary=True)
 
 
 def test_argument_validation(tmp_path: Path) -> None:
     rig = build_rig(tmp_path)
     tokenizer = rig.tokenizer()
     with pytest.raises(TypeError):
-        cpe.chunked_encode(tokenizer, b"bytes")  # type: ignore[arg-type]
+        chunked.encode(tokenizer, b"bytes")  # type: ignore[arg-type]
     with pytest.raises(ValueError):
-        cpe.chunked_encode(tokenizer, "x", k=0)
+        chunked.encode(tokenizer, "x", k=0)
     with pytest.raises(ValueError):
-        cpe.chunked_encode(tokenizer, "x", scan_budget=0)
+        chunked.encode(tokenizer, "x", scan_budget=0)
     with pytest.raises(ValueError):
-        cpe.chunked_encode(tokenizer, "x", k=True)  # bool is not accepted
+        chunked.encode(tokenizer, "x", k=True)  # bool is not accepted
 
 
 # -- artifact tier: identity against the oracle -----------------------------
@@ -748,15 +750,15 @@ def test_chunked_ids_equal_reference(
     expected = _reference(tokenizer)(text)
     assert list(tokenizer.encode(text, lookup="off").ids) == expected
     for k in (None, 8, 32):
-        encoded = cpe.chunked_encode(tokenizer, text, k=k)
+        encoded = chunked.encode(tokenizer, text, k=k)
         assert list(encoded.ids) == expected, (family, corpus, size, k)
         assert encoded.serial_reason is None
         if k is None:
-            assert encoded.k_requested == cpe.default_chunks(size)
+            assert encoded.k_requested == chunked.default_chunks(size)
         else:
             assert encoded.k_requested == k
             assert encoded.chunks >= 2, (family, corpus, size, k)
-    plan = cpe.plan_chunks(tokenizer, text, k=32)
+    plan = chunked.plan(tokenizer, text, k=32)
     assert plan.cut_misses == 0, (family, corpus, size)
 
 
@@ -764,10 +766,10 @@ def test_chunked_ids_equal_reference(
 def test_plan_invariants(loaded: dict[str, Tokenizer], family: str) -> None:
     tokenizer = _family(loaded, family)
     table = pclass_table()
-    planner = cpe._planner_for(tokenizer)
+    planner = chunked._planner_for(tokenizer)
     text = _generated_corpora(300_000)["transcript(generated)"]
     for k in (2, 5, 16, 64):
-        plan = cpe.plan_chunks(tokenizer, text, k=k)
+        plan = chunked.plan(tokenizer, text, k=k)
         assert plan.spans[0][0] == 0 and plan.spans[-1][1] == len(text)
         assert all(a < b for a, b in plan.spans)
         assert all(
@@ -777,9 +779,9 @@ def test_plan_invariants(loaded: dict[str, Tokenizer], family: str) -> None:
         floor = max(16, min(1024, len(text) // (4 * k)))
         assert all(b - a >= floor for a, b in plan.spans)
         for cut in plan.cuts:
-            assert cpe._boundary_ok(table, text, cut)
+            assert chunked._boundary_ok(table, text, cut)
             assert cut not in planner.guard.forbidden(text, cut, cut)
-    tight = cpe.plan_chunks(tokenizer, text, k=8, min_chunk=100_000)
+    tight = chunked.plan(tokenizer, text, k=8, min_chunk=100_000)
     assert len(tight.spans) <= 3 and tight.cut_misses >= 5
 
 
@@ -789,7 +791,7 @@ def test_cut_never_lands_inside_an_added_token_literal(
 ) -> None:
     """Negative control: every target position is placed inside a literal."""
     tokenizer = _family(loaded, family)
-    planner = cpe._planner_for(tokenizer)
+    planner = chunked._planner_for(tokenizer)
     face = json.loads(tokenizer._backend.materialized_tokenizer_json())
     literals = sorted({str(row["content"]) for row in face["added_tokens"]}, key=len)
     literal = literals[-1]
@@ -817,11 +819,11 @@ def test_cut_never_lands_inside_an_added_token_literal(
         occurrences.append((position, position + len(literal)))
         position += 1
     assert len(occurrences) >= k - 1
-    plan = cpe.plan_chunks(tokenizer, text, k=k)
+    plan = chunked.plan(tokenizer, text, k=k)
     for cut in plan.cuts:
         assert not any(a < cut < b for a, b in occurrences), (family, cut)
     assert plan.literal_rejects >= 1
-    encoded = cpe.chunked_encode(tokenizer, text, k=k)
+    encoded = chunked.encode(tokenizer, text, k=k)
     assert encoded.chunks >= 2
     assert list(encoded.ids) == _reference(tokenizer)(text)
     # A literal exactly at a target position is forbidden strictly inside
@@ -840,24 +842,24 @@ def test_no_certified_cut_falls_back_to_serial(
     loaded: dict[str, Tokenizer], family: str
 ) -> None:
     tokenizer = _family(loaded, family)
-    counts = cpe.stats(tokenizer)["fallback_counts"]
+    counts = chunked.stats(tokenizer)["fallback_counts"]
     assert isinstance(counts, dict)
-    before = counts.get("R_CPE_NO_CUT", 0)
+    before = counts.get("R_CHUNK_NO_CUT", 0)
     # Letters only: no synchronizing transition exists anywhere.
     text = "\u4e2d\u6587\u6d4b\u8bd5" * 10_000
-    encoded = cpe.chunked_encode(tokenizer, text, k=4, scan_budget=512)
-    assert encoded.serial_reason == ReasonCode.R_CPE_NO_CUT.value
+    encoded = chunked.encode(tokenizer, text, k=4, scan_budget=512)
+    assert encoded.serial_reason == ReasonCode.R_CHUNK_NO_CUT.value
     assert encoded.chunks == 1 and encoded.cut_misses == 3
     assert list(encoded.ids) == list(tokenizer.encode(text, lookup="off").ids)
-    report = tokenizer.explain()["cpe"]
+    report = tokenizer.explain()["chunked"]
     assert isinstance(report, dict)
-    assert report["fallback_counts"]["R_CPE_NO_CUT"] == before + 1
+    assert report["fallback_counts"]["R_CHUNK_NO_CUT"] == before + 1
     assert report["last"] == {
         "chars": len(text),
         "tokens": len(encoded.ids),
         "k_requested": 4,
         "chunks": 1,
-        "serial_reason": "R_CPE_NO_CUT",
+        "serial_reason": "R_CHUNK_NO_CUT",
         "cut_misses": 3,
         "literal_rejects": 0,
         "norm_rejects": 0,
@@ -869,31 +871,31 @@ def test_edge_inputs(loaded: dict[str, Tokenizer], family: str) -> None:
     tokenizer = _family(loaded, family)
     reference = _reference(tokenizer)
     for text in ("", " ", "a", "\n", "ab 12", " " * 300_000, "a" * 300):
-        encoded = cpe.chunked_encode(tokenizer, text, k=8)
+        encoded = chunked.encode(tokenizer, text, k=8)
         assert list(encoded.ids) == reference(text), repr(text[:8])
         assert list(encoded.ids) == list(tokenizer.encode(text, lookup="off").ids)
         assert encoded.chunks == 1
-    below = cpe.chunked_encode(tokenizer, "ab 12 " * 20, k=8)
+    below = chunked.encode(tokenizer, "ab 12 " * 20, k=8)
     assert below.chunks == 1 and below.serial_reason is None
-    below_count = cpe.stats(tokenizer)["below_threshold"]
+    below_count = chunked.stats(tokenizer)["below_threshold"]
     assert isinstance(below_count, int) and below_count >= 1
     # A lone surrogate is not UTF-8; both routes refuse it the same way.
     bad = ("ab 12 " * 60_000) + "\ud800" + ("cd 34 " * 60_000)
     with pytest.raises(UnicodeEncodeError):
         tokenizer.encode(bad, lookup="off")
     with pytest.raises(UnicodeEncodeError):
-        cpe.chunked_encode(tokenizer, bad, k=8)
+        chunked.encode(tokenizer, bad, k=8)
 
 
 @pytest.mark.parametrize("family", CANDIDATE_FAMILIES)
-def test_explain_carries_the_cpe_block(
+def test_explain_carries_the_chunked_block(
     loaded: dict[str, Tokenizer], family: str
 ) -> None:
     tokenizer = _family(loaded, family)
     text = _generated_corpora(300_000)["prose(generated)"]
-    cpe.chunked_encode(tokenizer, text, k=4)
+    chunked.encode(tokenizer, text, k=4)
     report = tokenizer.explain()
-    block = report["cpe"]
+    block = report["chunked"]
     assert isinstance(block, dict)
     assert block["admitted"] is True and block["refusal"] is None
     assert block["family"] == family
@@ -914,7 +916,7 @@ def test_explain_carries_the_cpe_block(
     }
     ledger = report["fallback_counts"]
     assert isinstance(ledger, dict)
-    assert "R_CPE_NO_CUT" not in ledger
+    assert "R_CHUNK_NO_CUT" not in ledger
 
 
 @pytest.mark.parametrize("family", CANDIDATE_FAMILIES)
@@ -924,13 +926,13 @@ def test_min_chunk_and_scan_budget_bound_the_plan(
     """release-candidate review, notes 5 and 6: the documented bounds hold."""
     tokenizer = _family(loaded, family)
     text = "a" * 110 + " " + "b" * 189
-    plan = cpe.plan_chunks(tokenizer, text, k=2, scan_budget=1)
+    plan = chunked.plan(tokenizer, text, k=2, scan_budget=1)
     assert plan.spans == ((0, 300),) and plan.cut_misses == 1
-    assert cpe.plan_chunks(tokenizer, text, k=2, scan_budget=40).cuts == (110,)
+    assert chunked.plan(tokenizer, text, k=2, scan_budget=40).cuts == (110,)
     text = "ab 12 " * 50
-    plan = cpe.plan_chunks(tokenizer, text, k=3, min_chunk=150)
+    plan = chunked.plan(tokenizer, text, k=3, min_chunk=150)
     assert plan.spans == ((0, 300),) and plan.cut_misses == 2
-    plan = cpe.plan_chunks(tokenizer, text, k=3, min_chunk=100)
+    plan = chunked.plan(tokenizer, text, k=3, min_chunk=100)
     assert len(plan.spans) == 2 and all(b - a >= 100 for a, b in plan.spans)
 
 
@@ -949,19 +951,19 @@ def test_cut_the_normalizer_moves_is_not_made(
     tokenizer = _family(loaded, family)
     reference = _reference(tokenizer)
     text = "a" * 127 + "\u0958" + "/k" + " " * 126
-    assert cpe._boundary_ok(pclass_table(), text, 128)
-    encoded = cpe.chunked_encode(tokenizer, text, k=2)
+    assert chunked._boundary_ok(pclass_table(), text, 128)
+    encoded = chunked.encode(tokenizer, text, k=2)
     assert list(encoded.ids) == reference(text), family
     assert list(encoded.ids) == list(tokenizer.encode(text, lookup="off").ids)
-    if cpe.stats(tokenizer)["normalizer"] == "nfc":
+    if chunked.stats(tokenizer)["normalizer"] == "nfc":
         assert encoded.chunks == 1
-        assert encoded.serial_reason == ReasonCode.R_CPE_NO_CUT.value
+        assert encoded.serial_reason == ReasonCode.R_CHUNK_NO_CUT.value
         assert encoded.norm_rejects >= 1
     else:
         assert encoded.chunks == 2 and encoded.cuts == (128,)
     # The same shape with plain letters at the cut is chunked, exactly.
     healthy = "a" * 120 + "\u0958" + "b" * 7 + "/k" + " " * 126
-    encoded = cpe.chunked_encode(tokenizer, healthy, k=2)
+    encoded = chunked.encode(tokenizer, healthy, k=2)
     assert encoded.chunks == 2 and encoded.cuts == (128,)
     assert list(encoded.ids) == reference(healthy)
 
@@ -975,15 +977,15 @@ def test_adversarial_normalization_corpus_is_exact(
     face = json.loads(tokenizer._backend.materialized_tokenizer_json())
     literals = [str(row["content"]) for row in face["added_tokens"]]
     rng = random.Random(sum(ord(c) for c in family) * 7919 + 0x5EED)
-    chunked = 0
+    n_chunked = 0
     for index in range(_ADVERSARIAL):
         text = _adversarial(rng, rng.randint(300, 1500), literals)
         k = rng.choice((2, 3, 4, 8))
-        encoded = cpe.chunked_encode(tokenizer, text, k=k)
+        encoded = chunked.encode(tokenizer, text, k=k)
         assert list(encoded.ids) == reference(text), (family, index, k)
-        chunked += encoded.chunks >= 2
+        n_chunked += encoded.chunks >= 2
     # The corpus must actually exercise cuts, not only refusals.
-    assert chunked >= _ADVERSARIAL // 4, (family, chunked, _ADVERSARIAL)
+    assert n_chunked >= _ADVERSARIAL // 4, (family, n_chunked, _ADVERSARIAL)
 
 
 def test_roster_families_are_the_admitted_set() -> None:

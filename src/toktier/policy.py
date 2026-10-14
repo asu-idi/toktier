@@ -196,16 +196,22 @@ class ReasonCode(enum.Enum):
     #: ``ReasonCode::InvalidPriorState``. Registered here in 0.2.7 so the
     #: two faces name it from one vocabulary.
     R_INVALID_PRIOR_STATE = "R_INVALID_PRIOR_STATE"
-    #: Chunk-parallel encode (``toktier.cpe``) found no certified cut in
+    #: Chunk-parallel encode (``toktier.chunked``) found no certified cut in
     #: the document, so it was encoded serially on the plain route.
-    #: Counted in ``explain()["cpe"]``, not in the routing ledger: the
+    #: Counted in ``explain()["chunked"]``, not in the routing ledger: the
     #: serial route is the same certified backend, not a fallback of it.
-    R_CPE_NO_CUT = "R_CPE_NO_CUT"
+    R_CHUNK_NO_CUT = "R_CHUNK_NO_CUT"
     #: Chunk-parallel encode was asked for a tokenizer outside the
     #: certified repair roster (no certified chunk-cut rule), so the
     #: document was encoded serially on the plain route. Counted in
-    #: ``explain()["cpe"]``.
-    R_CPE_FAMILY_UNSUPPORTED = "R_CPE_FAMILY_UNSUPPORTED"
+    #: ``explain()["chunked"]``.
+    R_CHUNK_FAMILY_UNSUPPORTED = "R_CHUNK_FAMILY_UNSUPPORTED"
+    #: Native chunk-parallel encode was asked for an input whose starting
+    #: backend is not the corrected CPU engine (a GPU-headed plan above its
+    #: crossover), so the input was encoded serially through the normal
+    #: route. Reported by the native runtime in the per-call facts and
+    #: counted in ``explain()["chunked"]``.
+    R_CHUNK_ROUTE_NOT_FAST_CPU = "R_CHUNK_ROUTE_NOT_FAST_CPU"
 
 
 @dataclass(frozen=True)

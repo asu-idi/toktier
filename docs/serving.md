@@ -18,7 +18,7 @@ ratios rather than as a benchmark (the protocol for those is
 | A turn of a conversation the caller can name | `encode(text, session=key)`, or a `Session` object | Verifies the stored transcript is a prefix of `text` and appends only the remainder |
 | A turn of a conversation the caller cannot name | `encode(text)` (`lookup="auto"`) | Asks the content index whether a stored text is a prefix of `text` |
 | A single-shot request that will not be extended | `encode(text, lookup="off")` | Nothing |
-| A single-shot request of hundreds of thousands of characters or more | `toktier.cpe.chunked_encode(tokenizer, text)` | Nothing (Section 3) |
+| A single-shot request of hundreds of thousands of characters or more | `toktier.chunked.encode(tokenizer, text)` | Nothing (Section 3) |
 
 The third row is the one worth stating plainly. An omitted `lookup`
 means `"auto"` for a core-stream call, and `"auto"` is the right default
@@ -43,7 +43,7 @@ first turn of a long conversation; the serving layer can.
 stream (`all_ids`) together with the splice (`replace_from`,
 `replacement_ids`). That is the frozen 0.x shape, and it stays. A
 serving process usually holds the stream itself -- it is what it sends
-to the model -- and only needs the splice, so since 0.2.10
+to the model -- and only needs the splice, so since 0.3.0
 `Session.append_patch(text)` returns a `SessionPatch` with the splice
 alone and no copy of the stream:
 
@@ -70,14 +70,14 @@ one that will not change when it lands.
 A single encode runs on one core. For a request of several hundred
 thousand characters that is tens of milliseconds on the certified CPU
 engine, and it is the one place in this library where more cores could
-help a single request. `toktier.cpe.chunked_encode` does that without
+help a single request. `toktier.chunked.encode` does that without
 touching the exact-ID contract:
 
 ```python
-from toktier import cpe
+from toktier import chunked
 
-encoded = cpe.chunked_encode(tokenizer, text)          # k from the table
-encoded = cpe.chunked_encode(tokenizer, text, k=16)    # explicit chunk count
+encoded = chunked.encode(tokenizer, text)          # k from the table
+encoded = chunked.encode(tokenizer, text, k=16)    # explicit chunk count
 assert encoded.ids == tokenizer.encode(text, lookup="off").ids
 ```
 
@@ -105,7 +105,7 @@ What decides whether it is worth it:
   normalizer sequence, or NFC with every added token matched on the
   input text (`normalized: false`) -- the normalizer shapes the cut rule
   reasons about. Any other tokenizer is encoded serially, and the result
-  says so in `serial_reason` (`R_CPE_FAMILY_UNSUPPORTED`; the `cpe`
+  says so in `serial_reason` (`R_CHUNK_FAMILY_UNSUPPORTED`; the `chunked`
   block of `explain()` names the refusal).
 - **Normalization.** The cut rule speaks about the text the
   pre-tokenizer sees, which for an NFC family is the normalized text,
@@ -156,10 +156,10 @@ What decides whether it is worth it:
   encode into one chunk at reference speed (162 ms to 15 ms in the
   measurement behind the table).
 
-Diagnostics. Once `chunked_encode` has served a tokenizer, its
-`explain()` report carries a `cpe` block: the admission decision and
+Diagnostics. Once `chunked.encode` has served a tokenizer, its
+`explain()` report carries a `chunked` block: the admission decision and
 the normalizer shape, calls, how many were chunked, serial fallbacks by
-reason code (`R_CPE_NO_CUT`, `R_CPE_FAMILY_UNSUPPORTED`), positions
+reason code (`R_CHUNK_NO_CUT`, `R_CHUNK_FAMILY_UNSUPPORTED`), positions
 given up, literal and normalization rejections, and the last call's
 facts. These counters live in that block and not in
 the routing ledger's top-level `fallback_counts`, because a serial
@@ -172,18 +172,18 @@ Two things the chunked call does not do. It does not consult the store
 that will grow), and it returns the core stream only -- special tokens
 are a read-time template around it, as for sessions.
 
-Native chunk encoder (research build, `dev-031`). The same plan --
+Native chunk encoder. The same plan --
 position for position, including the literal guard and the
 normalization-stability condition -- is also implemented inside the
-native runtime (`crates/toktier-routing-core/src/cpe.rs`), where the
+native runtime (`crates/toktier-routing-core/src/chunked.rs`), where the
 chunks are encoded on a persistent pool of corrected-Gigatoken workers
 (checked out per chunk, no prefix sharing between concurrent callers,
 pool size independent of the chunk count) and concatenated before the
-ids cross into Python. `cpe.chunked_encode(..., native=True)` and
+ids cross into Python. `chunked.encode(..., native=True)` and
 `Tokenizer.encode(text, parallel="auto" | k)` select it; the default
-of both remains the Python path above. `cpe.warm(tokenizer, workers=,
+of both remains the Python path above. `chunked.warm(tokenizer, workers=,
 text=)` forks and pre-warms the pool ahead of the first request;
-`cpe.native_admission(tokenizer)` reads the native planner's admission
+`chunked.admission(tokenizer)` reads the native planner's admission
 facts, and `ChunkedEncoding.native_facts` carries the per-call row
 sources and phase timings. This build is not a certified release: its
 fast_cpu source identity has moved, so the corrected CPU route is

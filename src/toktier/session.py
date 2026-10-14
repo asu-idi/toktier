@@ -6,7 +6,7 @@ pre-postprocessor core token stream, and the splice invariant
 ``all_ids == old_ids[:replace_from] + replacement_ids`` is enforced at
 construction so an inconsistent update cannot be built, only refused.
 
-``SessionPatch`` (added in 0.2.10) is the same splice without the
+``SessionPatch`` (added in 0.3.0) is the same splice without the
 ``all_ids`` field: what ``Session.append_patch`` returns to a caller who
 keeps the stream itself and only wants to know what to replace.
 

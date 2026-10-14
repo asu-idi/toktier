@@ -7,7 +7,7 @@ calls run on toktier's certified CPU route (ids equal to a from-scratch
 reference encode), and the request's `session_id` (else `cache_salt`) is
 bound around the tokenize call so a conversation's transcript is served
 as a verified prefix append instead of a full re-encode. No other code
-path changes. Requires `toktier >= 0.2.10` (toktier.integrations.sglang).
+path changes. Requires `toktier >= 0.3.0` (toktier.integrations.sglang).
 Baseline: sglang 0.5.19 (PyPI wheel).
 ---
 --- a/python/sglang/srt/server_args.py

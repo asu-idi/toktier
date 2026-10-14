@@ -1,4 +1,4 @@
-"""Certified chunk-parallel encode (CPE) for long requests on the CPU route.
+"""Certified chunk-parallel encode for long requests on the CPU route.
 
 A long document is cut at *certified stable boundaries*, the chunks are
 encoded as one batch on the loaded tokenizer (the native batch path runs
@@ -59,11 +59,11 @@ concatenation are Python, so the parallelism available is the batch
 worker pool of the native engine -- the Rayon thread count at first use,
 and at most one worker per 64 KiB of payload.
 
-A native counterpart exists in this research build (``native=True``, and
+A native counterpart exists (``native=True``, and
 ``Tokenizer.encode(..., parallel=...)``): the same plan, position for
 position, computed inside the native runtime, with the chunks encoded on
 a persistent pool of corrected-Gigatoken workers and concatenated there
-(``crates/toktier-routing-core/src/cpe.rs``). Its facts come back in
+(``crates/toktier-routing-core/src/chunked.rs``). Its facts come back in
 ``ChunkedEncoding.native_facts``; the counters of this module count both
 paths.
 
@@ -74,10 +74,10 @@ shipped sync profile was certified on -- may be chunked when its loader
 face carries no normalizer, the empty normalizer sequence, or NFC with
 every added token matched on the input text (``normalized: false``);
 any other tokenizer is encoded serially, the refusal is counted under
-``R_CPE_FAMILY_UNSUPPORTED`` and named in ``explain()["cpe"]["refusal"]``.
+``R_CHUNK_FAMILY_UNSUPPORTED`` and named in ``explain()["chunked"]["refusal"]``.
 A document in which no certified cut can be found is encoded serially
-under ``R_CPE_NO_CUT``. Both counters, and the per-call facts, are read
-back from ``Tokenizer.explain()["cpe"]`` once this module has served the
+under ``R_CHUNK_NO_CUT``. Both counters, and the per-call facts, are read
+back from ``Tokenizer.explain()["chunked"]`` once this module has served the
 tokenizer, or from :func:`stats`.
 
 Source text in this repository is ASCII, so the characters named in the
@@ -107,12 +107,12 @@ __all__ = [
     "SYNC_PAIRS",
     "ChunkPlan",
     "ChunkedEncoding",
-    "chunked_encode",
+    "admission",
     "default_chunks",
+    "encode",
     "is_admitted",
-    "native_admission",
     "native_available",
-    "plan_chunks",
+    "plan",
     "stats",
     "warm",
 ]
@@ -201,8 +201,8 @@ _STABLE_CACHE_LIMIT = 1 << 16
 _NORMALIZER_NONE = "none"
 _NORMALIZER_NFC = "nfc"
 
-_R_NO_CUT = ReasonCode.R_CPE_NO_CUT.value
-_R_FAMILY = ReasonCode.R_CPE_FAMILY_UNSUPPORTED.value
+_R_NO_CUT = ReasonCode.R_CHUNK_NO_CUT.value
+_R_FAMILY = ReasonCode.R_CHUNK_FAMILY_UNSUPPORTED.value
 
 
 def default_chunks(chars: int) -> int:
@@ -629,7 +629,7 @@ def _planner_for(tokenizer: Tokenizer) -> _Planner:
             _PLANNERS[tokenizer] = planner
             register = getattr(tokenizer, "_register_report", None)
             if callable(register):
-                register("cpe", planner.report)
+                register("chunked", planner.report)
         return planner
 
 
@@ -644,7 +644,7 @@ def stats(tokenizer: Tokenizer) -> dict[str, object]:
     return _planner_for(tokenizer).report()
 
 
-def plan_chunks(
+def plan(
     tokenizer: Tokenizer,
     text: str,
     *,
@@ -653,12 +653,12 @@ def plan_chunks(
     scan_budget: int = DEFAULT_SCAN_BUDGET,
     native: bool | None = None,
 ) -> ChunkPlan:
-    """The cut plan :func:`chunked_encode` would use, without encoding.
+    """The cut plan :func:`encode` would use, without encoding.
 
     Raises ``ValueError`` for a tokenizer outside the admitted set; the
     encode entry point prefers to fall back, this one prefers to say so.
-    ``native=True`` asks the native runtime for its plan instead (research
-    build); the two are meant to agree position for position.
+    ``native=True`` asks the native runtime for its plan instead; the two
+    are meant to agree position for position.
     """
     planner = _planner_for(tokenizer)
     if not planner.admitted:
@@ -685,9 +685,7 @@ def _native_runtime(tokenizer: Tokenizer) -> Any:
     """The native request runtime with the chunked surface, or raise."""
     runtime = tokenizer._native_request_runtime()
     if runtime is None or not callable(getattr(runtime, "chunked_encode", None)):
-        raise RuntimeError(
-            "the loaded runtime has no native chunked encoder (research build)"
-        )
+        raise RuntimeError("the loaded runtime has no native chunked encoder")
     return runtime
 
 
@@ -697,7 +695,7 @@ def native_available(tokenizer: Tokenizer) -> bool:
     return runtime is not None and callable(getattr(runtime, "chunked_encode", None))
 
 
-def native_admission(tokenizer: Tokenizer) -> dict[str, object]:
+def admission(tokenizer: Tokenizer) -> dict[str, object]:
     """The native chunk encoder's admission facts."""
     facts: dict[str, object] = dict(_native_runtime(tokenizer).chunked_admission())
     return facts
@@ -736,7 +734,7 @@ def _encode_rows(tokenizer: Tokenizer, chunks: Sequence[str]) -> list[Sequence[i
     return [row.ids for row in tokenizer.encode_batch(chunks)]
 
 
-def chunked_encode(
+def encode(
     tokenizer: Tokenizer,
     text: str,
     *,
@@ -759,11 +757,11 @@ def chunked_encode(
     normalizer this module reasons about), and a document in which no
     certified cut exists, are encoded serially on the tokenizer's plain
     route; the result says so in ``serial_reason`` and the tokenizer's
-    ``explain()["cpe"]`` block counts it.
+    ``explain()["chunked"]`` block counts it.
 
     ``native=True`` runs the plan and the chunk encodes inside the native
-    runtime (research build; raises ``RuntimeError`` when the loaded
-    runtime has no such surface). The default keeps the Python path.
+    runtime (raises ``RuntimeError`` when the loaded runtime has no such
+    surface). The default keeps the Python path.
     """
     if not isinstance(text, str):
         raise TypeError("text must be a str")
@@ -852,7 +850,7 @@ def _native_chunked_encode(
     min_chunk: int | None,
     budget: int,
 ) -> ChunkedEncoding:
-    """The native path of :func:`chunked_encode`."""
+    """The native path of :func:`encode`."""
     runtime = _native_runtime(tokenizer)
     ids, facts = runtime.chunked_encode(text, requested, min_chunk, budget)
     serial_reason = facts["serial_reason"]

@@ -350,7 +350,7 @@ class Session:
 
     Two ways to append. :meth:`append` returns the frozen
     :class:`~toktier.SessionUpdate`, which carries the whole stream;
-    :meth:`append_patch` (added in 0.2.10) returns only the splice, for a
+    :meth:`append_patch` (added in 0.3.0) returns only the splice, for a
     caller who keeps the stream itself. Both report the same
     ``replace_from`` and the same replacement.
     """
@@ -692,7 +692,7 @@ class Tokenizer:
         self._last_state_encode: dict[str, object] | None = None
         self._model_resolution: ModelResolution | None = None
         # Diagnostics blocks contributed by helpers layered over the
-        # facade (``toktier.cpe`` registers one); ``explain()`` appends
+        # facade (``toktier.chunked`` registers one); ``explain()`` appends
         # each under its name.
         self._extra_reports: dict[str, Callable[[], Mapping[str, object]]] = {}
         self._closed = False
@@ -817,12 +817,12 @@ class Tokenizer:
         explicitly selected experimental repair backend labels itself
         outside that guarantee.
 
-        ``parallel`` (research build; off by default) encodes the
-        document in certified chunks through :mod:`toktier.cpe`:
+        ``parallel`` (off by default) encodes the
+        document in certified chunks through :mod:`toktier.chunked`:
         ``"auto"`` takes the chunk count from the document length, an
         integer names it. The call is stateless (no ``session``,
         ``lookup`` omitted or ``"off"``, core stream only) and returns a
-        :class:`toktier.cpe.ChunkedEncoding`, whose ids equal the plain
+        :class:`toktier.chunked.ChunkedEncoding`, whose ids equal the plain
         encode; the native chunk encoder is used when the loaded runtime
         has one, the Python-level one otherwise.
         """
@@ -855,7 +855,7 @@ class Tokenizer:
         add_special_tokens: bool,
     ) -> Encoding:
         """The ``parallel=`` branch of :meth:`encode`."""
-        from ..cpe import chunked_encode, native_available
+        from .. import chunked
 
         self._require_open()
         if session is not None:
@@ -872,7 +872,9 @@ class Tokenizer:
             k = parallel
         else:
             raise ValueError("parallel must be 'auto' or a positive integer")
-        return chunked_encode(self, text, k=k, native=native_available(self) or None)
+        return chunked.encode(
+            self, text, k=k, native=chunked.native_available(self) or None
+        )
 
     def _encode_ids(
         self,
@@ -973,7 +975,7 @@ class Tokenizer:
         """Add a named diagnostics block to :meth:`explain`.
 
         For helpers layered over the facade that keep their own counters
-        (``toktier.cpe`` is one); the block appears under ``name`` in the
+        (``toktier.chunked`` is one); the block appears under ``name`` in the
         full report, evaluated at each ``explain()`` call.
         """
         self._extra_reports[name] = provider

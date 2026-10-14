@@ -139,7 +139,7 @@ fifteen the evidence covers is later work.
 
 ## CPU parallel BPE for long requests
 
-**Python-level shipped in 0.2.10** (`toktier.cpe.chunked_encode`,
+**Python-level shipped in 0.3.0** (`toktier.chunked.encode`,
 `docs/serving.md` Section 3): a long input is cut at certified stable
 boundaries -- the synchronizing-transition rule the session-repair
 witness already uses, plus an added-token literal guard and, for an NFC
@@ -154,10 +154,10 @@ byte-level BPE artifacts the sync profile was certified on) with a
 normalizer the rule reasons about (none, the empty sequence, NFC); the
 chunk table was measured on three of them and four corpus types.
 
-What remains is native, and is registered for 0.2.11 as a Rust
-`ChunkEncoder` (a research prototype exists on `dev-031`:
-`crates/toktier-routing-core/src/cpe.rs`, reachable through
-`cpe.chunked_encode(native=True)` and `Tokenizer.encode(parallel=)`;
+What remains is native, and is registered for a later release as a Rust
+`ChunkEncoder` (a prototype is in the tree:
+`crates/toktier-routing-core/src/chunked.rs`, reachable through
+`chunked.encode(native=True)` and `Tokenizer.encode(parallel=)`;
 its identity is not registered, so it is not a release): the cut
 search and the concatenation below PyO3, so the
 per-chunk Python boundary (each row handed over and concatenated) stops
@@ -170,7 +170,7 @@ pool, make the 64 KiB-per-worker floor a parameter, and judge the
 per-input guards per chunk inside `encode` so that a single unchunked
 request only pays reference speed for the passage that tripped a guard.
 A patch-shaped native return for session appends
-(`Session.append_patch` ships the Python surface in 0.2.10) is on the
+(`Session.append_patch` ships the Python surface in 0.3.0) is on the
 same list.
 
 ## Routing large session deltas to the GPU

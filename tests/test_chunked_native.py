@@ -1,17 +1,18 @@
-"""The native chunk encoder plans and encodes exactly as ``toktier.cpe`` does.
+"""The native chunk encoder plans and encodes exactly as ``toktier.chunked`` does.
 
-Artifact tier only (``TOKTIER_TEST_ARTIFACTS``, see ``test_cpe.py``): every
+Artifact tier only (``TOKTIER_TEST_ARTIFACTS``, see ``test_chunked.py``): every
 family found there is loaded once, and for each one the native runtime's
 ``chunked_plan`` is compared position for position with the Python
 planner over the corpora, the plan-bound variants and the generated
-normalization corpus; the native ``chunked_encode`` ids are judged
+normalization corpus; the native ``chunked.encode`` ids are judged
 against a from-scratch oracle encode; and the ``Tokenizer.encode(...,
-parallel=...)`` wrapper is exercised. ``TOKTIER_TEST_CPE_ADVERSARIAL``
+parallel=...)`` wrapper is exercised. ``TOKTIER_TEST_CHUNKED_ADVERSARIAL``
 scales the generated corpus per family (default 400).
 
-This is a research build: the native extension's fast_cpu source identity
-has moved, so a family whose certified plan lacks the corrected CPU route
-is reloaded under the experimental policy (the waiver is recorded in
+Until the source identities are rebound, the native extension's fast_cpu
+source identity differs from the recorded one, so a family whose
+certified plan lacks the corrected CPU route is reloaded under the
+experimental policy (the waiver is recorded in
 ``explain()["experimental_waivers"]``); the readings here are about
 equivalence with the Python planner, not about certification.
 """
@@ -30,12 +31,12 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 os.environ.setdefault("RAYON_NUM_THREADS", "4")
 
 import toktier
-from toktier import Config, ReasonCode, Tokenizer, cpe
+from toktier import Config, ReasonCode, Tokenizer, chunked
 from toktier.artifacts.manifest import ArtifactManifest
 from toktier.artifacts.tables import ARTIFACT_MANIFEST
 from toktier.paths import artifact_cache_dir
 
-from .test_cpe import (
+from .test_chunked import (
     _ADVERSARIAL,
     CANDIDATE_FAMILIES,
     SIZES,
@@ -64,13 +65,13 @@ def loaded(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, Token
     for family in available_families():
         source = _artifact_source(family)
         assert source is not None
-        home = tmp_path_factory.mktemp(f"cpe-native-{family}")
+        home = tmp_path_factory.mktemp(f"chunked-native-{family}")
         config = Config(home=home, offline=True)
         cache = artifact_cache_dir(config)
         cache.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source, cache / manifest.get(family).directory_name)
         handle = _load(family, config)
-        if not cpe.native_available(handle):
+        if not chunked.native_available(handle):
             handle.close()
             pytest.skip(f"{family}: no native chunk encoder on this route")
         handles[family] = handle
@@ -85,9 +86,11 @@ def _family(loaded: dict[str, Tokenizer], family: str) -> Tokenizer:
     return loaded[family]
 
 
-def _plans_agree(tokenizer: Tokenizer, text: str, **options: object) -> cpe.ChunkPlan:
-    python = cpe.plan_chunks(tokenizer, text, **options)  # type: ignore[arg-type]
-    native = cpe.plan_chunks(tokenizer, text, native=True, **options)  # type: ignore[arg-type]
+def _plans_agree(
+    tokenizer: Tokenizer, text: str, **options: object
+) -> chunked.ChunkPlan:
+    python = chunked.plan(tokenizer, text, **options)  # type: ignore[arg-type]
+    native = chunked.plan(tokenizer, text, native=True, **options)  # type: ignore[arg-type]
     assert native == python, (options, native, python)
     return native
 
@@ -97,8 +100,8 @@ def test_native_admission_matches_the_python_planner(
     loaded: dict[str, Tokenizer], family: str
 ) -> None:
     tokenizer = _family(loaded, family)
-    native = cpe.native_admission(tokenizer)
-    python = cpe.stats(tokenizer)
+    native = chunked.admission(tokenizer)
+    python = chunked.stats(tokenizer)
     for key in ("admitted", "refusal", "normalizer", "literals"):
         assert native[key] == python[key], (family, key, native, python)
     assert native["admitted"] is True
@@ -140,13 +143,13 @@ def test_native_plan_and_ids_agree_on_the_adversarial_corpus(
     face = json.loads(tokenizer._backend.materialized_tokenizer_json())
     face_literals = [str(row["content"]) for row in face["added_tokens"]]
     rng = random.Random(sum(ord(c) for c in family) * 7919 + 0x5EED + 1)
-    chunked = 0
+    n_chunked = 0
     for index in range(_ADVERSARIAL):
         text = _adversarial(rng, rng.randint(300, 1500), face_literals)
         k = rng.choice((2, 3, 4, 6, 8))
         plan = _plans_agree(tokenizer, text, k=k)
-        native = cpe.chunked_encode(tokenizer, text, k=k, native=True)
-        python = cpe.chunked_encode(tokenizer, text, k=k)
+        native = chunked.encode(tokenizer, text, k=k, native=True)
+        python = chunked.encode(tokenizer, text, k=k)
         assert list(native.ids) == reference(text), (family, index, k)
         assert list(python.ids) == list(native.ids)
         for key in (
@@ -159,8 +162,8 @@ def test_native_plan_and_ids_agree_on_the_adversarial_corpus(
         ):
             assert getattr(native, key) == getattr(python, key), (family, index, key)
         assert native.chunks == len(plan.spans)
-        chunked += native.chunks >= 2
-    assert chunked >= _ADVERSARIAL // 4, (family, chunked, _ADVERSARIAL)
+        n_chunked += native.chunks >= 2
+    assert n_chunked >= _ADVERSARIAL // 4, (family, n_chunked, _ADVERSARIAL)
 
 
 def _cases() -> list[object]:
@@ -185,7 +188,7 @@ def test_native_chunked_ids_equal_reference(
     text = corpora(size)[corpus]
     expected = _reference(tokenizer)(text)
     for k in (None, 8, 32):
-        encoded = cpe.chunked_encode(tokenizer, text, k=k, native=True)
+        encoded = chunked.encode(tokenizer, text, k=k, native=True)
         assert list(encoded.ids) == expected, (family, corpus, size, k)
         assert encoded.serial_reason is None
         assert encoded.native_facts is not None
@@ -194,12 +197,12 @@ def test_native_chunked_ids_equal_reference(
         assert isinstance(sources, dict)
         assert sum(sources.values()) == encoded.chunks
     wrapped = tokenizer.encode(text, parallel=8)
-    assert isinstance(wrapped, cpe.ChunkedEncoding)
+    assert isinstance(wrapped, chunked.ChunkedEncoding)
     assert list(wrapped.ids) == expected and wrapped.chunks >= 2
     auto = tokenizer.encode(text, parallel="auto", lookup="off")
-    assert isinstance(auto, cpe.ChunkedEncoding)
+    assert isinstance(auto, chunked.ChunkedEncoding)
     assert list(auto.ids) == expected
-    assert auto.k_requested == cpe.default_chunks(size)
+    assert auto.k_requested == chunked.default_chunks(size)
 
 
 @pytest.mark.parametrize("family", CANDIDATE_FAMILIES)
@@ -209,8 +212,8 @@ def test_native_serial_reasons_and_edges(
     tokenizer = _family(loaded, family)
     reference = _reference(tokenizer)
     review = "a" * 127 + "\u0958" + "/k" + " " * 126
-    native = cpe.chunked_encode(tokenizer, review, k=2, native=True)
-    python = cpe.chunked_encode(tokenizer, review, k=2)
+    native = chunked.encode(tokenizer, review, k=2, native=True)
+    python = chunked.encode(tokenizer, review, k=2)
     assert list(native.ids) == reference(review)
     assert (native.chunks, native.cuts, native.serial_reason, native.norm_rejects) == (
         python.chunks,
@@ -218,16 +221,16 @@ def test_native_serial_reasons_and_edges(
         python.serial_reason,
         python.norm_rejects,
     )
-    if cpe.stats(tokenizer)["normalizer"] == "nfc":
-        assert native.serial_reason == ReasonCode.R_CPE_NO_CUT.value
+    if chunked.stats(tokenizer)["normalizer"] == "nfc":
+        assert native.serial_reason == ReasonCode.R_CHUNK_NO_CUT.value
     cjk = "\u4e2d" * 40_000
-    encoded = cpe.chunked_encode(tokenizer, cjk, k=4, native=True)
-    assert encoded.serial_reason == ReasonCode.R_CPE_NO_CUT.value
+    encoded = chunked.encode(tokenizer, cjk, k=4, native=True)
+    assert encoded.serial_reason == ReasonCode.R_CHUNK_NO_CUT.value
     assert encoded.chunks == 1 and encoded.cut_misses == 3
     assert list(encoded.ids) == reference(cjk)
     for text in ("", " ", "x", "\n", "a" * 300, "ab " * 100, " " * 300_000):
-        encoded = cpe.chunked_encode(tokenizer, text, k=4, native=True)
-        python = cpe.chunked_encode(tokenizer, text, k=4)
+        encoded = chunked.encode(tokenizer, text, k=4, native=True)
+        python = chunked.encode(tokenizer, text, k=4)
         assert list(encoded.ids) == reference(text), repr(text[:20])
         assert (encoded.chunks, encoded.cuts, encoded.serial_reason) == (
             python.chunks,
@@ -237,9 +240,9 @@ def test_native_serial_reasons_and_edges(
         if len(text) < 256:
             assert encoded.chunks == 1 and encoded.serial_reason is None
     with pytest.raises(UnicodeEncodeError):
-        cpe.chunked_encode(tokenizer, "ab\ud800cd" * 200, k=2, native=True)
+        chunked.encode(tokenizer, "ab\ud800cd" * 200, k=2, native=True)
     with pytest.raises(TypeError):
-        cpe.chunked_encode(tokenizer, b"bytes", k=2, native=True)  # type: ignore[arg-type]
+        chunked.encode(tokenizer, b"bytes", k=2, native=True)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="stateless"):
         tokenizer.encode("x" * 1000, parallel=2, session="s")
     with pytest.raises(ValueError, match="stateless"):
@@ -256,19 +259,19 @@ def test_native_serial_reasons_and_edges(
 def test_native_pool_warm_and_ledger(loaded: dict[str, Tokenizer], family: str) -> None:
     tokenizer = _family(loaded, family)
     text = _generated_corpora(400_000)["prose(generated)"]
-    size = cpe.warm(tokenizer, workers=3, text=text[:20_000])
+    size = chunked.warm(tokenizer, workers=3, text=text[:20_000])
     assert size >= 3
-    assert cpe.warm(tokenizer, workers=2) == size
-    assert cpe.native_admission(tokenizer)["workers"] == size
+    assert chunked.warm(tokenizer, workers=2) == size
+    assert chunked.admission(tokenizer)["workers"] == size
     runtime = tokenizer._native_request_runtime()
     assert runtime is not None
     before = dict(runtime.runtime_stats()["execution_counts"])
-    stats_before = cpe.stats(tokenizer)
-    encoded = cpe.chunked_encode(tokenizer, text, k=6, native=True)
+    stats_before = chunked.stats(tokenizer)
+    encoded = chunked.encode(tokenizer, text, k=6, native=True)
     after = dict(runtime.runtime_stats()["execution_counts"])
     assert encoded.chunks >= 2
     assert sum(after.values()) - sum(before.values()) == encoded.chunks
-    stats_after = cpe.stats(tokenizer)
+    stats_after = chunked.stats(tokenizer)
     assert stats_after["native_calls"] == int(str(stats_before["native_calls"])) + 1
     assert stats_after["chunked"] == int(str(stats_before["chunked"])) + 1
     assert stats_after["chunks_total"] == (

@@ -13,7 +13,7 @@ use toktier_store_core::{
 
 use crate::{
     ChunkEncoder, ChunkPlan, ChunkedIds, FastCpuEngine, FastEncodeSource, FastSeedPayload,
-    ReferenceEngine, R_CPE_ROUTE_NOT_FAST_CPU,
+    ReferenceEngine, R_CHUNK_ROUTE_NOT_FAST_CPU,
 };
 
 pub const BACKEND_GPU: &str = "gpu";
@@ -1342,7 +1342,7 @@ impl NativeRouter {
                     cut_misses: 0,
                     literal_rejects: 0,
                     norm_rejects: 0,
-                    serial_reason: Some(R_CPE_ROUTE_NOT_FAST_CPU),
+                    serial_reason: Some(R_CHUNK_ROUTE_NOT_FAST_CPU),
                     below_threshold: false,
                     sources: Vec::new(),
                     row_bytes: vec![text.len()],

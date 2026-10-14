@@ -20,7 +20,7 @@ that decides what each idle worker takes next:
   (``policy="srpt"``; ``"fifo"`` keeps arrival order).
 * **chunk tasks for long requests.** A stateless request of at least
   ``chunk_min_chars`` is cut at certified stable boundaries
-  (``toktier.cpe.plan_chunks``: the same cuts the chunk-parallel encoder
+  (``toktier.chunked.plan``: the same cuts the chunk-parallel encoder
   makes, so the concatenation is the serial encoding by construction)
   into ``k = min(workers, kmax, ceil(chars / chunk_target))`` tasks that
   any worker may take; the request completes when its last chunk does.
@@ -324,7 +324,7 @@ class _Task:
 @dataclass
 class _Request:
     rid: int
-    kind: str  # free | session | auto | cpe
+    kind: str  # free | session | auto | chunked
     key: str | None
     chars: int
     t_arr: float
@@ -346,7 +346,7 @@ class SchedResult:
 
     ``ids`` is the core stream (``None`` when ``error`` names why the
     pool could not answer; the caller then encodes in-process).
-    ``how`` is ``"session"``, ``"auto"``, ``"free"`` or ``"cpe"``; ``k`` the chunk
+    ``how`` is ``"session"``, ``"auto"``, ``"free"`` or ``"chunked"``; ``k`` the chunk
     count requested and ``chunks`` the count that ran; the three times
     are milliseconds from arrival to first dispatch (``wait_ms``), the
     sum of worker service (``service_ms``) and arrival to completion
@@ -394,7 +394,7 @@ class Policy:
         }
         self.shared: list[tuple[float, int, _Task]] = []
         self._seq = 0
-        self.n_cpe = 0
+        self.n_chunked = 0
         self.k_hist: dict[int, int] = {}
         self.chunks_total = 0
         self.plan_misses = 0
@@ -457,8 +457,8 @@ class Policy:
                 if len(spans) < k:
                     self.plan_misses += k - len(spans)
             if len(spans) > 1:
-                req.kind = "cpe"
-                self.n_cpe += 1
+                req.kind = "chunked"
+                self.n_chunked += 1
                 self.k_hist[len(spans)] = self.k_hist.get(len(spans), 0) + 1
                 self.chunks_total += len(spans)
                 for index, (low, high) in enumerate(spans):
@@ -528,7 +528,7 @@ class Policy:
             "k_rule": self.config.k_rule,
             "affinity": self.config.affinity,
             "chunking": self.planner is not None,
-            "n_cpe_requests": self.n_cpe,
+            "n_chunked_requests": self.n_chunked,
             "chunks_total": self.chunks_total,
             "plan_misses": self.plan_misses,
             "k_hist": {str(k): n for k, n in sorted(self.k_hist.items())},
@@ -1016,7 +1016,7 @@ class Scheduler:
             error=req.failed,
             how=how,
             k=k,
-            chunks=k if how == "cpe" else 1,
+            chunks=k if how == "chunked" else 1,
             wait_ms=(t_first - req.t_arr) * 1e3,
             service_ms=req.service_ms,
             sojourn_ms=(t_end - req.t_arr) * 1e3,

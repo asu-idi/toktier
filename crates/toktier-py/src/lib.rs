@@ -39,7 +39,7 @@ use toktier_routing_core::{
     default_chunk_workers, BpeSyncBoundary, ChunkedIds, EntryStoreOpenError, FastCpuEngine,
     FastEncodeSource, FastRepairSpec, LiteralMode, LiteralPrefix, NativeEntryStore,
     NativeGpuEngine, NativeGpuOpener, NativeGpuSource, NativePrebuiltGpu, NativePrebuiltGpuConfig,
-    NativeRouter, ReferenceEngine, RouteSelector as CoreRouteSelector, CPE_DEFAULT_SCAN_BUDGET,
+    NativeRouter, ReferenceEngine, RouteSelector as CoreRouteSelector, CHUNKED_DEFAULT_SCAN_BUDGET,
 };
 use toktier_store_core::{
     AppendReport, BoundaryCut, Encoding, EngineError, KeyId, RecoveryMaterial, SemanticFingerprint,
@@ -1331,14 +1331,14 @@ impl PyNativeRuntime {
         self.router.chain()
     }
 
-    // -- certified chunk-parallel encode (research build) ----------------
+    // -- certified chunk-parallel encode ---------------------------------
 
     /// Core-stream ids of `text` through the certified chunk-parallel
     /// encoder of the corrected CPU engine, plus the facts of the call
     /// (chunks, cuts, rejects, per-row sources, phase timings). `k` is the
     /// requested chunk count; `min_chunk` and `scan_budget` are the plan
-    /// bounds of `toktier.cpe`. The ids equal `encode(text, lookup_auto=False)`.
-    #[pyo3(signature = (text, k, min_chunk = None, scan_budget = CPE_DEFAULT_SCAN_BUDGET))]
+    /// bounds of `toktier.chunked`. The ids equal `encode(text, lookup_auto=False)`.
+    #[pyo3(signature = (text, k, min_chunk = None, scan_budget = CHUNKED_DEFAULT_SCAN_BUDGET))]
     fn chunked_encode<'py>(
         &self,
         py: Python<'py>,
@@ -1362,7 +1362,7 @@ impl PyNativeRuntime {
     /// [`Self::chunked_encode`] with the ids returned as little-endian
     /// `u32` bytes instead of a Python list (the boundary cost of the list
     /// is then the caller's choice).
-    #[pyo3(signature = (text, k, min_chunk = None, scan_budget = CPE_DEFAULT_SCAN_BUDGET))]
+    #[pyo3(signature = (text, k, min_chunk = None, scan_budget = CHUNKED_DEFAULT_SCAN_BUDGET))]
     fn chunked_encode_bytes<'py>(
         &self,
         py: Python<'py>,
@@ -1386,7 +1386,7 @@ impl PyNativeRuntime {
     /// The cut plan `chunked_encode` would use, without encoding: character
     /// spans, byte spans and the reject counters. Raises for a tokenizer
     /// outside the admitted set.
-    #[pyo3(signature = (text, k, min_chunk = None, scan_budget = CPE_DEFAULT_SCAN_BUDGET))]
+    #[pyo3(signature = (text, k, min_chunk = None, scan_budget = CHUNKED_DEFAULT_SCAN_BUDGET))]
     fn chunked_plan<'py>(
         &self,
         py: Python<'py>,

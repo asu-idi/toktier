@@ -10,7 +10,7 @@ raises, a worker that exits, a worker that does not answer in time. The
 adapter tier wires the pool into the wrapper and the manager hook. One
 test at the end uses a real artifact when ``TOKTIER_TEST_ARTIFACTS``
 names a directory of local artifacts (the convention of
-``tests/test_cpe.py``) and judges pool ids -- session, stateless and
+``tests/test_chunked.py``) and judges pool ids -- session, stateless and
 chunked -- against the serial encode of the same tokenizer.
 """
 
@@ -201,7 +201,7 @@ def test_long_request_becomes_chunk_tasks_and_short_ones_do_not() -> None:
     policy = Policy(cfg, 4, _even_split)
     req = _req(0, "free", 200)
     tasks = policy.arrive(req, "x" * 200, 4)
-    assert req.kind == "cpe" and len(tasks) == 4
+    assert req.kind == "chunked" and len(tasks) == 4
     assert [t.kind for t in tasks] == ["chunk"] * 4
     assert [(t.index, t.chars) for t in tasks] == [(0, 50), (1, 50), (2, 50), (3, 50)]
     assert all(t.home is None for t in tasks)
@@ -290,11 +290,11 @@ def test_pool_answers_free_session_auto_and_chunked(pool: Scheduler) -> None:
     long_text = "".join(chr(97 + i % 26) for i in range(200))
     chunked = pool.encode_sync(long_text, None)
     assert chunked.error is None and chunked.ids == [ord(c) for c in long_text]
-    assert chunked.how == "cpe" and chunked.k == 2 and chunked.chunks == 2
+    assert chunked.how == "chunked" and chunked.k == 2 and chunked.chunks == 2
     assert sorted(chunked.wids) == [0, 1]  # both workers took a chunk
     stats = pool.stats()
     assert stats["completed"] == 5 and stats["failed"] == 0
-    assert stats["by_how"] == {"free": 1, "session": 2, "auto": 1, "cpe": 1}
+    assert stats["by_how"] == {"free": 1, "session": 2, "auto": 1, "chunked": 1}
     assert stats["policy"]["k_hist"] == {"2": 1}
     assert stats["worker_pids"].keys() == {0, 1}
 
@@ -521,7 +521,7 @@ def test_pool_ids_equal_serial_on_a_real_artifact(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import toktier
-    from toktier import Config, cpe
+    from toktier import Config, chunked
     from toktier.artifacts.manifest import ArtifactManifest
     from toktier.artifacts.tables import ARTIFACT_MANIFEST
     from toktier.paths import artifact_cache_dir
@@ -544,14 +544,14 @@ def test_pool_ids_equal_serial_on_a_real_artifact(
     monkeypatch.setenv("TOKTIER_HOME", str(home))
     monkeypatch.setenv("TOKTIER_OFFLINE", "1")
     subject = toktier.load(family, config=config, device="cpu")
-    assert cpe.is_admitted(subject)
+    assert chunked.is_admitted(subject)
     sched = Scheduler(
         SchedulerConfig(
             workers=2, chunk_min_chars=20_000, chunk_target=8_000, start_timeout_s=300.0
         ),
         family=family,
         store=str(tmp_path / "store"),
-        planner=lambda text, k: cpe.plan_chunks(subject, text, k=k).spans,
+        planner=lambda text, k: chunked.plan(subject, text, k=k).spans,
     )
     sched.start()
     try:
@@ -562,7 +562,7 @@ def test_pool_ids_equal_serial_on_a_real_artifact(
             serial = list(subject.encode(text, lookup="off").ids)
             free = sched.encode_sync(text, None)
             assert free.error is None and free.ids == serial
-            assert free.how == "cpe" and free.chunks >= 2
+            assert free.how == "chunked" and free.chunks >= 2
             keyed = sched.encode_sync(text, "conv", kind="session")
             assert keyed.ids == serial
             more = text + " and one more turn."

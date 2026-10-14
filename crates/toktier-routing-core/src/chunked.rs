@@ -1,4 +1,9 @@
-//! Certified chunk-parallel encode (CPE) on the corrected CPU route.
+//! Certified chunk-parallel encode on the corrected CPU route.
+//!
+//! Like the rest of this internal supporting crate, the items exported from
+//! this module carry no independent API stability promise and may change in
+//! any release; the supported entry point is the Python module
+//! `toktier.chunked`.
 //!
 //! A long document is cut at *certified stable boundaries*, the chunks are
 //! encoded in parallel on a persistent pool of corrected-Gigatoken workers,
@@ -13,7 +18,7 @@
 //! also a certified cut of the *normalized* text. A cut that cannot be
 //! certified is simply not made: fewer chunks, never a different id.
 //!
-//! The plan semantics are those of the Python module `toktier.cpe`
+//! The plan semantics are those of the Python module `toktier.chunked`
 //! (`_Planner.plan`, `_LiteralGuard`, `_NfcRule`), position for position:
 //! every index below is a Unicode scalar-value index, targets are
 //! `len * i / k`, the quick scan looks 48 characters below a target and
@@ -31,8 +36,8 @@
 //! module decides it: no `normalizer` section, or the empty `Sequence`,
 //! or `NFC` with every added token matched on the input text
 //! (`normalized: false`). Anything else is encoded serially under
-//! `R_CPE_FAMILY_UNSUPPORTED`; a document without a certified cut is
-//! encoded serially under `R_CPE_NO_CUT`.
+//! `R_CHUNK_FAMILY_UNSUPPORTED`; a document without a certified cut is
+//! encoded serially under `R_CHUNK_NO_CUT`.
 //!
 //! Each chunk runs through the engine's own guarded full-encode gate, so
 //! the added-token gate, the corrected-Gigatoken closure check and the
@@ -61,15 +66,15 @@ use crate::fast_cpu::{FastCpuEngine, FastEncodeSource};
 use crate::{BpeSyncBoundary, ReferenceEngine, N_CODEPOINTS};
 
 /// Reason code of a document in which no certified cut was found.
-pub const R_CPE_NO_CUT: &str = "R_CPE_NO_CUT";
+pub const R_CHUNK_NO_CUT: &str = "R_CHUNK_NO_CUT";
 /// Reason code of a tokenizer outside the admitted set.
-pub const R_CPE_FAMILY_UNSUPPORTED: &str = "R_CPE_FAMILY_UNSUPPORTED";
+pub const R_CHUNK_FAMILY_UNSUPPORTED: &str = "R_CHUNK_FAMILY_UNSUPPORTED";
 /// Reason code of an input whose starting backend is not the corrected
-/// CPU engine (research build: chunking is CPU-route only).
-pub const R_CPE_ROUTE_NOT_FAST_CPU: &str = "R_CPE_ROUTE_NOT_FAST_CPU";
+/// CPU engine (chunking is CPU-route only).
+pub const R_CHUNK_ROUTE_NOT_FAST_CPU: &str = "R_CHUNK_ROUTE_NOT_FAST_CPU";
 /// How far below a target position the cut search looks before it gives
 /// that cut up (characters).
-pub const CPE_DEFAULT_SCAN_BUDGET: usize = 4096;
+pub const CHUNKED_DEFAULT_SCAN_BUDGET: usize = 4096;
 
 /// The first, cheap part of every cut search.
 const QUICK_SCAN: usize = 48;
@@ -184,7 +189,7 @@ pub struct ChunkedIds {
 }
 
 /// `(mode, refusal)` for the loader face's normalizer section, decided
-/// as `toktier.cpe._normalizer_mode` decides it.
+/// as `toktier.chunked._normalizer_mode` decides it.
 pub fn normalizer_mode(document: &Value) -> Result<NormalizerMode, String> {
     let Some(section) = document.get("normalizer") else {
         return Ok(NormalizerMode::None);
@@ -230,7 +235,7 @@ fn truthy(value: Option<&Value>) -> bool {
 }
 
 /// The added-token literals of the loader face, in document order, as
-/// `toktier.cpe._Planner` reads them.
+/// `toktier.chunked._Planner` reads them.
 pub fn face_literals(document: &Value) -> Vec<String> {
     document
         .get("added_tokens")
@@ -758,7 +763,7 @@ impl ChunkEncoder {
         }
     }
 
-    /// The cut plan for `text`, as `toktier.cpe.plan_chunks` computes it
+    /// The cut plan for `text`, as `toktier.chunked.plan` computes it
     /// (admission is the caller's concern; see [`ChunkEncoder::admitted`]).
     pub fn plan(
         &self,
@@ -964,14 +969,14 @@ impl FastCpuEngine {
                 })
             };
         if !encoder.admitted() {
-            return serial(self, Some(R_CPE_FAMILY_UNSUPPORTED), false, None);
+            return serial(self, Some(R_CHUNK_FAMILY_UNSUPPORTED), false, None);
         }
         if k <= 1 || total < MIN_TEXT_CHARS {
             return serial(self, None, true, None);
         }
         let plan = encoder.plan_counted(text, total, k, min_chunk, scan_budget)?;
         if plan.spans.len() == 1 {
-            return serial(self, Some(R_CPE_NO_CUT), false, Some(&plan));
+            return serial(self, Some(R_CHUNK_NO_CUT), false, Some(&plan));
         }
         let plan_ns = started.elapsed().as_nanos() as u64;
 
@@ -1057,7 +1062,7 @@ impl FastCpuEngine {
 
     /// The planner's admission facts.
     pub fn chunk_encoder(&self) -> Result<&ChunkEncoder, EngineError> {
-        self.cpe_cell()
+        self.chunked_cell()
             .get_or_init(|| {
                 ChunkEncoder::new(
                     self.tokenizer_json_bytes(),
@@ -1293,7 +1298,7 @@ mod tests {
         let total = count_chars(&text);
         for k in [2usize, 5, 16, 64] {
             let plan = encoder
-                .plan(&text, k, None, CPE_DEFAULT_SCAN_BUDGET)
+                .plan(&text, k, None, CHUNKED_DEFAULT_SCAN_BUDGET)
                 .unwrap();
             assert_eq!(plan.spans[0].0, 0);
             assert_eq!(plan.spans.last().unwrap().1, total);
@@ -1313,7 +1318,7 @@ mod tests {
         }
         // A tight floor gives up most cuts.
         let tight = encoder
-            .plan(&text, 8, Some(10_000), CPE_DEFAULT_SCAN_BUDGET)
+            .plan(&text, 8, Some(10_000), CHUNKED_DEFAULT_SCAN_BUDGET)
             .unwrap();
         assert!(tight.spans.len() <= 3 && tight.cut_misses >= 5);
     }
@@ -1330,18 +1335,18 @@ mod tests {
         assert_eq!(cut.cuts(), vec![110]);
         let text = "ab 12 ".repeat(50);
         let single = encoder
-            .plan(&text, 3, Some(150), CPE_DEFAULT_SCAN_BUDGET)
+            .plan(&text, 3, Some(150), CHUNKED_DEFAULT_SCAN_BUDGET)
             .unwrap();
         assert_eq!(single.spans.len(), 1);
         assert_eq!(single.cut_misses, 2);
         let two = encoder
-            .plan(&text, 3, Some(100), CPE_DEFAULT_SCAN_BUDGET)
+            .plan(&text, 3, Some(100), CHUNKED_DEFAULT_SCAN_BUDGET)
             .unwrap();
         assert_eq!(two.spans.len(), 2);
         assert!(two.spans.iter().all(|(a, b)| b - a >= 100));
         // Below the text floor nothing is cut.
         let short = encoder
-            .plan(&"a b".repeat(80), 4, None, CPE_DEFAULT_SCAN_BUDGET)
+            .plan(&"a b".repeat(80), 4, None, CHUNKED_DEFAULT_SCAN_BUDGET)
             .unwrap();
         assert_eq!(short.spans.len(), 1);
     }
@@ -1378,20 +1383,20 @@ mod tests {
         let plan = nfc
             .chunk_encoder()
             .unwrap()
-            .plan(&text, 2, None, CPE_DEFAULT_SCAN_BUDGET)
+            .plan(&text, 2, None, CHUNKED_DEFAULT_SCAN_BUDGET)
             .unwrap();
         assert_eq!(plan.spans.len(), 1);
         assert!(plan.norm_rejects >= 1);
         let encoded = nfc
-            .chunked_encode_ids(&text, 2, None, CPE_DEFAULT_SCAN_BUDGET)
+            .chunked_encode_ids(&text, 2, None, CHUNKED_DEFAULT_SCAN_BUDGET)
             .unwrap();
-        assert_eq!(encoded.serial_reason, Some(R_CPE_NO_CUT));
+        assert_eq!(encoded.serial_reason, Some(R_CHUNK_NO_CUT));
         assert_eq!(encoded.ids, nfc.encode_ids(&text).unwrap());
         let plain = engine(false, &[]);
         let plan = plain
             .chunk_encoder()
             .unwrap()
-            .plan(&text, 2, None, CPE_DEFAULT_SCAN_BUDGET)
+            .plan(&text, 2, None, CHUNKED_DEFAULT_SCAN_BUDGET)
             .unwrap();
         assert_eq!(plan.cuts(), vec![128]);
         let healthy = format!(
@@ -1402,7 +1407,7 @@ mod tests {
         );
         for fast in [&nfc, &plain] {
             let encoded = fast
-                .chunked_encode_ids(&healthy, 2, None, CPE_DEFAULT_SCAN_BUDGET)
+                .chunked_encode_ids(&healthy, 2, None, CHUNKED_DEFAULT_SCAN_BUDGET)
                 .unwrap();
             assert_eq!(encoded.cuts, vec![128]);
             assert_eq!(encoded.ids, fast.encode_ids(&healthy).unwrap());
@@ -1421,7 +1426,7 @@ mod tests {
         assert_eq!(expected, fast.reference().encode_ids(&text, false).unwrap());
         for k in [2usize, 4, 9, 32] {
             let encoded = fast
-                .chunked_encode_ids(&text, k, None, CPE_DEFAULT_SCAN_BUDGET)
+                .chunked_encode_ids(&text, k, None, CHUNKED_DEFAULT_SCAN_BUDGET)
                 .unwrap();
             assert_eq!(encoded.ids, expected, "k={k}");
             assert!(encoded.chunks >= 2);
@@ -1450,11 +1455,11 @@ mod tests {
         }
         // Below the threshold and k = 1 are serial without a reason.
         let short = fast
-            .chunked_encode_ids("tiny text", 4, None, CPE_DEFAULT_SCAN_BUDGET)
+            .chunked_encode_ids("tiny text", 4, None, CHUNKED_DEFAULT_SCAN_BUDGET)
             .unwrap();
         assert!(short.below_threshold && short.serial_reason.is_none() && short.chunks == 1);
         let one = fast
-            .chunked_encode_ids(&text, 1, None, CPE_DEFAULT_SCAN_BUDGET)
+            .chunked_encode_ids(&text, 1, None, CHUNKED_DEFAULT_SCAN_BUDGET)
             .unwrap();
         assert!(one.below_threshold && one.ids == expected);
         // A refused family is serial under the family reason.
@@ -1485,7 +1490,7 @@ mod tests {
                 scope.spawn(move || {
                     for _ in 0..4 {
                         let encoded = fast
-                            .chunked_encode_ids(text, k, None, CPE_DEFAULT_SCAN_BUDGET)
+                            .chunked_encode_ids(text, k, None, CHUNKED_DEFAULT_SCAN_BUDGET)
                             .unwrap();
                         assert_eq!(&encoded.ids, expected);
                     }

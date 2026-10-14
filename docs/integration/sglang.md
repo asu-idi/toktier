@@ -109,13 +109,13 @@ directory (the store is single-process). And under
 that does not carry context variables, so the `contextvar` key degrades to
 content lookup there; the timing log records which path served each call.
 
-## Long stateless requests: chunk-parallel encode (0.2.10)
+## Long stateless requests: chunk-parallel encode (0.3.0)
 
 A request that carries no session key and will not be extended -- a
 single-shot prompt of a few hundred thousand characters, say a document
 pasted into one turn -- is a stateless full encode, and a single encode
-runs on one core. Since 0.2.10 the wrapper can hand such requests to
-`toktier.cpe.chunked_encode`, the certified chunk-parallel encoder of the
+runs on one core. Since 0.3.0 the wrapper can hand such requests to
+`toktier.chunked.encode`, the certified chunk-parallel encoder of the
 CPU route (`docs/serving.md` Section 3): the text is cut at certified
 stable boundaries, the chunks run as one batch on the engine's worker
 pool, and the ids are concatenated -- the same ids as the serial encode,
@@ -124,18 +124,18 @@ by construction.
 It is off by default and switched on with a threshold:
 
 ```
-TOKTIER_SGLANG_CPE_MIN_CHARS=256000   # characters; 0 (default) = off
-TOKTIER_SGLANG_CPE_K=0                # chunk count; 0 = the shipped table
+TOKTIER_SGLANG_CHUNKED_MIN_CHARS=256000   # characters; 0 (default) = off
+TOKTIER_SGLANG_CHUNKED_K=0                # chunk count; 0 = the shipped table
 ```
 
 Which requests it serves: every request in `off` mode, and a request
 *without* a key in `contextvar` mode (one that carries neither
 `session_id` nor `cache_salt`), when it is at least
-`TOKTIER_SGLANG_CPE_MIN_CHARS` characters long. A keyed request stays on
+`TOKTIER_SGLANG_CHUNKED_MIN_CHARS` characters long. A keyed request stays on
 the session path whatever its length; `auto` mode is content lookup by
 design and is not touched. The threshold worth setting is the table's
 own floor, 256 K characters (below it the batch path is not faster than
-a single encode); `TOKTIER_SGLANG_CPE_K` exists to force the chunk count
+a single encode); `TOKTIER_SGLANG_CHUNKED_K` exists to force the chunk count
 for a measurement and is otherwise best left at `0`. An explicit
 `AdapterConfig.long_request_encoder` takes precedence over the built-in
 encoder for the same requests.
@@ -146,17 +146,17 @@ variable at `1` the chunks are encoded one after another (still exact).
 The workers are forked lazily on the first batch that needs them, about
 20 ms each, once per process.
 
-Each served request is recorded in the timing log with `how: "cpe"` and
-the fields `cpe_k`, `cpe_chunks` and `cpe_serial_reason` (`null` when the
-chunks ran; a reason code such as `R_CPE_NO_CUT` when the document was
+Each served request is recorded in the timing log with `how: "chunked"` and
+the fields `chunked_k`, `chunked_chunks` and `chunked_serial_reason` (`null` when the
+chunks ran; a reason code such as `R_CHUNK_NO_CUT` when the document was
 encoded serially after all), and the stats file carries the tokenizer's
-`cpe` diagnostics block. Correctness posture is unchanged: the chunked
+`chunked` diagnostics block. Correctness posture is unchanged: the chunked
 result equals the from-scratch reference encode (for an NFC family such
 as qwen3_8b, cuts are made only where they are also cuts of the
 normalized text; `docs/serving.md` Section 3), and the shadow check
 compares it like any other.
 
-## Scheduled encodes: a process pool behind the wrapper (0.2.10)
+## Scheduled encodes: a process pool behind the wrapper (0.3.0)
 
 Everything above runs the encode on the thread of SGLang's event loop,
 one request after another, so the tokenizer is a serial stage of the
@@ -179,7 +179,7 @@ policy that decides what each idle worker takes next:
   their service time (shortest first, aged so nothing waits without
   bound; `fifo` is available);
 - a stateless request of at least `chunk_min_chars` is cut at certified
-  stable boundaries (`toktier.cpe.plan_chunks`, the same cuts as the
+  stable boundaries (`toktier.chunked.plan`, the same cuts as the
   chunk-parallel encoder) into `min(workers, kmax, ceil(N /
   chunk_target))` chunk tasks that any worker may take, so a long
   request neither monopolizes one worker nor holds the short ones behind
@@ -206,7 +206,7 @@ Correctness posture is unchanged: the pool decides where and in what
 order the same encodes run, never what they return. Whatever a worker
 answers passes through the wrapper's template, shadow check and timing
 log like a serial encode (`how: "sched_session" | "sched_auto" |
-"sched_free" | "sched_cpe"`, with the chunk count, the wait and the
+"sched_free" | "sched_chunked"`, with the chunk count, the wait and the
 service time per request), and a request the pool cannot answer -- a
 worker that failed to start, exited, raised, or did not answer within
 `worker_timeout_s` -- is encoded in-process on the route it would have
@@ -220,7 +220,7 @@ every request, which on the host of `docs/serving.md` is about 0.6 ms at
 100 K characters and 6 ms at 1 M on the session path (0.4 and 4.8 ms
 serial), so the pool pays for itself on long or concurrent requests, not
 on short sequential ones. The registered patch-shaped native return
-(`docs/releases/v0.2.10.md`) is what removes the per-request stream copy.
+(`docs/releases/v0.3.0.md`) is what removes the per-request stream copy.
 
 ## Correctness posture, briefly
 

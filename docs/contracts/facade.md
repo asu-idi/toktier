@@ -253,12 +253,12 @@ or execution failure. Guard-routing diagnostic events always carry a `stage`
 key so their fast-CPU, native span-bridge, and facade state-encoding sources can
 be distinguished without parsing messages.
 
-Since 0.2.10 the full report may also carry blocks contributed by helpers
+Since 0.3.0 the full report may also carry blocks contributed by helpers
 layered over the facade, under the helper's name. The one shipped helper is
-`toktier.cpe` (chunk-parallel encode, Section 7), whose `cpe` block appears
+`toktier.chunked` (chunk-parallel encode, Section 7), whose `chunked` block appears
 once it has served the tokenizer: the admission decision and the normalizer
 shape, call counts, how many calls were chunked, serial fallbacks by reason
-code (`R_CPE_NO_CUT`, `R_CPE_FAMILY_UNSUPPORTED`), cut positions given up,
+code (`R_CHUNK_NO_CUT`, `R_CHUNK_FAMILY_UNSUPPORTED`), cut positions given up,
 literal and normalization rejections, and the last call's facts. Those
 reason codes are counted there and not in the top-level `fallback_counts`,
 because a serial fallback of the chunked path runs the same certified backend
@@ -686,7 +686,7 @@ well-formed-but-newer records, in the contract's explicit-verify split.
   returned `None`: on the certified configurations sessions are served
   by the native request runtime, which that lookup did not consult, so
   it answered `None` for every session the product actually stores.
-- `Session.append_patch(text)` (added in 0.2.10) is a second append
+- `Session.append_patch(text)` (added in 0.3.0) is a second append
   entry point beside `append`, returning a `SessionPatch` --
   `replace_from` and `replacement_ids` only, with the same meaning as
   the two fields of `SessionUpdate` and no `all_ids`. The two calls
@@ -698,8 +698,8 @@ well-formed-but-newer records, in the contract's explicit-verify split.
   whole stream on every append, so the call saves the update object and
   its copies and nothing more; a patch-shaped native return is later
   work and will not change this surface.
-- `toktier.cpe.chunked_encode(tokenizer, text, *, k=None, min_chunk=None,
-  scan_budget=4096)` (added in 0.2.10) returns a `ChunkedEncoding`, an
+- `toktier.chunked.encode(tokenizer, text, *, k=None, min_chunk=None,
+  scan_budget=4096)` (added in 0.3.0) returns a `ChunkedEncoding`, an
   `Encoding` whose `ids` equal `encode(text, lookup="off").ids` and which
   additionally reports `chunks`, `k_requested`, `cuts`, `cut_misses`,
   `literal_rejects`, `norm_rejects` and `serial_reason`. It is a helper
@@ -713,15 +713,14 @@ well-formed-but-newer records, in the contract's explicit-verify split.
   every fallback is serial on the plain route with the reason named. It does not consult the store and it
   returns the core stream. `docs/serving.md` Section 3 describes the
   chunk table and the parallelism it relies on.
-- `chunked_encode(..., native=True)`, `plan_chunks(..., native=True)`,
-  `cpe.warm`, `cpe.native_admission`, `cpe.native_available` and the
-  `Tokenizer.encode(..., parallel=None)` keyword (research build,
-  `dev-031`) run the same plan and the chunk encodes inside the native
-  runtime. `parallel` is `None` by default and then changes nothing;
+- `chunked.encode(..., native=True)`, `chunked.plan(..., native=True)`,
+  `chunked.warm`, `chunked.admission`, `chunked.native_available` and the
+  `Tokenizer.encode(..., parallel=None)` keyword run the same plan and
+  the chunk encodes inside the native runtime. `parallel` is `None` by default and then changes nothing;
   `"auto"` or a positive integer returns a `ChunkedEncoding` for a
   stateless core-stream call (no `session`, `lookup` omitted or
   `"off"`, `add_special_tokens=False`; anything else is a
   `ValueError`). The native path is used when the loaded runtime has
   it, the Python path otherwise. `ChunkedEncoding` gains
-  `native_facts` (`None` on the Python path) and `explain()["cpe"]`
+  `native_facts` (`None` on the Python path) and `explain()["chunked"]`
   gains `native_calls` and `last["native"]`.

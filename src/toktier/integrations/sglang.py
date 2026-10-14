@@ -72,13 +72,13 @@ re-verified) around the core ids; a tokenizer whose template cannot be
 expressed that way makes the wrapper delegate those calls to the wrapped
 tokenizer rather than guess.
 
-Long stateless requests: with ``AdapterConfig.cpe_min_chars`` set (env
-``TOKTIER_SGLANG_CPE_MIN_CHARS``), a request that would otherwise be a
+Long stateless requests: with ``AdapterConfig.chunked_min_chars`` set (env
+``TOKTIER_SGLANG_CHUNKED_MIN_CHARS``), a request that would otherwise be a
 stateless full encode -- every request in ``"off"`` mode, and a request
 without a key in ``"contextvar"`` mode -- and that is at least that many
-characters long is encoded through ``toktier.cpe.chunked_encode``
+characters long is encoded through ``toktier.chunked.encode``
 (certified chunk-parallel encode on the CPU route, ``docs/integration/
-sglang.md``). The default leaves it off; ``TOKTIER_SGLANG_CPE_K`` forces
+sglang.md``). The default leaves it off; ``TOKTIER_SGLANG_CHUNKED_K`` forces
 the chunk count (``0`` reads the shipped table).
 
 Threading: SGLang serializes tokenizer calls (event loop, or the single
@@ -192,9 +192,9 @@ class AdapterConfig:
     the counters at exit. ``long_request_encoder`` is a hook: a callable
     ``(text) -> Sequence[int]`` used for stateless encodes of inputs at
     least ``long_request_min_chars`` long; ``None`` keeps the certified
-    single-threaded route. ``cpe_min_chars`` (``0`` = off) enables the
+    single-threaded route. ``chunked_min_chars`` (``0`` = off) enables the
     shipped chunk-parallel encoder for stateless inputs at least that long,
-    and ``cpe_k`` forces its chunk count (``0`` reads the shipped table);
+    and ``chunked_k`` forces its chunk count (``0`` reads the shipped table);
     an explicit ``long_request_encoder`` takes precedence over it. Stateless
     means: every request in ``"off"`` mode, and a request without a key in
     ``"contextvar"`` mode (which otherwise takes content lookup).
@@ -221,8 +221,8 @@ class AdapterConfig:
     rid_separator: str | None = None
     long_request_encoder: Callable[[str], Sequence[int]] | None = None
     long_request_min_chars: int = 1 << 30
-    cpe_min_chars: int = 0
-    cpe_k: int = 0
+    chunked_min_chars: int = 0
+    chunked_k: int = 0
     device: str = "cpu"
     identity: str = "require"
     scheduler: SchedulerConfig | None = None
@@ -238,8 +238,8 @@ class AdapterConfig:
             )
         if not 0.0 <= self.shadow_rate <= 1.0:
             raise ValueError("shadow_rate must lie in [0, 1]")
-        if self.cpe_min_chars < 0 or self.cpe_k < 0:
-            raise ValueError("cpe_min_chars and cpe_k must be non-negative")
+        if self.chunked_min_chars < 0 or self.chunked_k < 0:
+            raise ValueError("chunked_min_chars and chunked_k must be non-negative")
         if self.identity not in _IDENTITY_MODES:
             raise ValueError(
                 f"identity must be one of {_IDENTITY_MODES!r}, not {self.identity!r}"
@@ -256,7 +256,7 @@ class AdapterConfig:
         (``FAMILY``, ``REPO``, ``SESSION_KEY``, ``STORE``, ``SHADOW_RATE``,
         ``SHADOW_DUMP_DIR``, ``TIMING_LOG``, ``STATS_FILE``,
         ``EXPLAIN_EVERY``, ``RID_SEPARATOR``, ``PER_PROCESS_STORE``,
-        ``CPE_MIN_CHARS``, ``CPE_K``, ``IDENTITY``). The scheduler is read
+        ``CHUNKED_MIN_CHARS``, ``CHUNKED_K``, ``IDENTITY``). The scheduler is read
         from ``TOKTIER_SGLANG_SCHED_*`` when ``TOKTIER_SGLANG_SCHED_WORKERS``
         is set to a positive number (:meth:`SchedulerConfig.from_env`).
         """
@@ -287,8 +287,8 @@ class AdapterConfig:
             stats_file=get("STATS_FILE"),
             explain_every=int(get("EXPLAIN_EVERY", 0)),
             rid_separator=get("RID_SEPARATOR"),
-            cpe_min_chars=int(get("CPE_MIN_CHARS", 0)),
-            cpe_k=int(get("CPE_K", 0)),
+            chunked_min_chars=int(get("CHUNKED_MIN_CHARS", 0)),
+            chunked_k=int(get("CHUNKED_K", 0)),
             identity=str(get("IDENTITY", "require")),
             scheduler=scheduler,
         )
@@ -635,8 +635,8 @@ class SGLangToktierTokenizer:
                 "shadow_note": shadow_note,
                 "identity": dict(self._identity),
                 "hf_class": type(hf_tokenizer).__name__,
-                "cpe_min_chars": self._cfg.cpe_min_chars,
-                "cpe_k": self._cfg.cpe_k,
+                "chunked_min_chars": self._cfg.chunked_min_chars,
+                "chunked_k": self._cfg.chunked_k,
                 "scheduler": (
                     None if self._sched is None else self._sched.stats()["policy"]
                 ),
@@ -650,17 +650,17 @@ class SGLangToktierTokenizer:
         """Start the pool; on any failure keep the serial path and say why."""
         planner: Callable[[str, int], Sequence[tuple[int, int]]] | None = None
         try:
-            from toktier import cpe
+            from toktier import chunked
 
-            if cpe.is_admitted(self._tok):
+            if chunked.is_admitted(self._tok):
                 subject = self._tok
 
                 def planner(text: str, k: int) -> Sequence[tuple[int, int]]:
-                    return cpe.plan_chunks(subject, text, k=k).spans
+                    return chunked.plan(subject, text, k=k).spans
 
             else:
                 self._sched_note = (
-                    "chunking off: " + str(cpe.stats(self._tok).get("refusal"))
+                    "chunking off: " + str(chunked.stats(self._tok).get("refusal"))
                 )
         except Exception as ex:  # no chunking, but the pool is still worth having
             self._sched_note = f"chunking off: {type(ex).__name__}"
@@ -1005,18 +1005,18 @@ class SGLangToktierTokenizer:
                 how = "long_request_encoder"
             elif (
                 stateless
-                and self._cfg.cpe_min_chars > 0
-                and len(text) >= self._cfg.cpe_min_chars
+                and self._cfg.chunked_min_chars > 0
+                and len(text) >= self._cfg.chunked_min_chars
             ):
-                from toktier.cpe import chunked_encode
+                from toktier import chunked
 
-                encoded = chunked_encode(self._tok, text, k=self._cfg.cpe_k or None)
+                encoded = chunked.encode(self._tok, text, k=self._cfg.chunked_k or None)
                 core = list(encoded.ids)
-                how = "cpe"
+                how = "chunked"
                 extra = {
-                    "cpe_k": encoded.k_requested,
-                    "cpe_chunks": encoded.chunks,
-                    "cpe_serial_reason": encoded.serial_reason,
+                    "chunked_k": encoded.k_requested,
+                    "chunked_chunks": encoded.chunks,
+                    "chunked_serial_reason": encoded.serial_reason,
                 }
             elif key is not None:
                 core = list(self._tok.encode(text, session=key).ids)
@@ -1310,8 +1310,8 @@ class SGLangToktierTokenizer:
                 report = self._tok.explain()
                 out["store"] = report.get("store")
                 out["fallback_counts"] = report.get("fallback_counts")
-                if "cpe" in report:
-                    out["cpe"] = report["cpe"]
+                if "chunked" in report:
+                    out["chunked"] = report["chunked"]
             except Exception as ex:
                 out["store"] = f"explain_error:{type(ex).__name__}"
         if self._sched is not None:

@@ -6,7 +6,7 @@ tests pin the pure-Python contract: delegation, the session-key plumbing,
 the special-token template derivation, the identity gate, attribute
 forwarding, the shadow reference, and the manager attachment. One test
 at the end uses a real artifact when ``TOKTIER_TEST_ARTIFACTS`` names a
-directory of local artifacts (the convention of ``tests/test_cpe.py``).
+directory of local artifacts (the convention of ``tests/test_chunked.py``).
 """
 
 from __future__ import annotations
@@ -218,7 +218,7 @@ def test_attach_to_manager_wraps_and_binds() -> None:
     assert SESSION_KEY.get() is None
 
 
-# -- chunk-parallel encode wiring (0.2.10) ----------------------------------
+# -- chunk-parallel encode wiring (0.3.0) -----------------------------------
 
 
 class _Ids:
@@ -249,7 +249,7 @@ class _FakeToktier:
         return _Ids(tuple(ord(c) for c in text))
 
     def explain(self, summary: bool = False) -> dict[str, object]:
-        return {"store": None, "fallback_counts": {}, "cpe": {"calls": 1}}
+        return {"store": None, "fallback_counts": {}, "chunked": {"calls": 1}}
 
     def close(self) -> None:
         self.closed = True
@@ -263,20 +263,20 @@ class _Chunked:
         self.serial_reason = None
 
 
-def test_config_cpe_fields_from_env_and_validation() -> None:
+def test_config_chunked_fields_from_env_and_validation() -> None:
     cfg = AdapterConfig.from_env(
-        {"TOKTIER_SGLANG_CPE_MIN_CHARS": "4000", "TOKTIER_SGLANG_CPE_K": "4"}
+        {"TOKTIER_SGLANG_CHUNKED_MIN_CHARS": "4000", "TOKTIER_SGLANG_CHUNKED_K": "4"}
     )
-    assert cfg.cpe_min_chars == 4000 and cfg.cpe_k == 4
-    assert AdapterConfig.from_env({}).cpe_min_chars == 0
-    assert AdapterConfig.from_env({}).cpe_k == 0
+    assert cfg.chunked_min_chars == 4000 and cfg.chunked_k == 4
+    assert AdapterConfig.from_env({}).chunked_min_chars == 0
+    assert AdapterConfig.from_env({}).chunked_k == 0
     with pytest.raises(ValueError):
-        AdapterConfig(cpe_min_chars=-1)
+        AdapterConfig(chunked_min_chars=-1)
     with pytest.raises(ValueError):
-        AdapterConfig(cpe_k=-1)
+        AdapterConfig(chunked_k=-1)
 
 
-def test_cpe_serves_long_stateless_requests_only(
+def test_chunked_serves_long_stateless_requests_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake = _FakeToktier()
@@ -288,24 +288,24 @@ def test_cpe_serves_long_stateless_requests_only(
         seen.append((text, k))
         return _Chunked(text, k)
 
-    monkeypatch.setattr("toktier.cpe.chunked_encode", chunked)
+    monkeypatch.setattr("toktier.chunked.encode", chunked)
     long_text = "x" * 20
-    # "off": short stays on the stateless route, long takes CPE.
+    # "off": short stays on the stateless route, long is chunked.
     w = wrap_tokenizer(
-        _StubHf(), AdapterConfig(session_key="off", cpe_min_chars=10, cpe_k=4)
+        _StubHf(), AdapterConfig(session_key="off", chunked_min_chars=10, chunked_k=4)
     )
     assert w.encode("short", add_special_tokens=False) == [ord(c) for c in "short"]
     assert fake.calls == [{"lookup": "off"}]
     assert w.encode(long_text, add_special_tokens=False) == [ord("x")] * 20
     assert seen == [(long_text, 4)]
-    assert w.stats()["how"] == {"off": 1, "cpe": 1}
-    assert w.stats()["cpe"] == {"calls": 1}
+    assert w.stats()["how"] == {"off": 1, "chunked": 1}
+    assert w.stats()["chunked"] == {"calls": 1}
     # "contextvar": a keyed request stays on the session path whatever its
-    # length; a keyless long one takes CPE (the table, since cpe_k is 0).
+    # length; a keyless long one is chunked (the table, since chunked_k is 0).
     fake.calls.clear()
     seen.clear()
     w2 = wrap_tokenizer(
-        _StubHf(), AdapterConfig(session_key="contextvar", cpe_min_chars=10)
+        _StubHf(), AdapterConfig(session_key="contextvar", chunked_min_chars=10)
     )
     with bind_session_key("conv"):
         assert w2.encode(long_text, add_special_tokens=False) == [ord("x")] * 20
@@ -314,11 +314,13 @@ def test_cpe_serves_long_stateless_requests_only(
     assert seen == [(long_text, None)]
     assert w2.encode("short", add_special_tokens=False) == [ord(c) for c in "short"]
     assert fake.calls[-1] == {}
-    assert w2.stats()["how"] == {"session": 1, "cpe": 1, "auto": 1}
-    # "auto": content lookup by design; CPE never fires.
+    assert w2.stats()["how"] == {"session": 1, "chunked": 1, "auto": 1}
+    # "auto": content lookup by design; chunking never fires.
     fake.calls.clear()
     seen.clear()
-    w3 = wrap_tokenizer(_StubHf(), AdapterConfig(session_key="auto", cpe_min_chars=10))
+    w3 = wrap_tokenizer(
+        _StubHf(), AdapterConfig(session_key="auto", chunked_min_chars=10)
+    )
     assert w3.encode(long_text, add_special_tokens=False) == [ord("x")] * 20
     assert seen == [] and fake.calls == [{}]
     # Off by default: nothing changes for a wrapper without the option.
@@ -334,8 +336,8 @@ def test_explicit_long_request_encoder_takes_precedence(
     fake = _FakeToktier()
     monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
     monkeypatch.setattr(
-        "toktier.cpe.chunked_encode",
-        lambda *a, **k: pytest.fail("cpe must not run behind an explicit hook"),
+        "toktier.chunked.encode",
+        lambda *a, **k: pytest.fail("chunking must not run behind an explicit hook"),
     )
     w = wrap_tokenizer(
         _StubHf(),
@@ -343,7 +345,7 @@ def test_explicit_long_request_encoder_takes_precedence(
             session_key="off",
             long_request_encoder=lambda text: [1, 2, 3],
             long_request_min_chars=5,
-            cpe_min_chars=5,
+            chunked_min_chars=5,
         ),
     )
     assert w.encode("x" * 8, add_special_tokens=False) == [1, 2, 3]

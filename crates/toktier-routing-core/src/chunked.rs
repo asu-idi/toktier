@@ -35,9 +35,13 @@
 //! Admission is decided from the artifact document exactly as the Python
 //! module decides it: no `normalizer` section, or the empty `Sequence`,
 //! or `NFC` with every added token matched on the input text
-//! (`normalized: false`). Anything else is encoded serially under
-//! `R_CHUNK_FAMILY_UNSUPPORTED`; a document without a certified cut is
-//! encoded serially under `R_CHUNK_NO_CUT`.
+//! (`normalized: false`); and, for a normalizer shape so admitted, no
+//! added token that sets `lstrip`, `rstrip` or `single_word` (each of
+//! these lets the text next to a literal change how the literal is
+//! matched, so a cut beside it would not be a certified boundary).
+//! Anything else is encoded serially under `R_CHUNK_FAMILY_UNSUPPORTED`;
+//! a document without a certified cut is encoded serially under
+//! `R_CHUNK_NO_CUT`.
 //!
 //! Each chunk runs through the engine's own guarded full-encode gate, so
 //! the added-token gate, the corrected-Gigatoken closure check and the
@@ -188,9 +192,45 @@ pub struct ChunkedIds {
     pub cold_forks: usize,
 }
 
-/// `(mode, refusal)` for the loader face's normalizer section, decided
-/// as `toktier.chunked._normalizer_mode` decides it.
+/// Refusal of a face with an added token that sets `lstrip`, `rstrip` or
+/// `single_word`: the reference absorbs the whitespace next to a
+/// stripping literal into its match, and matches a `single_word` literal
+/// only when its neighbours are not word characters, so a cut beside
+/// such a literal can change the ids although the boundary predicate and
+/// the literal guard accept it (an `rstrip` literal followed by a space,
+/// a `single_word` literal after a letter). The face is refused for the
+/// flag itself, whether or not the cut rule would reach such a cut.
+pub const ADDED_TOKEN_FLAGS_REFUSAL: &str = "added_token_strip_or_single_word";
+
+/// The added-token flags that refuse admission (any one set is enough).
+const REFUSED_ADDED_TOKEN_FLAGS: [&str; 3] = ["lstrip", "rstrip", "single_word"];
+
+/// `(mode, refusal)` for the loader face's normalizer section and its
+/// added-token flags, decided as `toktier.chunked._normalizer_mode`
+/// decides it: the normalizer shape first (its refusals take
+/// precedence), then, for an admitted shape, [`ADDED_TOKEN_FLAGS_REFUSAL`]
+/// when any added-token object sets `lstrip`, `rstrip` or `single_word`
+/// (Python truthiness).
 pub fn normalizer_mode(document: &Value) -> Result<NormalizerMode, String> {
+    let mode = normalizer_shape(document)?;
+    let flagged = document
+        .get("added_tokens")
+        .and_then(Value::as_array)
+        .is_some_and(|rows| {
+            rows.iter().filter_map(Value::as_object).any(|row| {
+                REFUSED_ADDED_TOKEN_FLAGS
+                    .iter()
+                    .any(|flag| truthy(row.get(*flag)))
+            })
+        });
+    if flagged {
+        return Err(ADDED_TOKEN_FLAGS_REFUSAL.to_owned());
+    }
+    Ok(mode)
+}
+
+/// The normalizer-shape half of [`normalizer_mode`].
+fn normalizer_shape(document: &Value) -> Result<NormalizerMode, String> {
     let Some(section) = document.get("normalizer") else {
         return Ok(NormalizerMode::None);
     };
@@ -1094,6 +1134,14 @@ mod tests {
     use tokenizers::{AddedToken, Tokenizer};
 
     fn tokenizer_json(nfc: bool, added: &[&str]) -> Vec<u8> {
+        let added = added
+            .iter()
+            .map(|item| AddedToken::from(*item, true).normalized(false))
+            .collect::<Vec<_>>();
+        tokenizer_json_with(nfc, &added)
+    }
+
+    fn tokenizer_json_with(nfc: bool, added: &[AddedToken]) -> Vec<u8> {
         let visible = (33u32..=126)
             .chain(161..=172)
             .chain(174..=255)
@@ -1122,12 +1170,7 @@ mod tests {
             tokenizer.with_normalizer(Some(NFC));
         }
         if !added.is_empty() {
-            tokenizer.add_special_tokens(
-                &added
-                    .iter()
-                    .map(|item| AddedToken::from(*item, true).normalized(false))
-                    .collect::<Vec<_>>(),
-            );
+            tokenizer.add_special_tokens(added);
         }
         tokenizer.to_string(false).unwrap().into_bytes()
     }
@@ -1160,7 +1203,10 @@ mod tests {
     }
 
     fn engine(nfc: bool, added: &[&str]) -> Arc<FastCpuEngine> {
-        let json = tokenizer_json(nfc, added);
+        engine_from_json(nfc, tokenizer_json(nfc, added))
+    }
+
+    fn engine_from_json(nfc: bool, json: Vec<u8>) -> Arc<FastCpuEngine> {
         let reference = Arc::new(ReferenceEngine::from_bytes(&json).unwrap());
         let digest = Sha256::digest(&json)
             .iter()
@@ -1245,6 +1291,192 @@ mod tests {
             Err("normalizer_not_supported".to_owned())
         );
         assert_eq!(face_literals(&nfc), vec!["<a>".to_owned()],);
+    }
+
+    #[test]
+    fn added_token_flags_refuse_an_admitted_normalizer_shape() {
+        fn face(normalizer: Option<Value>, rows: Value) -> Value {
+            let mut document = serde_json::json!({ "added_tokens": rows });
+            if let Some(normalizer) = normalizer {
+                document["normalizer"] = normalizer;
+            }
+            document
+        }
+        let admitted_shapes = [
+            (None, NormalizerMode::None),
+            (Some(Value::Null), NormalizerMode::None),
+            (
+                Some(serde_json::json!({"type": "Sequence", "normalizers": []})),
+                NormalizerMode::None,
+            ),
+            (
+                Some(serde_json::json!({"type": "NFC"})),
+                NormalizerMode::Nfc,
+            ),
+        ];
+        for (normalizer, mode) in admitted_shapes {
+            // Flags absent, false, or falsy in the Python sense, and rows
+            // that are not objects: the shape decides alone.
+            let plain = face(
+                normalizer.clone(),
+                serde_json::json!([
+                    {"content": "<a>", "normalized": false},
+                    {"content": "<b>", "normalized": false,
+                     "lstrip": false, "rstrip": false, "single_word": false},
+                    {"content": "<c>", "normalized": false,
+                     "lstrip": null, "rstrip": 0, "single_word": ""},
+                    "lstrip",
+                    true
+                ]),
+            );
+            assert_eq!(normalizer_mode(&plain), Ok(mode), "{normalizer:?}");
+            // Any one flag that is truthy in the Python sense refuses.
+            for flag in REFUSED_ADDED_TOKEN_FLAGS {
+                for value in [
+                    serde_json::json!(true),
+                    serde_json::json!(1),
+                    serde_json::json!("yes"),
+                ] {
+                    let mut row = serde_json::json!({"content": "<x>", "normalized": false});
+                    row[flag] = value.clone();
+                    let flagged = face(
+                        normalizer.clone(),
+                        serde_json::json!([{"content": "<a>", "normalized": false}, row]),
+                    );
+                    assert_eq!(
+                        normalizer_mode(&flagged),
+                        Err(ADDED_TOKEN_FLAGS_REFUSAL.to_owned()),
+                        "{flag}={value} {normalizer:?}"
+                    );
+                }
+            }
+        }
+        // The normalizer-shape refusals keep their precedence.
+        let flagged = serde_json::json!([{"content": "<x>", "normalized": true, "rstrip": true}]);
+        for (normalizer, refusal) in [
+            (
+                serde_json::json!({"type": "NFKC"}),
+                "normalizer_not_supported:NFKC",
+            ),
+            (
+                serde_json::json!({"type": "Sequence", "normalizers": [{"type": "NFC"}]}),
+                "normalizer_not_supported:Sequence",
+            ),
+            (serde_json::json!([1]), "normalizer_not_supported"),
+            (
+                serde_json::json!({"type": "NFC"}),
+                "nfc_with_normalized_added_tokens",
+            ),
+        ] {
+            assert_eq!(
+                normalizer_mode(&face(Some(normalizer), flagged.clone())),
+                Err(refusal.to_owned())
+            );
+        }
+        // Without a normalizer the same row is refused for its flag, and
+        // the refusal leaves the literal list as it is.
+        assert_eq!(
+            normalizer_mode(&face(None, flagged.clone())),
+            Err(ADDED_TOKEN_FLAGS_REFUSAL.to_owned())
+        );
+        assert_eq!(face_literals(&face(None, flagged)), vec!["<x>".to_owned()]);
+    }
+
+    #[test]
+    fn a_literal_with_a_strip_or_word_flag_is_encoded_serially() {
+        // (flag, a repeated unit that puts the literal next to the
+        // character the flag reads, one cut beside the literal, and
+        // whether the cut rule itself reaches that cut). The `lstrip` cut
+        // has whitespace on its left, and no certified pair does, so the
+        // rule does not make it under this profile; the face is refused
+        // for the flag all the same.
+        let cases = [
+            ("rstrip", "<|x|> hello ", "<|x|>", " hello", true),
+            ("lstrip", "hello <|x|> ", "hello ", "<|x|>", false),
+            ("single_word", "foo<|x|> bar ", "foo", "<|x|> bar", true),
+        ];
+        let plain = engine(false, &["<|x|>"]);
+        for (flag, unit, left, right, reached) in cases {
+            let token = AddedToken::from("<|x|>", true).normalized(false);
+            let token = match flag {
+                "rstrip" => token.rstrip(true),
+                "lstrip" => token.lstrip(true),
+                _ => token.single_word(true),
+            };
+            let fast = engine_from_json(false, tokenizer_json_with(false, &[token]));
+            let reference = fast.reference();
+            let halves = |engine: &FastCpuEngine| {
+                let mut ids = engine.reference().encode_ids(left, false).unwrap();
+                ids.extend(engine.reference().encode_ids(right, false).unwrap());
+                ids
+            };
+            // The flag is what makes the cut beside the literal unsafe:
+            // with it the whole encode and the two halves differ, without
+            // it they agree.
+            let whole = format!("{left}{right}");
+            assert!(
+                reference.encode_ids(&whole, false).unwrap() != halves(&fast),
+                "{flag}: the halves agree with the whole encode"
+            );
+            assert!(
+                plain.reference().encode_ids(&whole, false).unwrap() == halves(&plain),
+                "{flag}: the unflagged halves differ from the whole encode"
+            );
+
+            // Where the cut rule reaches such a cut, it would cut the
+            // document into rows whose concatenation is not the whole
+            // encode ...
+            let text = unit.repeat(400);
+            let expected = reference.encode_ids(&text, false).unwrap();
+            let encoder = fast.chunk_encoder().unwrap();
+            if reached {
+                let plan = encoder
+                    .plan(&text, 32, None, CHUNKED_DEFAULT_SCAN_BUDGET)
+                    .unwrap();
+                assert!(plan.spans.len() > 1, "{flag}");
+                let mut rows = Vec::new();
+                for &(low, high) in &plan.byte_spans {
+                    rows.extend(reference.encode_ids(&text[low..high], false).unwrap());
+                }
+                assert!(
+                    rows != expected,
+                    "{flag}: the plan's rows concatenate to the whole encode"
+                );
+            }
+
+            // ... so structural admission refuses the face, and the
+            // document is encoded serially: the ids are the route's own
+            // serial encode.
+            assert!(!encoder.admitted(), "{flag}");
+            assert_eq!(encoder.refusal(), Some(ADDED_TOKEN_FLAGS_REFUSAL));
+            assert_eq!(encoder.normalizer(), None);
+            assert_eq!(encoder.literal_count(), 1);
+            let serial = fast.encode_ids(&text).unwrap();
+            for k in [2usize, 8, 32] {
+                let encoded = fast
+                    .chunked_encode_ids(&text, k, None, CHUNKED_DEFAULT_SCAN_BUDGET)
+                    .unwrap();
+                assert_eq!(encoded.chunks, 1, "{flag} k={k}");
+                assert_eq!(encoded.serial_reason, Some(R_CHUNK_FAMILY_UNSUPPORTED));
+                assert!(!encoded.below_threshold);
+                assert!(encoded.ids == serial, "{flag} k={k}: ids differ");
+            }
+            assert!(fast
+                .chunked_plan(&text, 8, None, CHUNKED_DEFAULT_SCAN_BUDGET)
+                .is_err());
+
+            // The same text under the unflagged literal is chunked, and
+            // its rows concatenate to the whole encode.
+            let chunked = plain
+                .chunked_encode_ids(&text, 8, None, CHUNKED_DEFAULT_SCAN_BUDGET)
+                .unwrap();
+            assert!(chunked.chunks >= 2, "{flag}");
+            assert!(
+                chunked.ids == plain.reference().encode_ids(&text, false).unwrap(),
+                "{flag}: unflagged chunked ids differ"
+            );
+        }
+        assert!(plain.chunk_encoder().unwrap().admitted());
     }
 
     #[test]

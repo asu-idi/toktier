@@ -140,7 +140,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from .sglang_sched import SchedResult, Scheduler, SchedulerConfig, _parse_flag
+from .sglang_sched import SchedResult, Scheduler, SchedulerConfig, parse_flag
 
 __all__ = [
     "SESSION_KEY",
@@ -335,7 +335,7 @@ class AdapterConfig:
             repo_id=get("REPO"),
             session_key=str(get("SESSION_KEY", "auto")),
             store=get("STORE"),
-            per_process_store=_parse_flag(
+            per_process_store=parse_flag(
                 _ENV_PREFIX + "PER_PROCESS_STORE",
                 e.get(_ENV_PREFIX + "PER_PROCESS_STORE"),
                 True,

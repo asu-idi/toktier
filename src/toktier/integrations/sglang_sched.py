@@ -85,6 +85,7 @@ __all__ = [
     "SchedulerConfig",
     "content_share",
     "parse_cores",
+    "parse_flag",
 ]
 
 _ENV_PREFIX = "TOKTIER_SGLANG_SCHED_"
@@ -98,12 +99,13 @@ _FLAG_ON = ("1", "true", "yes")
 _FLAG_OFF = ("0", "false", "no")
 
 
-def _parse_flag(variable: str, value: str | None, default: bool) -> bool:
-    """One on/off setting: unset or empty keeps ``default``, a value in
-    :data:`_FLAG_ON` or :data:`_FLAG_OFF` (any case) sets it, and any other
-    value raises ``ValueError`` naming ``variable``, so a mistyped setting
-    is refused rather than read as on. Shared with the adapter's
-    ``PER_PROCESS_STORE``."""
+def parse_flag(variable: str, value: str | None, default: bool) -> bool:
+    """One on/off setting: unset or empty keeps ``default``; ``1``, ``true``
+    or ``yes`` sets it on and ``0``, ``false`` or ``no`` sets it off, in any
+    letter case; any other value raises ``ValueError`` whose message starts
+    with ``variable``, so a mistyped setting is refused rather than read as
+    on. The scheduler's ``AFFINITY`` and ``CALIBRATE`` and the adapter's
+    ``PER_PROCESS_STORE`` are read through it."""
     if value is None or value == "":
         return default
     word = value.lower()
@@ -248,7 +250,7 @@ class SchedulerConfig:
             return default if value in (None, "") else value
 
         def flag(name: str, default: bool) -> bool:
-            return _parse_flag(_ENV_PREFIX + name, env.get(_ENV_PREFIX + name), default)
+            return parse_flag(_ENV_PREFIX + name, env.get(_ENV_PREFIX + name), default)
 
         base = cls()
         return cls(

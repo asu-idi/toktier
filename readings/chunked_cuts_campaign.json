@@ -5,7 +5,7 @@
     "tool": "maintainer transcription of the 2026-09-17 campaign records",
     "tool_version": "0",
     "source_commit": "fb6a0638052b767cfc3e9f5ede307629e7ffb4f2",
-    "generated_at": "2026-10-14T04:21:42Z"
+    "generated_at": "2026-10-14T04:42:26Z"
   },
   "campaign": {
     "run_id": "chunked-cuts-20260917",
@@ -57,6 +57,7 @@
     {
       "family": "deepseek_v3",
       "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
+      "loader_face_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
       "normalizer": "none",
       "paths": [
         "python"
@@ -84,6 +85,7 @@
     {
       "family": "gpt_oss_120b",
       "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+      "loader_face_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
       "normalizer": "none",
       "paths": [
         "python"
@@ -111,6 +113,7 @@
     {
       "family": "llama_3_1_8b",
       "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
+      "loader_face_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
       "normalizer": "none",
       "paths": [
         "python"
@@ -138,6 +141,7 @@
     {
       "family": "qwen3_8b",
       "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "loader_face_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
       "normalizer": "nfc",
       "paths": [
         "python"
@@ -169,6 +173,7 @@
       {
         "family": "deepseek_v3",
         "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
+        "loader_face_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
         "normalizer": "none",
         "paths": [
           "python"
@@ -190,6 +195,7 @@
       {
         "family": "gpt_oss_120b",
         "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+        "loader_face_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
         "normalizer": "none",
         "paths": [
           "python"
@@ -211,6 +217,7 @@
       {
         "family": "llama_3_1_8b",
         "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
+        "loader_face_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
         "normalizer": "none",
         "paths": [
           "python"
@@ -232,6 +239,7 @@
       {
         "family": "minimax_m3",
         "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
+        "loader_face_sha256": null,
         "normalizer": "nfc",
         "paths": [
           "python"
@@ -253,6 +261,7 @@
       {
         "family": "qwen3_5_08b",
         "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+        "loader_face_sha256": null,
         "normalizer": "nfc",
         "paths": [
           "python"
@@ -274,6 +283,7 @@
       {
         "family": "qwen3_8b",
         "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+        "loader_face_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
         "normalizer": "nfc",
         "paths": [
           "python"
@@ -296,5 +306,5 @@
   },
   "not_reasoned": [],
   "notes": "Transcribed from the campaign records of 2026-09-17, taken on the chunk-cut rule as it stood before this release renamed the module and added the admission gate: the chunked source identity was not recorded then (null above), the native path did not run, and the serial reason codes are written under their current names. The operating system of the compute nodes was not recorded beyond the kernel family. These readings seed the admission table until the release campaign (every roster family, Python and native paths, four-way comparison) replaces this file.",
-  "root_digest": "sha256:b46244814dbabd53bd6d7f24a80860324a69f1a51e0c89bc4f7d68c44697b412"
+  "root_digest": "sha256:24a422817031a6f8f4edfa6bb187edd576851fd24d805723ffbc99df14a0eb84"
 }

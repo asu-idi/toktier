@@ -4,15 +4,16 @@
   "generated_by": {
     "tool": "tools/update_chunked_admission.py",
     "tool_version": "1.0.0",
-    "source_commit": "de3c9bf2a60c375c65c6344c6368285f5ab59fe9",
-    "generated_at": "2026-10-14T04:21:43Z"
+    "source_commit": "54d12492c8132414895ba6ddbe42e6d6d02c9e03",
+    "generated_at": "2026-10-14T04:42:26Z"
   },
-  "chunked_identity": "sha256:1af9141f669e4da0e5c781c09fac84ec02bd955cd8dfa16005c12c42fe6a9743",
+  "chunked_identity": "sha256:f565ffd17ae30e7586e11c76d00644d84a183d2dc6884630389d2e355cc6ab4d",
   "fast_cpu_source_digest_v2": "c21b757333f4ab2dba68f243ecc218b8a299668bacab89da017934ed3eef47ca",
   "rows": [
     {
       "family": "deepseek_v3",
       "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
+      "loader_face_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
       "normalizer": "none",
       "status": "certified",
       "paths": [
@@ -32,6 +33,7 @@
     {
       "family": "gpt_oss_120b",
       "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+      "loader_face_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
       "normalizer": "none",
       "status": "certified",
       "paths": [
@@ -51,6 +53,7 @@
     {
       "family": "llama_3_1_8b",
       "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
+      "loader_face_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
       "normalizer": "none",
       "status": "certified",
       "paths": [
@@ -70,6 +73,7 @@
     {
       "family": "minimax_m3",
       "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
+      "loader_face_sha256": null,
       "normalizer": "nfc",
       "status": "adversarial_only",
       "paths": [],
@@ -86,6 +90,7 @@
     {
       "family": "qwen3_5_08b",
       "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+      "loader_face_sha256": null,
       "normalizer": "nfc",
       "status": "adversarial_only",
       "paths": [],
@@ -102,6 +107,7 @@
     {
       "family": "qwen3_8b",
       "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "loader_face_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
       "normalizer": "nfc",
       "status": "certified",
       "paths": [
@@ -119,5 +125,5 @@
       "adversarial_strings": 100000
     }
   ],
-  "root_digest": "sha256:01eaa179949db7d5cde126941fabfae5e6ade792c2bdaa6775a8d00580cbfbd9"
+  "root_digest": "sha256:c036595d862ec8cba3ffa3921016ac379cedd996a8c905936578db4cd0e68e38"
 }

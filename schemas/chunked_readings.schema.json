@@ -209,6 +209,7 @@
       "required": [
         "family",
         "artifact_sha256",
+        "loader_face_sha256",
         "normalizer",
         "paths",
         "docs",
@@ -227,6 +228,10 @@
       "properties": {
         "family": { "$ref": "#/$defs/identifier" },
         "artifact_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "loader_face_sha256": {
+          "description": "SHA-256 of the loader-face document (the tokenizer JSON the pinned loader materialized) the readings were taken on; null when not recorded.",
+          "oneOf": [{ "$ref": "#/$defs/sha256_hex" }, { "type": "null" }]
+        },
         "normalizer": { "enum": ["none", "nfc"] },
         "paths": { "$ref": "#/$defs/paths" },
         "docs": { "$ref": "#/$defs/count" },
@@ -251,6 +256,7 @@
       "required": [
         "family",
         "artifact_sha256",
+        "loader_face_sha256",
         "normalizer",
         "paths",
         "strings",
@@ -265,6 +271,10 @@
       "properties": {
         "family": { "$ref": "#/$defs/identifier" },
         "artifact_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "loader_face_sha256": {
+          "description": "SHA-256 of the loader-face document (the tokenizer JSON the pinned loader materialized) the readings were taken on; null when not recorded.",
+          "oneOf": [{ "$ref": "#/$defs/sha256_hex" }, { "type": "null" }]
+        },
         "normalizer": { "enum": ["none", "nfc"] },
         "paths": { "$ref": "#/$defs/paths" },
         "strings": { "$ref": "#/$defs/count" },

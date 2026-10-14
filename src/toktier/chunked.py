@@ -85,7 +85,9 @@ the refusal is counted under ``R_CHUNK_FAMILY_UNSUPPORTED`` and named in
 ``explain()["chunked"]["refusal"]`` (``artifact_without_chunked_evidence``
 for a roster artifact without a row,
 ``chunked_evidence_incomplete:<status>`` for a row with one level
-recorded). A document in which no certified
+recorded, ``loader_face_differs_from_chunked_evidence:<digest>`` when the
+live loader face is not the one the row's evidence was taken on). A
+document in which no certified
 cut can be found is encoded serially under ``R_CHUNK_NO_CUT``. Both
 counters, and the per-call facts, are read back from
 ``Tokenizer.explain()["chunked"]`` once this module has served the
@@ -236,6 +238,7 @@ _R_FAMILY = ReasonCode.R_CHUNK_FAMILY_UNSUPPORTED.value
 #: only (``chunked_evidence_incomplete:adversarial_only`` and the like).
 _R_EVIDENCE = "artifact_without_chunked_evidence"
 _R_INCOMPLETE = "chunked_evidence_incomplete"
+_R_FACE = "loader_face_differs_from_chunked_evidence"
 _STATUS_CERTIFIED = "certified"
 
 #: The shipped admission table and the domain its root digest is taken in
@@ -558,6 +561,7 @@ class _Planner:
         self.evidence_id: str | None = None
         self.evidence_status: str | None = None
         self.evidence_paths: tuple[str, ...] = ()
+        self.loader_face_sha256: str | None = None
         self._rule: _NfcRule | None = None
         digest = getattr(tokenizer, "_artifact_sha256", None)
         if not isinstance(digest, str) or family_spec(self.family, digest) is None:
@@ -570,7 +574,11 @@ class _Planner:
             if not callable(loader_face):
                 self.refusal = "no_loader_face_document"
             else:
-                document = json.loads(loader_face())
+                face_text = loader_face()
+                self.loader_face_sha256 = hashlib.sha256(
+                    face_text.encode("utf-8")
+                ).hexdigest()
+                document = json.loads(face_text)
                 literals = [
                     str(row.get("content", ""))
                     for row in document.get("added_tokens") or []
@@ -587,12 +595,18 @@ class _Planner:
             if isinstance(paths, list):
                 self.evidence_paths = tuple(str(path) for path in paths)
         if self.refusal is None and evidence_gate:
+            recorded_face = None if row is None else row.get("loader_face_sha256")
             if row is None:
                 self.refusal = _R_EVIDENCE
             elif self.evidence_status != _STATUS_CERTIFIED:
                 # One evidence level recorded (the battery or the corpus
                 # campaign, not both): named, and refused like an absent row.
                 self.refusal = f"{_R_INCOMPLETE}:{self.evidence_status}"
+            elif recorded_face is not None and recorded_face != self.loader_face_sha256:
+                # The live loader face is not the one the evidence was taken
+                # on (another loader version materializing another
+                # pre-tokenizer, for one): the evidence does not speak for it.
+                self.refusal = f"{_R_FACE}:{str(self.loader_face_sha256)[:12]}"
         self.guard = _LiteralGuard(literals)
         if self.normalizer == _NORMALIZER_NFC:
             # The reference engine's own NFC, not the standard library's:
@@ -729,6 +743,7 @@ class _Planner:
             "family": self.family,
             "normalizer": self.normalizer,
             "literals": self.guard.count,
+            "loader_face_sha256": self.loader_face_sha256,
             "evidence_id": self.evidence_id,
             "evidence_status": self.evidence_status,
             "evidence_paths": list(self.evidence_paths),

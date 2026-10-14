@@ -4,8 +4,8 @@
   "generated_by": {
     "tool": "tools/update_chunked_admission.py",
     "tool_version": "1.0.0",
-    "source_commit": "de3c9bf2a60c375c65c6344c6368285f5ab59fe9",
-    "generated_at": "2026-10-14T04:21:43Z"
+    "source_commit": "54d12492c8132414895ba6ddbe42e6d6d02c9e03",
+    "generated_at": "2026-10-14T04:42:26Z"
   },
   "run": {
     "run_id": "chunked-cuts-20260917",
@@ -66,5 +66,5 @@
       "scc058"
     ]
   },
-  "root_digest": "sha256:de6e2b430e89cd4ea3234a7ae7799c67946e51a2bf872044228515af956d6a9e"
+  "root_digest": "sha256:be5f8b8818f5e4c558241c2c6399e1fddda6df7da6ba9230853183fed30892ff"
 }

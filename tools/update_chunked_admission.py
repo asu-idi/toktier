@@ -158,6 +158,15 @@ def _roster() -> dict[str, str]:
     return {item.family: item.artifact_sha256 for item in roster_families()}
 
 
+def _face(row: dict[str, Any], label: str) -> str | None:
+    face = row.get("loader_face_sha256")
+    if face is None:
+        return None
+    if not isinstance(face, str) or len(face) != 64:
+        raise GenerationError(f"{label}.loader_face_sha256 must be a sha256 or null")
+    return face
+
+
 def _family_row(
     row: dict[str, Any], label: str, roster: dict[str, str]
 ) -> tuple[str, str, str]:
@@ -210,24 +219,33 @@ def derive(
     total_mismatches = 0
 
     def enroll(
-        family: str, digest: str, normalizer: str, label: str
+        family: str, digest: str, normalizer: str, face: str | None, label: str
     ) -> dict[str, Any]:
         known = facts.get(family)
         if known is None:
             known = {
                 "family": family,
                 "artifact_sha256": digest,
+                "loader_face_sha256": face,
                 "normalizer": normalizer,
                 "corpus_docs": 0,
                 "adversarial_strings": 0,
             }
             facts[family] = known
             levels[family] = {"python": set(), "native": set()}
-        elif known["normalizer"] != normalizer:
-            raise GenerationError(
-                f"{label}: {family}: normalizer differs between the corpus "
-                "campaign and the adversarial battery"
-            )
+        else:
+            if known["normalizer"] != normalizer:
+                raise GenerationError(
+                    f"{label}: {family}: normalizer differs between the corpus "
+                    "campaign and the adversarial battery"
+                )
+            if face is not None and known["loader_face_sha256"] not in (None, face):
+                raise GenerationError(
+                    f"{label}: {family}: the loader face differs between the corpus "
+                    "campaign and the adversarial battery"
+                )
+            if known["loader_face_sha256"] is None:
+                known["loader_face_sha256"] = face
         return known
 
     def judged(
@@ -258,7 +276,7 @@ def derive(
     for index, row in enumerate(corpus_rows):
         label = f"families[{index}]"
         family, digest, normalizer = _family_row(row, label, roster)
-        known = enroll(family, digest, normalizer, label)
+        known = enroll(family, digest, normalizer, _face(row, label), label)
         if known["corpus_docs"]:
             raise GenerationError(f"{label}: {family} appears twice")
         docs = _count(row.get("docs"), f"{label}.docs")
@@ -275,7 +293,7 @@ def derive(
     for index, row in enumerate(adversarial_rows):
         label = f"adversarial.families[{index}]"
         family, digest, normalizer = _family_row(row, label, roster)
-        known = enroll(family, digest, normalizer, label)
+        known = enroll(family, digest, normalizer, _face(row, label), label)
         if known["adversarial_strings"]:
             raise GenerationError(f"{label}: {family} appears twice")
         strings = _count(row.get("strings"), f"{label}.strings")
@@ -303,6 +321,7 @@ def derive(
         rows[family] = {
             "family": family,
             "artifact_sha256": known["artifact_sha256"],
+            "loader_face_sha256": known["loader_face_sha256"],
             "normalizer": known["normalizer"],
             "status": status,
             "paths": paths,

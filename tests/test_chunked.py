@@ -465,9 +465,17 @@ def available_families(candidates: Sequence[str] = CANDIDATE_FAMILIES) -> list[s
 
 
 def load_isolated(
-    family: str, tmp_path_factory: pytest.TempPathFactory, **options: Any
+    family: str,
+    tmp_path_factory: pytest.TempPathFactory,
+    *,
+    loader: Callable[..., Tokenizer] | None = None,
+    **options: Any,
 ) -> Tokenizer:
-    """Load ``family`` from a copy of its local artifact in an isolated home."""
+    """Load ``family`` from a copy of its local artifact in an isolated home.
+
+    ``loader`` is ``toktier.load`` unless a test that patches it hands the
+    original in.
+    """
     manifest = ArtifactManifest.load(ARTIFACT_MANIFEST)
     source = _artifact_source(family)
     assert source is not None
@@ -476,7 +484,8 @@ def load_isolated(
     cache = artifact_cache_dir(config)
     cache.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source, cache / manifest.get(family).directory_name)
-    return toktier.load(family, config=config, device="cpu", **options)
+    load = toktier.load if loader is None else loader
+    return load(family, config=config, device="cpu", **options)
 
 
 @pytest.fixture(scope="module")
@@ -793,6 +802,14 @@ _NFC_FACE: dict[str, Any] = {
     "normalizer": {"type": "NFC"},
     "added_tokens": [{"content": "<|x|>", "normalized": False}],
 }
+_NFC_FACE_SHA256 = hashlib.sha256(json.dumps(_NFC_FACE).encode("utf-8")).hexdigest()
+
+
+def _bind_face(document: dict[str, Any], family: str = "qwen3_8b") -> None:
+    """Make the table copy's row record the stand-in face as the judged one."""
+    for row in document["rows"]:
+        if row["family"] == family:
+            row["loader_face_sha256"] = _NFC_FACE_SHA256
 
 
 @pytest.fixture
@@ -825,6 +842,16 @@ def admission_table(
 
     yield install
     chunked._admission_rows.cache_clear()
+
+
+@pytest.fixture
+def stand_in_table(
+    admission_table: Callable[..., dict[str, Any]],
+) -> Callable[..., dict[str, Any]]:
+    """The shipped table with qwen3_8b's row bound to the stand-in face, so
+    that a stand-in planner is judged on everything but the face."""
+    admission_table(_bind_face)
+    return admission_table
 
 
 def test_admission_table_rows_are_roster_artifacts_with_the_python_path() -> None:
@@ -867,7 +894,43 @@ def test_a_row_with_one_evidence_level_is_refused_by_name(
     assert lifted.admitted is True and lifted.evidence_status == "adversarial_only"
 
 
-def test_normalized_added_token_refuses_an_nfc_roster_artifact() -> None:
+def test_live_loader_face_must_be_the_one_the_evidence_saw(
+    admission_table: Callable[..., dict[str, Any]],
+) -> None:
+    """A certified row names the loader face its evidence was taken on; a
+    tokenizer whose live face hashes differently (another loader version
+    materializing another pre-tokenizer) is refused by name, a row without
+    a recorded face is not held to one, and the lift records the live face."""
+    digest = _roster_digest("qwen3_8b")
+    admission_table()  # the shipped row: the campaign's face, not the stand-in's
+    shipped_face = TABLE_ROWS["qwen3_8b"]["loader_face_sha256"]
+    planner = chunked._Planner(_stand_in("qwen3_8b", digest, _NFC_FACE))
+    if shipped_face is None:
+        assert planner.admitted is True
+    else:
+        assert planner.admitted is False
+        assert planner.refusal == (
+            f"loader_face_differs_from_chunked_evidence:{_NFC_FACE_SHA256[:12]}"
+        )
+    assert planner.loader_face_sha256 == _NFC_FACE_SHA256
+    assert planner.admission_facts()["loader_face_sha256"] == _NFC_FACE_SHA256
+    stand_in = _stand_in("qwen3_8b", digest, _NFC_FACE)
+    assert chunked._Planner(stand_in, evidence_gate=False).admitted is True
+
+    def unrecorded(document: dict[str, Any]) -> None:
+        for row in document["rows"]:
+            if row["family"] == "qwen3_8b":
+                row["loader_face_sha256"] = None
+
+    admission_table(unrecorded)
+    assert chunked._Planner(_stand_in("qwen3_8b", digest, _NFC_FACE)).admitted is True
+    admission_table(_bind_face)
+    assert chunked._Planner(_stand_in("qwen3_8b", digest, _NFC_FACE)).admitted is True
+
+
+def test_normalized_added_token_refuses_an_nfc_roster_artifact(
+    stand_in_table: Callable[..., dict[str, Any]],
+) -> None:
     """A roster artifact whose NFC face carries a ``normalized: true`` added
     token is refused on the normalizer step, before and regardless of the
     evidence step; the same face with the token matched on the input text
@@ -914,7 +977,7 @@ def test_roster_artifact_without_a_table_row_is_refused(
         == "artifact_not_in_certified_repair_roster"
     )
     # A row that records only the Python path leaves the native path out.
-    admission_table()
+    admission_table(_bind_face)
     planner = chunked._Planner(_stand_in("qwen3_8b", digest, _NFC_FACE))
     assert planner.admitted is True
     assert planner.native_evidence == ("native" in planner.evidence_paths)
@@ -926,6 +989,7 @@ def test_tampered_admission_table_fails_closed(
     digest = _roster_digest("qwen3_8b")
 
     def grant_native(document: dict[str, Any]) -> None:
+        _bind_face(document)
         for row in document["rows"]:
             row["paths"] = ["python", "native"]
 
@@ -1257,7 +1321,118 @@ def test_adversarial_normalization_corpus_is_exact(
     assert n_chunked >= _ADVERSARIAL // 4, (family, n_chunked, _ADVERSARIAL)
 
 
-def test_roster_families_are_the_admitted_set() -> None:
+def test_roster_families_are_the_admitted_set(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """The table is a subset of the roster, and the run-time admitted set is
+    exactly the table's certified rows: every roster family whose artifact
+    is present locally is loaded and asked; a certified row is admitted, a
+    partial row is refused with its status, an absent family is refused as
+    without evidence. The artifact part runs when the artifacts are there."""
     names = {item.family for item in roster_families()}
-    assert set(CANDIDATE_FAMILIES) <= names
+    assert set(TABLE_FAMILIES) <= names
+    assert set(CANDIDATE_FAMILIES) <= set(TABLE_FAMILIES)
     assert "kimi_k3" not in names and "bert_uncased" not in names
+    present = available_families(sorted(names))
+    if not present:
+        pytest.skip("roster artifacts not available under TOKTIER_TEST_ARTIFACTS")
+    admitted: set[str] = set()
+    for family in present:
+        tokenizer = load_isolated(family, tmp_path_factory)
+        try:
+            facts = chunked.admission(tokenizer)
+            if chunked.is_admitted(tokenizer):
+                admitted.add(family)
+            row = TABLE_ROWS.get(family)
+            if row is None:
+                assert facts["refusal"] == "artifact_without_chunked_evidence", family
+                assert facts["evidence_status"] is None
+            elif row["status"] != "certified":
+                assert facts["refusal"] == (
+                    f"chunked_evidence_incomplete:{row['status']}"
+                ), family
+                assert facts["evidence_status"] == row["status"]
+            else:
+                assert facts["refusal"] is None and facts["admitted"] is True, family
+                assert facts["evidence_paths"] == row["paths"]
+                if row["loader_face_sha256"] is not None:
+                    assert facts["loader_face_sha256"] == row["loader_face_sha256"]
+        finally:
+            tokenizer.close()
+    assert admitted == set(CANDIDATE_FAMILIES) & set(present)
+
+
+@pytest.mark.parametrize("family", PARTIAL_FAMILIES)
+def test_partial_row_is_encoded_serially_with_the_refusal_named(
+    tmp_path_factory: pytest.TempPathFactory, family: str
+) -> None:
+    """A roster artifact whose row has one evidence level is a serial
+    tokenizer for this module: ids equal the plain encode, the fallback is
+    counted, and the report names the status."""
+    if not _artifact_source(family):
+        pytest.skip(f"{family}: artifact not available under TOKTIER_TEST_ARTIFACTS")
+    tokenizer = load_isolated(family, tmp_path_factory)
+    try:
+        text = _generated_corpora(300_000)["prose(generated)"]
+        encoded = chunked.encode(tokenizer, text, k=8)
+        assert encoded.serial_reason == ReasonCode.R_CHUNK_FAMILY_UNSUPPORTED.value
+        assert encoded.chunks == 1 and encoded.native_facts is None
+        assert list(encoded.ids) == list(tokenizer.encode(text, lookup="off").ids)
+        assert list(encoded.ids) == _reference(tokenizer)(text)
+        wrapped = tokenizer.encode(text, parallel="auto")
+        assert isinstance(wrapped, chunked.ChunkedEncoding)
+        assert wrapped.serial_reason == ReasonCode.R_CHUNK_FAMILY_UNSUPPORTED.value
+        report = tokenizer.explain()["chunked"]
+        assert isinstance(report, dict)
+        assert report["admitted"] is False
+        assert report["refusal"] == (
+            f"chunked_evidence_incomplete:{TABLE_ROWS[family]['status']}"
+        )
+        assert report["fallback_counts"] == {"R_CHUNK_FAMILY_UNSUPPORTED": 2}
+        with pytest.raises(ValueError, match="no certified chunk-cut rule"):
+            chunked.plan(tokenizer, text, k=8)
+    finally:
+        tokenizer.close()
+
+
+def test_removing_a_row_turns_a_certified_family_serial(
+    tmp_path_factory: pytest.TempPathFactory,
+    admission_table: Callable[..., dict[str, Any]],
+) -> None:
+    """The negative control on a real artifact: with its row removed from
+    the table a certified family is encoded serially under
+    R_CHUNK_FAMILY_UNSUPPORTED, and explain() names the missing evidence;
+    with the shipped table restored the same artifact is chunked again."""
+    present = available_families()
+    if not present:
+        pytest.skip("no certified artifact available under TOKTIER_TEST_ARTIFACTS")
+    family = present[0]
+
+    def drop(document: dict[str, Any]) -> None:
+        document["rows"] = [r for r in document["rows"] if r["family"] != family]
+
+    text = _generated_corpora(300_000)["code(generated)"]
+    admission_table(drop)
+    tokenizer = load_isolated(family, tmp_path_factory)
+    try:
+        assert chunked.is_admitted(tokenizer) is False
+        encoded = chunked.encode(tokenizer, text, k=8)
+        assert encoded.serial_reason == ReasonCode.R_CHUNK_FAMILY_UNSUPPORTED.value
+        assert encoded.chunks == 1
+        assert list(encoded.ids) == _reference(tokenizer)(text)
+        report = tokenizer.explain()["chunked"]
+        assert isinstance(report, dict)
+        assert report["refusal"] == "artifact_without_chunked_evidence"
+        assert report["evidence_id"] is None and report["evidence_paths"] == []
+        assert report["fallback_counts"] == {"R_CHUNK_FAMILY_UNSUPPORTED": 1}
+    finally:
+        tokenizer.close()
+    admission_table()
+    tokenizer = load_isolated(family, tmp_path_factory)
+    try:
+        assert chunked.is_admitted(tokenizer) is True
+        encoded = chunked.encode(tokenizer, text, k=8)
+        assert encoded.serial_reason is None and encoded.chunks >= 2
+        assert list(encoded.ids) == _reference(tokenizer)(text)
+    finally:
+        tokenizer.close()

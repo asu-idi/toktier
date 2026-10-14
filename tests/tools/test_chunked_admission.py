@@ -94,6 +94,8 @@ def test_table_is_a_roster_subset_bound_to_this_tree() -> None:
     assert [row["family"] for row in rows] == sorted(row["family"] for row in rows)
     for row in rows:
         assert row["artifact_sha256"] == roster[row["family"]], row["family"]
+        face = row["loader_face_sha256"]
+        assert face is None or (len(face) == 64 and int(face, 16) >= 0)
         assert row["evidence_id"] == tool.EVIDENCE_ID
         assert row["corpus_docs"] or row["adversarial_strings"]
         levels = set(row["evidence"]["python"])

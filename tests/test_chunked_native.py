@@ -40,12 +40,15 @@ from .test_chunked import (
     _ADVERSARIAL,
     SIZES,
     TABLE_FAMILIES,
+    TABLE_ROWS,
     _adversarial,
     _artifact_source,
     _generated_corpora,
     _reference,
     corpora,
+    load_isolated,
 )
+from .test_chunked import CANDIDATE_FAMILIES as CERTIFIED_FAMILIES
 
 #: Every family with a table row, certified or not: these are equivalence
 #: readings of the two planners, taken with the evidence gate lifted.
@@ -299,3 +302,124 @@ def test_native_pool_warm_and_ledger(loaded: dict[str, Tokenizer], family: str) 
     assert isinstance(encoded.native_facts, dict)
     assert encoded.native_facts["cold_forks"] == 0 or size < 6
     assert encoded.native_facts["encode_ns"] > 0
+
+
+# -- the evidence gate on the native path -------------------------------------
+
+
+@pytest.mark.parametrize("family", CERTIFIED_FAMILIES)
+def test_native_demand_follows_the_table_when_the_gate_is_not_lifted(
+    tmp_path_factory: pytest.TempPathFactory, family: str
+) -> None:
+    """On an ordinarily gated planner the table decides the native path:
+    a row without the native path makes ``native=True`` raise naming the
+    missing evidence and ``native=None`` take the Python path; a row with
+    it lets both run the native encoder."""
+    if not _artifact_source(family):
+        pytest.skip(f"{family}: artifact not available under TOKTIER_TEST_ARTIFACTS")
+    tokenizer = load_isolated(family, tmp_path_factory)
+    try:
+        if not chunked.native_available(tokenizer):
+            # The default policy may route this build to the reference
+            # engine only; the certified route is what the gate is about.
+            tokenizer.close()
+            tokenizer = load_isolated(family, tmp_path_factory, policy="experimental")
+        if not chunked.native_available(tokenizer):
+            pytest.skip(f"{family}: no native chunk encoder on this route")
+        row = TABLE_ROWS[family]
+        text = _generated_corpora(300_000)["prose(generated)"]
+        expected = _reference(tokenizer)(text)
+        facts = chunked.admission(tokenizer)
+        assert facts["admission_gate"] == "evidence_table"
+        assert facts["native_available"] is True
+        if "native" in row["paths"]:
+            assert facts["native_by_default"] is True
+            encoded = chunked.encode(tokenizer, text, k=4, native=True)
+            assert encoded.native_facts is not None
+            auto = chunked.encode(tokenizer, text, k=4)
+            assert auto.native_facts is not None
+        else:
+            assert facts["native_by_default"] is False
+            with pytest.raises(RuntimeError, match="no evidence for the native"):
+                chunked.encode(tokenizer, text, k=4, native=True)
+            with pytest.raises(RuntimeError, match="no evidence for the native"):
+                chunked.plan(tokenizer, text, k=4, native=True)
+            auto = chunked.encode(tokenizer, text, k=4)
+            assert auto.native_facts is None
+            last = chunked.stats(tokenizer)["last"]
+            assert isinstance(last, dict) and last["native"] is False
+        assert list(auto.ids) == expected and auto.chunks >= 2
+        forced = chunked.encode(tokenizer, text, k=4, native=False)
+        assert forced.native_facts is None and list(forced.ids) == expected
+    finally:
+        tokenizer.close()
+
+
+@pytest.mark.parametrize("family", CERTIFIED_FAMILIES[:1])
+def test_route_without_the_corrected_cpu_engine_is_serial_by_name(
+    tmp_path_factory: pytest.TempPathFactory, family: str
+) -> None:
+    """``R_CHUNK_ROUTE_NOT_FAST_CPU``: on a plan whose starting backend is
+    not the corrected CPU engine (here the reference-only route of
+    ``policy="reference"``), the native encoder encodes serially through
+    the normal route and says so; the ids are the plain encode's."""
+    if not _artifact_source(family):
+        pytest.skip(f"{family}: artifact not available under TOKTIER_TEST_ARTIFACTS")
+    tokenizer = load_isolated(family, tmp_path_factory, policy="reference")
+    try:
+        chain = tokenizer.explain()["fallback_chain"]
+        assert isinstance(chain, (list, tuple)) and "fast_cpu" not in chain
+        if not chunked.native_available(tokenizer):
+            pytest.skip(f"{family}: the reference route has no native runtime here")
+        chunked._planner_for(tokenizer, evidence_gate=False)
+        text = _generated_corpora(300_000)["prose(generated)"]
+        encoded = chunked.encode(tokenizer, text, k=4, native=True)
+        assert encoded.serial_reason == ReasonCode.R_CHUNK_ROUTE_NOT_FAST_CPU.value
+        assert encoded.chunks == 1 and encoded.cuts == ()
+        assert encoded.native_facts is not None
+        assert list(encoded.ids) == _reference(tokenizer)(text)
+        report = tokenizer.explain()["chunked"]
+        assert isinstance(report, dict)
+        assert report["fallback_counts"] == {"R_CHUNK_ROUTE_NOT_FAST_CPU": 1}
+        assert report["native_calls"] == 1 and report["applied"] == 0
+        facts = chunked.admission(tokenizer)
+        assert facts["native"] is None
+        assert "no corrected CPU engine" in str(facts["native_unavailable_reason"])
+    finally:
+        tokenizer.close()
+
+
+@pytest.mark.skipif(
+    os.environ.get("TOKTIER_TEST_CHUNKED_GPU_CHAIN") != "1",
+    reason=(
+        "GPU-headed chain: set TOKTIER_TEST_CHUNKED_GPU_CHAIN=1 on a host with a "
+        "prebuilt-kernel GPU to cover R_CHUNK_ROUTE_NOT_FAST_CPU above the crossover"
+    ),
+)
+@pytest.mark.parametrize("family", CERTIFIED_FAMILIES[:1])
+def test_gpu_headed_chain_above_the_crossover_is_serial_by_name(
+    tmp_path_factory: pytest.TempPathFactory, family: str
+) -> None:
+    """The same reason code on a GPU-headed plan: an input above the GPU
+    crossover starts on the GPU backend, so the native chunk encoder
+    encodes it serially through the normal route."""
+    if not _artifact_source(family):
+        pytest.skip(f"{family}: artifact not available under TOKTIER_TEST_ARTIFACTS")
+    try:
+        tokenizer = load_isolated(
+            family, tmp_path_factory, device="cuda", gpu_delivery="prebuilt"
+        )
+    except Exception as error:
+        pytest.skip(f"{family}: no GPU-headed plan on this host ({error})")
+    try:
+        chain = tokenizer.explain()["fallback_chain"]
+        assert isinstance(chain, (list, tuple)) and chain and chain[0] == "gpu"
+        if not chunked.native_available(tokenizer):
+            pytest.skip(f"{family}: the GPU-headed route has no native runtime here")
+        chunked._planner_for(tokenizer, evidence_gate=False)
+        text = _generated_corpora(2_000_000)["prose(generated)"]
+        encoded = chunked.encode(tokenizer, text, k=4, native=True)
+        assert encoded.serial_reason == ReasonCode.R_CHUNK_ROUTE_NOT_FAST_CPU.value
+        assert list(encoded.ids) == _reference(tokenizer)(text)
+    finally:
+        tokenizer.close()

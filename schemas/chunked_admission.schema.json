@@ -39,6 +39,7 @@
         "required": [
           "family",
           "artifact_sha256",
+          "loader_face_sha256",
           "normalizer",
           "status",
           "paths",
@@ -54,6 +55,10 @@
             "maxLength": 128
           },
           "artifact_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "loader_face_sha256": {
+            "description": "SHA-256 of the loader-face document the evidence was taken on; the module refuses a tokenizer whose live loader face hashes differently (a loader version that materializes another pre-tokenizer is not the certified face). Null when the readings did not record it.",
+            "oneOf": [{ "type": "string", "pattern": "^[0-9a-f]{64}$" }, { "type": "null" }]
+          },
           "normalizer": { "enum": ["none", "nfc"] },
           "status": {
             "description": "certified: the Python path was judged by both the adversarial battery and the corpus campaign; adversarial_only / corpus_only: one level is recorded, the row is refused at run time.",

@@ -23,7 +23,13 @@ tokenization path. In particular, Rust package-version constants and Python
 distribution-version reads are not tokenization inputs. This boundary is
 machine-enforced over the certification source coverage by
 `tools/scan_version_constants.py`; its small allowlist contains only the
-enumerated build-fact reporting sites.
+enumerated build-fact reporting sites. Since 0.3.0 the same run also checks
+the lines that tell a reader which version of the Rust crate to depend on
+(`toktier = "X"`, `toktier = { version = "X", ... }`, either one inside a
+Rust or TOML comment as well, and a `cargo add` command that names a
+version of the crate): they must name the workspace version, so a release
+does not ship documentation pointing at the one before it. A release note under `docs/releases/` names its own version
+instead.
 
 The version-normalized source identities do not broaden this rule. Identity v2
 normalizes only the workspace package version, the enumerated internal path

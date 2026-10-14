@@ -53,8 +53,12 @@ judgement below is visible before a build is attempted:
 `jit_toolchain_constraint` is the judged set it is compared against, and
 `jit_toolchain_satisfied` is the shared judgement (`null` under the prebuilt
 delivery, which has no compiler premise). `automatic_gpu_eligible` combines
-that with candidacy, the observed architectures, and the delivery's own
-materials, applying the same rule the plan applies: under the default
+that with candidacy, the observed architectures, the delivery's own
+materials and, since 0.3.0, the machine-side bindings the plan verifies --
+a driver at or above the record's floor and, for a prebuilt certificate,
+the Rust request host the fatbin is paired with (its source digest, build
+flags and toolchain), read from the same list the plan refuses from --
+applying the same rule the plan applies: under the default
 `SUPPORTED` policy an unjudged compiler or an unjudged architecture is a
 coverage gap the route is admitted and labelled `supported_untested` for,
 while `CERTIFIED` refuses it, and `REFERENCE` plans no accelerated backend

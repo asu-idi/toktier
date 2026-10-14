@@ -362,9 +362,15 @@ defines the exact-ID contract every accelerated route is judged against, so
 "no acceleration certificate attaches" is the whole of what is being said: it
 is a statement about acceleration, not a doubt about the ids. ``unverified``
 is reserved for the cases where nothing is known -- no registry record for the
-artifact, or an installed oracle outside the certified set
-(``certification.state == "reference_only"``), where the reference that runs
-is not the pinned one.
+artifact, or a reference that runs on something the record did not judge
+(``certification.state == "reference_only"``). That is either an installed
+oracle outside the certified set, where the reference that runs is not the
+pinned one, or (since 0.3.0) a materialized loader face whose digest is not
+the record's ``loader_face_sha256``: the artifact bytes verified, the
+installed loader built a different face from them, and the plan records
+``R_LOADER_FACE_MISMATCH`` with both digests. In that case the installed
+reference runs on the face it built. A record without the digest, or a path
+that materialized no face, compares nothing.
 
 One definition belongs beside that statement (settled in 0.2.8). **The
 reference is the loader face**: the certification subject covers

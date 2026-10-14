@@ -68,17 +68,39 @@ a persistent pool of corrected-Gigatoken workers and concatenated there
 paths.
 
 Admission is the certified repair roster, narrowed to the normalizers
-this module reasons about. A tokenizer whose family and artifact digest
+this module reasons about, narrowed again to the artifacts whose chunked
+path has recorded evidence. A tokenizer whose family and artifact digest
 have a repair-table entry -- the eleven byte-level BPE artifacts the
 shipped sync profile was certified on -- may be chunked when its loader
 face carries no normalizer, the empty normalizer sequence, or NFC with
-every added token matched on the input text (``normalized: false``);
-any other tokenizer is encoded serially, the refusal is counted under
-``R_CHUNK_FAMILY_UNSUPPORTED`` and named in ``explain()["chunked"]["refusal"]``.
-A document in which no certified cut can be found is encoded serially
-under ``R_CHUNK_NO_CUT``. Both counters, and the per-call facts, are read
-back from ``Tokenizer.explain()["chunked"]`` once this module has served the
+every added token matched on the input text (``normalized: false``),
+and when the shipped admission table
+(``routing/tables/chunked_admission.v1.json``, generated from the
+campaign readings by ``tools/update_chunked_admission.py``) has a
+certified row for that family and artifact -- one with both levels of
+chunked-path evidence, the adversarial normalization battery and the
+corpus cut campaign: the set this module may chunk is the set the
+chunked path was judged on. Any other tokenizer is encoded serially,
+the refusal is counted under ``R_CHUNK_FAMILY_UNSUPPORTED`` and named in
+``explain()["chunked"]["refusal"]`` (``artifact_without_chunked_evidence``
+for a roster artifact without a row,
+``chunked_evidence_incomplete:<status>`` for a row with one level
+recorded). A document in which no certified
+cut can be found is encoded serially under ``R_CHUNK_NO_CUT``. Both
+counters, and the per-call facts, are read back from
+``Tokenizer.explain()["chunked"]`` once this module has served the
 tokenizer, or from :func:`stats`.
+
+The table also says which paths were judged for a row. With
+``native=None`` (the default) the native encoder is used only when the
+loaded runtime has it and the row records the ``native`` path; otherwise
+the Python path runs. ``native=True`` demands the native encoder and
+raises when the runtime lacks it, when the tokenizer is not admitted, or
+when the row lacks the native path; ``native=False`` is the Python path.
+Collecting the evidence a row is made of needs the gate lifted for the
+tokenizer under judgement; the campaign tool does that through the
+private planner constructor, and ``explain()["chunked"]["admission_gate"]``
+says so when it happens.
 
 Source text in this repository is ASCII, so the characters named in the
 carve-outs and in the example above are written as escapes.
@@ -86,18 +108,23 @@ carve-outs and in the example above are written as escapes.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import threading
 import weakref
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from itertools import chain
 from typing import Any
 
+from ._jcs import canonical_json
+from .errors import RegistryInvalid
 from .facade.api import Encoding, Tokenizer
 from .policy import ReasonCode
 from .repair.registry import family_spec, pclass_table
+from .routing.tables import CHUNKED_ADMISSION
 
 __all__ = [
     "CHUNK_TABLE",
@@ -203,6 +230,70 @@ _NORMALIZER_NFC = "nfc"
 
 _R_NO_CUT = ReasonCode.R_CHUNK_NO_CUT.value
 _R_FAMILY = ReasonCode.R_CHUNK_FAMILY_UNSUPPORTED.value
+
+#: The refusal of a roster artifact the admission table has no row for,
+#: and the prefix of the refusal of a row whose evidence has one level
+#: only (``chunked_evidence_incomplete:adversarial_only`` and the like).
+_R_EVIDENCE = "artifact_without_chunked_evidence"
+_R_INCOMPLETE = "chunked_evidence_incomplete"
+_STATUS_CERTIFIED = "certified"
+
+#: The shipped admission table and the domain its root digest is taken in
+#: (``tools/registry_common.py`` writes the same tag).
+_ADMISSION_TABLE = CHUNKED_ADMISSION
+_ADMISSION_SCHEMA = "toktier.chunked_admission.v1"
+_ADMISSION_DOMAIN = b"toktier.chunked_admission.v1\0"
+_PATH_NATIVE = "native"
+
+
+def _table_failure(message: str, **details: object) -> RegistryInvalid:
+    return RegistryInvalid(
+        message, details={"path": str(_ADMISSION_TABLE), **details}
+    )
+
+
+@lru_cache(maxsize=1)
+def _admission_rows() -> dict[tuple[str, str], Mapping[str, object]]:
+    """The admission table, keyed by ``(family, artifact_sha256)``.
+
+    The root digest is recomputed before a row is trusted, as the repair
+    registry does for its tables: a table that does not hash to its own
+    digest is refused rather than read around.
+    """
+    try:
+        raw = json.loads(_ADMISSION_TABLE.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise _table_failure("the chunked admission table cannot be read") from exc
+    if (
+        not isinstance(raw, dict)
+        or raw.get("schema") != _ADMISSION_SCHEMA
+        or raw.get("schema_version") != 1
+    ):
+        raise _table_failure("the chunked admission table has an unknown schema")
+    body = {key: value for key, value in raw.items() if key != "root_digest"}
+    expected = "sha256:" + hashlib.sha256(
+        _ADMISSION_DOMAIN + canonical_json(body)
+    ).hexdigest()
+    if raw.get("root_digest") != expected:
+        raise _table_failure(
+            "the chunked admission table root digest does not match",
+            observed=raw.get("root_digest"),
+            expected=expected,
+        )
+    rows = raw.get("rows")
+    if not isinstance(rows, list):
+        raise _table_failure("the chunked admission table has no rows")
+    out: dict[tuple[str, str], Mapping[str, object]] = {}
+    for row in rows:
+        if not isinstance(row, Mapping) or not isinstance(row.get("paths"), list):
+            raise _table_failure("a chunked admission row is malformed")
+        key = (str(row.get("family")), str(row.get("artifact_sha256")))
+        if key in out:
+            raise _table_failure(
+                "the chunked admission table repeats an artifact", family=key[0]
+            )
+        out[key] = row
+    return out
 
 
 def default_chunks(chars: int) -> int:
@@ -447,13 +538,26 @@ class ChunkedEncoding(Encoding):
 
 
 class _Planner:
-    """Per-tokenizer admission, guard, normalizer and counters."""
+    """Per-tokenizer admission, guard, normalizer and counters.
 
-    def __init__(self, tokenizer: Tokenizer) -> None:
+    Admission is decided once, in this order: the certified repair roster
+    (family and artifact digest), a loader face to read, a normalizer
+    shape the rule reasons about, and a row in the shipped admission
+    table. ``evidence_gate=False`` leaves the last step out; it exists
+    for the campaign that produces the table's rows and for the
+    equivalence tests of the two planners, and the report says when it
+    was used.
+    """
+
+    def __init__(self, tokenizer: Tokenizer, *, evidence_gate: bool = True) -> None:
         self._table = pclass_table()
         self.family = tokenizer.family
         self.refusal: str | None = None
         self.normalizer: str | None = None
+        self.evidence_gate = evidence_gate
+        self.evidence_id: str | None = None
+        self.evidence_status: str | None = None
+        self.evidence_paths: tuple[str, ...] = ()
         self._rule: _NfcRule | None = None
         digest = getattr(tokenizer, "_artifact_sha256", None)
         if not isinstance(digest, str) or family_spec(self.family, digest) is None:
@@ -473,6 +577,22 @@ class _Planner:
                     if isinstance(row, Mapping)
                 ]
                 self.normalizer, self.refusal = _normalizer_mode(document)
+        row = None
+        if isinstance(digest, str):
+            row = _admission_rows().get((self.family, digest))
+        if row is not None:
+            paths = row.get("paths")
+            self.evidence_id = str(row.get("evidence_id"))
+            self.evidence_status = str(row.get("status"))
+            if isinstance(paths, list):
+                self.evidence_paths = tuple(str(path) for path in paths)
+        if self.refusal is None and evidence_gate:
+            if row is None:
+                self.refusal = _R_EVIDENCE
+            elif self.evidence_status != _STATUS_CERTIFIED:
+                # One evidence level recorded (the battery or the corpus
+                # campaign, not both): named, and refused like an absent row.
+                self.refusal = f"{_R_INCOMPLETE}:{self.evidence_status}"
         self.guard = _LiteralGuard(literals)
         if self.normalizer == _NORMALIZER_NFC:
             # The reference engine's own NFC, not the standard library's:
@@ -496,6 +616,12 @@ class _Planner:
     @property
     def admitted(self) -> bool:
         return self.refusal is None
+
+    @property
+    def native_evidence(self) -> bool:
+        """Whether the native path may run: its evidence is recorded, or
+        the gate is lifted for collecting it."""
+        return _PATH_NATIVE in self.evidence_paths or not self.evidence_gate
 
     def _scan(self, text: str, low: int, high: int, rejects: list[int]) -> int:
         """The highest certified cut in ``[low, high]``, or ``-1``."""
@@ -595,16 +721,30 @@ class _Planner:
                 "native": native,
             }
 
+    def admission_facts(self) -> dict[str, object]:
+        """The admission decision and what it rests on (no counters)."""
+        return {
+            "admitted": self.admitted,
+            "refusal": self.refusal,
+            "family": self.family,
+            "normalizer": self.normalizer,
+            "literals": self.guard.count,
+            "evidence_id": self.evidence_id,
+            "evidence_status": self.evidence_status,
+            "evidence_paths": list(self.evidence_paths),
+            "admission_gate": (
+                "evidence_table"
+                if self.evidence_gate
+                else "lifted_for_evidence_collection"
+            ),
+        }
+
     def report(self) -> dict[str, object]:
         with self._lock:
             return {
-                "admitted": self.admitted,
-                "refusal": self.refusal,
-                "family": self.family,
-                "normalizer": self.normalizer,
-                "literals": self.guard.count,
+                **self.admission_facts(),
                 "calls": self._calls,
-                "chunked": self._chunked,
+                "applied": self._chunked,
                 "serial": self._serial,
                 "below_threshold": self._below_threshold,
                 "chunks_total": self._chunks_total,
@@ -621,11 +761,24 @@ _PLANNERS: weakref.WeakKeyDictionary[Tokenizer, _Planner] = weakref.WeakKeyDicti
 _PLANNERS_LOCK = threading.Lock()
 
 
-def _planner_for(tokenizer: Tokenizer) -> _Planner:
+def _planner_for(
+    tokenizer: Tokenizer, *, evidence_gate: bool | None = None
+) -> _Planner:
+    """The planner of ``tokenizer``, created on first use.
+
+    ``evidence_gate`` is ``None`` for the ordinary call (an existing
+    planner is returned, a new one is gated on the admission table). A
+    boolean replaces the planner with one built that way, counters
+    reset; ``False`` is the lift the campaign tool and the equivalence
+    tests use before any other call has served the tokenizer.
+    """
     with _PLANNERS_LOCK:
         planner = _PLANNERS.get(tokenizer)
-        if planner is None:
-            planner = _Planner(tokenizer)
+        if planner is None or (
+            evidence_gate is not None and planner.evidence_gate != evidence_gate
+        ):
+            gated = True if evidence_gate is None else evidence_gate
+            planner = _Planner(tokenizer, evidence_gate=gated)
             _PLANNERS[tokenizer] = planner
             register = getattr(tokenizer, "_register_report", None)
             if callable(register):
@@ -634,8 +787,9 @@ def _planner_for(tokenizer: Tokenizer) -> _Planner:
 
 
 def is_admitted(tokenizer: Tokenizer) -> bool:
-    """Whether this tokenizer may be chunked (certified repair roster,
-    with a normalizer this module reasons about)."""
+    """Whether this tokenizer may be chunked: certified repair roster, a
+    normalizer this module reasons about, and a row in the admission
+    table."""
     return _planner_for(tokenizer).admitted
 
 
@@ -657,8 +811,9 @@ def plan(
 
     Raises ``ValueError`` for a tokenizer outside the admitted set; the
     encode entry point prefers to fall back, this one prefers to say so.
-    ``native=True`` asks the native runtime for its plan instead; the two
-    are meant to agree position for position.
+    ``native=True`` asks the native runtime for its plan instead (and
+    raises ``RuntimeError`` when that path may not run, as :func:`encode`
+    does); the two are meant to agree position for position.
     """
     planner = _planner_for(tokenizer)
     if not planner.admitted:
@@ -670,7 +825,8 @@ def plan(
     if native:
         if not isinstance(text, str):
             raise TypeError("text must be a str")
-        facts = _native_runtime(tokenizer).chunked_plan(text, chunks, min_chunk, budget)
+        runtime = _require_native(tokenizer, planner)
+        facts = runtime.chunked_plan(text, chunks, min_chunk, budget)
         return ChunkPlan(
             spans=tuple((int(low), int(high)) for low, high in facts["spans"]),
             k=chunks,
@@ -690,14 +846,80 @@ def _native_runtime(tokenizer: Tokenizer) -> Any:
 
 
 def native_available(tokenizer: Tokenizer) -> bool:
-    """Whether the native chunked encoder is reachable for ``tokenizer``."""
+    """Whether the native chunked encoder is reachable for ``tokenizer``
+    (the loaded runtime has the surface; admission is a separate question,
+    answered by :func:`admission`)."""
     runtime = tokenizer._native_request_runtime()
     return runtime is not None and callable(getattr(runtime, "chunked_encode", None))
 
 
+def _require_native(tokenizer: Tokenizer, planner: _Planner) -> Any:
+    """The native runtime when the native path may run for this tokenizer.
+
+    Raises ``RuntimeError`` naming what is missing: the runtime surface,
+    the admission itself, or the recorded evidence for the native path.
+    """
+    runtime = _native_runtime(tokenizer)
+    if not planner.admitted:
+        raise RuntimeError(
+            f"{planner.family!r} is not admitted to the chunked path "
+            f"({planner.refusal}), and the native chunk encoder was asked for "
+            "explicitly"
+        )
+    if not planner.native_evidence:
+        raise RuntimeError(
+            f"{planner.family!r}: the admission table records no evidence for the "
+            f"native chunked path of this artifact (recorded paths: "
+            f"{list(planner.evidence_paths)}); pass native=None to let the module "
+            "choose, or native=False for the Python path"
+        )
+    return runtime
+
+
+def _select_native(
+    tokenizer: Tokenizer, planner: _Planner, native: bool | None
+) -> bool:
+    """Whether :func:`encode` runs the native path for this call."""
+    if native is None:
+        return (
+            planner.admitted and planner.native_evidence and native_available(tokenizer)
+        )
+    if native:
+        _require_native(tokenizer, planner)
+        return True
+    return False
+
+
 def admission(tokenizer: Tokenizer) -> dict[str, object]:
-    """The native chunk encoder's admission facts."""
-    facts: dict[str, object] = dict(_native_runtime(tokenizer).chunked_admission())
+    """The admission facts, merged.
+
+    This module's decision and what it rests on (roster, loader-face
+    normalizer, admission-table row and the paths it records), whether
+    the native encoder is reachable and whether ``native=None`` would
+    select it, and under ``"native"`` the native planner's own admission
+    facts when the loaded runtime has one and can describe it (``None``
+    otherwise, with ``"native_unavailable_reason"`` saying why: no native
+    surface, or a route without the corrected CPU engine the native
+    planner is built on).
+    """
+    planner = _planner_for(tokenizer)
+    available = native_available(tokenizer)
+    facts: dict[str, object] = planner.admission_facts()
+    facts["native_available"] = available
+    facts["native_by_default"] = (
+        planner.admitted and planner.native_evidence and available
+    )
+    native_facts: dict[str, object] | None = None
+    unavailable: str | None = None
+    if not available:
+        unavailable = "the loaded runtime has no native chunked encoder"
+    else:
+        try:
+            native_facts = dict(_native_runtime(tokenizer).chunked_admission())
+        except RuntimeError as exc:
+            unavailable = str(exc)
+    facts["native"] = native_facts
+    facts["native_unavailable_reason"] = unavailable
     return facts
 
 
@@ -754,14 +976,19 @@ def encode(
     read-time template, as for sessions.
 
     A tokenizer outside the admitted set (the certified roster, with a
-    normalizer this module reasons about), and a document in which no
-    certified cut exists, are encoded serially on the tokenizer's plain
-    route; the result says so in ``serial_reason`` and the tokenizer's
-    ``explain()["chunked"]`` block counts it.
+    normalizer this module reasons about, and a row in the admission
+    table), and a document in which no certified cut exists, are encoded
+    serially on the tokenizer's plain route; the result says so in
+    ``serial_reason`` and the tokenizer's ``explain()["chunked"]`` block
+    counts it.
 
-    ``native=True`` runs the plan and the chunk encodes inside the native
-    runtime (raises ``RuntimeError`` when the loaded runtime has no such
-    surface). The default keeps the Python path.
+    ``native`` selects the native chunk encoder, which runs the plan and
+    the chunk encodes inside the native runtime. ``None`` (the default)
+    uses it when the loaded runtime has it and the admission table
+    records the native path for this artifact, and the Python path
+    otherwise; ``True`` demands it and raises ``RuntimeError`` when the
+    runtime lacks it, the tokenizer is not admitted, or the native path
+    has no recorded evidence; ``False`` is the Python path.
     """
     if not isinstance(text, str):
         raise TypeError("text must be a str")
@@ -769,7 +996,7 @@ def encode(
     chars = len(text)
     requested = _resolve_k(k, chars)
     budget = _check_budget(scan_budget)
-    if native:
+    if _select_native(tokenizer, planner, native):
         return _native_chunked_encode(
             tokenizer, planner, text, requested, min_chunk, budget
         )

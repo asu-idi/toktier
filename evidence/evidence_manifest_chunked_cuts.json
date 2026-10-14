@@ -4,8 +4,8 @@
   "generated_by": {
     "tool": "tools/update_chunked_admission.py",
     "tool_version": "1.0.0",
-    "source_commit": "bfeaf8ced30dea28db9f96695e309d17a762992f",
-    "generated_at": "2026-10-14T04:02:38Z"
+    "source_commit": "de3c9bf2a60c375c65c6344c6368285f5ab59fe9",
+    "generated_at": "2026-10-14T04:21:43Z"
   },
   "run": {
     "run_id": "chunked-cuts-20260917",
@@ -44,7 +44,7 @@
   ],
   "corpora": [
     {
-      "corpus_id": "nvidia/Nemotron-CC-v2.1@ba6f2aaef7ada865bb08fc08640ca292150097db (High-Quality, Medium-High-Quality and Medium-Quality shards) together with a 6,008-document multilingual text set split at blank lines",
+      "corpus_id": "nvidia/Nemotron-CC-v2.1@ba6f2aaef7ada865bb08fc08640ca292150097db (131 High-Quality tier shards: High-Quality, High-Quality-DQA, High-Quality-Synthetic, High-Quality-Translated-To-English and High-Quality-Translated-To-English-Synthetic) together with a 6,008-document multilingual text set split at blank lines",
       "docs": 102400000,
       "bytes": 380330377958
     }
@@ -66,5 +66,5 @@
       "scc058"
     ]
   },
-  "root_digest": "sha256:25ca9bb8a5660bea36c330512b2e9078697b34c113e4087321a24de2acd13371"
+  "root_digest": "sha256:de6e2b430e89cd4ea3234a7ae7799c67946e51a2bf872044228515af956d6a9e"
 }

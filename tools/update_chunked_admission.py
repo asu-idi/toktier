@@ -75,6 +75,9 @@ TOOL_NAME = "tools/update_chunked_admission.py"
 TOOL_VERSION = "1.0.0"
 EVIDENCE_ID = "ev-chunked-cuts-v1"
 SUITE_VERSION = "chunked-cuts-four-way-v1"
+#: The two levels of chunked-path evidence a certified row needs for the
+#: Python path (and the native path, for it to be listed in ``paths``).
+EVIDENCE_LEVELS = ("adversarial", "corpus")
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 READINGS_PATH = REPOSITORY_ROOT / "readings" / "chunked_cuts_campaign.json"
@@ -185,12 +188,14 @@ def derive(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Return ``(admission table, evidence manifest)`` derived from the readings.
 
-    A row is granted the ``python`` path when the corpus campaign or the
-    adversarial battery judged the Python chunked ids equal to the oracle
-    and the serial ids on at least one input of that family, and the
-    ``native`` path when the corpus campaign additionally judged the
-    native chunked ids equal to the oracle and to the Python ids. Any
-    recorded mismatch, anywhere, refuses the whole derivation.
+    A family gets a row when either level of evidence judged its Python
+    chunked ids against the oracle and the serial route; the row is
+    ``certified`` only when both levels did (the adversarial battery and
+    the corpus campaign), and only then does ``paths`` list ``python``,
+    plus ``native`` when both levels also judged the native chunked ids
+    against the oracle and the Python ids. A row with one level carries
+    that as its status and no paths. Any recorded mismatch, anywhere,
+    refuses the whole derivation.
     """
     roster = _roster()
     corpus_rows = _rows(readings.get("families"), "families")
@@ -198,92 +203,117 @@ def derive(
     adversarial_rows = _rows(adversarial.get("families"), "adversarial.families")
     excluded = _rows(readings.get("not_reasoned"), "not_reasoned")
 
-    rows: dict[str, dict[str, Any]] = {}
+    # Per family: which evidence levels (adversarial battery, corpus
+    # campaign) judged which path with complete, zero-mismatch columns.
+    levels: dict[str, dict[str, set[str]]] = {}
+    facts: dict[str, dict[str, Any]] = {}
     total_mismatches = 0
+
+    def enroll(
+        family: str, digest: str, normalizer: str, label: str
+    ) -> dict[str, Any]:
+        known = facts.get(family)
+        if known is None:
+            known = {
+                "family": family,
+                "artifact_sha256": digest,
+                "normalizer": normalizer,
+                "corpus_docs": 0,
+                "adversarial_strings": 0,
+            }
+            facts[family] = known
+            levels[family] = {"python": set(), "native": set()}
+        elif known["normalizer"] != normalizer:
+            raise GenerationError(
+                f"{label}: {family}: normalizer differs between the corpus "
+                "campaign and the adversarial battery"
+            )
+        return known
+
+    def judged(
+        row: dict[str, Any], label: str, family: str, level: str
+    ) -> dict[str, int | None]:
+        paths = _paths(row, label)
+        mismatches = _mismatches(row, label)
+        python_complete = (
+            "python" in paths
+            and mismatches["python_vs_oracle"] is not None
+            and mismatches["serial_vs_oracle"] is not None
+        )
+        native_complete = (
+            "native" in paths
+            and mismatches["native_vs_oracle"] is not None
+            and mismatches["python_vs_native"] is not None
+        )
+        if not python_complete:
+            raise GenerationError(
+                f"{label}: {family}: the {level} readings must judge the Python "
+                "path against the oracle and the serial route"
+            )
+        levels[family]["python"].add(level)
+        if native_complete:
+            levels[family]["native"].add(level)
+        return mismatches
 
     for index, row in enumerate(corpus_rows):
         label = f"families[{index}]"
         family, digest, normalizer = _family_row(row, label, roster)
-        if family in rows:
+        known = enroll(family, digest, normalizer, label)
+        if known["corpus_docs"]:
             raise GenerationError(f"{label}: {family} appears twice")
-        paths = _paths(row, label)
         docs = _count(row.get("docs"), f"{label}.docs")
         if not docs:
             raise GenerationError(f"{label}: {family}: no documents were judged")
-        mismatches = _mismatches(row, label)
+        if "native" in _paths(row, label) and row.get("native") is None:
+            raise GenerationError(
+                f"{label}: {family}: a native-path row needs the native counters"
+            )
+        mismatches = judged(row, label, family, "corpus")
         total_mismatches += sum(value or 0 for value in mismatches.values())
-        granted: list[str] = []
-        if (
-            "python" in paths
-            and mismatches["python_vs_oracle"] is not None
-            and mismatches["serial_vs_oracle"] is not None
-        ):
-            granted.append("python")
-        if (
-            "native" in paths
-            and row.get("native") is not None
-            and mismatches["native_vs_oracle"] is not None
-            and mismatches["python_vs_native"] is not None
-        ):
-            granted.append("native")
-        if not granted:
-            raise GenerationError(
-                f"{label}: {family}: the recorded paths have no complete "
-                "comparison columns"
-            )
-        if "native" in granted and "python" not in granted:
-            raise GenerationError(
-                f"{label}: {family}: a native-path row needs the Python path "
-                "judged alongside it"
-            )
-        rows[family] = {
-            "family": family,
-            "artifact_sha256": digest,
-            "normalizer": normalizer,
-            "paths": granted,
-            "evidence_id": EVIDENCE_ID,
-            "corpus_docs": docs,
-            "adversarial_strings": 0,
-        }
+        known["corpus_docs"] = docs
 
     for index, row in enumerate(adversarial_rows):
         label = f"adversarial.families[{index}]"
         family, digest, normalizer = _family_row(row, label, roster)
-        paths = _paths(row, label)
+        known = enroll(family, digest, normalizer, label)
+        if known["adversarial_strings"]:
+            raise GenerationError(f"{label}: {family} appears twice")
         strings = _count(row.get("strings"), f"{label}.strings")
         if not strings:
             raise GenerationError(f"{label}: {family}: no strings were judged")
-        mismatches = _mismatches(row, label)
+        mismatches = judged(row, label, family, "adversarial")
         total_mismatches += sum(value or 0 for value in mismatches.values())
-        if (
-            "python" not in paths
-            or mismatches["python_vs_oracle"] is None
-            or mismatches["serial_vs_oracle"] is None
-        ):
-            raise GenerationError(
-                f"{label}: {family}: the adversarial battery must judge the "
-                "Python path against the oracle and the serial route"
-            )
-        existing = rows.get(family)
-        if existing is None:
-            rows[family] = {
-                "family": family,
-                "artifact_sha256": digest,
-                "normalizer": normalizer,
-                "paths": ["python"],
-                "evidence_id": EVIDENCE_ID,
-                "corpus_docs": 0,
-                "adversarial_strings": strings,
-            }
+        known["adversarial_strings"] = strings
+
+    rows: dict[str, dict[str, Any]] = {}
+    for family, known in facts.items():
+        python_levels = levels[family]["python"]
+        native_levels = levels[family]["native"]
+        if python_levels == set(EVIDENCE_LEVELS):
+            status = "certified"
+        elif python_levels == {"adversarial"}:
+            status = "adversarial_only"
         else:
-            if existing["normalizer"] != normalizer:
-                raise GenerationError(
-                    f"{label}: {family}: normalizer differs between the corpus "
-                    "campaign and the adversarial battery"
-                )
-            if existing["adversarial_strings"]:
-                raise GenerationError(f"{label}: {family} appears twice")
-            existing["adversarial_strings"] = strings
+            status = "corpus_only"
+        paths: list[str] = []
+        if status == "certified":
+            paths.append("python")
+            if native_levels == set(EVIDENCE_LEVELS):
+                paths.append("native")
+        rows[family] = {
+            "family": family,
+            "artifact_sha256": known["artifact_sha256"],
+            "normalizer": known["normalizer"],
+            "status": status,
+            "paths": paths,
+            "evidence": {
+                "python": sorted(python_levels),
+                "native": sorted(native_levels),
+            },
+            "evidence_id": EVIDENCE_ID,
+            "corpus_docs": known["corpus_docs"],
+            "adversarial_strings": known["adversarial_strings"],
+        }
 
     for index, row in enumerate(excluded):
         label = f"not_reasoned[{index}]"
@@ -364,6 +394,11 @@ def _generated_by(source_commit: str | None) -> dict[str, str]:
     }
 
 
+def partial_rows(table: dict[str, Any]) -> list[dict[str, Any]]:
+    """Table rows that are not certified (one evidence level recorded)."""
+    return [row for row in table.get("rows", []) if row.get("status") != "certified"]
+
+
 def absent_families(readings: dict[str, Any], table: dict[str, Any]) -> list[str]:
     """Roster families with neither a table row nor a not-reasoned record."""
     present = {str(row["family"]) for row in table.get("rows", [])}
@@ -437,6 +472,11 @@ def check(
                 f"fast_cpu_source_digest_v2 {recorded_v2!r}, not this tree's "
                 f"{engine_v2!r}; the native-path evidence does not bind to this tree"
             )
+    for row in partial_rows(table):
+        problems.append(
+            f"release: {row['family']} has chunked-path evidence at one level only "
+            f"({row['status']}); it is not certified and is refused at run time"
+        )
     for family in absent_families(readings, table):
         problems.append(
             f"release: {family} is in the certified repair roster but has no "
@@ -494,11 +534,17 @@ def main(argv: list[str] | None = None) -> int:
     write_document(arguments.table, table, table_schema, CHUNKED_ADMISSION_DOMAIN_TAG)
     write_document(arguments.manifest, manifest, evidence_schema, EVIDENCE_DOMAIN_TAG)
     rows = table["rows"]
+    certified = sum(row["status"] == "certified" for row in rows)
     native = sum("native" in row["paths"] for row in rows)
     print(
-        f"updated {arguments.table} ({len(rows)} rows, {native} with the native "
-        f"path) and {arguments.manifest}"
+        f"updated {arguments.table} ({len(rows)} rows, {certified} certified, "
+        f"{native} with the native path) and {arguments.manifest}"
     )
+    for row in partial_rows(table):
+        print(
+            f"note: {row['family']} has {row['status'].replace('_', ' ')} evidence "
+            "and is refused at run time until both levels are recorded"
+        )
     for family in absent_families(readings, table):
         print(f"note: {family} has no chunked-path evidence and is refused at run time")
     return 0

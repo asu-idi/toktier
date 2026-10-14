@@ -94,9 +94,18 @@ def test_table_is_a_roster_subset_bound_to_this_tree() -> None:
     assert [row["family"] for row in rows] == sorted(row["family"] for row in rows)
     for row in rows:
         assert row["artifact_sha256"] == roster[row["family"]], row["family"]
-        assert "python" in row["paths"]
         assert row["evidence_id"] == tool.EVIDENCE_ID
         assert row["corpus_docs"] or row["adversarial_strings"]
+        levels = set(row["evidence"]["python"])
+        if row["status"] == "certified":
+            assert levels == set(tool.EVIDENCE_LEVELS) and "python" in row["paths"]
+            assert row["corpus_docs"] and row["adversarial_strings"]
+        else:
+            assert row["paths"] == [] and len(levels) == 1
+            assert row["status"] == next(iter(levels)) + "_only"
+        if "native" in row["paths"]:
+            assert set(row["evidence"]["native"]) == set(tool.EVIDENCE_LEVELS)
+    assert any(row["status"] == "certified" for row in rows)
     assert table["chunked_identity"] == tool.chunked_identity()
     assert table["fast_cpu_source_digest_v2"] == compute_identity_v2.source_digest(
         "fast_cpu"
@@ -172,32 +181,89 @@ def test_a_family_outside_the_roster_or_with_another_digest_is_refused() -> None
         _derive(tampered)
 
 
-def test_native_path_needs_both_native_columns_and_the_python_path() -> None:
+def _with_native(row: dict[str, Any]) -> dict[str, Any]:
+    out = copy.deepcopy(row)
+    out["paths"] = ["python", "native"]
+    out["mismatches"]["native_vs_oracle"] = 0
+    out["mismatches"]["python_vs_native"] = 0
+    if "docs" in out:
+        out["native"] = {
+            "chunks": 1,
+            "chunked_docs": 1,
+            "serial_fallbacks": 0,
+            "serial_reasons": {},
+            "plan_disagreements": 0,
+        }
+    return out
+
+
+def _row_index(rows: list[dict[str, Any]], family: str) -> int:
+    return next(i for i, row in enumerate(rows) if row["family"] == family)
+
+
+def test_native_path_needs_both_levels_and_complete_columns() -> None:
     readings = _readings()
-    row = copy.deepcopy(readings["families"][0])
-    row["paths"] = ["python", "native"]
-    row["native"] = {
-        "chunks": 1,
-        "chunked_docs": 1,
-        "serial_fallbacks": 0,
-        "serial_reasons": {},
-        "plan_disagreements": 0,
-    }
-    row["mismatches"]["native_vs_oracle"] = 0
-    # One native column missing: the native path is not granted.
-    readings_a = copy.deepcopy(readings)
-    readings_a["families"][0] = copy.deepcopy(row)
-    table, _ = _derive(readings_a)
-    granted = next(r for r in table["rows"] if r["family"] == row["family"])
-    assert granted["paths"] == ["python"]
-    # Both native columns at zero: granted, and the manifest still binds.
-    row["mismatches"]["python_vs_native"] = 0
-    readings_b = copy.deepcopy(readings)
-    readings_b["families"][0] = row
-    table, manifest = _derive(readings_b)
-    granted = next(r for r in table["rows"] if r["family"] == row["family"])
-    assert granted["paths"] == ["python", "native"]
+    certified = next(
+        row["family"]
+        for row in load_json(tool.TABLE_PATH)["rows"]
+        if row["status"] == "certified"
+    )
+    corpus_i = _row_index(readings["families"], certified)
+    battery_i = _row_index(readings["adversarial"]["families"], certified)
+
+    def granted(document: dict[str, Any]) -> list[str]:
+        table, _manifest = _derive(document)
+        row = next(r for r in table["rows"] if r["family"] == certified)
+        assert row["status"] == "certified"
+        return list(row["paths"])
+
+    # Native judged by the corpus campaign alone: recorded, not granted.
+    corpus_only = copy.deepcopy(readings)
+    corpus_only["families"][corpus_i] = _with_native(readings["families"][corpus_i])
+    assert granted(corpus_only) == ["python"]
+    # Native judged by both levels, but a column missing at one: not granted.
+    missing = copy.deepcopy(corpus_only)
+    battery_row = _with_native(readings["adversarial"]["families"][battery_i])
+    battery_row["mismatches"]["python_vs_native"] = None
+    missing["adversarial"]["families"][battery_i] = battery_row
+    assert granted(missing) == ["python"]
+    # Both levels, both columns at zero: granted.
+    complete = copy.deepcopy(corpus_only)
+    complete["adversarial"]["families"][battery_i] = _with_native(
+        readings["adversarial"]["families"][battery_i]
+    )
+    assert granted(complete) == ["python", "native"]
+    _table, manifest = _derive(complete)
     assert manifest["totals"]["mismatches"] == 0
+
+
+def test_one_evidence_level_gives_a_named_partial_status() -> None:
+    readings = _readings()
+    certified = next(
+        row["family"]
+        for row in load_json(tool.TABLE_PATH)["rows"]
+        if row["status"] == "certified"
+    )
+    battery_only = copy.deepcopy(readings)
+    battery_only["families"] = [
+        row for row in readings["families"] if row["family"] != certified
+    ]
+    table, manifest = _derive(battery_only)
+    row = next(r for r in table["rows"] if r["family"] == certified)
+    assert row["status"] == "adversarial_only" and row["paths"] == []
+    assert row["evidence"] == {"python": ["adversarial"], "native": []}
+    assert row["corpus_docs"] == 0 and row["adversarial_strings"] > 0
+    assert {a["family"] for a in manifest["artifacts"]} >= {certified}
+    corpus_only = copy.deepcopy(readings)
+    corpus_only["adversarial"]["families"] = [
+        row for row in readings["adversarial"]["families"] if row["family"] != certified
+    ]
+    table, _manifest = _derive(corpus_only)
+    row = next(r for r in table["rows"] if r["family"] == certified)
+    assert row["status"] == "corpus_only" and row["paths"] == []
+    assert tool.partial_rows(table) and tool.absent_families(readings, table) == (
+        tool.absent_families(readings, load_json(tool.TABLE_PATH))
+    )
 
 
 def test_release_check_names_the_absent_roster_families(tmp_path: Path) -> None:
@@ -210,7 +276,13 @@ def test_release_check_names_the_absent_roster_families(tmp_path: Path) -> None:
     result = _run("--release-check")
     for family in expected:
         assert f"release: {family} is in the certified repair roster" in result.stderr
-    if expected or readings["chunked_identity"] != table["chunked_identity"]:
+    for row in tool.partial_rows(table):
+        assert f"release: {row['family']} has chunked-path evidence" in result.stderr
+    if (
+        expected
+        or tool.partial_rows(table)
+        or readings["chunked_identity"] != table["chunked_identity"]
+    ):
         assert result.returncode == 1
     # A family recorded as not reasoned about is not reported as absent.
     if expected:

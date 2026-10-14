@@ -38,15 +38,22 @@ from toktier.paths import artifact_cache_dir
 
 from .test_chunked import (
     _ADVERSARIAL,
-    CANDIDATE_FAMILIES,
     SIZES,
+    TABLE_FAMILIES,
     _adversarial,
     _artifact_source,
     _generated_corpora,
     _reference,
-    available_families,
     corpora,
 )
+
+#: Every family with a table row, certified or not: these are equivalence
+#: readings of the two planners, taken with the evidence gate lifted.
+CANDIDATE_FAMILIES = TABLE_FAMILIES
+
+
+def available_families() -> list[str]:
+    return [name for name in CANDIDATE_FAMILIES if _artifact_source(name)]
 
 
 def _load(family: str, config: Config) -> Tokenizer:
@@ -74,6 +81,10 @@ def loaded(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, Token
         if not chunked.native_available(handle):
             handle.close()
             pytest.skip(f"{family}: no native chunk encoder on this route")
+        # These are equivalence readings of the two planners, not
+        # certification: the evidence gate is lifted so the native path
+        # runs for every admitted family, whatever the table records.
+        chunked._planner_for(handle, evidence_gate=False)
         handles[family] = handle
     yield handles
     for handle in handles.values():
@@ -100,11 +111,16 @@ def test_native_admission_matches_the_python_planner(
     loaded: dict[str, Tokenizer], family: str
 ) -> None:
     tokenizer = _family(loaded, family)
-    native = chunked.admission(tokenizer)
+    merged = chunked.admission(tokenizer)
+    native = merged["native"]
     python = chunked.stats(tokenizer)
+    assert isinstance(native, dict)
     for key in ("admitted", "refusal", "normalizer", "literals"):
         assert native[key] == python[key], (family, key, native, python)
     assert native["admitted"] is True
+    assert merged["admitted"] is True and merged["native_available"] is True
+    assert merged["admission_gate"] == "lifted_for_evidence_collection"
+    assert merged["native_by_default"] is True
 
 
 @pytest.mark.parametrize("family", CANDIDATE_FAMILIES)
@@ -262,7 +278,8 @@ def test_native_pool_warm_and_ledger(loaded: dict[str, Tokenizer], family: str) 
     size = chunked.warm(tokenizer, workers=3, text=text[:20_000])
     assert size >= 3
     assert chunked.warm(tokenizer, workers=2) == size
-    assert chunked.admission(tokenizer)["workers"] == size
+    native_facts = chunked.admission(tokenizer)["native"]
+    assert isinstance(native_facts, dict) and native_facts["workers"] == size
     runtime = tokenizer._native_request_runtime()
     assert runtime is not None
     before = dict(runtime.runtime_stats()["execution_counts"])
@@ -273,7 +290,7 @@ def test_native_pool_warm_and_ledger(loaded: dict[str, Tokenizer], family: str) 
     assert sum(after.values()) - sum(before.values()) == encoded.chunks
     stats_after = chunked.stats(tokenizer)
     assert stats_after["native_calls"] == int(str(stats_before["native_calls"])) + 1
-    assert stats_after["chunked"] == int(str(stats_before["chunked"])) + 1
+    assert stats_after["applied"] == int(str(stats_before["applied"])) + 1
     assert stats_after["chunks_total"] == (
         int(str(stats_before["chunks_total"])) + encoded.chunks
     )

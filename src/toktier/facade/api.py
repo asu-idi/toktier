@@ -824,7 +824,8 @@ class Tokenizer:
         ``lookup`` omitted or ``"off"``, core stream only) and returns a
         :class:`toktier.chunked.ChunkedEncoding`, whose ids equal the plain
         encode; the native chunk encoder is used when the loaded runtime
-        has one, the Python-level one otherwise.
+        has one and the chunked admission table records the native path
+        for this artifact, the Python-level one otherwise.
         """
         if parallel is not None:
             return self._encode_parallel(
@@ -872,9 +873,9 @@ class Tokenizer:
             k = parallel
         else:
             raise ValueError("parallel must be 'auto' or a positive integer")
-        return chunked.encode(
-            self, text, k=k, native=chunked.native_available(self) or None
-        )
+        # ``native=None``: the module selects the native encoder when the
+        # runtime has it and the admission table records the native path.
+        return chunked.encode(self, text, k=k, native=None)
 
     def _encode_ids(
         self,

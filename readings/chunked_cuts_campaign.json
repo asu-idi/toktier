@@ -5,7 +5,7 @@
     "tool": "maintainer transcription of the 2026-09-17 campaign records",
     "tool_version": "0",
     "source_commit": "fb6a0638052b767cfc3e9f5ede307629e7ffb4f2",
-    "generated_at": "2026-10-14T04:02:37Z"
+    "generated_at": "2026-10-14T04:21:42Z"
   },
   "campaign": {
     "run_id": "chunked-cuts-20260917",
@@ -48,7 +48,7 @@
   },
   "corpus": [
     {
-      "corpus_id": "nvidia/Nemotron-CC-v2.1@ba6f2aaef7ada865bb08fc08640ca292150097db (High-Quality, Medium-High-Quality and Medium-Quality shards) together with a 6,008-document multilingual text set split at blank lines",
+      "corpus_id": "nvidia/Nemotron-CC-v2.1@ba6f2aaef7ada865bb08fc08640ca292150097db (131 High-Quality tier shards: High-Quality, High-Quality-DQA, High-Quality-Synthetic, High-Quality-Translated-To-English and High-Quality-Translated-To-English-Synthetic) together with a 6,008-document multilingual text set split at blank lines",
       "docs": 102400000,
       "chars": 380330377958
     }
@@ -296,5 +296,5 @@
   },
   "not_reasoned": [],
   "notes": "Transcribed from the campaign records of 2026-09-17, taken on the chunk-cut rule as it stood before this release renamed the module and added the admission gate: the chunked source identity was not recorded then (null above), the native path did not run, and the serial reason codes are written under their current names. The operating system of the compute nodes was not recorded beyond the kernel family. These readings seed the admission table until the release campaign (every roster family, Python and native paths, four-way comparison) replaces this file.",
-  "root_digest": "sha256:ea8531f922008c103f556330a56e0474319b786f6d3607fef3691dfa23b66a79"
+  "root_digest": "sha256:b46244814dbabd53bd6d7f24a80860324a69f1a51e0c89bc4f7d68c44697b412"
 }

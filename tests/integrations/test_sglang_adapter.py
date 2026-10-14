@@ -305,6 +305,23 @@ def test_unexpected_manager_shape_leaves_the_class_unchanged(
     assert "sglang_version" in records[0]
 
 
+def test_an_invalid_setting_leaves_the_manager_unattached(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Form Z reads the environment itself; a refused setting fails closed."""
+    manager = _manager_class()
+    before = dict(vars(manager))
+    monkeypatch.setenv("TOKTIER_SGLANG_IDENTITY", "skip")
+    lines: list[str] = []
+    assert attach_to_tokenizer_manager(manager, log=lines.append) is False
+    assert dict(vars(manager)) == before
+    assert len(lines) == 1 and "invalid configuration" in lines[0]
+    assert "TOKTIER_SGLANG_IDENTITY" in lines[0]
+    # Through the explicit wrap, the same setting raises and names the variable.
+    with pytest.raises(ValueError, match="TOKTIER_SGLANG_IDENTITY"):
+        wrap_tokenizer(_StubHf())
+
+
 # -- chunk-parallel encode wiring (0.3.0) -----------------------------------
 
 
@@ -498,7 +515,7 @@ def test_identity_compares_every_core_section() -> None:
     assert check_core_identity(both, fake)["sections"] == ["normalizer", "added_tokens"]
 
 
-def test_identity_unavailable_delegates_and_skip_mode_exists(
+def test_identity_unavailable_delegates_and_the_check_cannot_be_skipped(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake = _FakeToktier()
@@ -510,16 +527,17 @@ def test_identity_unavailable_delegates_and_skip_mode_exists(
     assert w.identity["reason"] == (
         "the supplied tokenizer has no serializable fast backend"
     )
-    fake2 = _FakeToktier()
-    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake2)
-    w2 = wrap_tokenizer(hf, AdapterConfig(session_key="off", identity="skip"))
-    assert w2.identity["status"] == "skipped" and w2.toktier is fake2
-    with pytest.raises(ValueError):
-        AdapterConfig(identity="maybe")
-    assert AdapterConfig.from_env({"TOKTIER_SGLANG_IDENTITY": "skip"}).identity == (
-        "skip"
-    )
-    assert AdapterConfig.from_env({}).identity == "require"
+    # The check is always on: neither a constructor argument nor the
+    # environment can turn it off, and an unknown value is refused, not ignored.
+    for value in ("skip", "maybe", "off", "REQUIRE"):
+        with pytest.raises(ValueError, match="cannot be turned off"):
+            AdapterConfig(identity=value)
+        with pytest.raises(ValueError, match="TOKTIER_SGLANG_IDENTITY"):
+            AdapterConfig.from_env({"TOKTIER_SGLANG_IDENTITY": value})
+    for accepted in ({}, {"TOKTIER_SGLANG_IDENTITY": ""}):
+        assert AdapterConfig.from_env(accepted).identity == "require"
+    explicit = {"TOKTIER_SGLANG_IDENTITY": "require"}
+    assert AdapterConfig.from_env(explicit).identity == "require"
     # passthrough never loads toktier, so there is nothing to compare
     w3 = wrap_tokenizer(_StubHf(), AdapterConfig(session_key="passthrough"))
     assert w3.identity["status"] == "skipped"

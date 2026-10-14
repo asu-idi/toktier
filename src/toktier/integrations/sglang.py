@@ -54,9 +54,10 @@ identity`). A family or repository name alone cannot establish this: the
 supplied object may carry another revision, other loader options or live
 vocabulary changes. When the two are not equivalent, or the comparison
 cannot be made, the wrapper delegates every call to the supplied tokenizer
-for its whole life and records the reason (``stats()["identity"]``;
-``TOKTIER_SGLANG_IDENTITY=skip`` turns the check off for tokenizers that
-cannot be serialized, at the operator's risk). Admission is not a one-time
+for its whole life and records the reason (``stats()["identity"]``). The
+check cannot be turned off: ``TOKTIER_SGLANG_IDENTITY`` accepts only
+``require`` (or unset), and any other value is rejected as an invalid
+setting rather than ignored. Admission is not a one-time
 fact: the supplied object can change after construction -- ``add_tokens``
 through the wrapper, an assignment such as ``split_special_tokens = True``,
 or a change made on the retained object directly -- so before every
@@ -157,7 +158,8 @@ SESSION_KEY: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 
 _KEY_MODES = ("contextvar", "auto", "off", "passthrough")
 _SHADOW_MODES = ("off", "sync", "async")
-_IDENTITY_MODES = ("require", "skip")
+#: The identity check is always on; ``"require"`` is the only setting.
+_IDENTITY_MODES = ("require",)
 _ENV_PREFIX = "TOKTIER_SGLANG_"
 
 #: Loader-face sections that decide the core id stream of a fast tokenizer:
@@ -231,9 +233,11 @@ class AdapterConfig:
     an explicit ``long_request_encoder`` takes precedence over it. Stateless
     means: every request in ``"off"`` mode, and a request without a key in
     ``"contextvar"`` mode (which otherwise takes content lookup).
-    ``identity`` is ``"require"`` (the wrapper accelerates only when
+    ``identity`` is always ``"require"``: the wrapper accelerates only when
     :func:`check_core_identity` finds the supplied tokenizer equivalent to
-    the toktier subject, and delegates otherwise) or ``"skip"``.
+    the toktier subject, and delegates otherwise. The field exists so that
+    an explicit setting is checked rather than ignored; any other value is
+    rejected.
     ``scheduler`` (a :class:`~toktier.integrations.sglang_sched.
     SchedulerConfig` with ``workers`` > 0) starts the process-pool
     scheduler; ``None`` keeps every encode in this process.
@@ -275,7 +279,8 @@ class AdapterConfig:
             raise ValueError("chunked_min_chars and chunked_k must be non-negative")
         if self.identity not in _IDENTITY_MODES:
             raise ValueError(
-                f"identity must be one of {_IDENTITY_MODES!r}, not {self.identity!r}"
+                "identity must be 'require' (the identity check cannot be "
+                f"turned off), not {self.identity!r}"
             )
         if self.scheduler is not None and self.scheduler.workers < 1:
             raise ValueError("scheduler, when given, needs at least one worker")
@@ -289,7 +294,9 @@ class AdapterConfig:
         (``FAMILY``, ``REPO``, ``SESSION_KEY``, ``STORE``, ``SHADOW_RATE``,
         ``SHADOW_DUMP_DIR``, ``TIMING_LOG``, ``STATS_FILE``,
         ``EXPLAIN_EVERY``, ``RID_SEPARATOR``, ``PER_PROCESS_STORE``,
-        ``CHUNKED_MIN_CHARS``, ``CHUNKED_K``, ``IDENTITY``). The scheduler is read
+        ``CHUNKED_MIN_CHARS``, ``CHUNKED_K``, ``IDENTITY``; the last accepts
+        only ``require``). An invalid value raises ``ValueError``. The
+        scheduler is read
         from ``TOKTIER_SGLANG_SCHED_*`` when ``TOKTIER_SGLANG_SCHED_WORKERS``
         is set to a positive number (:meth:`SchedulerConfig.from_env`, given
         the same mapping). With ``env`` omitted the process environment is
@@ -305,6 +312,12 @@ class AdapterConfig:
         shadow = {"0": "off", "1": "sync", "true": "sync", "false": "off"}.get(
             shadow_raw, shadow_raw
         )
+        identity = str(get("IDENTITY", "require"))
+        if identity not in _IDENTITY_MODES:
+            raise ValueError(
+                f"{_ENV_PREFIX}IDENTITY must be unset or 'require'; the identity "
+                f"check cannot be turned off (got {identity!r})"
+            )
         scheduler: SchedulerConfig | None = None
         if int(get("SCHED_WORKERS", 0)) > 0:
             scheduler = SchedulerConfig.from_env(e)
@@ -324,7 +337,7 @@ class AdapterConfig:
             rid_separator=get("RID_SEPARATOR"),
             chunked_min_chars=int(get("CHUNKED_MIN_CHARS", 0)),
             chunked_k=int(get("CHUNKED_K", 0)),
-            identity=str(get("IDENTITY", "require")),
+            identity=identity,
             scheduler=scheduler,
         )
 
@@ -605,16 +618,15 @@ class SGLangToktierTokenizer:
         self._stale = False
         if self._mode != "passthrough":
             self._tok = self._load_toktier()
-            if self._cfg.identity == "require":
-                self._identity = check_core_identity(hf_tokenizer, self._tok)
-                if self._identity["status"] != "equivalent":
-                    # Not the tokenizer toktier loaded (or not provably so):
-                    # the supplied object answers everything, for good.
-                    self._tok.close()
-                    self._tok = None
-                    self._mode = "passthrough"
-                else:
-                    self._fingerprint = _live_fingerprint(hf_tokenizer)
+            self._identity = check_core_identity(hf_tokenizer, self._tok)
+            if self._identity["status"] != "equivalent":
+                # Not the tokenizer toktier loaded (or not provably so):
+                # the supplied object answers everything, for good.
+                self._tok.close()
+                self._tok = None
+                self._mode = "passthrough"
+            else:
+                self._fingerprint = _live_fingerprint(hf_tokenizer)
         self._stats["mode"] = self._mode
         self._stats["identity"] = dict(self._identity)
         self._stats["sched_fallback"] = 0
@@ -855,8 +867,6 @@ class SGLangToktierTokenizer:
         """
         if self._tok is None:
             return False
-        if self._cfg.identity != "require":
-            return True
         with self._lock:
             if self._tok is None:
                 return False
@@ -1394,7 +1404,9 @@ def wrap_tokenizer(
 
     ``config`` defaults to :meth:`AdapterConfig.from_env`; keyword arguments
     override individual fields. Returns the wrapper (or the tokenizer itself
-    when it is already wrapped).
+    when it is already wrapped). An invalid ``TOKTIER_SGLANG_*`` setting
+    raises ``ValueError``; with the backend patch, SGLang then stops at
+    startup instead of serving with the setting ignored.
     """
     if isinstance(hf_tokenizer, SGLangToktierTokenizer):
         return hf_tokenizer
@@ -1512,8 +1524,10 @@ def attach_to_tokenizer_manager(
     returns ``False`` after recording why: a ``log`` line and, when a
     timing log is configured, an ``{"kind": "attach", "status":
     "sglang_shape_unverified", ...}`` record carrying the reason and the
-    SGLang version. ``False`` is also returned when the class is already
-    patched.
+    SGLang version. An invalid ``TOKTIER_SGLANG_*`` setting (read when
+    ``config`` is omitted) leaves the class unchanged as well: the call
+    returns ``False`` and logs the error. ``False`` is also
+    returned when the class is already patched.
 
     After the original ``__init__`` the manager's ``tokenizer`` is wrapped
     (and the dynamic-batch tokenizer's reference to it updated); around
@@ -1529,7 +1543,18 @@ def attach_to_tokenizer_manager(
     """
     if getattr(manager_cls, "_toktier_attached", False):
         return False
-    cfg = config if config is not None else AdapterConfig.from_env()
+    if config is not None:
+        cfg = config
+    else:
+        try:
+            cfg = AdapterConfig.from_env()
+        except ValueError as ex:
+            if log is not None:
+                log(
+                    "toktier sglang adapter not attached in pid "
+                    f"{os.getpid()}: invalid configuration: {ex}"
+                )
+            return False
     shape = check_manager_shape(manager_cls)
     if shape["status"] != "verified":
         _append_record(cfg.timing_log, {"kind": "attach", **shape})

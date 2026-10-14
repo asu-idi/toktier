@@ -1,0 +1,300 @@
+{
+  "schema": "toktier.chunked_cuts_campaign.v1",
+  "schema_version": 1,
+  "generated_by": {
+    "tool": "maintainer transcription of the 2026-09-17 campaign records",
+    "tool_version": "0",
+    "source_commit": "fb6a0638052b767cfc3e9f5ede307629e7ffb4f2",
+    "generated_at": "2026-10-14T04:02:37Z"
+  },
+  "campaign": {
+    "run_id": "chunked-cuts-20260917",
+    "date": "2026-09-17",
+    "tag": null
+  },
+  "tool_sha256": null,
+  "chunked_identity": null,
+  "fast_cpu_source_digest": "843bee0e5e4d73e96da7f74a3baa8b8e483bc735f453286871ff07d1748ea32a",
+  "fast_cpu_source_digest_v2": "31cafeecb98352e500975d84dc92b769f73a3a7468fab9beabb4c686e607a6b3",
+  "toktier_version": "0.2.9",
+  "tokenizers": "0.22.2",
+  "transformers": null,
+  "python": "3.12.14",
+  "os": "Linux x86_64",
+  "hosts": [
+    "sc018",
+    "sc046",
+    "sc104",
+    "sc105",
+    "scc053",
+    "scc058"
+  ],
+  "job_ids": [
+    "63531658"
+  ],
+  "core_hours": 171.0,
+  "k_rule": {
+    "rule": "max(2, ceil(chars / chunk_chars))",
+    "chunk_chars": 8000,
+    "min_chunk": 64
+  },
+  "length_gate": {
+    "min_chars": 512,
+    "max_chars": 400000
+  },
+  "shards": {
+    "planned": 128,
+    "final": 128
+  },
+  "corpus": [
+    {
+      "corpus_id": "nvidia/Nemotron-CC-v2.1@ba6f2aaef7ada865bb08fc08640ca292150097db (High-Quality, Medium-High-Quality and Medium-Quality shards) together with a 6,008-document multilingual text set split at blank lines",
+      "docs": 102400000,
+      "chars": 380330377958
+    }
+  ],
+  "families": [
+    {
+      "family": "deepseek_v3",
+      "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
+      "normalizer": "none",
+      "paths": [
+        "python"
+      ],
+      "docs": 102400000,
+      "chars": 380330377958,
+      "tokens": 73955688757,
+      "chunks": 207595483,
+      "chunked_docs": 102399965,
+      "cut_misses": 38,
+      "literal_rejects": 0,
+      "norm_rejects": 0,
+      "serial_fallbacks": 35,
+      "serial_reasons": {
+        "R_CHUNK_NO_CUT": 35
+      },
+      "native": null,
+      "mismatches": {
+        "python_vs_oracle": 0,
+        "native_vs_oracle": null,
+        "python_vs_native": null,
+        "serial_vs_oracle": 0
+      }
+    },
+    {
+      "family": "gpt_oss_120b",
+      "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+      "normalizer": "none",
+      "paths": [
+        "python"
+      ],
+      "docs": 102400000,
+      "chars": 380330377958,
+      "tokens": 73551225653,
+      "chunks": 207595483,
+      "chunked_docs": 102399965,
+      "cut_misses": 38,
+      "literal_rejects": 0,
+      "norm_rejects": 0,
+      "serial_fallbacks": 35,
+      "serial_reasons": {
+        "R_CHUNK_NO_CUT": 35
+      },
+      "native": null,
+      "mismatches": {
+        "python_vs_oracle": 0,
+        "native_vs_oracle": null,
+        "python_vs_native": null,
+        "serial_vs_oracle": 0
+      }
+    },
+    {
+      "family": "llama_3_1_8b",
+      "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
+      "normalizer": "none",
+      "paths": [
+        "python"
+      ],
+      "docs": 102400000,
+      "chars": 380330377958,
+      "tokens": 74473504927,
+      "chunks": 207595483,
+      "chunked_docs": 102399965,
+      "cut_misses": 38,
+      "literal_rejects": 162,
+      "norm_rejects": 0,
+      "serial_fallbacks": 35,
+      "serial_reasons": {
+        "R_CHUNK_NO_CUT": 35
+      },
+      "native": null,
+      "mismatches": {
+        "python_vs_oracle": 0,
+        "native_vs_oracle": null,
+        "python_vs_native": null,
+        "serial_vs_oracle": 0
+      }
+    },
+    {
+      "family": "qwen3_8b",
+      "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "normalizer": "nfc",
+      "paths": [
+        "python"
+      ],
+      "docs": 102400000,
+      "chars": 380330377958,
+      "tokens": 75621085874,
+      "chunks": 207595482,
+      "chunked_docs": 102399964,
+      "cut_misses": 39,
+      "literal_rejects": 250,
+      "norm_rejects": 4,
+      "serial_fallbacks": 36,
+      "serial_reasons": {
+        "R_CHUNK_NO_CUT": 36
+      },
+      "native": null,
+      "mismatches": {
+        "python_vs_oracle": 0,
+        "native_vs_oracle": null,
+        "python_vs_native": null,
+        "serial_vs_oracle": 0
+      }
+    }
+  ],
+  "adversarial": {
+    "generator": "the adversarial normalization corpus generator of the chunked tests (300-1,500 character strings, k in {2, 3, 4, 6, 8}; one string in ten of 2,000-6,000 characters with k up to 16), judged against the oracle package and the serial route",
+    "families": [
+      {
+        "family": "deepseek_v3",
+        "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
+        "normalizer": "none",
+        "paths": [
+          "python"
+        ],
+        "strings": 20000,
+        "chars": 24383512,
+        "chunked": 20000,
+        "chunks": 96861,
+        "cut_misses": 343,
+        "literal_rejects": 33439,
+        "norm_rejects": 0,
+        "mismatches": {
+          "python_vs_oracle": 0,
+          "native_vs_oracle": null,
+          "python_vs_native": null,
+          "serial_vs_oracle": 0
+        }
+      },
+      {
+        "family": "gpt_oss_120b",
+        "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+        "normalizer": "none",
+        "paths": [
+          "python"
+        ],
+        "strings": 20000,
+        "chars": 24438393,
+        "chunked": 20000,
+        "chunks": 97108,
+        "cut_misses": 344,
+        "literal_rejects": 12076,
+        "norm_rejects": 0,
+        "mismatches": {
+          "python_vs_oracle": 0,
+          "native_vs_oracle": null,
+          "python_vs_native": null,
+          "serial_vs_oracle": 0
+        }
+      },
+      {
+        "family": "llama_3_1_8b",
+        "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
+        "normalizer": "none",
+        "paths": [
+          "python"
+        ],
+        "strings": 20000,
+        "chars": 24096204,
+        "chunked": 20000,
+        "chunks": 97614,
+        "cut_misses": 431,
+        "literal_rejects": 35033,
+        "norm_rejects": 0,
+        "mismatches": {
+          "python_vs_oracle": 0,
+          "native_vs_oracle": null,
+          "python_vs_native": null,
+          "serial_vs_oracle": 0
+        }
+      },
+      {
+        "family": "minimax_m3",
+        "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
+        "normalizer": "nfc",
+        "paths": [
+          "python"
+        ],
+        "strings": 30000,
+        "chars": 36541110,
+        "chunked": 30000,
+        "chunks": 146377,
+        "cut_misses": 544,
+        "literal_rejects": 21477,
+        "norm_rejects": 9825,
+        "mismatches": {
+          "python_vs_oracle": 0,
+          "native_vs_oracle": null,
+          "python_vs_native": null,
+          "serial_vs_oracle": 0
+        }
+      },
+      {
+        "family": "qwen3_5_08b",
+        "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+        "normalizer": "nfc",
+        "paths": [
+          "python"
+        ],
+        "strings": 30000,
+        "chars": 36389306,
+        "chunked": 30000,
+        "chunks": 147513,
+        "cut_misses": 587,
+        "literal_rejects": 23676,
+        "norm_rejects": 9891,
+        "mismatches": {
+          "python_vs_oracle": 0,
+          "native_vs_oracle": null,
+          "python_vs_native": null,
+          "serial_vs_oracle": 0
+        }
+      },
+      {
+        "family": "qwen3_8b",
+        "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+        "normalizer": "nfc",
+        "paths": [
+          "python"
+        ],
+        "strings": 100000,
+        "chars": 121263547,
+        "chunked": 100000,
+        "chunks": 486465,
+        "cut_misses": 1801,
+        "literal_rejects": 70769,
+        "norm_rejects": 32191,
+        "mismatches": {
+          "python_vs_oracle": 0,
+          "native_vs_oracle": null,
+          "python_vs_native": null,
+          "serial_vs_oracle": 0
+        }
+      }
+    ]
+  },
+  "not_reasoned": [],
+  "notes": "Transcribed from the campaign records of 2026-09-17, taken on the chunk-cut rule as it stood before this release renamed the module and added the admission gate: the chunked source identity was not recorded then (null above), the native path did not run, and the serial reason codes are written under their current names. The operating system of the compute nodes was not recorded beyond the kernel family. These readings seed the admission table until the release campaign (every roster family, Python and native paths, four-way comparison) replaces this file.",
+  "root_digest": "sha256:ea8531f922008c103f556330a56e0474319b786f6d3607fef3691dfa23b66a79"
+}

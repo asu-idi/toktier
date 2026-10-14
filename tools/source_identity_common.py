@@ -8,6 +8,10 @@ release checks can verify them without a build.
 
 One table (:data:`IDENTITIES`) holds the domain and path set of every
 identity, so the three thin CLI wrappers cannot drift from each other.
+A second, tools-only table (:data:`TOOL_SIDE_IDENTITIES`) holds the
+identities that bind evidence to Python-side sources and have no
+compile-time counterpart; they are kept apart so that every consumer
+iterating the three build-time identities keeps meaning exactly those.
 Ordering note: Rust's ``PathBuf`` ordering compares path components,
 not the rendered ``'/'`` byte against ``'-'``; sorting by ``path.parts``
 matches ``build.rs`` exactly for sibling names such as ``toktier`` and
@@ -141,6 +145,33 @@ IDENTITIES: dict[str, SourceIdentity] = {
             "crates/toktier-store-core",
             "crates/toktier-store-sqlite",
         ),
+    ),
+}
+
+#: Identities computed by the tools alone (no ``build.rs`` counterpart,
+#: not part of the three-identity model of ``docs/contracts/registry.md``
+#: Section 1, and deliberately outside :data:`IDENTITIES` so that the
+#: synchronization and coverage cross-checks below, the version-constant
+#: scan and the artifact-equivalence coverage keep speaking about the
+#: three build-time identities only).
+#:
+#: ``chunked`` is the source identity of the Python chunk-parallel path:
+#: the module and the two frozen repair tables it reads (the property
+#: table that classes every character, and the roster that admits a
+#: family). ``src/toktier/routing/tables/chunked_admission.v1.json``
+#: records it, and ``tools/update_chunked_admission.py --check``
+#: recomputes it, so a change to any of these files is a change the
+#: chunked-path evidence has to be re-examined against. The algorithm is
+#: :meth:`SourceIdentity.source_digest`, unchanged.
+TOOL_SIDE_IDENTITIES: dict[str, SourceIdentity] = {
+    "chunked": SourceIdentity(
+        domain=b"toktier.chunked.source.v1\0",
+        files=(
+            "src/toktier/chunked.py",
+            "src/toktier/repair/tables/fast_repair_families.v1.json",
+            "src/toktier/repair/tables/repair_pclass.v1.zlib",
+        ),
+        trees=(),
     ),
 }
 

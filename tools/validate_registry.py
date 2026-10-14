@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Validate a toktier registry or evidence manifest and its root digest."""
+"""Validate a toktier registry, evidence manifest, chunked admission table or
+chunked-cuts readings file against its schema and check its root digest."""
 
 from __future__ import annotations
 
@@ -29,11 +30,24 @@ SCHEMAS: dict[str, tuple[Path, bytes]] = {
         REPOSITORY_ROOT / "schemas" / "evidence_manifest.schema.json",
         b"toktier.evidence.v1\0",
     ),
+    "chunked_admission": (
+        REPOSITORY_ROOT / "schemas" / "chunked_admission.schema.json",
+        b"toktier.chunked_admission.v1\0",
+    ),
+    "chunked_readings": (
+        REPOSITORY_ROOT / "schemas" / "chunked_readings.schema.json",
+        b"toktier.chunked_readings.v1\0",
+    ),
 }
 REGISTRY_MARKERS = frozenset(
     {"oracles", "pipelines", "added_frontends", "compositions"}
 )
 EVIDENCE_MARKERS = frozenset({"evidence_id", "run", "corpora", "totals", "environment"})
+#: The two chunked-path documents name their schema in a top-level member.
+SELF_DESCRIBED = {
+    "toktier.chunked_admission.v1": "chunked_admission",
+    "toktier.chunked_cuts_campaign.v1": "chunked_readings",
+}
 
 
 class InputError(ValueError):
@@ -64,6 +78,9 @@ def load_document(path: Path) -> object:
 def detect_schema(document: object) -> str:
     if not isinstance(document, dict):
         raise InputError("top-level JSON value must be an object")
+    declared = document.get("schema")
+    if isinstance(declared, str) and declared in SELF_DESCRIBED:
+        return SELF_DESCRIBED[declared]
     keys = set(document)
     registry_match = bool(keys & REGISTRY_MARKERS)
     evidence_match = bool(keys & EVIDENCE_MARKERS)
@@ -124,7 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Validate a toktier registry or evidence manifest."
     )
     parser.add_argument("json_file", type=Path, metavar="FILE")
-    parser.add_argument("--schema", choices=("registry", "evidence"))
+    parser.add_argument("--schema", choices=tuple(SCHEMAS))
     return parser
 
 

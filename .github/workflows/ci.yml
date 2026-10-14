@@ -102,6 +102,8 @@ jobs:
       - run: python tools/update_fast_cpu_registry.py --check
       - run: python tools/generate_evidence.py --check --campaign main
       - run: python tools/generate_evidence.py --check --campaign extra
+      - run: python tools/generate_evidence.py --check --campaign chunked_cuts
+      - run: python tools/update_chunked_admission.py --check
       - run: python tools/verify_carryover.py --check
       - run: python tools/generate_readme_backfill.py --check
       - run: python tools/generate_artifact_manifest.py --check

@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "evidence_id": "ev-chunked-cuts-v1",
+  "generated_by": {
+    "tool": "tools/update_chunked_admission.py",
+    "tool_version": "1.0.0",
+    "source_commit": "bfeaf8ced30dea28db9f96695e309d17a762992f",
+    "generated_at": "2026-10-14T04:02:38Z"
+  },
+  "run": {
+    "run_id": "chunked-cuts-20260917",
+    "date": "2026-09-17",
+    "suite_version": "chunked-cuts-four-way-v1"
+  },
+  "oracle": {
+    "package": "tokenizers",
+    "version": "0.22.2"
+  },
+  "artifacts": [
+    {
+      "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
+      "family": "deepseek_v3"
+    },
+    {
+      "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+      "family": "gpt_oss_120b"
+    },
+    {
+      "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
+      "family": "llama_3_1_8b"
+    },
+    {
+      "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
+      "family": "minimax_m3"
+    },
+    {
+      "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+      "family": "qwen3_5_08b"
+    },
+    {
+      "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "family": "qwen3_8b"
+    }
+  ],
+  "corpora": [
+    {
+      "corpus_id": "nvidia/Nemotron-CC-v2.1@ba6f2aaef7ada865bb08fc08640ca292150097db (High-Quality, Medium-High-Quality and Medium-Quality shards) together with a 6,008-document multilingual text set split at blank lines",
+      "docs": 102400000,
+      "bytes": 380330377958
+    }
+  ],
+  "totals": {
+    "docs": 102400000,
+    "bytes": 380330377958,
+    "mismatches": 0
+  },
+  "environment": {
+    "os": "Linux x86_64",
+    "python": "3.12.14",
+    "hosts": [
+      "sc018",
+      "sc046",
+      "sc104",
+      "sc105",
+      "scc053",
+      "scc058"
+    ]
+  },
+  "root_digest": "sha256:25ca9bb8a5660bea36c330512b2e9078697b34c113e4087321a24de2acd13371"
+}

@@ -37,11 +37,21 @@ Usage::
     python tools/generate_evidence.py --check --campaign extra
     python tools/generate_evidence.py --check --campaign kimi
     python tools/generate_evidence.py --check --campaign fastokens_pinned
+    python tools/generate_evidence.py --check --campaign chunked_cuts
 
 For the ``fastokens_pinned`` campaign ``routed`` counts documents the adapter's
 Unicode guard answers by the reference by design, and ``mismatches`` is the
 guarded count; the raw count is carried in the registry's
 ``engine_distributions.fastokens.evidence`` node beside it.
+
+The ``chunked_cuts`` manifest (the chunk-parallel path's campaign,
+``ev-chunked-cuts-v1``) is written by ``tools/update_chunked_admission.py``
+from ``readings/chunked_cuts_campaign.json``, which also derives the shipped
+admission table from the same readings; this tool verifies the manifest
+like the others. There ``totals.docs`` counts the distinct corpus documents
+judged (the adversarial battery's strings are carried in the readings, not
+here) and ``totals.mismatches`` sums every comparison column of the
+campaign, corpus and battery alike.
 
 The check needs the ``jsonschema`` package (in the ``test`` dependency
 group; not a runtime dependency of the library).
@@ -73,6 +83,9 @@ DEFAULT_OUTPUTS = {
     "kimi": REPOSITORY_ROOT / "evidence" / "evidence_manifest_kimi_band.json",
     "fastokens_pinned": (
         REPOSITORY_ROOT / "evidence" / "evidence_manifest_fastokens_pinned.json"
+    ),
+    "chunked_cuts": (
+        REPOSITORY_ROOT / "evidence" / "evidence_manifest_chunked_cuts.json"
     ),
 }
 

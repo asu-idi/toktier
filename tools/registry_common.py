@@ -40,6 +40,10 @@ EVIDENCE_DOMAIN_TAG = b"toktier.evidence.v1\x00"
 PIPELINE_DOMAIN_TAG = b"toktier.pipeline.v1\x00"
 ADDED_FRONTEND_DOMAIN_TAG = b"toktier.added_frontend.v1\x00"
 SIBLING_ALIAS_DOMAIN_TAG = b"toktier.sibling_aliases.v1\x00"
+#: The chunk-parallel admission table (``src/toktier/chunked.py`` checks
+#: the same tag at load time) and the campaign readings it is derived from.
+CHUNKED_ADMISSION_DOMAIN_TAG = b"toktier.chunked_admission.v1\x00"
+CHUNKED_READINGS_DOMAIN_TAG = b"toktier.chunked_readings.v1\x00"
 
 #: Digest stand-in for a binding that another lane owns. It is a syntactically
 #: valid sha256 that cannot be a real digest of anything anyone shipped, so a

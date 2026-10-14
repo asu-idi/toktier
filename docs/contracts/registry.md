@@ -364,6 +364,13 @@ raise `REGISTRY_INVALID`.
   numbers are structurally traceable; the harness that produced them is
   planned for a later release. The manifest states what was run and what
   was observed; it does not claim more than that.
+- Since 0.3.0 the chunk-parallel path has its own admission table,
+  `src/toktier/routing/tables/chunked_admission.v1.json`, derived by
+  `tools/update_chunked_admission.py` from the campaign readings
+  (`readings/chunked_cuts_campaign.json`) together with the
+  `ev-chunked-cuts-v1` manifest; a certified family without a row there
+  is refused at run time, so the set the path may chunk is the set the
+  path was judged on.
 
 ### 5.1 Explicit evidence carry-over
 

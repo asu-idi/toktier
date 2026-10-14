@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toktier:schema:chunked-readings:1",
+  "title": "toktier chunked-cuts campaign readings",
+  "description": "Readings of the chunk-parallel path's correctness campaign: per family, the documents judged under the forced-chunking rule, the planner counters, and the four-way mismatch columns (Python chunked vs oracle, native chunked vs oracle, Python vs native, serial vs oracle), plus the adversarial normalization battery. Written by tools/run_chunked_cut_campaign.py summarize; read by tools/update_chunked_admission.py, which derives the shipped admission table and the ev-chunked-cuts-v1 evidence manifest from it. Recorded as read; a nonzero mismatch is never rounded away, and a family with one is refused a table row.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "generated_by",
+    "root_digest",
+    "campaign",
+    "tool_sha256",
+    "chunked_identity",
+    "fast_cpu_source_digest",
+    "fast_cpu_source_digest_v2",
+    "toktier_version",
+    "tokenizers",
+    "transformers",
+    "python",
+    "os",
+    "hosts",
+    "job_ids",
+    "core_hours",
+    "k_rule",
+    "length_gate",
+    "shards",
+    "corpus",
+    "families",
+    "adversarial",
+    "not_reasoned",
+    "notes"
+  ],
+  "properties": {
+    "schema": { "const": "toktier.chunked_cuts_campaign.v1" },
+    "schema_version": { "const": 1 },
+    "generated_by": { "$ref": "#/$defs/generated_by" },
+    "root_digest": { "$ref": "#/$defs/sha256_prefixed" },
+    "campaign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "date"],
+      "properties": {
+        "run_id": { "$ref": "#/$defs/identifier" },
+        "date": { "type": "string", "format": "date" },
+        "tag": { "type": ["string", "null"] }
+      }
+    },
+    "tool_sha256": {
+      "description": "SHA-256 of tools/run_chunked_cut_campaign.py as it ran; null when the readings predate the tool.",
+      "oneOf": [{ "$ref": "#/$defs/sha256_hex" }, { "type": "null" }]
+    },
+    "chunked_identity": {
+      "description": "The chunked source identity (tools/source_identity_common.py, TOOL_SIDE_IDENTITIES['chunked']) of the package that ran; null when it was not recorded.",
+      "oneOf": [{ "$ref": "#/$defs/sha256_prefixed" }, { "type": "null" }]
+    },
+    "fast_cpu_source_digest": {
+      "description": "fast_cpu_build_facts()['source_digest'] of the native extension that ran (v1, as the extension reports it).",
+      "oneOf": [{ "$ref": "#/$defs/sha256_hex" }, { "type": "null" }]
+    },
+    "fast_cpu_source_digest_v2": {
+      "description": "Version-normalized fast_cpu identity of the tree the extension was built from (tools/compute_identity_v2.py fast_cpu); the native path's evidence binds to it.",
+      "oneOf": [{ "$ref": "#/$defs/sha256_hex" }, { "type": "null" }]
+    },
+    "toktier_version": { "type": "string" },
+    "tokenizers": { "type": "string" },
+    "transformers": { "type": ["string", "null"] },
+    "python": { "type": "string" },
+    "os": { "type": "string" },
+    "hosts": { "type": "array", "items": { "type": "string" } },
+    "job_ids": { "type": "array", "items": { "type": "string" } },
+    "core_hours": { "type": ["number", "null"], "minimum": 0 },
+    "k_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "chunk_chars", "min_chunk"],
+      "properties": {
+        "rule": { "const": "max(2, ceil(chars / chunk_chars))" },
+        "chunk_chars": { "type": "integer", "minimum": 1 },
+        "min_chunk": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "length_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_chars", "max_chars"],
+      "properties": {
+        "min_chars": { "type": "integer", "minimum": 0 },
+        "max_chars": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "shards": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planned", "final"],
+      "properties": {
+        "planned": { "type": "integer", "minimum": 0 },
+        "final": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "corpus": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["corpus_id", "docs", "chars"],
+        "properties": {
+          "corpus_id": { "type": "string" },
+          "docs": { "type": "integer", "minimum": 0 },
+          "chars": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "families": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/family_row" }
+    },
+    "adversarial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generator", "families"],
+      "properties": {
+        "generator": { "type": "string" },
+        "families": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/adversarial_row" }
+        }
+      }
+    },
+    "not_reasoned": {
+      "description": "Roster families the chunk-cut rule does not reason about (their loader-face normalizer is outside the admitted shapes); they are not expected to have a table row.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["family", "artifact_sha256", "refusal"],
+        "properties": {
+          "family": { "$ref": "#/$defs/identifier" },
+          "artifact_sha256": { "$ref": "#/$defs/sha256_hex" },
+          "refusal": { "type": "string" }
+        }
+      }
+    },
+    "notes": { "type": "string" }
+  },
+  "$defs": {
+    "sha256_hex": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "sha256_prefixed": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$",
+      "maxLength": 128
+    },
+    "count": { "type": "integer", "minimum": 0 },
+    "optional_count": { "type": ["integer", "null"], "minimum": 0 },
+    "generated_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "tool_version", "source_commit", "generated_at"],
+      "properties": {
+        "tool": { "type": "string" },
+        "tool_version": { "type": "string" },
+        "source_commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+        "generated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "paths": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["python", "native"] }
+    },
+    "serial_reasons": {
+      "type": "object",
+      "propertyNames": { "pattern": "^R_[A-Z0-9_]+$" },
+      "additionalProperties": { "$ref": "#/$defs/count" }
+    },
+    "mismatches": {
+      "description": "Documents (or strings) whose id sequences differed, per comparison; null for a comparison that did not run.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python_vs_oracle", "native_vs_oracle", "python_vs_native", "serial_vs_oracle"],
+      "properties": {
+        "python_vs_oracle": { "$ref": "#/$defs/optional_count" },
+        "native_vs_oracle": { "$ref": "#/$defs/optional_count" },
+        "python_vs_native": { "$ref": "#/$defs/optional_count" },
+        "serial_vs_oracle": { "$ref": "#/$defs/optional_count" }
+      }
+    },
+    "native_counters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chunks", "chunked_docs", "serial_fallbacks", "serial_reasons", "plan_disagreements"],
+      "properties": {
+        "chunks": { "$ref": "#/$defs/count" },
+        "chunked_docs": { "$ref": "#/$defs/count" },
+        "serial_fallbacks": { "$ref": "#/$defs/count" },
+        "serial_reasons": { "$ref": "#/$defs/serial_reasons" },
+        "plan_disagreements": {
+          "description": "Documents on which the native plan (chunk count, cuts, serial reason) differed from the Python plan.",
+          "$ref": "#/$defs/count"
+        }
+      }
+    },
+    "family_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "artifact_sha256",
+        "normalizer",
+        "paths",
+        "docs",
+        "chars",
+        "tokens",
+        "chunks",
+        "chunked_docs",
+        "cut_misses",
+        "literal_rejects",
+        "norm_rejects",
+        "serial_fallbacks",
+        "serial_reasons",
+        "native",
+        "mismatches"
+      ],
+      "properties": {
+        "family": { "$ref": "#/$defs/identifier" },
+        "artifact_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "normalizer": { "enum": ["none", "nfc"] },
+        "paths": { "$ref": "#/$defs/paths" },
+        "docs": { "$ref": "#/$defs/count" },
+        "chars": { "$ref": "#/$defs/count" },
+        "tokens": { "$ref": "#/$defs/count" },
+        "chunks": { "$ref": "#/$defs/count" },
+        "chunked_docs": { "$ref": "#/$defs/count" },
+        "cut_misses": { "$ref": "#/$defs/count" },
+        "literal_rejects": { "$ref": "#/$defs/count" },
+        "norm_rejects": { "$ref": "#/$defs/count" },
+        "serial_fallbacks": { "$ref": "#/$defs/count" },
+        "serial_reasons": { "$ref": "#/$defs/serial_reasons" },
+        "native": {
+          "oneOf": [{ "$ref": "#/$defs/native_counters" }, { "type": "null" }]
+        },
+        "mismatches": { "$ref": "#/$defs/mismatches" }
+      }
+    },
+    "adversarial_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "artifact_sha256",
+        "normalizer",
+        "paths",
+        "strings",
+        "chars",
+        "chunked",
+        "chunks",
+        "cut_misses",
+        "literal_rejects",
+        "norm_rejects",
+        "mismatches"
+      ],
+      "properties": {
+        "family": { "$ref": "#/$defs/identifier" },
+        "artifact_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "normalizer": { "enum": ["none", "nfc"] },
+        "paths": { "$ref": "#/$defs/paths" },
+        "strings": { "$ref": "#/$defs/count" },
+        "chars": { "$ref": "#/$defs/count" },
+        "chunked": { "$ref": "#/$defs/count" },
+        "chunks": { "$ref": "#/$defs/count" },
+        "cut_misses": { "$ref": "#/$defs/count" },
+        "literal_rejects": { "$ref": "#/$defs/count" },
+        "norm_rejects": { "$ref": "#/$defs/count" },
+        "mismatches": { "$ref": "#/$defs/mismatches" }
+      }
+    }
+  }
+}

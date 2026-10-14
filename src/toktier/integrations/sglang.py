@@ -14,8 +14,8 @@ the wrapper are:
   tokenizer``) calls :func:`wrap_tokenizer`, ``_tokenize_one_request``
   binds the request's session key, and ``_tokenize_texts`` offers the
   request to :func:`tokenize_texts_with_pool` first
-  (``patches/sglang-0.5.19-toktier-backend.patch`` and
-  ``patches/sglang-0.5.21-toktier-backend.patch``);
+  (``patches/sglang-0.5.19-toktier-backend.patch`` for 0.5.19,
+  ``patches/sglang-0.5.21-toktier-backend.patch`` for 0.5.20 and 0.5.21);
 * form Z -- no change to SGLang: an injector (``sitecustomize`` on
   ``PYTHONPATH``) calls :func:`attach_to_tokenizer_manager` on the
   ``TokenizerManager`` class, which wraps the tokenizer after construction
@@ -23,6 +23,10 @@ the wrapper are:
   The class is checked first (:func:`check_manager_shape`); when the
   methods it wraps are shaped differently, SGLang is left unchanged and
   the reason is recorded with the SGLang version.
+
+Both forms were checked against SGLang 0.5.19, 0.5.20 and 0.5.21 on
+2026-10-13 (CPU side: the class shape, the attachment, the patched
+methods and a real tokenizer's ids; no model server).
 
 Session state can be keyed two ways, selected by ``AdapterConfig.session_key``:
 

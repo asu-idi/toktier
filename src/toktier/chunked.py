@@ -88,9 +88,11 @@ the refusal is counted under ``R_CHUNK_FAMILY_UNSUPPORTED`` and named in
 ``explain()["chunked"]["refusal"]`` (``artifact_without_chunked_evidence``
 for a roster artifact without a row,
 ``chunked_evidence_incomplete:<status>`` for a row with one level
-recorded, ``loader_face_differs_from_chunked_evidence:<digest>`` when the
-live loader face is not the one the row's evidence was taken on). A
-document in which no certified
+recorded, ``oracle_differs_from_chunked_evidence:<version>`` when the
+facade's probe found the installed oracle outside the set the artifact's
+record was judged with, ``loader_face_differs_from_chunked_evidence:<digest>``
+when the live loader face is not the one the row's evidence was taken
+on). A document in which no certified
 cut can be found is encoded serially under ``R_CHUNK_NO_CUT``. Both
 counters, and the per-call facts, are read back from
 ``Tokenizer.explain()["chunked"]`` once this module has served the
@@ -255,6 +257,7 @@ _R_FAMILY = ReasonCode.R_CHUNK_FAMILY_UNSUPPORTED.value
 #: only (``chunked_evidence_incomplete:adversarial_only`` and the like).
 _R_EVIDENCE = "artifact_without_chunked_evidence"
 _R_INCOMPLETE = "chunked_evidence_incomplete"
+_R_ORACLE = "oracle_differs_from_chunked_evidence"
 _R_FACE = "loader_face_differs_from_chunked_evidence"
 _STATUS_CERTIFIED = "certified"
 
@@ -527,6 +530,30 @@ def _normalizer_mode(document: Mapping[str, object]) -> tuple[str | None, str | 
     return mode, None
 
 
+def _oracle_outside_certified_set(tokenizer: object) -> str | None:
+    """The installed oracle version when the facade's probe found it
+    outside the set the artifact's certification record was judged with,
+    ``None`` when it is inside or there is no record to compare with.
+
+    This is the comparison behind the planner's ``R_ORACLE_MISMATCH``
+    (``toktier.routing.plan``, the oracle-version check), read from the
+    tokenizer's own probe snapshot and registry view, so it answers the
+    same under every routing policy, including the ones that never reach
+    that check.
+    """
+    snapshot = getattr(tokenizer, "_snapshot", None)
+    registry = getattr(tokenizer, "_registry", None)
+    match = getattr(snapshot, "certification", None)
+    if match is None or registry is None:
+        return None
+    oracle = registry.oracle(match.record.oracle_id)
+    certified = oracle.certified_versions if oracle is not None else ()
+    installed = getattr(snapshot, "oracle_version", None)
+    if installed in certified:
+        return None
+    return str(installed)
+
+
 @dataclass(frozen=True)
 class ChunkPlan:
     """Where a document was cut, and what the search had to give up."""
@@ -579,10 +606,12 @@ class _Planner:
     Admission is decided once, in this order: the certified repair roster
     (family and artifact digest), a loader face to read, a normalizer
     shape the rule reasons about, no added token with a strip or
-    single-word flag, and a row in the shipped admission table.
-    ``evidence_gate=False`` leaves the last step out; it exists for the
-    campaign that produces the table's rows and for the equivalence
-    tests of the two planners, and the report says when it was used.
+    single-word flag, and a row in the shipped admission table (certified,
+    the installed oracle inside the set the record was judged with, and
+    the live face the row's). ``evidence_gate=False`` leaves the last
+    step out; it exists for the campaign that produces the table's rows
+    and for the equivalence tests of the two planners, and the report
+    says when it was used.
     """
 
     def __init__(self, tokenizer: Tokenizer, *, evidence_gate: bool = True) -> None:
@@ -633,6 +662,12 @@ class _Planner:
                 # One evidence level recorded (the battery or the corpus
                 # campaign, not both): named, and refused like an absent row.
                 self.refusal = f"{_R_INCOMPLETE}:{self.evidence_status}"
+            elif (oracle := _oracle_outside_certified_set(tokenizer)) is not None:
+                # The installed reference is not one the artifact's record
+                # was judged with (the facade's probe found it outside the
+                # certified set): the chunked evidence was taken against
+                # the certified oracle and does not speak for this one.
+                self.refusal = f"{_R_ORACLE}:{oracle}"
             elif recorded_face is not None and recorded_face != self.loader_face_sha256:
                 # The live loader face is not the one the evidence was taken
                 # on (another loader version materializing another
@@ -835,7 +870,9 @@ def _planner_for(
 def is_admitted(tokenizer: Tokenizer) -> bool:
     """Whether this tokenizer may be chunked: certified repair roster, a
     loader face this module reasons about (normalizer and added-token
-    flags), and a row in the admission table."""
+    flags), and a certified row in the admission table that holds for the
+    installed oracle and the live face (:func:`admission` names the
+    refusal)."""
     return _planner_for(tokenizer).admitted
 
 

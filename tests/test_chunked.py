@@ -27,6 +27,7 @@ from __future__ import annotations
 import copy
 import functools
 import hashlib
+import importlib
 import json
 import os
 import random
@@ -810,6 +811,100 @@ def test_live_loader_face_must_be_the_one_the_evidence_saw(
     assert chunked._Planner(_stand_in("qwen3_8b", digest, _NFC_FACE)).admitted is True
 
 
+_CERTIFIED_ORACLE = ("0.22.2",)
+
+
+def _with_oracle(
+    stand_in: Any, installed: str | None, certified: tuple[str, ...] | None
+) -> Any:
+    """Give a stand-in the probe snapshot and registry view the facade
+    holds: the installed oracle version, and the certified set of the
+    oracle the artifact's record names (``None``: the registry does not
+    know that oracle)."""
+    record = SimpleNamespace(oracle_id="oracle-under-test")
+    stand_in._snapshot = SimpleNamespace(
+        oracle_version=installed, certification=SimpleNamespace(record=record)
+    )
+    oracles = (
+        {} if certified is None else {"oracle-under-test": SimpleNamespace(
+            certified_versions=certified
+        )}
+    )
+    stand_in._registry = SimpleNamespace(oracle=oracles.get)
+    return stand_in
+
+
+def test_oracle_outside_the_certified_set_is_refused_by_name(
+    stand_in_table: Callable[..., dict[str, Any]],
+) -> None:
+    """When the facade's probe finds the installed oracle outside the set
+    the artifact's record was judged with (the planner's
+    ``R_ORACLE_MISMATCH`` comparison), the chunked evidence does not speak
+    for it: the planner refuses by name, ``evidence_status`` still
+    describes the row, and the lifted gate (collecting evidence under that
+    oracle) is not affected. An oracle inside the set changes nothing."""
+    digest = _roster_digest("qwen3_8b")
+
+    def stand_in(installed: str | None, certified: tuple[str, ...] | None) -> Any:
+        return _with_oracle(
+            _stand_in("qwen3_8b", digest, _NFC_FACE), installed, certified
+        )
+
+    inside = chunked._Planner(stand_in("0.22.2", _CERTIFIED_ORACLE))
+    assert inside.admitted is True and inside.refusal is None
+    plain = chunked._Planner(_stand_in("qwen3_8b", digest, _NFC_FACE))
+    assert inside.admission_facts() == plain.admission_facts()
+
+    outside = chunked._Planner(stand_in("0.22.1", _CERTIFIED_ORACLE))
+    assert outside.admitted is False
+    assert outside.refusal == "oracle_differs_from_chunked_evidence:0.22.1"
+    assert outside.evidence_status == "certified"
+    assert outside.evidence_id == "ev-chunked-cuts-v1"
+    assert "python" in outside.evidence_paths
+    lifted = chunked._Planner(
+        stand_in("0.22.1", _CERTIFIED_ORACLE), evidence_gate=False
+    )
+    assert lifted.admitted is True
+
+    unknown = chunked._Planner(stand_in("0.22.2", None))
+    assert unknown.refusal == "oracle_differs_from_chunked_evidence:0.22.2"
+    absent = chunked._Planner(stand_in(None, _CERTIFIED_ORACLE))
+    assert absent.refusal == "oracle_differs_from_chunked_evidence:None"
+    no_record = _stand_in("qwen3_8b", digest, _NFC_FACE)
+    no_record._snapshot = SimpleNamespace(oracle_version="0.22.1", certification=None)
+    no_record._registry = SimpleNamespace(oracle=lambda _oracle_id: None)
+    assert chunked._Planner(no_record).admitted is True
+
+    # The status step comes first, and the face step after the oracle.
+    other_face = copy.deepcopy(_NFC_FACE)
+    other_face["added_tokens"].append({"content": "<|z|>", "normalized": False})
+    both = _with_oracle(
+        _stand_in("qwen3_8b", digest, other_face), "0.22.1", _CERTIFIED_ORACLE
+    )
+    assert chunked._Planner(both).refusal == (
+        "oracle_differs_from_chunked_evidence:0.22.1"
+    )
+    face_only = _with_oracle(
+        _stand_in("qwen3_8b", digest, other_face), "0.22.2", _CERTIFIED_ORACLE
+    )
+    assert str(chunked._Planner(face_only).refusal).startswith(
+        "loader_face_differs_from_chunked_evidence:"
+    )
+
+    def one_level(document: dict[str, Any]) -> None:
+        _bind_face(document)
+        for row in document["rows"]:
+            if row["family"] == "qwen3_8b":
+                row["status"] = "adversarial_only"
+                row["paths"] = []
+                row["evidence"] = {"python": ["adversarial"], "native": []}
+
+    stand_in_table(one_level)
+    assert chunked._Planner(stand_in("0.22.1", _CERTIFIED_ORACLE)).refusal == (
+        "chunked_evidence_incomplete:adversarial_only"
+    )
+
+
 def test_normalized_added_token_refuses_an_nfc_roster_artifact(
     stand_in_table: Callable[..., dict[str, Any]],
 ) -> None:
@@ -1370,5 +1465,49 @@ def test_removing_a_row_turns_a_certified_family_serial(
         encoded = chunked.encode(tokenizer, text, k=8)
         assert encoded.serial_reason is None and encoded.chunks >= 2
         assert list(encoded.ids) == _reference(tokenizer)(text)
+    finally:
+        tokenizer.close()
+
+
+def test_oracle_outside_the_certified_set_turns_a_certified_family_serial(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same refusal on a real artifact, with the facade's own probe
+    reporting another oracle version: the plan refuses the accelerated
+    route under ``R_ORACLE_MISMATCH`` and the certification is not
+    ``certified``, the chunked block refuses by name and encodes serially
+    with the ids of the reference, and ``evidence_status`` still describes
+    the row. The probe is told a different version; the oracle that runs is
+    the installed one, so the ids are the plain encode's either way."""
+    present = available_families()
+    if not present:
+        pytest.skip("no certified artifact available under TOKTIER_TEST_ARTIFACTS")
+    family = present[0]
+    # The submodule, not the ``probe`` function the package re-exports.
+    probe_module = importlib.import_module("toktier.routing.probe")
+    other = "0.0.0+not-certified"
+    monkeypatch.setattr(probe_module, "oracle_version", lambda: other)
+    text = _generated_corpora(300_000)["prose(generated)"]
+    tokenizer = load_isolated(family, tmp_path_factory)
+    try:
+        report = tokenizer.explain()
+        codes = {reason["code"] for reason in report["plan_reasons"]}  # type: ignore[union-attr]
+        assert "R_ORACLE_MISMATCH" in codes
+        certification = report["certification"]
+        assert isinstance(certification, dict)
+        assert certification["effective_verdict"] != "certified"
+        facts = chunked.admission(tokenizer)
+        assert facts["admitted"] is False
+        assert facts["refusal"] == f"oracle_differs_from_chunked_evidence:{other}"
+        assert facts["evidence_status"] == "certified"
+        assert facts["native_by_default"] is False
+        encoded = chunked.encode(tokenizer, text, k=8)
+        assert encoded.serial_reason == ReasonCode.R_CHUNK_FAMILY_UNSUPPORTED.value
+        assert encoded.chunks == 1
+        assert list(encoded.ids) == _reference(tokenizer)(text)
+        block = tokenizer.explain()["chunked"]
+        assert isinstance(block, dict)
+        assert block["applied"] == 0 and block["serial"] == 1
+        assert block["fallback_counts"] == {"R_CHUNK_FAMILY_UNSUPPORTED": 1}
     finally:
         tokenizer.close()

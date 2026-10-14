@@ -1,13 +1,18 @@
 # Using toktier with SGLang
 
 This page describes two ways toktier can be used together with
-[SGLang](https://github.com/sgl-project/sglang) (written against v0.5.19).
-The first needs no changes on either side and runs against the shipped
-Python facade. The second is a small tokenizer-backend patch, shaped like
-the `fastokens` backend SGLang already ships, that we would rather discuss
-with the SGLang maintainers than carry on our own. Both were exercised on a
-Qwen3-8B server; the numbers quoted below come from that setup and are
-described in the last section.
+[SGLang](https://github.com/sgl-project/sglang). The first needs no
+changes on either side and runs against the shipped Python facade. The
+second is the adapter that ships in `toktier.integrations.sglang` since
+0.3.0, installed either by a small tokenizer-backend patch, shaped like
+the `fastokens` backend SGLang already ships, or without patching
+anything. The patch is something we would rather discuss with the SGLang
+maintainers than carry on our own. Both were exercised on a Qwen3-8B
+server; the numbers quoted below come from that setup and are described
+in the last section. Which SGLang versions the adapter has been checked
+against, and how to install the two packages side by side, are in
+[Supported SGLang versions](#supported-sglang-versions) and
+[Installing beside SGLang](#installing-beside-sglang).
 
 ## What SGLang already does
 
@@ -146,15 +151,22 @@ variable at `1` the chunks are encoded one after another (still exact).
 The workers are forked lazily on the first batch that needs them, about
 20 ms each, once per process.
 
-Each served request is recorded in the timing log with `how: "chunked"` and
-the fields `chunked_k`, `chunked_chunks` and `chunked_serial_reason` (`null` when the
-chunks ran; a reason code such as `R_CHUNK_NO_CUT` when the document was
-encoded serially after all), and the stats file carries the tokenizer's
-`chunked` diagnostics block. Correctness posture is unchanged: the chunked
-result equals the from-scratch reference encode (for an NFC family such
-as qwen3_8b, cuts are made only where they are also cuts of the
-normalized text; `docs/serving.md` Section 3), and the shadow check
-compares it like any other.
+Each served request is recorded in the timing log with `how: "chunked"`
+and the fields `chunked_k`, `chunk_count` and `chunked_serial_reason`
+(`null` when the chunks ran, and a reason code such as `R_CHUNK_NO_CUT`
+when the document was encoded serially after all). The stats file
+carries the tokenizer's `chunked` diagnostics block. The encoder takes
+the native path where the admission table lists it for the artifact and
+the Python path otherwise (`docs/serving.md` Section 3), and an artifact
+the table does not admit is encoded serially and counted under
+`R_CHUNK_FAMILY_UNSUPPORTED`.
+<!-- TODO(fill): confirm the timing-log key chunk_count against the merged commits. -->
+
+Correctness posture is unchanged: the chunked result equals the
+from-scratch reference encode (for an NFC family such as qwen3_8b, cuts
+are made only where they are also cuts of the normalized text;
+`docs/serving.md` Section 3), and the shadow check compares it like any
+other.
 
 ## Scheduled encodes: a process pool behind the wrapper (0.3.0)
 
@@ -186,12 +198,14 @@ policy that decides what each idle worker takes next:
   it; the ids are concatenated, which is the serial encoding by
   construction.
 
-Form Z also patches `_tokenize_texts`: a single string (or a list of
-strings) is awaited through `SGLangToktierTokenizer.encode_async`, so the
-event loop stays free while the pool works and several requests are in
-flight at once; cross-encoder inputs and other shapes take the original
-path, and other entry points (`__call__`, the dynamic-batch executor)
-use the pool synchronously.
+With the pool on, `attach_to_tokenizer_manager` also patches
+`_tokenize_texts`. A single string, or a list of strings, is then awaited
+through `SGLangToktierTokenizer.encode_async`, so the event loop stays
+free while the pool works and several requests are in flight at once.
+Cross-encoder inputs and other shapes take the original path, and other
+entry points (`__call__`, the dynamic-batch executor) use the pool
+synchronously.
+<!-- TODO(fill): if the merged SGLang compatibility commits add the same _tokenize_texts hook to the backend patch, say so here: "The backend patch adds the same hook." -->
 
 ```
 TOKTIER_SGLANG_SCHED_WORKERS=4        # 0 (default) = no pool
@@ -222,6 +236,59 @@ serial), so the pool pays for itself on long or concurrent requests, not
 on short sequential ones. The registered patch-shaped native return
 (`docs/releases/v0.3.0.md`) is what removes the per-request stream copy.
 
+## Settings
+
+The adapter is configured through `AdapterConfig` and, for the pool,
+`SchedulerConfig`. `AdapterConfig.from_env()` reads the variables below
+once, when the adapter is set up, and hands the scheduler its settings
+as a mapping, so nothing reads the environment later. An unset or empty
+variable keeps the default. These names belong to the adapter: they sit
+outside the frozen variable set of `docs/contracts/config.md`, and like
+the adapter itself they are provisional in 0.3.0.
+
+| Variable | Default | What it sets |
+|---|---|---|
+| `TOKTIER_SGLANG_FAMILY` | unset | the toktier family id to load; unset resolves the wrapped tokenizer's `name_or_path` through `toktier.from_pretrained` |
+| `TOKTIER_SGLANG_REPO` | unset | the repository id to resolve when no family is named, in place of `name_or_path` |
+| `TOKTIER_SGLANG_SESSION_KEY` | `auto` | `auto` (content lookup), `contextvar` (the request's key), `off` (stateless) or `passthrough` (the wrapped tokenizer answers, the wrapper only times) |
+| `TOKTIER_SGLANG_RID_SEPARATOR` | unset | when set, the part of the request id before it is a key of last resort |
+| `TOKTIER_SGLANG_STORE` | unset | a directory for persistent session state |
+| `TOKTIER_SGLANG_PER_PROCESS_STORE` | `1` | append the process id to the store directory, so tokenizer worker processes never share one |
+| `TOKTIER_SGLANG_IDENTITY` | `require` | `require` accelerates only an equivalent tokenizer; `skip` turns the identity check off |
+| `TOKTIER_SGLANG_SHADOW` | `off` | `off`, `sync` (re-encode with the wrapped tokenizer, compare and correct) or `async` (compare after the fact) |
+| `TOKTIER_SGLANG_SHADOW_RATE` | `1.0` | the share of requests the shadow check takes |
+| `TOKTIER_SGLANG_SHADOW_DUMP_DIR` | unset | a directory that receives one JSON file per shadow mismatch |
+| `TOKTIER_SGLANG_TIMING_LOG` | unset | a JSONL file with one record per encode |
+| `TOKTIER_SGLANG_STATS_FILE` | unset | a JSON file that receives the counters at exit |
+| `TOKTIER_SGLANG_EXPLAIN_EVERY` | `0` | every this many calls, add the last execution path to the timing record; `0` is never |
+| `TOKTIER_SGLANG_CHUNKED_MIN_CHARS` | `0` | hand stateless requests of at least this many characters to `toktier.chunked.encode`; `0` is off |
+| `TOKTIER_SGLANG_CHUNKED_K` | `0` | force the chunk count of that encoder; `0` reads the shipped table |
+| `TOKTIER_SGLANG_SCHED_WORKERS` | `0` | the size of the worker pool; `0` is no pool, and the settings below are read only when it is positive |
+
+| Variable | Default | What it sets |
+|---|---|---|
+| `TOKTIER_SGLANG_SCHED_CORES` | unset | pin worker `i` to the `i`-th listed core (`0-3,8` form) |
+| `TOKTIER_SGLANG_SCHED_POLICY` | `srpt` | `srpt` (estimated shortest first, with aging) or `fifo` |
+| `TOKTIER_SGLANG_SCHED_AGING` | `1.0` | milliseconds of priority a task gains per millisecond it waits |
+| `TOKTIER_SGLANG_SCHED_CHUNK_MIN_CHARS` | `131072` | stateless requests at least this long are cut into chunk tasks |
+| `TOKTIER_SGLANG_SCHED_CHUNK_TARGET` | `65536` | the chunk size the cut aims for, in characters |
+| `TOKTIER_SGLANG_SCHED_KMAX` | `16` | the most chunks one request is cut into; never more than the workers |
+| `TOKTIER_SGLANG_SCHED_K_RULE` | `fixed` | `idle` also caps the chunk count by the idle workers at arrival |
+| `TOKTIER_SGLANG_SCHED_AFFINITY` | `1` | keep keyed requests on their home worker; off, they are encoded stateless on any worker |
+| `TOKTIER_SGLANG_SCHED_MS_FIXED` | `0.2` | the fixed part of the service-time estimate, in milliseconds |
+| `TOKTIER_SGLANG_SCHED_MS_PER_CHAR` | `3e-5` | the per-character estimate for stateless work and chunks |
+| `TOKTIER_SGLANG_SCHED_MS_PER_CHAR_SESSION` | `1e-5` | the per-character estimate for session work |
+| `TOKTIER_SGLANG_SCHED_NON_ASCII_RATIO` | `5.0` | how much more a non-ASCII character is estimated to cost |
+| `TOKTIER_SGLANG_SCHED_CALIBRATE` | `1` | let measured service times move the per-character estimates |
+| `TOKTIER_SGLANG_SCHED_WORKER_TIMEOUT_S` | `60` | how long one task may take before its request is served in-process; `0` is no bound |
+| `TOKTIER_SGLANG_SCHED_START_TIMEOUT_S` | `300` | how long the pool may take to start |
+| `TOKTIER_SGLANG_SCHED_RAYON_THREADS` | `1` | the Rayon thread count each worker starts with |
+
+The estimate only orders the queues, so it can be rough; the defaults
+are the values our measurements used, and most deployments need to set
+only `WORKERS` and `CORES`.
+<!-- TODO(fill): reconcile both tables with the variable list in the SGLang compatibility record (the two pool loader variables are expected to be gone; any other change goes here). -->
+
 ## Correctness posture, briefly
 
 Every toktier path returns the ids a from-scratch reference encode would
@@ -240,7 +307,7 @@ only for tokenizer bytes it has certified.
 ## The wrapped tokenizer must be the one toktier loaded
 
 A family or repository name alone cannot establish that the Hugging Face
-object SGLang hands the wrapper is the tokenizer toktier loaded: the
+object SGLang hands the wrapper is the tokenizer toktier loaded. The
 supplied object may carry another revision, other loader options, or
 live vocabulary changes (`add_tokens` after loading is the concrete
 case, and a token added that way is one id on the supplied object and
@@ -248,20 +315,124 @@ several on toktier's). So before the wrapper accelerates anything it
 serializes the supplied object's fast backend (`backend_tokenizer.
 to_str()`, which includes tokens added after loading) and the loader
 face toktier executes against, and compares the sections that decide
-the core id stream: model, normalizer, pre-tokenizer, added tokens, and
-the truncation and padding state (`check_core_identity`). When the two
-are not equivalent, or one side cannot be serialized, the wrapper
-delegates every call to the supplied tokenizer for its whole life; the
-outcome is in `stats()["identity"]` (`status`, `reason`, the differing
-`sections`) and in the init record of the timing log, and `mode` then
-reads `passthrough`. `TOKTIER_SGLANG_IDENTITY=skip` turns the check off
-for a tokenizer that cannot be serialized, at the operator's risk (the
-shadow check is then the only guard).
+the core id stream (`check_core_identity`). Four details of that
+comparison matter in practice.
+
+- The sections compared are the model, the normalizer, the
+  pre-tokenizer, the post-processor, the added tokens, and the
+  truncation and padding state.
+- The supplied object's `split_special_tokens` setting must be off.
+  The serialization does not carry it, and when it is on, added tokens
+  are split like ordinary text, which toktier's subject never does.
+- The `trim_offsets` flag of a byte-level pre-tokenizer or
+  post-processor is left out on both sides. It decides character
+  offsets, not ids, and `transformers` 5 sets it on the live object
+  where the artifact file does not, so comparing it would send every
+  request to the supplied tokenizer under SGLang's `transformers` with
+  no difference in the ids.
+- Admission is checked again after construction. Before every
+  accelerated encode the wrapper compares a cheap fingerprint of the
+  supplied object's mutable surface (added tokens, the split setting,
+  normalizer, pre-tokenizer, post-processor, truncation and padding)
+  with the one taken at admission, and a mutating call made through the
+  wrapper marks it stale at once. On any difference the full comparison
+  runs again. An object that is no longer equivalent switches the
+  wrapper to delegation for good (the pool, if any, is closed, and an
+  `identity_drift` record is written); one that still is keeps
+  acceleration and has its shadow reference rebuilt.
+
+When the two are not equivalent, or one side cannot be serialized, the
+wrapper delegates every call to the supplied tokenizer for its whole
+life. The outcome is in `stats()["identity"]` (`status`, `reason`, the
+differing `sections`) and in the init record of the timing log, and
+`mode` then reads `passthrough`. `TOKTIER_SGLANG_IDENTITY=skip` turns the
+check off for a tokenizer that cannot be serialized, at the operator's
+risk (the shadow check is then the only guard).
 
 Attribute writes follow attribute reads: an assignment SGLang makes on
 the tokenizer -- `tokenizer.chat_template = ...` in its template manager
 when a chat template is installed -- lands on the wrapped object, where
 the delegated `apply_chat_template` reads it.
+
+## Supported SGLang versions
+
+<!-- TODO(fill): from the SGLang compatibility record. Expected shape:
+"The adapter has been checked against SGLang 0.5.19, 0.5.20 and 0.5.21
+(on <date>): its unit tests, the attach to the real TokenizerManager
+class, and the patch applying to each release's source." -->
+
+The attach checks the shape of SGLang's `TokenizerManager` before it
+changes anything: the two methods it wraps, `_tokenize_one_request` and
+`_tokenize_texts`, must exist and take the arguments it expects. On a
+version where they do not, `attach_to_tokenizer_manager` leaves the
+class as it is and returns `False`, the adapter records
+`sglang_shape_unverified` together with the SGLang version string, and
+SGLang tokenizes as it would without toktier. The ids are then SGLang's
+own, and nothing is accelerated.
+<!-- TODO(fill): confirm the field names (sglang_shape_unverified, sglang_version) and where they are recorded against the merged SGLang compatibility commits; name a second patch file here if one release needs its own. -->
+
+## Installing beside SGLang
+
+toktier pins `transformers==4.57.6`, the loader companion its loader-face
+readings were taken with. SGLang pins `transformers==5.12.1` and
+`tokenizers==0.22.2`.
+<!-- TODO(fill): the SGLang versions this pin holds for, from the SGLang compatibility record (expected 0.5.19 to 0.5.21). -->
+A resolver cannot satisfy both in one environment, so install SGLang
+first and toktier after it without its dependencies:
+
+```
+pip install "sglang==<version>"
+pip install --no-deps toktier==0.3.0
+pip check
+```
+
+`pip check` should then report one line, toktier's `transformers`
+requirement. Any other line names a package toktier needs that SGLang
+did not bring; install it the same way. The `[fastokens]` extra is not
+installed by `--no-deps`. If you want toktier's pinned Fastokens adapter,
+install `toktier-fastokens==0.3.1.2` yourself, and keep in mind that it
+uses the import name `fastokens`, which is also the name of the package
+SGLang's own `fastokens` backend installs. Install one of the two, not
+both (`packaging/fastokens-pinned/README.md`).
+
+What this means for toktier. Routing admission is bound to the artifact
+bytes, the engine identity and the `tokenizers` 0.22.2 oracle, and the
+`transformers` version is not part of it. SGLang's pin of `tokenizers` is
+the version toktier certifies against, so the certified routes are the
+same as in a toktier-only environment. For every packaged artifact
+except `qwen3_5_08b`, toktier executes the verified artifact file itself;
+`qwen3_5_08b` declares added tokens in its configuration file, so its
+loader face is materialized by the installed `transformers`.
+
+What it means for `toktier doctor`. Its `certified_cpu_profile_ready`
+field says whether the installed `tokenizers` and `transformers` are
+exactly the pair the loader-face readings were taken with, 0.22.2 and
+4.57.6. Beside SGLang it reads `false`, and the fields built on it
+follow: `automatic_effective_backend` and, under `--family`,
+`automatic_effective_backend_below_gpu_threshold` answer `hf` where they
+would otherwise answer `fast_cpu`. That is a statement about the
+installation profile, not about routing. What a loaded tokenizer
+actually runs is in its `explain()`, and `doctor --family FAMILY` lists
+the planner's own reasons under `family.plan_reasons`.
+<!-- TODO(fill): replace the reading above with the recorded one from the transformers 5.12.1 combination check (doctor --json fields and explain() backend), and adjust if they differ. -->
+
+The combinations we have checked:
+
+- SGLang 0.5.19 with `transformers` 5.12.1 and `tokenizers` 0.22.2,
+  checked on 2026-09-17 on the code that became this release: the
+  adapter's identity check reads `equivalent` for `qwen3_8b`, the worker
+  pool starts, and the session-path and chunked pool ids equal the
+  Hugging Face ids.
+<!-- TODO(fill): add the dated readings as they land. (1) the transformers 5.12.1 combination check: eleven roster families, 100,000 documents each, toktier ids under 5.12.1 against the same documents under 4.57.6 and against the oracle; (2) the per-version SGLang probes; (3) the real-server smoke test on the release candidate. -->
+
+The risks, stated plainly. Under `transformers` 5 the live tokenizer
+object reports `trim_offsets` differently from 4.57.6. The ids are the
+same, and the identity check leaves that flag out on both sides. If a
+later `transformers` materialized a tokenizer differently in a way that
+does change ids, the identity check would find the supplied object and
+toktier's face different, and the wrapper would hand that tokenizer to
+the Hugging Face object for its whole life, with the reason in
+`stats()["identity"]`. That outcome is safe but slow, and it is visible.
 
 ## What we are not proposing
 
@@ -312,11 +483,17 @@ scheduled arrival.
 
 Correctness during these runs: every toktier request's `prompt_tokens`
 equalled the local Hugging Face count, and the shadow check (on for the
-smoke runs) reported 0 differences in 177 compared requests. On the same
-transcripts, replayed in serving order, the `fastokens` backend (0.1.2, the
-version SGLang pins) produced a different id stream for 78 of 279
-transcripts (+1 or +2 tokens): a `\n<spaces>\n` run at the previous turn's
-end is split, and the split is carried into later turns; the same text
-encoded once in a fresh process is correct, so single-shot tests do not
-see it. We mention it because a latency comparison between the two
-backends is only meaningful with that difference on the table.
+smoke runs) reported 0 differences in 177 compared requests.
+
+The `fastokens` backend gave a different answer on the same transcripts.
+Replayed in serving order on 2026-09-17, with SGLang 0.5.19 and the
+`fastokens` version it pins, 0.1.2, the backend returned a different id
+stream from the Hugging Face reference for 78 of 279 transcripts, one or
+two tokens more in each. In every case a run of `\n`, spaces and `\n`
+that ends the previous turn is split where the reference keeps it whole,
+and the split carries into every later turn of that transcript. The same
+text encoded once in a fresh process gets the reference ids, so a test
+that encodes each text once does not see the difference. We mention it
+because a latency comparison between the two backends only means
+something with that difference on the table.
+<!-- TODO(fill): one sentence naming the fastokens versions that SGLang 0.5.20 and 0.5.21 pin (from the SGLang compatibility record), followed by "We have not re-run this replay on those versions." unless it was re-run. -->

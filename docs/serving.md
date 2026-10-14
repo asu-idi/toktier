@@ -81,6 +81,13 @@ encoded = chunked.encode(tokenizer, text, k=16)    # explicit chunk count
 assert encoded.ids == tokenizer.encode(text, lookup="off").ids
 ```
 
+The same plan runs on one of two paths, and both return the same ids.
+The Python path cuts in Python and runs the chunks through the
+tokenizer's own batch path; the native path makes the same cuts inside
+the native runtime (the end of this section). `encode` picks the native
+path when the loaded runtime carries it and the admission table lists
+the native path for the artifact, and the Python path otherwise.
+
 How it keeps the contract. The document is cut only at *certified
 stable boundaries*: positions at which the pre-tokenizer of the
 certified byte-level BPE families cannot carry a pre-token across the
@@ -98,15 +105,21 @@ different id.
 
 What decides whether it is worth it:
 
-- **Admission.** Only a tokenizer whose family and artifact digest have
-  an entry in the certified repair roster may be chunked (those are the
-  eleven byte-level BPE artifacts the sync profile was certified on),
-  and only when its loader face carries no normalizer, the empty
+- **Admission.** Three conditions, all of which must hold. The
+  tokenizer's family and artifact digest have an entry in the certified
+  repair roster (the eleven byte-level BPE artifacts the sync profile
+  was certified on). Its loader face carries no normalizer, the empty
   normalizer sequence, or NFC with every added token matched on the
-  input text (`normalized: false`) -- the normalizer shapes the cut rule
-  reasons about. Any other tokenizer is encoded serially, and the result
-  says so in `serial_reason` (`R_CHUNK_FAMILY_UNSUPPORTED`; the `chunked`
-  block of `explain()` names the refusal).
+  input text (`normalized: false`), which are the normalizer shapes the
+  cut rule reasons about. And the chunked admission table that ships
+  with the package, `toktier/routing/tables/chunked_admission.v1.json`,
+  has a row for the artifact. That table is generated from the
+  chunked-path evidence, and each row names the paths the evidence
+  covers (`python`, `native`); `docs/support-matrix.md` shows it as the
+  "Chunked cuts" column. Any other tokenizer is encoded serially, and
+  the result says so in `serial_reason` (`R_CHUNK_FAMILY_UNSUPPORTED`;
+  the `chunked` block of `explain()` names the refusal, which for an
+  artifact without a row is `artifact_without_chunked_evidence`).
 - **Normalization.** The cut rule speaks about the text the
   pre-tokenizer sees, which for an NFC family is the normalized text,
   not the input. A letter such as U+0958, which NFC writes as a letter
@@ -137,17 +150,18 @@ What decides whether it is worth it:
   concatenation work). Below 256 K characters a single encode is
   already as fast as the batch path, which is why the table says one
   chunk there.
-- **Cores.** The parallelism is the native engine's batch worker pool,
-  which is sized by the Rayon thread count at first use
-  (`RAYON_NUM_THREADS`; the default is the core count of the process's
-  affinity). A process started with `RAYON_NUM_THREADS=1` gets the
-  chunks encoded one after another -- still exact, not faster. The
-  workers are forked lazily on the first batch that needs them, at
-  roughly 20 ms per worker, once per process; a serving process should
-  send one long batch at start-up rather than pay that inside a
-  request.
-- **What it saves.** On 1 M-character English prose with 16 workers,
-  8.6 ms against 26.5 ms serial for the slower of the certified engines
+- **Cores.** On the Python path the parallelism is the native
+  engine's batch worker pool, which is sized by the Rayon thread count
+  at first use (`RAYON_NUM_THREADS`; the default is the core count of
+  the process's affinity). Its workers are forked lazily on the first
+  batch that needs them, at roughly 20 ms per worker, once per process,
+  so a serving process should send one long batch at start-up rather
+  than pay that inside a request. The native path has its own pool,
+  described below, and runs its chunks on the same Rayon threads. On
+  either path a process started with `RAYON_NUM_THREADS=1` gets the
+  chunks encoded one after another: still exact, not faster.
+- **What it saves.** On the Python path, 1 M-character English prose
+  with 16 workers takes 8.6 ms against 26.5 ms serial for the slower of the certified engines
   (3.1x), and 6.9 ms against 9.8 ms for the faster ones (1.4x): the
   remaining cost is the Python boundary, where each chunk's ids are
   handed over and concatenated. A per-input guard that would have
@@ -157,38 +171,67 @@ What decides whether it is worth it:
   measurement behind the table).
 
 Diagnostics. Once `chunked.encode` has served a tokenizer, its
-`explain()` report carries a `chunked` block: the admission decision and
-the normalizer shape, calls, how many were chunked, serial fallbacks by
-reason code (`R_CHUNK_NO_CUT`, `R_CHUNK_FAMILY_UNSUPPORTED`), positions
-given up, literal and normalization rejections, and the last call's
-facts. These counters live in that block and not in
-the routing ledger's top-level `fallback_counts`, because a serial
-fallback here runs the same certified backend the chunks would have
-used: nothing fell back between backends
+`explain()` report carries a `chunked` block. It holds the admission
+decision (`admitted`, `refusal`) and the normalizer shape, the number of
+calls and how many of them were cut (`applied`), serial fallbacks by
+reason code (`R_CHUNK_NO_CUT`, `R_CHUNK_FAMILY_UNSUPPORTED`,
+`R_CHUNK_ROUTE_NOT_FAST_CPU`), positions given up, literal and
+normalization rejections, how many calls took the native path
+(`native_calls`), and the last call's facts. These counters live in that
+block and not in the routing ledger's top-level `fallback_counts`,
+because a serial fallback here runs the same certified backend the
+chunks would have used, so nothing fell back between backends
 ([`contracts/routing.md`](contracts/routing.md) Section 5.2).
+<!-- TODO(fill): check the block's key names (applied, and an evidence_id key if one is added) against the merged admission-table commit. -->
 
 Two things the chunked call does not do. It does not consult the store
 (it is a stateless call by construction; use a session for a transcript
 that will grow), and it returns the core stream only -- special tokens
 are a read-time template around it, as for sessions.
 
-Native chunk encoder. The same plan --
-position for position, including the literal guard and the
-normalization-stability condition -- is also implemented inside the
-native runtime (`crates/toktier-routing-core/src/chunked.rs`), where the
-chunks are encoded on a persistent pool of corrected-Gigatoken workers
-(checked out per chunk, no prefix sharing between concurrent callers,
-pool size independent of the chunk count) and concatenated before the
-ids cross into Python. `chunked.encode(..., native=True)` and
-`Tokenizer.encode(text, parallel="auto" | k)` select it; the default
-of both remains the Python path above. `chunked.warm(tokenizer, workers=,
-text=)` forks and pre-warms the pool ahead of the first request;
-`chunked.admission(tokenizer)` reads the native planner's admission
-facts, and `ChunkedEncoding.native_facts` carries the per-call row
-sources and phase timings. This build is not a certified release: its
-fast_cpu source identity has moved, so the corrected CPU route is
-admitted only under the experimental policy until the identity is
-registered.
+Native chunk encoder. The same plan, position for position and with
+the literal guard and the normalization-stability condition, is also
+implemented inside the native runtime
+(`crates/toktier-routing-core/src/chunked.rs`). There the chunks are
+encoded on a persistent pool of corrected-Gigatoken workers and
+concatenated before the ids cross into Python, so the per-chunk Python
+boundary that limits the Python path is gone. A worker is checked out
+for one chunk and returned, so concurrent callers do not share a prefix
+of the pool, and the pool size does not depend on the chunk count. Each
+chunk still passes the engine's guarded full-encode gate, so a chunk
+that holds an added-token literal or trips a guard is encoded by the
+reference on its own.
+
+Which path runs is decided per call:
+
+| `native=` | What runs |
+|---|---|
+| `None` (default) | the native path when the loaded runtime carries it and the admission table lists `native` for the artifact; the Python path otherwise |
+| `False` | the Python path |
+| `True` | the native path; `RuntimeError` when the runtime lacks it or the table does not list `native`, naming which |
+
+`Tokenizer.encode(text, parallel="auto")`, or `parallel=` a positive
+chunk count, makes the same choice for a stateless core-stream call (no
+`session`, `lookup` omitted or `"off"`, `add_special_tokens=False`).
+
+The pool is forked on first use. `chunked.warm(tokenizer, workers=None,
+text=None)` forks it ahead of the first request, to the Rayon thread
+count when `workers` is omitted, and with a sample `text` runs each new
+worker once so its caches are warm; a serving process should call it at
+start-up. `chunked.admission(tokenizer)` reports the decision for both
+paths, and `ChunkedEncoding.native_facts` carries the per-call facts of
+the native path (how many rows each implementation produced, the plan,
+encode and concatenation times, and the workers forked during the call;
+`None` on the Python path). Two limits are worth knowing. Chunking is a
+CPU-route feature: when the native path is asked for an input whose
+route does not start at the corrected CPU engine (a plan with a GPU at
+its head, for an input at or above the GPU crossover, or a route
+without the corrected CPU engine), the input is encoded serially through
+the normal route and the result says `R_CHUNK_ROUTE_NOT_FAST_CPU`. And
+inside a process whose Rayon thread count is 1, such as a worker of the
+SGLang adapter's pool at its default setting, the native chunks run one
+after another, exact and not faster.
+<!-- TODO(fill): check the admission() key names and the auto rule against the merged admission-table commit. -->
 
 ## 4. Process shape
 
@@ -202,4 +245,15 @@ registered.
   that holds its session.
 - Batch encodes share the worker pool: two threads calling
   `encode_batch` at once take turns on the same workers rather than
-  doubling them.
+  doubling them. The native chunk encoder's pool is separate and does
+  not have this limit.
+- Parallel encodes of different requests need different processes,
+  because the certified CPU engine is serialized inside one process. The
+  SGLang adapter can run a pool of tokenizer worker processes for that
+  (`TOKTIER_SGLANG_SCHED_WORKERS`, 0 by default, which means no pool;
+  [`integration/sglang.md`](integration/sglang.md)). Each worker loads
+  its own tokenizer, about 320 MB, and encodes with one thread. A good
+  starting point is one worker per physical core you can reserve for
+  tokenization; our own SGLang measurements used four workers on a
+  16-core NUMA node. The pool helps when its workers have cores of
+  their own.

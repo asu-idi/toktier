@@ -76,7 +76,8 @@ The backend patch (about fifty added lines) adds
 release line: `patches/sglang-0.5.19-toktier-backend.patch` for 0.5.19,
 and `patches/sglang-0.5.21-toktier-backend.patch` for 0.5.20 and 0.5.21
 (0.5.20 moved the `--tokenizer-backend` option to
-`arg_groups/fields/serving.py`). Each patch touches two files:
+`arg_groups/fields/serving.py`); the published Rust source archive also
+carries both patches, under the same paths. Each patch touches two files:
 
 - `server_args.py` (0.5.19) or `arg_groups/fields/serving.py` (0.5.20
   and 0.5.21): the choice and its help text;

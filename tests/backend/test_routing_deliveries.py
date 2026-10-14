@@ -18,7 +18,8 @@ import _support as support
 import pytest
 
 from toktier.policy import BACKEND_GPU, ReasonCode, RoutingPolicy
-from toktier.routing.plan import assess_backend
+from toktier.routing.plan import assess_backend, prebuilt_host_binding_mismatches
+from toktier.routing.registry_view import BackendEntry
 
 PREBUILT_DIGEST = "d" * 64
 
@@ -239,6 +240,105 @@ def test_prebuilt_driver_floor_enforced() -> None:
     assert assessment.blocking is not None
     assert assessment.blocking.code is ReasonCode.R_DRIVER_TOO_OLD
     assert assessment.blocking.detail["required"] == DRIVER_MIN
+
+
+def test_the_planner_refuses_exactly_the_host_binding_list() -> None:
+    """Checks 11 and 13's host half are the list ``doctor`` reads.
+
+    One state that drifts on every axis the function names: under
+    ``EXPERIMENTAL`` every one of them is waived and recorded, so the
+    waivers are the function's list, in its order, with the same codes
+    and details; under ``CERTIFIED`` the first of them blocks.
+    """
+    drifted = {
+        "delivery": "prebuilt",
+        "prebuilt_available": True,
+        "binary_digest": PREBUILT_DIGEST,
+        "host_source_digest": "e" * 64,
+        "host_build_flags": ("profile=debug",),
+        "host_toolchain": "rustc drifted",
+    }
+    entry = _entry_with_deliveries()
+    view = support.registry(backends={BACKEND_GPU: entry})
+    snapshot = support.snapshot(
+        registry_view=view,
+        driver_version="570.1",
+        kernel_cache=support.gpu_ready_kernel_cache(**drifted),
+    )
+    prebuilt = view.certification(
+        artifact_sha256=support.ARTIFACT_SHA,
+        pipeline_fingerprint=support.PIPELINE_FINGERPRINT,
+        added_frontend_fingerprint=support.ADDED_FINGERPRINT,
+    )
+    assert prebuilt is not None
+    prebuilt_entry = prebuilt.record.backends[BACKEND_GPU].deliveries["prebuilt"]
+    assert isinstance(prebuilt_entry, BackendEntry)
+    listed = prebuilt_host_binding_mismatches(
+        prebuilt_entry,
+        host_source_digest="e" * 64,
+        host_build_flags=("profile=debug",),
+        host_toolchain="rustc drifted",
+        driver_version="570.1",
+    )
+    assert [axis for axis, _code, _detail in listed] == [
+        "driver",
+        "host_source",
+        "host_build_flags",
+        "host_toolchain",
+    ]
+
+    waived = assess_backend(
+        BACKEND_GPU,
+        snapshot,
+        RoutingPolicy.EXPERIMENTAL,
+        view,
+        support.config(routing_policy=RoutingPolicy.EXPERIMENTAL),
+    )
+    assert waived.eligible
+    assert [
+        (reason.code, list(reason.detail.items())) for reason in waived.waived
+    ] == [(code, list(detail.items())) for _axis, code, detail in listed]
+
+    refused = assess_backend(
+        BACKEND_GPU, snapshot, RoutingPolicy.CERTIFIED, view, support.config()
+    )
+    assert refused.blocking is not None
+    _axis, code, detail = listed[0]
+    assert refused.blocking.code is code
+    assert dict(refused.blocking.detail) == detail
+
+
+def test_a_verifying_host_lists_nothing() -> None:
+    """The bound host on a driver above the floor: an empty list."""
+    entry = BackendEntry(
+        status="certified",
+        host_source_digest=support.HOST_SOURCE_DIGEST,
+        host_build_flags=support.HOST_BUILD_FLAGS,
+        host_toolchain=support.HOST_TOOLCHAIN,
+        driver_min=DRIVER_MIN,
+    )
+    assert (
+        prebuilt_host_binding_mismatches(
+            entry,
+            host_source_digest=support.HOST_SOURCE_DIGEST,
+            host_build_flags=support.HOST_BUILD_FLAGS,
+            host_toolchain=support.HOST_TOOLCHAIN,
+            driver_version=DRIVER_OK,
+        )
+        == ()
+    )
+    # A JIT-era entry binds no native host, so only its floor is read.
+    jit = BackendEntry(status="certified_source", driver_min=None)
+    assert (
+        prebuilt_host_binding_mismatches(
+            jit,
+            host_source_digest=None,
+            host_build_flags=(),
+            host_toolchain=None,
+            driver_version=None,
+        )
+        == ()
+    )
 
 
 def test_explain_reports_per_architecture_delivery_status() -> None:

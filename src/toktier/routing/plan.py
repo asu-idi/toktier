@@ -286,6 +286,78 @@ def fast_cpu_binding_mismatches(
     return tuple(mismatches)
 
 
+def prebuilt_host_binding_mismatches(
+    entry: BackendEntry,
+    *,
+    host_source_digest: str | None,
+    host_build_flags: Sequence[str],
+    host_toolchain: str | None,
+    driver_version: str | None,
+) -> tuple[tuple[str, ReasonCode, dict[str, object]], ...]:
+    """The machine-side GPU bindings that do not verify, in check order.
+
+    Axis name, reason code and detail for each: the driver floor (check
+    11), then the Rust request host a ``certified`` prebuilt binary is
+    paired with -- its source digest (the host half of check 13), its
+    build flags and its toolchain. Pure; it reads the entry and the
+    facts it is handed and nothing else.
+
+    It is one function for the reason :func:`fast_cpu_binding_mismatches`
+    is: ``doctor`` asks the same question, and a report that read these
+    facts its own way could name the GPU beside a plan reason refusing
+    it.
+    """
+    mismatches: list[tuple[str, ReasonCode, dict[str, object]]] = []
+    if entry.driver_min is not None and not _driver_satisfies(
+        driver_version, entry.driver_min
+    ):
+        mismatches.append(
+            (
+                "driver",
+                ReasonCode.R_DRIVER_TOO_OLD,
+                {"installed": driver_version, "required": entry.driver_min},
+            )
+        )
+    if entry.status == STATUS_CERTIFIED and entry.host_source_digest is not None:
+        if host_source_digest != entry.host_source_digest:
+            mismatches.append(
+                (
+                    "host_source",
+                    ReasonCode.R_KERNEL_DIGEST_MISMATCH,
+                    {
+                        "digest": "host_source",
+                        "expected_digest": entry.host_source_digest,
+                        "observed_digest": host_source_digest,
+                    },
+                )
+            )
+        if tuple(entry.host_build_flags) != tuple(host_build_flags):
+            mismatches.append(
+                (
+                    "host_build_flags",
+                    ReasonCode.R_UNCERTIFIED_ARTIFACT,
+                    {
+                        "cause": "host_build_flags_mismatch",
+                        "certified": list(entry.host_build_flags),
+                        "observed": list(host_build_flags),
+                    },
+                )
+            )
+        if entry.host_toolchain != host_toolchain:
+            mismatches.append(
+                (
+                    "host_toolchain",
+                    ReasonCode.R_UNCERTIFIED_ARTIFACT,
+                    {
+                        "cause": "host_toolchain_mismatch",
+                        "certified": entry.host_toolchain,
+                        "observed": host_toolchain,
+                    },
+                )
+            )
+    return tuple(mismatches)
+
+
 def assess_backend(
     backend: str,
     snapshot: ProbeSnapshot,
@@ -561,19 +633,19 @@ def _assess(
                 coverage=True,
             )
 
-    # 11. Driver at or above the certified floor.
-    if view.driver_min is not None and not _driver_satisfies(
-        snapshot.driver_version, view.driver_min
-    ):
-        refuse(
-            _reason(
-                ReasonCode.R_DRIVER_TOO_OLD,
-                backend,
-                installed=snapshot.driver_version,
-                required=view.driver_min,
-            ),
-            waivable=True,
-        )
+    # 11. Driver at or above the certified floor. Read from the one list
+    #     ``doctor`` reads too; its host axes are refused after check 13's
+    #     binary digest, where they have always been.
+    host_binding = prebuilt_host_binding_mismatches(
+        view,
+        host_source_digest=snapshot.kernel_cache.host_source_digest,
+        host_build_flags=snapshot.kernel_cache.host_build_flags,
+        host_toolchain=snapshot.kernel_cache.host_toolchain,
+        driver_version=snapshot.driver_version,
+    )
+    for axis, code, detail in host_binding:
+        if axis == "driver":
+            refuse(_reason(code, backend, **detail), waivable=True)
 
     # 12. A build that failed leaves nothing to run.
     if snapshot.kernel_cache.build_failed:
@@ -604,32 +676,11 @@ def _assess(
     # A prebuilt certificate is the conjunction of the exact CUDA image and
     # the source-certified Rust host that selects, launches, postprocesses,
     # and falls back from it.  These are deliberately distinct bindings: a
-    # stable fatbin cannot certify drifted host behavior.
-    if view.status == STATUS_CERTIFIED and view.host_source_digest is not None:
-        if tuple(view.host_build_flags) != tuple(
-            snapshot.kernel_cache.host_build_flags
-        ):
-            refuse(
-                _reason(
-                    ReasonCode.R_UNCERTIFIED_ARTIFACT,
-                    backend,
-                    cause="host_build_flags_mismatch",
-                    certified=list(view.host_build_flags),
-                    observed=list(snapshot.kernel_cache.host_build_flags),
-                ),
-                waivable=True,
-            )
-        if view.host_toolchain != snapshot.kernel_cache.host_toolchain:
-            refuse(
-                _reason(
-                    ReasonCode.R_UNCERTIFIED_ARTIFACT,
-                    backend,
-                    cause="host_toolchain_mismatch",
-                    certified=view.host_toolchain,
-                    observed=snapshot.kernel_cache.host_toolchain,
-                ),
-                waivable=True,
-            )
+    # stable fatbin cannot certify drifted host behavior. The host's source
+    # digest, build flags and toolchain, in that order.
+    for axis, code, detail in host_binding:
+        if axis != "driver":
+            refuse(_reason(code, backend, **detail), waivable=True)
 
     # 14. Bound build flags and toolchain constraint. The flags are the
     #     recipe this source was judged under, so a difference there is a
@@ -693,17 +744,14 @@ def _delivery_view(entry: BackendEntry, snapshot: ProbeSnapshot) -> BackendEntry
 def _bound_digests(
     entry: BackendEntry, snapshot: ProbeSnapshot
 ) -> tuple[tuple[str, str | None, str | None], ...]:
-    """(label, certified digest, observed digest) triples to verify."""
+    """(label, certified digest, observed digest) triples to verify.
+
+    The native host's source digest of a ``certified`` entry is verified
+    by :func:`prebuilt_host_binding_mismatches`, right after these.
+    """
     cache = snapshot.kernel_cache
     if entry.status == STATUS_CERTIFIED:
-        return (
-            ("binary", entry.binary_digest, cache.binary_digest),
-            (
-                "host_source",
-                entry.host_source_digest,
-                cache.host_source_digest,
-            ),
-        )
+        return (("binary", entry.binary_digest, cache.binary_digest),)
     if entry.status == STATUS_CERTIFIED_SOURCE:
         return (
             ("source", entry.source_digest, cache.source_digest),

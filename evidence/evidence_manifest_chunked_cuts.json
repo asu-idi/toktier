@@ -4,8 +4,8 @@
   "generated_by": {
     "tool": "tools/update_chunked_admission.py",
     "tool_version": "1.0.0",
-    "source_commit": "8440e11b5c88347027db089ab4e7820a086cd7cb",
-    "generated_at": "2026-10-14T07:01:49Z"
+    "source_commit": "b25c33e957b37a9c71fe7f133ab617135a1f1e88",
+    "generated_at": "2026-10-14T08:01:06Z"
   },
   "run": {
     "run_id": "chunked-cuts-20260917",
@@ -22,6 +22,14 @@
       "family": "deepseek_v3"
     },
     {
+      "artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+      "family": "deepseek_v4_flash"
+    },
+    {
+      "artifact_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+      "family": "glm_5_2"
+    },
+    {
       "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
       "family": "gpt_oss_120b"
     },
@@ -32,6 +40,18 @@
     {
       "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
       "family": "minimax_m3"
+    },
+    {
+      "artifact_sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135",
+      "family": "ministral_3_8b"
+    },
+    {
+      "artifact_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+      "family": "nemotron_3_nano_4b"
+    },
+    {
+      "artifact_sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca",
+      "family": "olmo_3_7b"
     },
     {
       "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
@@ -66,5 +86,5 @@
       "scc058"
     ]
   },
-  "root_digest": "sha256:6ad931877abda6107a76e0645d59aadaa2d5d4ef826921c1b15051ed72476cee"
+  "root_digest": "sha256:d2f4d2ddf30f3ca08a6e150c57589b5276706e1b44c3da64d059926bfd4894c9"
 }

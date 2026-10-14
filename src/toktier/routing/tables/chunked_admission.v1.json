@@ -4,8 +4,8 @@
   "generated_by": {
     "tool": "tools/update_chunked_admission.py",
     "tool_version": "1.0.0",
-    "source_commit": "8440e11b5c88347027db089ab4e7820a086cd7cb",
-    "generated_at": "2026-10-14T07:01:49Z"
+    "source_commit": "b25c33e957b37a9c71fe7f133ab617135a1f1e88",
+    "generated_at": "2026-10-14T08:01:06Z"
   },
   "chunked_identity": "sha256:20f64fc894309652a7cb949446e3cbe38cc97d1ae44f9929d689d23d4bcf2886",
   "fast_cpu_source_digest_v2": "13245f222543f0395db48cef07588ecd05faf4dab5fae047a618ce2f26aaa781",
@@ -24,10 +24,50 @@
           "adversarial",
           "corpus"
         ],
-        "native": []
+        "native": [
+          "adversarial"
+        ]
       },
       "evidence_id": "ev-chunked-cuts-v1",
       "corpus_docs": 102400000,
+      "adversarial_strings": 20000
+    },
+    {
+      "family": "deepseek_v4_flash",
+      "artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+      "loader_face_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+      "normalizer": "none",
+      "status": "adversarial_only",
+      "paths": [],
+      "evidence": {
+        "python": [
+          "adversarial"
+        ],
+        "native": [
+          "adversarial"
+        ]
+      },
+      "evidence_id": "ev-chunked-cuts-v1",
+      "corpus_docs": 0,
+      "adversarial_strings": 20000
+    },
+    {
+      "family": "glm_5_2",
+      "artifact_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+      "loader_face_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+      "normalizer": "none",
+      "status": "adversarial_only",
+      "paths": [],
+      "evidence": {
+        "python": [
+          "adversarial"
+        ],
+        "native": [
+          "adversarial"
+        ]
+      },
+      "evidence_id": "ev-chunked-cuts-v1",
+      "corpus_docs": 0,
       "adversarial_strings": 20000
     },
     {
@@ -44,7 +84,9 @@
           "adversarial",
           "corpus"
         ],
-        "native": []
+        "native": [
+          "adversarial"
+        ]
       },
       "evidence_id": "ev-chunked-cuts-v1",
       "corpus_docs": 102400000,
@@ -64,7 +106,9 @@
           "adversarial",
           "corpus"
         ],
-        "native": []
+        "native": [
+          "adversarial"
+        ]
       },
       "evidence_id": "ev-chunked-cuts-v1",
       "corpus_docs": 102400000,
@@ -73,7 +117,7 @@
     {
       "family": "minimax_m3",
       "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
-      "loader_face_sha256": null,
+      "loader_face_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
       "normalizer": "nfc",
       "status": "adversarial_only",
       "paths": [],
@@ -81,16 +125,75 @@
         "python": [
           "adversarial"
         ],
-        "native": []
+        "native": [
+          "adversarial"
+        ]
       },
       "evidence_id": "ev-chunked-cuts-v1",
       "corpus_docs": 0,
-      "adversarial_strings": 30000
+      "adversarial_strings": 100000
+    },
+    {
+      "family": "ministral_3_8b",
+      "artifact_sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135",
+      "loader_face_sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135",
+      "normalizer": "none",
+      "status": "adversarial_only",
+      "paths": [],
+      "evidence": {
+        "python": [
+          "adversarial"
+        ],
+        "native": [
+          "adversarial"
+        ]
+      },
+      "evidence_id": "ev-chunked-cuts-v1",
+      "corpus_docs": 0,
+      "adversarial_strings": 20000
+    },
+    {
+      "family": "nemotron_3_nano_4b",
+      "artifact_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+      "loader_face_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+      "normalizer": "none",
+      "status": "adversarial_only",
+      "paths": [],
+      "evidence": {
+        "python": [
+          "adversarial"
+        ],
+        "native": [
+          "adversarial"
+        ]
+      },
+      "evidence_id": "ev-chunked-cuts-v1",
+      "corpus_docs": 0,
+      "adversarial_strings": 20000
+    },
+    {
+      "family": "olmo_3_7b",
+      "artifact_sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca",
+      "loader_face_sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca",
+      "normalizer": "none",
+      "status": "adversarial_only",
+      "paths": [],
+      "evidence": {
+        "python": [
+          "adversarial"
+        ],
+        "native": [
+          "adversarial"
+        ]
+      },
+      "evidence_id": "ev-chunked-cuts-v1",
+      "corpus_docs": 0,
+      "adversarial_strings": 20000
     },
     {
       "family": "qwen3_5_08b",
       "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
-      "loader_face_sha256": null,
+      "loader_face_sha256": "a57b5c62cd5f242a06c632b82cc0b4f8239d08cc80fd9347fc1f629be977c6ca",
       "normalizer": "nfc",
       "status": "adversarial_only",
       "paths": [],
@@ -98,11 +201,13 @@
         "python": [
           "adversarial"
         ],
-        "native": []
+        "native": [
+          "adversarial"
+        ]
       },
       "evidence_id": "ev-chunked-cuts-v1",
       "corpus_docs": 0,
-      "adversarial_strings": 30000
+      "adversarial_strings": 100000
     },
     {
       "family": "qwen3_8b",
@@ -118,12 +223,14 @@
           "adversarial",
           "corpus"
         ],
-        "native": []
+        "native": [
+          "adversarial"
+        ]
       },
       "evidence_id": "ev-chunked-cuts-v1",
       "corpus_docs": 102400000,
       "adversarial_strings": 100000
     }
   ],
-  "root_digest": "sha256:3a875bbb280058d6e6fa224632b5526b56de6d2f8ea8aafb53c36d8a9e24888e"
+  "root_digest": "sha256:694635bcc82788ab7909a9dcdcf47f888e2a9123e2b1fe2471ca891ac77f6e3a"
 }

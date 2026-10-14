@@ -119,6 +119,37 @@ def parse_flag(variable: str, value: str | None, default: bool) -> bool:
     )
 
 
+def _parse_int(
+    variable: str, value: str | None, default: int, *, non_negative: bool = False
+) -> int:
+    """One integer setting: unset or empty keeps ``default``, and a value
+    that is not an integer (or, with ``non_negative``, is below zero)
+    raises ``ValueError`` whose message starts with ``variable``, as
+    :func:`parse_flag` does."""
+    if value is None or value == "":
+        return default
+    expected = "a non-negative integer" if non_negative else "an integer"
+    try:
+        number = int(value)
+    except ValueError:
+        raise ValueError(f"{variable} must be {expected} (got {value!r})") from None
+    if non_negative and number < 0:
+        raise ValueError(f"{variable} must be {expected} (got {value!r})")
+    return number
+
+
+def _parse_float(variable: str, value: str | None, default: float) -> float:
+    """One numeric setting: unset or empty keeps ``default``, and a value
+    that is not a number raises ``ValueError`` whose message starts with
+    ``variable``."""
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        raise ValueError(f"{variable} must be a number (got {value!r})") from None
+
+
 def parse_cores(text: str) -> tuple[int, ...]:
     """``"0-3,8"`` -> ``(0, 1, 2, 3, 8)``; the empty string -> ``()``."""
     out: list[int] = []
@@ -241,7 +272,10 @@ class SchedulerConfig:
         ``MS_PER_CHAR_SESSION``, ``CALIBRATE``, ``WORKER_TIMEOUT_S``,
         ``START_TIMEOUT_S``, ``RAYON_THREADS``. ``AFFINITY`` and
         ``CALIBRATE`` accept ``1``/``true``/``yes`` and ``0``/``false``/``no``
-        in any case. An invalid value raises ``ValueError``. The test-only
+        in any case. ``WORKERS`` takes a non-negative integer. An invalid
+        value raises ``ValueError``; a value that does not parse, a negative
+        ``WORKERS`` and an on/off value outside the set above are refused
+        with a message that starts with the variable's name. The test-only
         ``loader`` and ``loader_path`` fields keep their defaults here.
         """
 
@@ -252,27 +286,43 @@ class SchedulerConfig:
         def flag(name: str, default: bool) -> bool:
             return parse_flag(_ENV_PREFIX + name, env.get(_ENV_PREFIX + name), default)
 
+        def whole(name: str, default: int, *, non_negative: bool = False) -> int:
+            variable = _ENV_PREFIX + name
+            return _parse_int(
+                variable, env.get(variable), default, non_negative=non_negative
+            )
+
+        def real(name: str, default: float) -> float:
+            variable = _ENV_PREFIX + name
+            return _parse_float(variable, env.get(variable), default)
+
+        cores_text = str(get("CORES", ""))
+        try:
+            cores = parse_cores(cores_text)
+        except ValueError:
+            raise ValueError(
+                f"{_ENV_PREFIX}CORES must list core numbers and ranges, such as "
+                f"0-3,8 (got {cores_text!r})"
+            ) from None
         base = cls()
         return cls(
-            workers=int(get("WORKERS", base.workers)),
-            cores=parse_cores(str(get("CORES", ""))),
+            workers=whole("WORKERS", base.workers, non_negative=True),
+            cores=cores,
             policy=str(get("POLICY", base.policy)),
-            aging=float(get("AGING", base.aging)),
-            chunk_min_chars=int(get("CHUNK_MIN_CHARS", base.chunk_min_chars)),
-            chunk_target=int(get("CHUNK_TARGET", base.chunk_target)),
-            kmax=int(get("KMAX", base.kmax)),
+            aging=real("AGING", base.aging),
+            chunk_min_chars=whole("CHUNK_MIN_CHARS", base.chunk_min_chars),
+            chunk_target=whole("CHUNK_TARGET", base.chunk_target),
+            kmax=whole("KMAX", base.kmax),
             k_rule=str(get("K_RULE", base.k_rule)),
             affinity=flag("AFFINITY", base.affinity),
-            ms_fixed=float(get("MS_FIXED", base.ms_fixed)),
-            ms_per_char=float(get("MS_PER_CHAR", base.ms_per_char)),
-            non_ascii_ratio=float(get("NON_ASCII_RATIO", base.non_ascii_ratio)),
-            ms_per_char_session=float(
-                get("MS_PER_CHAR_SESSION", base.ms_per_char_session)
-            ),
+            ms_fixed=real("MS_FIXED", base.ms_fixed),
+            ms_per_char=real("MS_PER_CHAR", base.ms_per_char),
+            non_ascii_ratio=real("NON_ASCII_RATIO", base.non_ascii_ratio),
+            ms_per_char_session=real("MS_PER_CHAR_SESSION", base.ms_per_char_session),
             calibrate=flag("CALIBRATE", base.calibrate),
-            worker_timeout_s=float(get("WORKER_TIMEOUT_S", base.worker_timeout_s)),
-            start_timeout_s=float(get("START_TIMEOUT_S", base.start_timeout_s)),
-            rayon_threads=int(get("RAYON_THREADS", base.rayon_threads)),
+            worker_timeout_s=real("WORKER_TIMEOUT_S", base.worker_timeout_s),
+            start_timeout_s=real("START_TIMEOUT_S", base.start_timeout_s),
+            rayon_threads=whole("RAYON_THREADS", base.rayon_threads),
         )
 
 

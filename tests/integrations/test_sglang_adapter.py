@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shutil
 import time
 from collections.abc import Callable, Iterator
@@ -26,6 +27,7 @@ import toktier
 from toktier import Config
 from toktier.artifacts.manifest import ArtifactManifest
 from toktier.artifacts.tables import ARTIFACT_MANIFEST
+from toktier.integrations import sglang_sched
 from toktier.integrations.sglang import (
     SESSION_KEY,
     AdapterConfig,
@@ -313,6 +315,9 @@ def test_unexpected_manager_shape_leaves_the_class_unchanged(
         ("TOKTIER_SGLANG_PER_PROCESS_STORE", "off"),
         ("TOKTIER_SGLANG_SCHED_AFFINITY", "maybe"),
         ("TOKTIER_SGLANG_SCHED_CALIBRATE", "2"),
+        ("TOKTIER_SGLANG_SCHED_WORKERS", "-1"),
+        ("TOKTIER_SGLANG_SCHED_KMAX", "2.0"),
+        ("TOKTIER_SGLANG_SHADOW_RATE", "half"),
     ],
 )
 def test_an_invalid_setting_leaves_the_manager_unattached(
@@ -384,6 +389,91 @@ def test_on_off_settings_accept_a_fixed_set_and_refuse_the_rest(
     if variable.startswith("TOKTIER_SGLANG_SCHED_"):
         with pytest.raises(ValueError, match=variable):
             SchedulerConfig.from_env({variable: "off"})
+
+
+def _starts_with(variable: str) -> str:
+    """A ``match`` pattern for a message that starts with ``variable``, the
+    form the on/off settings refuse in."""
+    return rf"^{re.escape(variable)} "
+
+
+_POOL = {"TOKTIER_SGLANG_SCHED_WORKERS": "1"}  # so the scheduler is read
+_ADAPTER_INTEGERS = (
+    "TOKTIER_SGLANG_EXPLAIN_EVERY",
+    "TOKTIER_SGLANG_CHUNKED_MIN_CHARS",
+    "TOKTIER_SGLANG_CHUNKED_K",
+)
+_SCHED_INTEGERS = (
+    "TOKTIER_SGLANG_SCHED_CHUNK_MIN_CHARS",
+    "TOKTIER_SGLANG_SCHED_CHUNK_TARGET",
+    "TOKTIER_SGLANG_SCHED_KMAX",
+    "TOKTIER_SGLANG_SCHED_RAYON_THREADS",
+)
+_SCHED_NUMBERS = (
+    "TOKTIER_SGLANG_SCHED_AGING",
+    "TOKTIER_SGLANG_SCHED_MS_FIXED",
+    "TOKTIER_SGLANG_SCHED_MS_PER_CHAR",
+    "TOKTIER_SGLANG_SCHED_NON_ASCII_RATIO",
+    "TOKTIER_SGLANG_SCHED_MS_PER_CHAR_SESSION",
+    "TOKTIER_SGLANG_SCHED_WORKER_TIMEOUT_S",
+    "TOKTIER_SGLANG_SCHED_START_TIMEOUT_S",
+)
+
+
+def test_pool_size_takes_a_non_negative_integer_only() -> None:
+    variable = "TOKTIER_SGLANG_SCHED_WORKERS"
+    assert AdapterConfig.from_env({variable: ""}).scheduler is None
+    assert AdapterConfig.from_env({variable: "0"}).scheduler is None
+    pooled = AdapterConfig.from_env({variable: "3"}).scheduler
+    assert pooled is not None and pooled.workers == 3
+    assert SchedulerConfig.from_env({variable: "0"}).workers == 0
+    # A negative count was once read as "no pool"; it is refused now, by
+    # name, through the adapter and through the scheduler alike.
+    for value in ("-1", "-5", "2.0", "two", "1e3"):
+        with pytest.raises(ValueError, match=_starts_with(variable)):
+            AdapterConfig.from_env({variable: value})
+        with pytest.raises(ValueError, match=_starts_with(variable)):
+            SchedulerConfig.from_env({variable: value})
+
+
+def test_numeric_settings_are_refused_by_name() -> None:
+    accepted = AdapterConfig.from_env(
+        {
+            **_POOL,
+            "TOKTIER_SGLANG_SHADOW_RATE": "0.25",
+            "TOKTIER_SGLANG_EXPLAIN_EVERY": "7",
+            "TOKTIER_SGLANG_SCHED_AGING": "0.5",
+            "TOKTIER_SGLANG_SCHED_MS_FIXED": "1e-3",
+            "TOKTIER_SGLANG_SCHED_RAYON_THREADS": "2",
+        }
+    )
+    assert accepted.shadow_rate == 0.25 and accepted.explain_every == 7
+    assert accepted.scheduler is not None
+    assert accepted.scheduler.aging == 0.5 and accepted.scheduler.ms_fixed == 1e-3
+    assert accepted.scheduler.rayon_threads == 2
+    for variable in _ADAPTER_INTEGERS:
+        for value in ("2.5", "many"):
+            with pytest.raises(ValueError, match=_starts_with(variable)):
+                AdapterConfig.from_env({variable: value})
+    with pytest.raises(ValueError, match=_starts_with("TOKTIER_SGLANG_SHADOW_RATE")):
+        AdapterConfig.from_env({"TOKTIER_SGLANG_SHADOW_RATE": "half"})
+    refused: dict[str, tuple[str, ...]] = {
+        name: ("2.5", "many") for name in _SCHED_INTEGERS
+    }
+    refused.update({name: ("fast",) for name in _SCHED_NUMBERS})
+    refused["TOKTIER_SGLANG_SCHED_CORES"] = ("a-b", "0-", "x")
+    for variable, values in refused.items():
+        for value in values:
+            with pytest.raises(ValueError, match=_starts_with(variable)):
+                AdapterConfig.from_env({**_POOL, variable: value})
+            with pytest.raises(ValueError, match=_starts_with(variable)):
+                SchedulerConfig.from_env({variable: value})
+    # The on/off settings refuse in the same form, through the parser the
+    # adapter and the scheduler share.
+    affinity = "TOKTIER_SGLANG_SCHED_AFFINITY"
+    with pytest.raises(ValueError, match=_starts_with(affinity)):
+        SchedulerConfig.from_env({affinity: "off"})
+    assert "parse_flag" in sglang_sched.__all__
 
 
 # -- chunk-parallel encode wiring (0.3.0) -----------------------------------

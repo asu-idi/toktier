@@ -221,6 +221,35 @@ def _sglang_version() -> str | None:
         return None
 
 
+# The two numeric readers follow the rule of ``sglang_sched``'s own copies:
+# a value that does not parse is refused with a message that starts with
+# the variable's name, as ``parse_flag`` does for the on/off settings.
+# Each module keeps its own copy, so neither imports the other's private
+# names.
+def _parse_int(
+    variable: str, value: str | None, default: int, *, non_negative: bool = False
+) -> int:
+    if value is None or value == "":
+        return default
+    expected = "a non-negative integer" if non_negative else "an integer"
+    try:
+        number = int(value)
+    except ValueError:
+        raise ValueError(f"{variable} must be {expected} (got {value!r})") from None
+    if non_negative and number < 0:
+        raise ValueError(f"{variable} must be {expected} (got {value!r})")
+    return number
+
+
+def _parse_float(variable: str, value: str | None, default: float) -> float:
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        raise ValueError(f"{variable} must be a number (got {value!r})") from None
+
+
 @dataclass(frozen=True)
 class AdapterConfig:
     """Everything the wrapper needs beyond the tokenizer it wraps.
@@ -297,15 +326,19 @@ class AdapterConfig:
     def from_env(cls, env: Mapping[str, str] | None = None) -> AdapterConfig:
         """Read ``TOKTIER_SGLANG_*`` variables; unset ones keep the defaults.
 
-        ``TOKTIER_SGLANG_SHADOW`` accepts ``0``/``off``, ``1``/``sync`` and
-        ``async``. Other names map one to one onto the fields
+        ``TOKTIER_SGLANG_SHADOW`` accepts ``off`` (or ``0``/``false``),
+        ``sync`` (or ``1``/``true``) and ``async``, in any letter case. Other
+        names map one to one onto the fields
         (``FAMILY``, ``REPO``, ``SESSION_KEY``, ``STORE``, ``SHADOW_RATE``,
         ``SHADOW_DUMP_DIR``, ``TIMING_LOG``, ``STATS_FILE``,
         ``EXPLAIN_EVERY``, ``RID_SEPARATOR``, ``PER_PROCESS_STORE``,
         ``CHUNKED_MIN_CHARS``, ``CHUNKED_K``, ``IDENTITY``; the last accepts
         only ``require``, and ``PER_PROCESS_STORE`` accepts
         ``1``/``true``/``yes`` and ``0``/``false``/``no`` in any case). An
-        invalid value raises ``ValueError``. The scheduler is read
+        invalid value raises ``ValueError``; a numeric value that does not
+        parse, an on/off value outside that set and a negative
+        ``SCHED_WORKERS`` are refused with a message that starts with the
+        variable's name. The scheduler is read
         from ``TOKTIER_SGLANG_SCHED_*`` when ``TOKTIER_SGLANG_SCHED_WORKERS``
         is set to a positive number (:meth:`SchedulerConfig.from_env`, given
         the same mapping). With ``env`` omitted the process environment is
@@ -316,6 +349,12 @@ class AdapterConfig:
         def get(name: str, default: Any = None) -> Any:
             value = e.get(_ENV_PREFIX + name)
             return default if value in (None, "") else value
+
+        def whole(name: str, default: int, *, non_negative: bool = False) -> int:
+            variable = _ENV_PREFIX + name
+            return _parse_int(
+                variable, e.get(variable), default, non_negative=non_negative
+            )
 
         shadow_raw = str(get("SHADOW", "off")).lower()
         shadow = {"0": "off", "1": "sync", "true": "sync", "false": "off"}.get(
@@ -328,7 +367,7 @@ class AdapterConfig:
                 f"check cannot be turned off (got {identity!r})"
             )
         scheduler: SchedulerConfig | None = None
-        if int(get("SCHED_WORKERS", 0)) > 0:
+        if whole("SCHED_WORKERS", 0, non_negative=True) > 0:
             scheduler = SchedulerConfig.from_env(e)
         return cls(
             family=get("FAMILY"),
@@ -341,14 +380,16 @@ class AdapterConfig:
                 True,
             ),
             shadow=shadow,
-            shadow_rate=float(get("SHADOW_RATE", 1.0)),
+            shadow_rate=_parse_float(
+                _ENV_PREFIX + "SHADOW_RATE", e.get(_ENV_PREFIX + "SHADOW_RATE"), 1.0
+            ),
             shadow_dump_dir=get("SHADOW_DUMP_DIR"),
             timing_log=get("TIMING_LOG"),
             stats_file=get("STATS_FILE"),
-            explain_every=int(get("EXPLAIN_EVERY", 0)),
+            explain_every=whole("EXPLAIN_EVERY", 0),
             rid_separator=get("RID_SEPARATOR"),
-            chunked_min_chars=int(get("CHUNKED_MIN_CHARS", 0)),
-            chunked_k=int(get("CHUNKED_K", 0)),
+            chunked_min_chars=whole("CHUNKED_MIN_CHARS", 0),
+            chunked_k=whole("CHUNKED_K", 0),
             identity=identity,
             scheduler=scheduler,
         )

@@ -139,39 +139,42 @@ fifteen the evidence covers is later work.
 
 ## CPU parallel BPE for long requests
 
-**Python-level shipped in 0.3.0** (`toktier.chunked.encode`,
-`docs/serving.md` Section 3): a long input is cut at certified stable
-boundaries -- the synchronizing-transition rule the session-repair
-witness already uses, plus an added-token literal guard and, for an NFC
-family, the requirement that the cut also be a certified cut of the
-normalized text -- the chunks run as one batch on the certified CPU
-engine's worker pool, and the id rows are concatenated. Because no
-pre-token can span a certified cut, there is no boundary to repair and
-nothing to retry: the result is the serial encoding by construction,
-and an input in which no certified cut exists is encoded serially with
-the reason named. Admission is the certified repair roster (the eleven
-byte-level BPE artifacts the sync profile was certified on) with a
-normalizer the rule reasons about (none, the empty sequence, NFC); the
-chunk table was measured on three of them and four corpus types.
+**Shipped in 0.3.0, on both paths** (`toktier.chunked.encode`,
+`docs/serving.md` Section 3). A long input is cut at certified stable
+boundaries: the synchronizing-transition rule the session-repair witness
+already uses, plus an added-token literal guard and, for an NFC family,
+the requirement that the cut also be a certified cut of the normalized
+text. The chunks are encoded in parallel and the id rows concatenated.
+Because no pre-token can span a certified cut, there is no boundary to
+repair and nothing to retry, so the result is the serial encoding by
+construction, and an input in which no certified cut exists is encoded
+serially with the reason named. The same plan runs as a Python helper
+over the batch path and inside a native chunk encoder, which encodes the
+chunks on its own worker pool and concatenates them before the ids reach
+Python; each call picks the path the admission table allows. Admission
+is the certified repair roster with a normalizer the rule reasons about,
+narrowed to the artifacts that have chunked-path evidence in the
+admission table the package ships. The SGLang adapter can use it for
+long stateless requests, and its worker pool cuts long requests into
+chunk tasks on the same rule.
 
-What remains is native, and is registered for a later release as a Rust
-`ChunkEncoder` (a prototype is in the tree:
-`crates/toktier-routing-core/src/chunked.rs`, reachable through
-`chunked.encode(native=True)` and `Tokenizer.encode(parallel=)`;
-its identity is not registered, so it is not a release): the cut
-search and the concatenation below PyO3, so the
-per-chunk Python boundary (each row handed over and concatenated) stops
-being the floor -- on the faster engines it is most of what is left --
-together with the batch-path items the same measurement surfaced: fork
-and warm the batch workers at construction instead of on the first
-batch (about 20 ms per worker today), let concurrent `encode_batch`
-callers take disjoint idle workers instead of sharing a prefix of the
-pool, make the 64 KiB-per-worker floor a parameter, and judge the
-per-input guards per chunk inside `encode` so that a single unchunked
-request only pays reference speed for the passage that tripped a guard.
-A patch-shaped native return for session appends
-(`Session.append_patch` ships the Python surface in 0.3.0) is on the
-same list.
+What remains is registered for a later release:
+
+- chunked-path evidence for every roster artifact the shipped admission
+  table does not yet list;
+- a patch-shaped native return for session appends, behind the
+  `Session.append_patch` surface shipped in 0.3.0;
+- a pool entry point outside SGLang, and chunk-parallel encode on the
+  Rust `toktier` crate;
+- a second cut mode at the edges of special-token strings;
+- a bytes entry point with UTF-8 validation outside the GIL;
+- for the batch path's own workers, forking and warming at construction,
+  disjoint idle workers for concurrent `encode_batch` callers, and the
+  64 KiB-per-worker floor as a parameter, which the native chunk
+  encoder's pool already has; and per-chunk guard judgement inside a
+  plain `encode`, so that an unchunked request only pays reference speed
+  for the passage that tripped a guard.
+<!-- TODO(fill): drop the first item if the shipped admission table lists every roster artifact. -->
 
 ## Routing large session deltas to the GPU
 
@@ -285,6 +288,9 @@ effort is the pre-tokenizer structure, not the vocabulary size.
 - Feeding pre-computed token IDs to inference servers that accept them (see
   [`docs/integration/dynamo.md`](docs/integration/dynamo.md)) works today and
   needs nothing from either side.
+- An SGLang adapter ships since 0.3.0, attached without changes to SGLang
+  or through a small backend patch kept in this repository
+  ([`docs/integration/sglang.md`](docs/integration/sglang.md)).
 - A persistent layer that implements the tokenizer traits used by the NVIDIA
   Dynamo frontend, so that it can sit next to the existing in-process cache, is
   a candidate for collaboration rather than a unilateral plan; the same document

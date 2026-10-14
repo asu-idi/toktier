@@ -257,9 +257,11 @@ Since 0.3.0 the full report may also carry blocks contributed by helpers
 layered over the facade, under the helper's name. The one shipped helper is
 `toktier.chunked` (chunk-parallel encode, Section 7), whose `chunked` block appears
 once it has served the tokenizer: the admission decision and the normalizer
-shape, call counts, how many calls were chunked, serial fallbacks by reason
-code (`R_CHUNK_NO_CUT`, `R_CHUNK_FAMILY_UNSUPPORTED`), cut positions given up,
-literal and normalization rejections, and the last call's facts. Those
+shape, call counts, how many calls were cut (`applied`), serial fallbacks by
+reason code (`R_CHUNK_NO_CUT`, `R_CHUNK_FAMILY_UNSUPPORTED`,
+`R_CHUNK_ROUTE_NOT_FAST_CPU`), cut positions given up, literal and
+normalization rejections, how many calls took the native path
+(`native_calls`), and the last call's facts. Those
 reason codes are counted there and not in the top-level `fallback_counts`,
 because a serial fallback of the chunked path runs the same certified backend
 the chunks would have used; nothing fell back between backends. The summary
@@ -699,28 +701,46 @@ well-formed-but-newer records, in the contract's explicit-verify split.
   its copies and nothing more; a patch-shaped native return is later
   work and will not change this surface.
 - `toktier.chunked.encode(tokenizer, text, *, k=None, min_chunk=None,
-  scan_budget=4096)` (added in 0.3.0) returns a `ChunkedEncoding`, an
-  `Encoding` whose `ids` equal `encode(text, lookup="off").ids` and which
-  additionally reports `chunks`, `k_requested`, `cuts`, `cut_misses`,
-  `literal_rejects`, `norm_rejects` and `serial_reason`. It is a helper
-  over the public batch path rather than a new route: admission is the
-  certified repair roster (family and artifact digest) narrowed to the
-  normalizer shapes the rule reasons about (none, the empty sequence,
-  NFC with input-matched added tokens), the cut predicate is the
-  session-repair witness's synchronizing-transition rule plus an
-  added-token literal guard and, for an NFC family, the requirement
-  that the cut also be a certified cut of the normalized text, and
-  every fallback is serial on the plain route with the reason named. It does not consult the store and it
-  returns the core stream. `docs/serving.md` Section 3 describes the
-  chunk table and the parallelism it relies on.
-- `chunked.encode(..., native=True)`, `chunked.plan(..., native=True)`,
-  `chunked.warm`, `chunked.admission`, `chunked.native_available` and the
-  `Tokenizer.encode(..., parallel=None)` keyword run the same plan and
-  the chunk encodes inside the native runtime. `parallel` is `None` by default and then changes nothing;
-  `"auto"` or a positive integer returns a `ChunkedEncoding` for a
-  stateless core-stream call (no `session`, `lookup` omitted or
-  `"off"`, `add_special_tokens=False`; anything else is a
-  `ValueError`). The native path is used when the loaded runtime has
-  it, the Python path otherwise. `ChunkedEncoding` gains
-  `native_facts` (`None` on the Python path) and `explain()["chunked"]`
-  gains `native_calls` and `last["native"]`.
+  scan_budget=4096, native=None)` (added in 0.3.0) returns a
+  `ChunkedEncoding`, an `Encoding` whose `ids` equal
+  `encode(text, lookup="off").ids` and which additionally reports
+  `chunks`, `k_requested`, `cuts`, `cut_misses`, `literal_rejects`,
+  `norm_rejects`, `serial_reason` and `native_facts`. It is a helper
+  rather than a new route. Admission takes three conditions: the
+  certified repair roster (family and artifact digest), a normalizer
+  shape the rule reasons about (none, the empty sequence, NFC with
+  input-matched added tokens), and a row in the chunked admission table
+  the package ships (`routing/tables/chunked_admission.v1.json`). The cut
+  predicate is the session-repair witness's synchronizing-transition
+  rule plus an added-token literal guard and, for an NFC family, the
+  requirement that the cut also be a certified cut of the normalized
+  text. Every fallback is serial on the plain route with the reason
+  named. It does not consult the store and it returns the core stream.
+  `docs/serving.md` Section 3 describes the chunk table and the
+  parallelism it relies on.
+- The plan runs on one of two paths with the same cuts: the Python path,
+  which runs the chunks through the public batch path, and the native
+  chunk encoder inside the native runtime. `native=None` takes the
+  native path when the loaded runtime carries it and the admission
+  table lists `native` for the artifact, and the Python path otherwise;
+  `native=False` takes the Python path; `native=True` takes the native
+  path or raises `RuntimeError` naming what is missing.
+  `chunked.plan(..., native=True)`, `chunked.warm`,
+  `chunked.admission`, `chunked.native_available` and
+  `ChunkedEncoding.native_facts` (`None` on the Python path) belong to
+  the native path, and `explain()["chunked"]` counts it in
+  `native_calls` and `last["native"]`.
+- `Tokenizer.encode(..., parallel=None)` (added in 0.3.0) is `None` by
+  default and then changes nothing. `"auto"` or a positive integer
+  returns `toktier.chunked.encode(self, text, k=...)` with the path
+  chosen as above, for a stateless core-stream call (no `session`,
+  `lookup` omitted or `"off"`, `add_special_tokens=False`; anything else
+  is a `ValueError`).
+- Stability of these additions. `toktier.chunked`, the `parallel`
+  keyword, and the SGLang adapter modules
+  (`toktier.integrations.sglang`, `toktier.integrations.sglang_sched`)
+  are provisional in 0.x: they may change in a minor release, and they
+  do not move `API_VERSION`. `Session.append_patch` and `SessionPatch`
+  are an addition on the frozen track, to be folded into `api.md`
+  Section 5.1 at its next revision.
+<!-- TODO(fill): check native=None and the parallel= keyword against the merged code (the auto rule lives in the admission-table commits; Tokenizer._encode_parallel has to pass native=None for the shortcut to follow it). -->

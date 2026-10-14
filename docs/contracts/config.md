@@ -64,6 +64,16 @@ diagnostics.
 Variables outside this set that may exist during development are not
 contract and can disappear without notice.
 
+Since 0.3.0 one integration reads variables of its own. The SGLang
+adapter (`toktier.integrations.sglang`) is configured by the
+`TOKTIER_SGLANG_*` names listed in `docs/integration/sglang.md`, and its
+worker pool by the `TOKTIER_SGLANG_SCHED_*` names. Only the adapter
+reads them, once, when its configuration is built, and it passes the
+pool its settings as a mapping. They are outside the frozen set above
+and, like the adapter, provisional in 0.x; the facade and the `Config`
+object never read them.
+<!-- TODO(fill): confirm "passes the pool its settings as a mapping" against the merged SGLang compatibility commits (SchedulerConfig.from_env without an environment fallback). -->
+
 Layer scope: this table is the Python product's configuration surface. The
 `toktier` Rust crate is configured through `RuntimeBuilder`, and since 0.2.4
 it resolves its directories from the same variables with the same precedence:

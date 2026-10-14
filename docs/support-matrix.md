@@ -101,6 +101,38 @@ released-API rerun over every row is in
 and the one-call native-front-end rerun is in
 [`readings/fast_cpu_native_frontend_parity.json`](../readings/fast_cpu_native_frontend_parity.json).
 
+## Certified chunk cuts
+
+Since 0.3.0 a long input can be encoded in chunks cut at certified
+stable boundaries (`toktier.chunked`, `docs/serving.md` Section 3). The
+result is the serial encoding by construction, and the claim is still
+bound to evidence, artifact by artifact. Three kinds of evidence bear on
+it, and only two of them are about the chunked path.
+
+| Evidence | What it covers | Reading |
+|---|---|---|
+| Engine differential | the corrected CPU engine encoding whole documents; it never cuts one, so it says nothing about cuts | 41,800,181,401 checks, 11 artifacts x 3,800,016,491 documents, 0 divergences ([`tools/fast_cpu_binding.json`](../tools/fast_cpu_binding.json)) |
+| Adversarial battery | the cut rule on strings built to stress it: decomposing characters, combining sequences, jamo, kana voicing marks, literals beside marks | <!-- TODO(fill): strings per family, families, paths and mismatches from readings/chunked_cuts_campaign.json (adversarial section) --> |
+| Corpus cut comparison | web documents of 512 to 400,000 characters, encoded with forced cuts and compared id for id with the serial encode and the reference | <!-- TODO(fill): documents per family, families, paths, mismatches and serial fallbacks from readings/chunked_cuts_campaign.json --> |
+
+The engine differential stays what it was in the section above. It
+supports the chunked path only in the sense that each chunk is encoded
+by the same engine, and it is not counted as chunked-path evidence.
+
+What may be chunked is decided at run time from three conditions, all of
+which must hold: the artifact has a repair-roster entry, its loader face
+carries a normalizer the cut rule reasons about (none, the empty
+sequence, or NFC with input-matched added tokens), and the chunked
+admission table has a row for it. The table is generated from the two
+evidence records named under the family table, and a standing check
+keeps it equal to them. Each row is bound to the code it was measured
+on: the Python path to `chunked_identity`, a digest of
+`toktier/chunked.py` and the two repair tables it reads, and the native
+path to the corrected CPU engine's version-normalized source digest. A
+change to either code takes the matching rows out of the evidence until
+it is measured again.
+<!-- TODO(fill): one sentence on coverage once the shipped table is final, e.g. "In this release six of the eleven roster artifacts have rows, on the Python path." or "All eleven roster artifacts have rows, on both paths." -->
+
 ## Pinned Fastokens distribution (toktier-fastokens)
 
 toktier-fastokens 0.3.1.2 is a build of fastokens 0.3.1 with six patches
@@ -177,27 +209,44 @@ package.
 
 ## Byte-level BPE families
 
-| Family id | Anchor repository | Artifact sha256 (prefix) | CPU fast repair | GPU status |
-|---|---|---|---|---|
-| `qwen3_8b` | `Qwen/Qwen3-8B` | aeb13307a71a | certified (Gigatoken) | certified (prebuilt) |
-| `qwen3_5_08b` | `Qwen/Qwen3.5-0.8B` | 5f9e4d4901a9 | certified (Gigatoken) | certified (prebuilt) |
-| `llama_3_1_8b` | `meta-llama/Llama-3.1-8B` | 76e48799b099 | certified (Gigatoken) | certified (prebuilt) |
-| `deepseek_v3` | `deepseek-ai/DeepSeek-V3` | 621ac2e32d0d | certified (Gigatoken) | certified (prebuilt) |
-| `deepseek_v4_flash` | `deepseek-ai/DeepSeek-V4-Flash` | 8f9f37ca37fd | certified (Gigatoken) | certified (prebuilt) |
-| `gpt_oss_120b` | `openai/gpt-oss-120b` | 0614fe83cada | certified (Gigatoken) | certified (prebuilt) |
-| `glm_5_2` | `zai-org/GLM-5.2` | 19e773648cb4 | certified (Gigatoken) | certified (prebuilt) |
-| `minimax_m3` | `MiniMaxAI/MiniMax-M3` | bb1f1626cf01 | certified (Gigatoken) | certified (prebuilt) |
-| `ministral_3_8b` | `mistralai/Ministral-3-8B-Instruct-2512-BF16` | d5f6046775b1 | certified (Gigatoken) | certified (prebuilt) |
-| `nemotron_3_nano_4b` | `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` | 623c34567aeb | certified (Gigatoken) | certified (prebuilt) |
-| `olmo_3_7b` | `allenai/Olmo-3-1025-7B` | 73fd5254624f | certified (Gigatoken) | certified (prebuilt) |
-| `hy3` | `tencent/Hy3` | 446e0b59cd94 | unsupported by Gigatoken; HF | certified (prebuilt) |
-| `kimi_k3` | `moonshotai/Kimi-K3` | 773c2476259d | unsupported by Gigatoken; HF | certified (prebuilt) |
-| `ling_3_0_flash` | `inclusionAI/Ling-3.0-flash` | 40fb9d7d7795 | unsupported by Gigatoken; HF | certified (prebuilt) |
-| `laguna_s_2_1` | `poolside/Laguna-S-2.1` | 809240f7a182 | unsupported by Gigatoken; HF | certified (prebuilt) |
+| Family id | Anchor repository | Artifact sha256 (prefix) | CPU fast repair | GPU status | Chunked cuts |
+|---|---|---|---|---|---|
+| `qwen3_8b` | `Qwen/Qwen3-8B` | aeb13307a71a | certified (Gigatoken) | certified (prebuilt) | certified (python) |
+| `qwen3_5_08b` | `Qwen/Qwen3.5-0.8B` | 5f9e4d4901a9 | certified (Gigatoken) | certified (prebuilt) | certified (python) |
+| `llama_3_1_8b` | `meta-llama/Llama-3.1-8B` | 76e48799b099 | certified (Gigatoken) | certified (prebuilt) | certified (python) |
+| `deepseek_v3` | `deepseek-ai/DeepSeek-V3` | 621ac2e32d0d | certified (Gigatoken) | certified (prebuilt) | certified (python) |
+| `deepseek_v4_flash` | `deepseek-ai/DeepSeek-V4-Flash` | 8f9f37ca37fd | certified (Gigatoken) | certified (prebuilt) | no evidence |
+| `gpt_oss_120b` | `openai/gpt-oss-120b` | 0614fe83cada | certified (Gigatoken) | certified (prebuilt) | certified (python) |
+| `glm_5_2` | `zai-org/GLM-5.2` | 19e773648cb4 | certified (Gigatoken) | certified (prebuilt) | no evidence |
+| `minimax_m3` | `MiniMaxAI/MiniMax-M3` | bb1f1626cf01 | certified (Gigatoken) | certified (prebuilt) | certified (python) |
+| `ministral_3_8b` | `mistralai/Ministral-3-8B-Instruct-2512-BF16` | d5f6046775b1 | certified (Gigatoken) | certified (prebuilt) | no evidence |
+| `nemotron_3_nano_4b` | `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` | 623c34567aeb | certified (Gigatoken) | certified (prebuilt) | no evidence |
+| `olmo_3_7b` | `allenai/Olmo-3-1025-7B` | 73fd5254624f | certified (Gigatoken) | certified (prebuilt) | no evidence |
+| `hy3` | `tencent/Hy3` | 446e0b59cd94 | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
+| `kimi_k3` | `moonshotai/Kimi-K3` | 773c2476259d | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
+| `ling_3_0_flash` | `inclusionAI/Ling-3.0-flash` | 40fb9d7d7795 | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
+| `laguna_s_2_1` | `poolside/Laguna-S-2.1` | 809240f7a182 | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
+<!-- TODO(fill): set the Chunked cuts column from the shipped routing/tables/chunked_admission.v1.json (rows and their paths); the values above follow the first version of that table, six artifacts on the Python path. -->
 
 Pinned upstream revisions are recorded per row as
 `support.repo_revision.{family}` in the generated table; the package verifies
 them at fetch time.
+
+Chunked cuts names what `toktier.chunked` may do with the artifact, as
+the chunked admission table that ships with the package
+(`toktier/routing/tables/chunked_admission.v1.json`) records it, with
+the evidence in `evidence/evidence_manifest_chunked_cuts.json` and
+`readings/chunked_cuts_campaign.json`. `certified (python, native)`
+means the table's row covers both the Python path and the native chunk
+encoder, and `certified (python)` means it covers the Python path only;
+`chunked.encode` then takes the Python path by default, and asking for
+the native one raises. `no evidence` means the artifact is on the
+certified repair roster with a normalizer the cut rule reasons about,
+but no row exists yet, so chunked encode runs serially and names the
+refusal `artifact_without_chunked_evidence`. `not admitted` means the
+artifact is not on the repair roster at all. The whole-document routes
+in the other columns do not depend on this one; see
+[Certified chunk cuts](#certified-chunk-cuts).
 
 GPU status names the prebuilt kernel delivery: `certified (prebuilt)` is
 binary-digest bound to the shipped fatbin, source/build bound to its Rust
@@ -569,6 +618,11 @@ snapshot](#repositories-admitted-after-the-snapshot).
 | `deepseek-ai/DeepSeek-V4-Pro-DSpark` | `7c09739fd136` | `8f9f37ca37fd` | identical |
 | `deepseek-ai/DeepSeek-V4-Pro-0813` &dagger; | `72e1d3230f6c` | `8f9f37ca37fd` | identical |
 
+`deepseek-ai/DeepSeek-V4.1-Flash` and
+`deepseek-ai/DeepSeek-V4-Flash-Vision-Exp` are not among these seven.
+They ship a different tokenizer file, recorded under
+[Examined and not certified: the DeepSeek-V4.1-Flash tokenizer](#examined-and-not-certified-the-deepseek-v41-flash-tokenizer).
+
 #### `gpt_oss_120b` (3 repositories)
 
 | Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
@@ -881,6 +935,60 @@ route reads `tokenizer.json` and is unaffected. That configuration file
 declares no added tokens of its own, so the boundary recorded under
 [Configuration-only added tokens](#configuration-only-added-tokens) does not
 arise for this artifact.
+
+### Examined and not certified: the DeepSeek-V4.1-Flash tokenizer
+
+| Repository | Revision | `tokenizer.json` sha256 | Size | Nearest certified family | Basis | Examined on |
+|---|---|---|---|---|---|---|
+| `deepseek-ai/DeepSeek-V4.1-Flash` | `dba1be0a40aa` | `c90dfa01249d` | 6,367,257 | `deepseek_v4_flash` | same pipeline, different added-token table | 2026-09-20 |
+| `deepseek-ai/DeepSeek-V4-Flash-Vision-Exp` | `6821d6ad3681` | `c90dfa01249d` | 6,367,257 | `deepseek_v4_flash` | identical to the row above | 2026-09-20 |
+
+The two repositories ship the same tokenizer file, so one examination
+covers both, and so does everything below.
+
+What was established. The file carries the vocabulary (128,000 entries),
+the merge table (127,741 rows) and the normalizer, pre-tokenizer,
+post-processor and decoder of the certified `deepseek_v4_flash`
+artifact, entry for entry. Its added-token table has the same 1,283 ids,
+and nine of them carry different literals. One placeholder becomes
+`<｜System｜>`, the `<｜image2｜>` literal becomes `<｜deepseek_image｜>`,
+and six table-markup literals and `<｜image｜>` become placeholder names;
+the first of the nine also changes its `special` and `normalized` flags.
+The `tokenizer_config.json` is byte-identical to the anchor's and
+declares no added tokens of its own, so the loader face carries
+exactly the file's added tokens. On 100,000 documents of web text, multilingual paragraphs and
+code (218,539,216 characters), toktier's reference route over this file,
+the reference engine over its loader face and the reference engine over
+the certified `deepseek_v4_flash` face returned the same ids on every
+document, and none of the 18 literals that differ between the two
+added-token tables occurs in them.
+
+What follows from that. The pipeline sections are equal, so the two
+artifacts hold the same pipeline capability,
+`pipeline.9f6d5117c3680d0e`. The added-token tables differ, so the
+added-token capability is a new one, `added-frontend.b5b5d7ad62c0371f`,
+and no reading in this release covers it. The tokenizer loads and runs
+through the reference engine under any policy that permits it, and an
+accelerated route is refused with `R_UNCERTIFIED_ARTIFACT` wherever an
+accelerated backend is installed to be assessed. `toktier.chunked` does
+not admit it either: it has no repair-roster entry, so a chunked encode
+runs serially under `R_CHUNK_FAMILY_UNSUPPORTED`. There is no family id
+for it in this release; `from_pretrained` reaches it by content.
+
+Why it is not certified yet. The evidence is close: same pipeline, a
+small and enumerable set of differing literals, and a clean differential
+on the sample above. Two pieces are missing. The registry can record a
+carry-over within one artifact but not yet from one artifact to
+another, the two optional fields for that shape having been removed in
+0.2.9 because no registry carried them. And the 18 literals have not yet
+been scanned for over the full certification corpus the carried readings
+were taken on. Both are registered for a later release.
+
+The repository also ships `encoding/encoding.py`. It is a prompt-format
+reference written against the Python standard library alone: it builds
+the conversation string and never touches token ids, so it sits above
+the tokenizer rather than beside it. The certified
+`deepseek-ai/DeepSeek-V4-Flash` repository ships an equivalent file.
 
 ## Configuration-only added tokens
 

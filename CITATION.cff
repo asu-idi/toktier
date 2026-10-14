@@ -34,6 +34,9 @@ identifiers:
   - type: other
     value: "arXiv:2607.29678"
     description: Paper describing the system
+  # A second identifier for the paper describing the chunk-parallel path,
+  # the CPU pool and the SGLang adapter is added when its arXiv identifier
+  # is public.
 
 preferred-citation:
   type: article

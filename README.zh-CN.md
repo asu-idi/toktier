@@ -482,6 +482,14 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 `fast_cpu`。两种情形下，这个结论都与 `toktier gpu compile` 以及下一次请求所走
 的路一致，而且无需先运行它们。
 
+`certified_cpu_profile_ready` 说的是本机装的 `tokenizers` 与 `transformers`
+是否恰好是取 loader 面读数时用的那一对（0.22.2 与 4.57.6），而不是某条路由
+是否开启。与 SGLang 装在一起时，因为 SGLang 钉的 `transformers` 版本不同，
+它会读到 `false`，建立在它之上的实际后端字段也会在本该写 `fast_cpu` 的地方
+写 `hf`；一个已加载的 tokenizer 实际走哪条路，以它的 `explain()` 和
+`family.plan_reasons` 为准（见
+[Installing beside SGLang](docs/integration/sglang.md#installing-beside-sglang)，英文）。
+
 ### 缓存、状态与目录布局
 
 核心包不依赖 `torch`，导入时无需 CUDA、网络连接或硬件探测。工件缓存、
@@ -602,6 +610,11 @@ WordPiece；不同 family 可以共用同一工件）、**11 个具备 CPU 快�
 
 这些是经验性差分结果，并非对所有可能输入的证明。针对每个请求的检查和参考
 fallback 仍是系统契约的一部分。
+
+0.3.0 新增的分块并行编码有它自己的证据，与上表分开记录：上表的验证活动都是
+整篇编码，从不切分文档。分块路径的证据是一组对抗电池和一次网页语料切点对拍，
+由此生成的准入表随包发布，逐个工件决定哪些可以分块（见
+[`docs/support-matrix.md`](docs/support-matrix.md#certified-chunk-cuts)，英文）。
 
 仓库自检命令：
 
@@ -732,6 +745,8 @@ span，涵盖 normalization、pre-tokenization、merge 和 added-token 处理；
 
 - [`docs/releases/v0.2.9.md`](docs/releases/v0.2.9.md) — 本版本发布说明（英文）。
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — 分层、路由与 store 格式。
+- [`docs/serving.md`](docs/serving.md) — 各类请求该用哪种 encode 调用、只返回差量的会话追加，以及长请求的分块并行编码。
+- [`docs/integration/sglang.md`](docs/integration/sglang.md) — 把 toktier 用作 SGLang 的 tokenizer 后端。
 - [`ROADMAP.md`](ROADMAP.md) — 发布范围与后续集成。
 - [`docs/support-matrix.md`](docs/support-matrix.md) — 工件与覆盖仓库。
 - [`docs/gpu-jit.md`](docs/gpu-jit.md) — 预编译和 JIT GPU 交付。

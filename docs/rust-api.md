@@ -625,6 +625,13 @@ does not claim that a CUDA launch or committed SQLite transaction was rolled
 back. Timings report queue, engine, durable-store, and result-view
 materialization separately.
 
+Chunk-parallel encode of one long request (`toktier.chunked`,
+[`serving.md`](serving.md) Section 3) is reachable from the Python facade
+in this release and not from the `toktier` crate; a Rust entry point is
+registered for a later release. The native chunk encoder itself lives in
+the internal `toktier-routing-core` crate, whose exports carry no
+stability promise of their own (`docs/contracts/versioning.md`).
+
 ## Threading, errors, and features
 
 `Runtime`, `Tokenizer`, `TokenBuffer`, and `Encoding` are `Send + Sync`.

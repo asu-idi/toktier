@@ -554,6 +554,14 @@ under `CERTIFIED` the same machine reads `false` and `fast_cpu`. Either way it
 is the conclusion `toktier gpu compile` and the next request reach, before you
 run them.
 
+`certified_cpu_profile_ready` says whether the installed `tokenizers` and
+`transformers` are exactly the pair the loader-face readings were taken with
+(0.22.2 and 4.57.6), not whether a route is open. Beside SGLang, whose
+`transformers` pin differs, it reads `false` and the effective-backend fields
+built on it answer `hf` where they would otherwise answer `fast_cpu`, while a
+loaded tokenizer's `explain()` and `family.plan_reasons` show what actually runs
+([Installing beside SGLang](docs/integration/sglang.md#installing-beside-sglang)).
+
 ### Caches, state, and directory layout
 
 The core package has no `torch` dependency and can be imported without CUDA,
@@ -697,6 +705,12 @@ Three status values keep evidence and runtime behavior distinct:
 
 These are empirical differential results, not a proof over all possible inputs.
 Per-request checks and the reference fallback remain part of the contract.
+
+The chunk-parallel encode added in 0.3.0 has evidence of its own, kept apart
+from the table above, whose campaigns encode whole documents and never cut
+one: an adversarial battery and a corpus cut comparison on the chunked path,
+from which a shipped admission table decides, artifact by artifact, what may be
+chunked ([`docs/support-matrix.md`](docs/support-matrix.md#certified-chunk-cuts)).
 
 Repository self-checks:
 

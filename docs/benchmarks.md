@@ -147,6 +147,15 @@ can reproduce is worth less than a smaller one anybody can.
 
 Raw single-engine latency can beat the tier at small sessions (bare gigatoken and bare fastokens above); the tier buys exact-id sessions, durable state, and tail stability against the certified reference engine.
 
+The `tier-hf` row is not covered by the public API. It drives the store
+core with the reference crate as the repair-window engine, and the
+installed package exposes no control that selects that window:
+`repair_backend="reference"` turns acceleration off and re-encodes the
+whole text on every turn, which is a different measurement. The row
+stays because it isolates what the window engine contributes, and the
+`repair (HF tokenizers win.)` column of F4 is the same case. Both are
+marked as not covered wherever a public-API reading sits beside them.
+
 ## F3 — per-session state to resume tokenization
 
 What the store durably keeps per session (sealed block records +
@@ -325,7 +334,7 @@ describes:
 |---|---|
 | `toktier GPU` / `toktier GPU (fused)` | the prebuilt GPU path taken at or above the 64 KiB crossover |
 | `gigatoken` (warm/full) | the corrected-Gigatoken full CPU encode taken below the crossover |
-| `repair (HF tokenizers win.)` | the certified session repair with the HF-window configuration |
+| `repair (HF tokenizers win.)` | the certified session repair with the HF-window configuration; not covered by the public API (see the F2 note) |
 | `repair (gigatoken win.)` | the certified session repair with the corrected-Gigatoken window, which the shipped facade wires by default |
 | `HF tokenizers` / `reference backend` | the frozen reference route at the end of every fallback chain |
 | `fastokens` | no row: an explicit experimental adapter; what its pinned build's readings cover is in `docs/support-matrix.md` |
@@ -398,6 +407,59 @@ the retained pre-0.2.0 breakdown study is
 optional `seed_digest_overlap` runtime switch and its measured effect are
 described in the [0.2.0 release notes](releases/v0.2.0.md).
 
+## Chunk-parallel encode and the CPU pool (Machine A, 2026-10-01)
+
+Since 0.3.0 one request can use more than one core, either through
+`toktier.chunked` in the tokenizer's own process or through the SGLang
+adapter's pool of worker processes. The readings below are single calls
+through the adapter, on the `qwen3_8b` tokenizer and English prose, with
+the calling process pinned to four cores of one NUMA node and pool
+worker `i` pinned to core `i`. Each cell is the median of five calls
+(three for the reference), in milliseconds, except the two concurrent
+rows, which are one wall-clock reading each. The pool's cutting threshold
+was 65,536 characters, so a 100K-character stateless request was cut.
+Every answer of the pool equalled the reference ids. They were taken on
+2026-10-01 on the code that became this release, on an otherwise idle
+host.
+<!-- TODO(fill): if the release battery re-takes this microbenchmark on the release candidate, replace the cells and the date together. -->
+
+| Call | 100K characters | 1M characters |
+|---|---:|---:|
+| Hugging Face tokenizer (`transformers`), serial | 22.79 | 325.31 |
+| Adapter without a pool, stateless (`off` mode) | 1.98 | 30.80 |
+| Adapter without a pool, session append of 29 characters | 0.68 | 5.34 |
+| Pool of 4, same session append | 1.51 | 11.07 |
+| Pool of 8, same session append | 1.46 | 11.29 |
+| Pool of 4, stateless, one task | 1.71 (60K) | not measured |
+| Pool of 8, stateless, one task | 1.77 (60K) | not measured |
+| Pool of 4, stateless, cut into chunks | 2.06 (2 chunks) | 12.43 (4 chunks) |
+| Pool of 8, stateless, cut into chunks | 2.07 (2 chunks) | 8.39 (8 chunks) |
+| Pool of 4, four requests at once (wall time) | 5.95 | not measured |
+| Pool of 8, eight requests at once (wall time) | 7.08 | not measured |
+
+The one-task rows use the first 60,000 characters of the 100K text,
+which stays below the cutting threshold. The session rows time the first
+call that appends 29 characters to a session already holding the text,
+in a fresh session for each repetition.
+
+How to read it. Sending a session append through the pool adds about
+0.8 ms at 100K characters and about 5.7 ms at one million, which is the
+cost of moving the whole transcript to the worker and its ids back. A
+stateless million-character request cut into four chunks on four
+workers takes 12.43 ms against 30.80 ms in-process, and eight chunks on
+eight workers take 8.39 ms. At 100K characters two chunks are no faster
+than one task or the in-process encode. So the pool pays for itself on
+long or concurrent requests, not on short sequential ones.
+
+Chunk-parallel encode inside one process, without the pool, is
+described with its chunk table in [`serving.md`](serving.md) Section 3,
+which also quotes the readings behind that table.
+
+### Native chunk encoder
+
+<!-- TODO(fill): readings to be added from the release battery (machine, date, pinned cores, family, input sizes, serial against Python path against native path, and the identity check). Leave this subsection out of the release if no such readings are taken. -->
+Readings to be added from the release battery.
+
 ## Certification scale behind the GPU numbers
 
 The GPU lanes are measured on `sm_120`, and the certification evidence
@@ -422,3 +484,19 @@ distributions, and 169 GPU digest vectors equal on both sides.
   exact-ID guarantee for the optional Fastokens 0.3.1 adapter): 1,000,000 real documents x
   {hy3, kimi_k3, ling_3_0_flash, laguna_s_2_1}, full token-id list
   equality against the reference: kimi_k3: 1,000,000 docs, 0 mismatches; ling_3_0_flash: 1,000,000 docs, 0 mismatches; laguna_s_2_1: 1,000,000 docs, 0 mismatches; hy3: 1,000,000 docs, 0 mismatches, 3 documents rejected with a loud error (rare characters; wrong ids are never produced).
+
+## How this page is refreshed
+
+Three rules keep the tables on this page comparable from one release to
+the next.
+
+- A refreshed table changes its heading date and its pinned cores
+  together with its numbers. A table that keeps its old heading keeps
+  its old numbers.
+- A change in the 4K-context rows is not reported as a gain or a loss of
+  a release. At that size the host moves the numbers more than the code
+  does.
+- Before a table is refreshed, its control column (`HF tokenizers full`,
+  which runs no toktier code) is re-taken and compared with itself. Its
+  drift decides which rows of the refresh can be compared with the old
+  ones.

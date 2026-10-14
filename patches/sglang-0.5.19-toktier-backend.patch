@@ -12,6 +12,10 @@ detokenizer processes keep the plain tokenizer they load. With the
 adapter's process pool enabled (TOKTIER_SGLANG_SCHED_WORKERS > 0),
 `_tokenize_texts` awaits the pool for plain text inputs instead of
 encoding on the event loop's thread. No other code path changes.
+The added code uses `nullcontext`, `logger` and `get_serving`, which
+tokenizer_manager.py already imports in this baseline; the patch adds
+no import of its own, so a port to another release should check that
+the file still imports all three.
 Requires `toktier >= 0.3.0` (toktier.integrations.sglang).
 Baseline: sglang 0.5.19 (PyPI wheel).
 ---

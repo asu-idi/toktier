@@ -43,6 +43,7 @@ from ..artifacts.model_resolution import ModelResolution, resolve_model_reposito
 from ..artifacts.tables import ARTIFACT_MANIFEST
 from ..backends.fast_cpu import FastCpuBackend
 from ..backends.hf import HfBackend
+from ..backends.loader_face import loader_face_sha256
 from ..backends.protocol import TOKENIZER_FILE
 from ..config import Config
 from ..engine.gpu.backend import GpuBackend, LazyGpuBackend
@@ -550,8 +551,12 @@ class Tokenizer:
         # for an artifact whose configuration sidecar contributes added
         # tokens this is the serialized live loader object, so the
         # added-token router, the seal guard and the reference itself
-        # answer from one document.
-        document = json.loads(self._backend.materialized_tokenizer_json())
+        # answer from one document. Its digest goes to the planner, which
+        # compares it with the face the certification record was judged
+        # on (registry.md Section 1).
+        face_text = self._backend.materialized_tokenizer_json()
+        self._loader_face_sha256 = loader_face_sha256(face_text)
+        document = json.loads(face_text)
         added_token_rows = document.get("added_tokens") or []
         self._seal_end_guard_chars = max(
             (
@@ -590,6 +595,7 @@ class Tokenizer:
             registry=self._registry,
             artifact_sha256=self._artifact_sha256,
             device_probe=device_probe,
+            loader_face_sha256=self._loader_face_sha256,
         )
         self._plan = build_plan(
             self._snapshot, resolved_policy, self._registry, self._config

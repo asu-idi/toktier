@@ -144,6 +144,7 @@ that may accompany them is not a machine interface.
 | `R_KERNEL_DIGEST_MISMATCH` | A registry-bound digest does not verify: kernel source digest (`certified_source`) or binary digest (`certified`), or the bound class-table digest of the generated lookup tables the kernel consumes. |
 | `R_KERNEL_BUILD_FAILED` | JIT build attempted at load and failed. |
 | `R_ENGINE_BINDING_MISMATCH` | The CPU engine's delivery identity, private module, build version, source digest, build flags, exact toolchain, patch, or repair configuration does not match the registry binding. |
+| `R_LOADER_FACE_MISMATCH` | The loader face materialized at load -- the tokenizer JSON document the reference executes -- is not the one the record's readings were taken on (the record's `loader_face_sha256`, `registry.md` Section 1). The artifact bytes verified; what the installed loader built from them differs, as another `transformers` release can do for an artifact whose configuration sidecar contributes added tokens. Acceleration is off, the installed reference still runs on the face it built, and the state is reported as reference-only. The detail carries `expected_digest` and `observed_digest`. Added in 0.3.0. |
 
 ### 5.2 Run-time reasons (per call or per input, recorded during execute)
 

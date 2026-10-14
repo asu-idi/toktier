@@ -97,8 +97,14 @@ def registry_document(
     artifact_sha256: str = ARTIFACT_SHA,
     certified_versions: Sequence[str] = (ORACLE_VERSION,),
     compositions: Sequence[tuple[str, str]] = (),
+    loader_face_sha256: str | None = None,
 ) -> ValidatedRegistryDocument:
-    """A minimal registry document in the schema-v1 shape."""
+    """A minimal registry document in the schema-v1 shape.
+
+    ``loader_face_sha256`` writes the optional face digest on the one
+    artifact record (registry.md Section 1); the default leaves the
+    record without a face claim, as every record before 0.3.0 was.
+    """
     default = {BACKEND_GPU: certified_source_entry()}
     entries = dict(backends) if backends is not None else default
     document: dict[str, Any] = {
@@ -149,6 +155,8 @@ def registry_document(
             for pipeline_id, added_id in compositions
         ],
     }
+    if loader_face_sha256 is not None:
+        document["artifacts"][0]["loader_face_sha256"] = loader_face_sha256
     # The helper supplies every required schema field; backend overrides stay
     # dynamic so individual tests can vary the records they exercise.
     return cast(ValidatedRegistryDocument, document)
@@ -198,6 +206,7 @@ def snapshot(
     added_fingerprint: str | None = ADDED_FINGERPRINT,
     kernel_cache: KernelCacheState | None = None,
     reference_importable: bool = True,
+    loader_face_sha256: str | None = None,
 ) -> ProbeSnapshot:
     """Build a probe snapshot describing one machine state."""
     view = registry_view if registry_view is not None else registry()
@@ -212,6 +221,7 @@ def snapshot(
         pipeline_fingerprint=pipeline_fingerprint,
         added_frontend_fingerprint=added_fingerprint,
         oracle_version=oracle_version,
+        loader_face_sha256=loader_face_sha256,
         importable_backends=frozenset(backends),
         devices=tuple(devices),
         devices_probed=devices_probed,

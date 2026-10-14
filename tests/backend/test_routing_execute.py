@@ -482,6 +482,68 @@ def test_explain_marks_reference_only_on_oracle_mismatch() -> None:
     assert certification["effective_verdict"] == "unverified"
 
 
+def test_explain_marks_reference_only_on_loader_face_mismatch() -> None:
+    """A face the record did not judge is reported like a foreign oracle.
+
+    The installed reference runs on the face the installed loader built,
+    and the record's readings say nothing about that face, so no
+    certificate attaches and the verdict is ``unverified``. The reason
+    names both digests.
+    """
+    judged, observed = "f" * 64, "e" * 64
+    view = support.registry(loader_face_sha256=judged)
+    snapshot = support.snapshot(registry_view=view, loader_face_sha256=observed)
+    config = support.config()
+    route_plan = plan(snapshot, RoutingPolicy.CERTIFIED, view, config)
+    assert route_plan.backend == BACKEND_REFERENCE
+    explanation = build_explanation(route_plan=route_plan, snapshot=snapshot)
+    certification = explanation["certification"]
+    assert isinstance(certification, dict)
+    assert certification["state"] == "reference_only"
+    assert certification["effective_verdict"] == "unverified"
+    reasons = explanation["plan_reasons"]
+    assert isinstance(reasons, list)
+    face_reasons = [r for r in reasons if r["code"] == "R_LOADER_FACE_MISMATCH"]
+    assert face_reasons
+    assert face_reasons[0]["detail"] == {
+        "expected_digest": judged,
+        "observed_digest": observed,
+    }
+    probe = explanation["probe"]
+    assert isinstance(probe, dict)
+    assert probe["loader_face_sha256"] == observed
+
+
+def test_explain_compares_no_face_when_either_side_is_absent() -> None:
+    """A record without the digest, or a path that built no face, is as before."""
+    judged = "f" * 64
+    config = support.config()
+    for view, snapshot in (
+        (
+            support.registry(loader_face_sha256=judged),
+            support.snapshot(
+                registry_view=support.registry(loader_face_sha256=judged)
+            ),
+        ),
+        (
+            support.registry(),
+            support.snapshot(
+                registry_view=support.registry(), loader_face_sha256="e" * 64
+            ),
+        ),
+    ):
+        route_plan = plan(snapshot, RoutingPolicy.CERTIFIED, view, config)
+        assert route_plan.backend == BACKEND_GPU
+        explanation = build_explanation(route_plan=route_plan, snapshot=snapshot)
+        certification = explanation["certification"]
+        assert isinstance(certification, dict)
+        assert certification["state"] == "certified_source"
+        assert certification["effective_verdict"] == "certified"
+        reasons = explanation["plan_reasons"]
+        assert isinstance(reasons, list)
+        assert all(r["code"] != "R_LOADER_FACE_MISMATCH" for r in reasons)
+
+
 def test_explain_reports_the_pinned_reference_route_as_reference() -> None:
     """The pinned oracle's own output is not an unverified result.
 

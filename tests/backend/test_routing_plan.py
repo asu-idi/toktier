@@ -60,8 +60,13 @@ PLAN_TIME_CODES = frozenset(
         ReasonCode.R_SM_UNCERTIFIED,
         ReasonCode.R_KERNEL_DIGEST_MISMATCH,
         ReasonCode.R_KERNEL_BUILD_FAILED,
+        ReasonCode.R_LOADER_FACE_MISMATCH,
     }
 )
+
+#: A face digest a record may carry and a snapshot may observe.
+JUDGED_FACE = "f" * 64
+OTHER_FACE = "e" * 64
 
 
 @dataclass(frozen=True)
@@ -292,6 +297,48 @@ STATES: dict[str, State] = {
     "oracle_outside_certified_set": _uncertified_case(
         snapshot_kwargs={"oracle_version": "0.23.0"},
         code=ReasonCode.R_ORACLE_MISMATCH,
+    ),
+    # The record names the face its readings were taken on and the
+    # facade materialized another one (0.3.0): closed like an oracle
+    # outside the certified set, waivable like it.
+    "loader_face_differs_from_the_record": _uncertified_case(
+        registry_kwargs={"loader_face_sha256": JUDGED_FACE},
+        snapshot_kwargs={"loader_face_sha256": OTHER_FACE},
+        code=ReasonCode.R_LOADER_FACE_MISMATCH,
+    ),
+    # The same record with the face it names: nothing changes.
+    "loader_face_recorded_and_matching": State(
+        build=_state(
+            registry_kwargs={"loader_face_sha256": JUDGED_FACE},
+            snapshot_kwargs={"loader_face_sha256": JUDGED_FACE},
+        ),
+        expect={
+            CERTIFIED: _eligible(),
+            REFERENCE: _reference_only(),
+            REQUIRE: _eligible(),
+            EXPERIMENTAL: _eligible(),
+        },
+    ),
+    # A record with a face digest on a path that materialized no face,
+    # and a materialized face against a record without the digest: no
+    # comparison is made and nothing is claimed either way.
+    "loader_face_recorded_but_not_observed": State(
+        build=_state(registry_kwargs={"loader_face_sha256": JUDGED_FACE}),
+        expect={
+            CERTIFIED: _eligible(),
+            REFERENCE: _reference_only(),
+            REQUIRE: _eligible(),
+            EXPERIMENTAL: _eligible(),
+        },
+    ),
+    "loader_face_observed_but_not_recorded": State(
+        build=_state(snapshot_kwargs={"loader_face_sha256": OTHER_FACE}),
+        expect={
+            CERTIFIED: _eligible(),
+            REFERENCE: _reference_only(),
+            REQUIRE: _eligible(),
+            EXPERIMENTAL: _eligible(),
+        },
     ),
     # The one coverage gap in this table: the kernel is the bound one
     # and it loads on this device; what is missing is a campaign that

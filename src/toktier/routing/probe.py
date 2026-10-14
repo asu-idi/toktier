@@ -218,6 +218,11 @@ class ProbeSnapshot:
     added_frontend_fingerprint: str | None = None
     oracle_package: str = ORACLE_PACKAGE
     oracle_version: str | None = None
+    #: Digest of the loader face the facade materialized for this
+    #: artifact (``loader_face_sha256``), the document the reference
+    #: executes; ``None`` on a path that materialized no face, which
+    #: compares nothing.
+    loader_face_sha256: str | None = None
     importable_backends: frozenset[str] = frozenset({BACKEND_REFERENCE})
     devices: tuple[DeviceInfo, ...] = ()
     #: Whether device enumeration was actually performed by a supplied
@@ -245,6 +250,7 @@ class ProbeSnapshot:
             "artifact_sha256": self.artifact_sha256,
             "oracle_package": self.oracle_package,
             "oracle_version": self.oracle_version,
+            "loader_face_sha256": self.loader_face_sha256,
             "importable_backends": sorted(self.importable_backends),
             "devices_probed": self.devices_probed,
             "devices": [
@@ -327,8 +333,14 @@ def probe(
     device_probe: DeviceProbe | None = None,
     installed_oracle_version: str | None = None,
     engine_facts: FastCpuEngineFacts | None = None,
+    loader_face_sha256: str | None = None,
 ) -> ProbeSnapshot:
-    """Collect the routing facts for one artifact. Changes nothing."""
+    """Collect the routing facts for one artifact. Changes nothing.
+
+    ``loader_face_sha256`` is handed in by the caller that materialized
+    the face (the facade, after opening the reference backend); probing
+    materializes nothing itself.
+    """
     devices_source: DeviceProbe = device_probe or NoDevices()
     match = registry.certification(
         artifact_sha256=artifact_sha256,
@@ -346,6 +358,7 @@ def probe(
         pipeline_fingerprint=pipeline_fingerprint,
         added_frontend_fingerprint=added_frontend_fingerprint,
         oracle_version=version,
+        loader_face_sha256=loader_face_sha256,
         importable_backends=importable_backends(),
         devices=devices_source.devices(),
         devices_probed=device_probe is not None,

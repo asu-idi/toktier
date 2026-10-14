@@ -140,6 +140,11 @@ release that moves either side moves both and re-takes the readings.
   - installed oracle version outside the certified set -> accelerated
     paths stay closed, the installed reference oracle still runs, and
     the state is reported as reference-only (`R_ORACLE_MISMATCH`);
+  - materialized loader face other than the record's
+    `loader_face_sha256` (Section 1) -> accelerated paths stay closed,
+    the installed reference runs on the face the installed loader built,
+    and the state is reported as reference-only
+    (`R_LOADER_FACE_MISMATCH`);
   - artifact not in the registry at all -> reference, reported
     uncertified (`R_UNCERTIFIED_ARTIFACT`).
 - Package metadata pins the released oracle exactly (`tokenizers==0.22.2`;

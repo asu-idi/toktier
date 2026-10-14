@@ -167,6 +167,12 @@ class ReasonCode(enum.Enum):
     #: The installed external engine differs from the version or native
     #: binary digest bound by the support registry.
     R_ENGINE_BINDING_MISMATCH = "R_ENGINE_BINDING_MISMATCH"
+    #: The loader face materialized at load is not the one the record's
+    #: readings were taken on (another loader release building a
+    #: different face from the same verified bytes, for one);
+    #: acceleration off, the installed reference still runs on the face
+    #: it built (reference-only state).
+    R_LOADER_FACE_MISMATCH = "R_LOADER_FACE_MISMATCH"
 
     # ---- run-time reasons --------------------------------------------
     #: Input contains an added-token literal; routed to the reference

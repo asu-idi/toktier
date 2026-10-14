@@ -64,9 +64,11 @@ def _certification_state(
     """How the running configuration is labeled.
 
     ``reference_only`` is the state where an artifact is in the registry
-    but the installed oracle is outside its certified set: acceleration
-    is closed, the installed reference still runs. It is distinct from
-    ``uncertified`` (no record at all) because the two say different
+    but the installed oracle is outside its certified set, or (since
+    0.3.0) the loader face the installed loader materialized is not the
+    one the record's readings were taken on: acceleration is closed, the
+    installed reference still runs, on the face it built. It is distinct
+    from ``uncertified`` (no record at all) because the two say different
     things about what is known.
 
     The GPU backend ships as two deliveries with different certification
@@ -103,7 +105,8 @@ def _certification_state(
     acceleration certificate attaches because there is no accelerated
     route to certify. ``unverified`` now means what it says: no
     certificate and no such guarantee, as when the artifact carries no
-    registry record or the installed oracle is outside the certified set
+    registry record, the installed oracle is outside the certified set,
+    or the materialized loader face is not the judged one
     (``reference_only``).
     """
     match = snapshot.certification
@@ -121,8 +124,11 @@ def _certification_state(
             "gpu_delivery": None,
         }
     record = match.record
-    oracle_mismatch = any(
-        reason.code.value == "R_ORACLE_MISMATCH" for reason in route_plan.reasons
+    # Either refusal leaves the installed reference running on something
+    # the record did not judge: the oracle itself, or the face it reads.
+    reference_only = any(
+        reason.code.value in ("R_ORACLE_MISMATCH", "R_LOADER_FACE_MISMATCH")
+        for reason in route_plan.reasons
     )
     statuses = {
         backend_id: entry.status for backend_id, entry in record.backends.items()
@@ -151,7 +157,7 @@ def _certification_state(
             else "experimental"
         )
     else:
-        state = "reference_only" if oracle_mismatch else "reference"
+        state = "reference_only" if reference_only else "reference"
     effective_verdict = (
         "experimental"
         if has_experimental_waiver or state == "experimental"

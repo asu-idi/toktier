@@ -20,27 +20,31 @@ Check order (stable, and the order the reason codes are assigned in):
 5. no eligible registry identity/status     -> ``R_UNCERTIFIED_ARTIFACT``
 6. certificate premises lost in-process     -> ``R_UNCERTIFIED_ARTIFACT``
 7. oracle version outside certified set     -> ``R_ORACLE_MISMATCH``
-8. CPU-engine binding does not verify       -> ``R_ENGINE_BINDING_MISMATCH``
-9. device architecture not listed           -> ``R_SM_UNCERTIFIED``
-10. driver below the certified minimum      -> ``R_DRIVER_TOO_OLD``
-11. kernel build attempted and failed       -> ``R_KERNEL_BUILD_FAILED``
-12. a bound digest does not verify          -> ``R_KERNEL_DIGEST_MISMATCH``
-13. bound flags/toolchain do not verify     -> ``R_UNCERTIFIED_ARTIFACT``
+8. materialized loader face not the judged  -> ``R_LOADER_FACE_MISMATCH``
+9. CPU-engine binding does not verify       -> ``R_ENGINE_BINDING_MISMATCH``
+10. device architecture not listed          -> ``R_SM_UNCERTIFIED``
+11. driver below the certified minimum      -> ``R_DRIVER_TOO_OLD``
+12. kernel build attempted and failed       -> ``R_KERNEL_BUILD_FAILED``
+13. a bound digest does not verify          -> ``R_KERNEL_DIGEST_MISMATCH``
+14. bound flags/toolchain do not verify     -> ``R_UNCERTIFIED_ARTIFACT``
 
 Checks 1-4 are facts about the machine or the requesting path (the
 unprobed case of check 4 is a fact about the caller, not the hardware)
 and hold under every policy.
-Checks 5-9, 11 and 12 are certification statements, so ``EXPERIMENTAL``
+Checks 5-10, 12 and 13 are certification statements, so ``EXPERIMENTAL``
 may proceed past them; each one it passes is recorded as a waiver and
-reported by ``explain()``, never silently. Check 10 blocks under every
+reported by ``explain()``, never silently. Check 11 blocks under every
 policy, because a kernel that failed to build cannot run. Check 5 has
 one exception: for the CPU fast path on content the registry carries no
 record for, there is no engine binding to run against, so the refusal is
-not a statement ``EXPERIMENTAL`` can waive.
+not a statement ``EXPERIMENTAL`` can waive. Check 8 (added in 0.3.0)
+compares the digest of the loader face the facade materialized with the
+one the record's readings were taken on; a record without the digest, or
+a snapshot without a materialized face, compares nothing.
 
 Two of these refusals are about coverage rather than verification: the
-device architecture of check 9, and the compiler/runtime pair of check
-13. In both the bound identity verifies and no campaign has measured the
+device architecture of check 10, and the compiler/runtime pair of check
+14. In both the bound identity verifies and no campaign has measured the
 combination. ``SUPPORTED`` proceeds past those two and records each as a
 supported-untested note; ``CERTIFIED`` refuses them as it always has.
 """
@@ -497,7 +501,29 @@ def _assess(
             waivable=True,
         )
 
-    # 8. The corrected engine is linked into the core native extension. Its
+    # 8. The face the facade materialized is the one the record's readings
+    #    were taken on. The artifact identity covers the verified bytes;
+    #    the face is what the installed loader builds from them, and
+    #    another loader release can build a different one from the same
+    #    bytes (registry.md Section 1). Either side absent: nothing to
+    #    compare, and nothing is claimed.
+    recorded_face = match.record.loader_face_sha256
+    if (
+        recorded_face is not None
+        and snapshot.loader_face_sha256 is not None
+        and snapshot.loader_face_sha256 != recorded_face
+    ):
+        refuse(
+            _reason(
+                ReasonCode.R_LOADER_FACE_MISMATCH,
+                backend,
+                expected_digest=recorded_face,
+                observed_digest=snapshot.loader_face_sha256,
+            ),
+            waivable=True,
+        )
+
+    # 9. The corrected engine is linked into the core native extension. Its
     #    source set, release build flags and exact Rust compiler are reported
     #    by the executing extension and bound by the registry. Its row carries
     #    no device/kernel facts, so a successful check terminates here.
@@ -516,7 +542,7 @@ def _assess(
             )
         return
 
-    # 9. Device architecture explicitly judged. A device outside the
+    # 10. Device architecture explicitly judged. A device outside the
     #    judged list is a coverage gap rather than a verification
     #    failure: the kernel is the bound one and it loads there, and no
     #    campaign has run on it. SUPPORTED admits that and labels it;
@@ -535,7 +561,7 @@ def _assess(
                 coverage=True,
             )
 
-    # 10. Driver at or above the certified floor.
+    # 11. Driver at or above the certified floor.
     if view.driver_min is not None and not _driver_satisfies(
         snapshot.driver_version, view.driver_min
     ):
@@ -549,7 +575,7 @@ def _assess(
             waivable=True,
         )
 
-    # 11. A build that failed leaves nothing to run.
+    # 12. A build that failed leaves nothing to run.
     if snapshot.kernel_cache.build_failed:
         refuse(
             _reason(
@@ -560,7 +586,7 @@ def _assess(
             waivable=False,
         )
 
-    # 12. Bound digests. A value that was never computed counts as a
+    # 13. Bound digests. A value that was never computed counts as a
     #     failed verification, never as a pass.
     for label, expected, observed in _bound_digests(view, snapshot):
         if expected is not None and observed != expected:
@@ -605,7 +631,7 @@ def _assess(
                 waivable=True,
             )
 
-    # 13. Bound build flags and toolchain constraint. The flags are the
+    # 14. Bound build flags and toolchain constraint. The flags are the
     #     recipe this source was judged under, so a difference there is a
     #     verification failure. The compiler/runtime pair is the other
     #     kind of gap: the sources and flags are the judged ones and no
@@ -848,10 +874,11 @@ def _require_accelerated_error(
                 "class_table_digest": detail.get("digest"),
             },
         )
-    # R_UNCERTIFIED_ARTIFACT, R_ORACLE_MISMATCH, and
-    # R_ENGINE_BINDING_MISMATCH mean: this
-    # artifact has no eligible certification identity under the current
-    # conditions. The reason code in details keeps them distinguishable.
+    # R_UNCERTIFIED_ARTIFACT, R_ORACLE_MISMATCH, R_LOADER_FACE_MISMATCH
+    # and R_ENGINE_BINDING_MISMATCH mean: this artifact has no eligible
+    # certification identity under the current conditions. The reason
+    # code in details keeps them distinguishable, and the digest keys
+    # carry both faces for the loader-face case.
     return UncertifiedTokenizer(
         "no certified accelerated path is eligible for this artifact",
         details={

@@ -96,6 +96,7 @@ class _ReadingsDocument(TypedDict):
 class _ArtifactDocumentOptional(TypedDict, total=False):
     aliases: list[str]
     config_added_tokens: Mapping[str, object]
+    loader_face_sha256: str
     carryover: Mapping[str, object]
 
 
@@ -257,6 +258,11 @@ class ArtifactRecord:
     #: naming the absence certificate they rest on
     #: (``docs/contracts/evidence-carryover.md`` Section 3).
     carryover: Mapping[str, object] | None = None
+    #: Digest of the loader-face document the readings were taken on
+    #: (``loader_face_sha256``, registry.md Section 1). The planner
+    #: compares it with the digest of the face the facade materialized;
+    #: ``None`` for a record that makes no face claim.
+    loader_face_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -375,6 +381,7 @@ class RegistryView:
                         mismatches=readings["mismatches"],
                         config_added_tokens=raw.get("config_added_tokens"),
                         carryover=raw.get("carryover"),
+                        loader_face_sha256=raw.get("loader_face_sha256"),
                     )
                 )
             oracles = [

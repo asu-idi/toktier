@@ -33,10 +33,12 @@ the pinned loader's face; a different installed loader is refused
 rather than recorded.
 
 ``--check`` recomputes the digests from the cached artifacts and
-compares them with the shipped table. Artifacts not cached on this
-machine are listed and skipped (exit code 3 when any was skipped and
-nothing mismatched), so the check says what it could not conclude
-rather than passing over it. ``tools/check_loader_face_alignment.py
+compares them with the shipped table, and checks that the table and its
+packaged copy are the same serialised document. Artifacts not cached on
+this machine are listed and skipped (exit code 3 when any was skipped
+and nothing mismatched), so the check says what it could not conclude
+rather than passing over it; the copy comparison needs no artifact and
+runs either way. ``tools/check_loader_face_alignment.py
 --fingerprints`` performs the same comparison as part of the standing
 loader-face gate. After writing, ``tools/sync_rust_package_data.py``
 carries the packaged copy into the Rust crate's data payload.
@@ -212,6 +214,21 @@ def check_problems(
     return problems
 
 
+def copy_problems(registry: dict[str, Any]) -> list[str]:
+    """The registry copies that are not the serialised ``registry``.
+
+    The repository table and its packaged copy must be the same bytes.
+    This needs no cached artifact, so ``--check`` asks it on every
+    machine, before the digests it could not recompute are counted.
+    """
+    payload = serialise_document(registry)
+    return [
+        f"{path} is not the serialised registry"
+        for path in (DEFAULT_REGISTRY, PACKAGED_REGISTRY)
+        if not path.is_file() or path.read_bytes() != payload
+    ]
+
+
 def _write(path: Path, document: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(serialise_document(document))
@@ -245,22 +262,22 @@ def main(argv: list[str] | None = None) -> int:
     observed, absent = observed_loader_faces(registry)
 
     if arguments.check:
+        # The copies are compared first: that needs no cached artifact, so
+        # a machine with part of the roster cached still checks them.
+        copies = copy_problems(registry)
+        for problem in copies:
+            print(f"error: {problem}", file=sys.stderr)
         problems = check_problems(registry, observed)
         reading = {
             "checked": sorted(observed),
             "absent": absent,
-            "problems": problems,
+            "problems": problems + copies,
         }
         print(json.dumps(reading, ensure_ascii=True))
-        if problems:
+        if problems or copies:
             return 1
         if absent or not observed:
             return ABSENT
-        payload = serialise_document(registry)
-        for path in (DEFAULT_REGISTRY, PACKAGED_REGISTRY):
-            if not path.is_file() or path.read_bytes() != payload:
-                print(f"error: {path} is not the serialised registry", file=sys.stderr)
-                return 1
         return 0
 
     if absent:

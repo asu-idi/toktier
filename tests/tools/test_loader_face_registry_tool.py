@@ -27,7 +27,11 @@ for entry in (str(ROOT), str(TOOLS)):
         sys.path.insert(0, entry)
 
 import update_loader_face_registry as tool  # noqa: E402
-from registry_common import REGISTRY_DOMAIN_TAG, root_digest  # noqa: E402
+from registry_common import (  # noqa: E402
+    REGISTRY_DOMAIN_TAG,
+    root_digest,
+    serialise_document,
+)
 
 from tests.facade.conftest import Rig, build_rig  # noqa: E402
 from toktier.backends.loader_face import loader_face_sha256  # noqa: E402
@@ -129,3 +133,39 @@ def test_the_shipped_table_digests_are_sha256_values() -> None:
         digest = row["loader_face_sha256"]
         assert hashlib.sha256(b"").hexdigest() != digest
         assert len(digest) == 64
+
+
+def test_check_compares_the_copies_before_counting_uncached_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The two registry copies need no cached artifact to compare, so a
+    machine with only part of the roster cached still gets that answer:
+    differing copies fail the check (exit 1) instead of the partial cache
+    ending it first with the not-concluded status (exit 3)."""
+    registry: dict[str, object] = {
+        "schema_version": 1,
+        "artifacts": [{"family": "a", "artifact_sha256": "a" * 64}],
+    }
+    repository = tmp_path / "support_registry.json"
+    packaged = tmp_path / "packaged" / "support_registry.json"
+    packaged.parent.mkdir()
+    for path in (repository, packaged):
+        path.write_bytes(serialise_document(registry))
+    monkeypatch.setattr(tool, "DEFAULT_REGISTRY", repository)
+    monkeypatch.setattr(tool, "PACKAGED_REGISTRY", packaged)
+    monkeypatch.setattr(tool, "installed_loader_version", tool.pinned_loader_version)
+    monkeypatch.setattr(tool, "observed_loader_faces", lambda _registry: ({}, ["a"]))
+
+    assert tool.copy_problems(registry) == []
+    assert tool.main(["--check"]) == tool.ABSENT
+    packaged.write_bytes(serialise_document({**registry, "schema_version": 2}))
+    assert tool.copy_problems(registry) == [
+        f"{packaged} is not the serialised registry"
+    ]
+    capsys.readouterr()
+    assert tool.main(["--check"]) == 1
+    captured = capsys.readouterr()
+    assert f"{packaged} is not the serialised registry" in captured.err
+    reading = json.loads(captured.out)
+    assert reading["absent"] == ["a"]
+    assert reading["problems"] == [f"{packaged} is not the serialised registry"]

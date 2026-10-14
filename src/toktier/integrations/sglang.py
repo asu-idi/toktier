@@ -16,6 +16,9 @@ the wrapper are:
   ``PYTHONPATH``) calls :func:`attach_to_tokenizer_manager` on the
   ``TokenizerManager`` class, which wraps the tokenizer after construction
   and binds the request's session key around ``_tokenize_one_request``.
+  The class is checked first (:func:`check_manager_shape`); when the
+  methods it wraps are shaped differently, SGLang is left unchanged and
+  the reason is recorded with the SGLang version.
 
 Session state can be keyed two ways, selected by ``AdapterConfig.session_key``:
 
@@ -107,6 +110,7 @@ import asyncio
 import atexit
 import contextlib
 import contextvars
+import inspect
 import json
 import os
 import queue
@@ -127,6 +131,7 @@ __all__ = [
     "attach_to_tokenizer_manager",
     "bind_session_key",
     "check_core_identity",
+    "check_manager_shape",
     "session_key_from_request",
     "wrap_tokenizer",
 ]
@@ -176,6 +181,24 @@ _MUTATORS = frozenset(
         "train_from_iterator",
     }
 )
+
+#: The ``TokenizerManager`` methods form Z wraps, with the leading
+#: positional parameters each must have, in order: the wrappers call the
+#: originals positionally, so the order matters as much as the names.
+_MANAGER_METHODS: dict[str, tuple[str, ...]] = {
+    "_tokenize_one_request": ("self", "obj"),
+    "_tokenize_texts": ("self", "texts", "is_cross_encoder"),
+}
+
+
+def _sglang_version() -> str | None:
+    """The installed SGLang distribution's version, or ``None``."""
+    try:
+        from importlib.metadata import version
+
+        return version("sglang")
+    except Exception:  # not installed, or no metadata
+        return None
 
 
 @dataclass(frozen=True)
@@ -585,6 +608,7 @@ class SGLangToktierTokenizer:
         self._stats["mode"] = self._mode
         self._stats["identity"] = dict(self._identity)
         self._stats["sched_fallback"] = 0
+        self._stats["sglang_version"] = _sglang_version()
         self._sched: Scheduler | None = None
         self._sched_note: str | None = None
         if self._cfg.scheduler is not None and self._tok is not None:
@@ -636,6 +660,7 @@ class SGLangToktierTokenizer:
                 "shadow": self._shadow_mode,
                 "shadow_note": shadow_note,
                 "identity": dict(self._identity),
+                "sglang_version": self._stats["sglang_version"],
                 "hf_class": type(hf_tokenizer).__name__,
                 "chunked_min_chars": self._cfg.chunked_min_chars,
                 "chunked_k": self._cfg.chunked_k,
@@ -1292,6 +1317,11 @@ class SGLangToktierTokenizer:
 
     # -- bookkeeping ------------------------------------------------------
 
+    def _note_manager_shape(self, shape: Mapping[str, Any]) -> None:
+        """Record the form Z shape check of the manager this wrapper serves."""
+        self._stats["sglang_shape"] = shape.get("status")
+        self._record({"kind": "attach", **shape})
+
     def _record(self, rec: dict[str, Any]) -> None:
         if self._log_fh is None:
             return
@@ -1367,6 +1397,66 @@ def wrap_tokenizer(
 # -- form Z: attach without changing SGLang ---------------------------------
 
 
+def check_manager_shape(manager_cls: Any) -> dict[str, Any]:
+    """Whether ``manager_cls`` has the shape form Z attaches to.
+
+    Form Z replaces ``_tokenize_one_request`` and ``_tokenize_texts`` with
+    coroutines that call the originals positionally, so each must exist,
+    be a coroutine function, and take the expected leading parameters in
+    order: ``(self, obj)`` and ``(self, texts, is_cross_encoder)``.
+    Returns ``{"status", "reason", "sglang_version", "methods"}``:
+    ``status`` is ``"verified"`` or ``"sglang_shape_unverified"`` (``reason``
+    then says what differs); ``sglang_version`` is the installed SGLang
+    distribution's version (``None`` when it cannot be read); ``methods``
+    maps each method name to its parameter names (``None`` when absent).
+    Nothing is changed.
+    """
+    problems: list[str] = []
+    methods: dict[str, list[str] | None] = {}
+    positional = (
+        inspect.Parameter.POSITIONAL_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    )
+    for name, expected in _MANAGER_METHODS.items():
+        method = inspect.getattr_static(manager_cls, name, None)
+        if isinstance(method, (staticmethod, classmethod)) or not callable(method):
+            methods[name] = None
+            problems.append(f"{name} is missing or not a plain method")
+            continue
+        try:
+            parameters = list(inspect.signature(method).parameters.values())
+        except (TypeError, ValueError):
+            methods[name] = None
+            problems.append(f"{name} has no readable signature")
+            continue
+        methods[name] = [parameter.name for parameter in parameters]
+        if not inspect.iscoroutinefunction(method):
+            problems.append(f"{name} is not a coroutine function")
+        leading = tuple(p.name for p in parameters if p.kind in positional)
+        if leading[: len(expected)] != expected:
+            problems.append(
+                f"{name} takes ({', '.join(leading)}), "
+                f"expected ({', '.join(expected)}, ...)"
+            )
+    return {
+        "status": "sglang_shape_unverified" if problems else "verified",
+        "reason": "; ".join(problems) if problems else None,
+        "sglang_version": _sglang_version(),
+        "methods": methods,
+    }
+
+
+def _append_record(path: str | None, record: dict[str, Any]) -> None:
+    """Append one record to the timing log without a wrapper (best effort)."""
+    if not path:
+        return
+    with contextlib.suppress(Exception):
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as fh:
+            record = {"ts": time.time(), "pid": os.getpid(), **record}
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
 def attach_to_tokenizer_manager(
     manager_cls: Any,
     config: AdapterConfig | None = None,
@@ -1375,24 +1465,46 @@ def attach_to_tokenizer_manager(
 ) -> bool:
     """Patch a ``TokenizerManager``-shaped class in place (idempotent).
 
+    The class is checked first (:func:`check_manager_shape`). When the
+    methods form Z wraps are not shaped as expected, the class is left
+    unchanged, so SGLang keeps its own tokenizer path, and the call
+    returns ``False`` after recording why: a ``log`` line and, when a
+    timing log is configured, an ``{"kind": "attach", "status":
+    "sglang_shape_unverified", ...}`` record carrying the reason and the
+    SGLang version. ``False`` is also returned when the class is already
+    patched.
+
     After the original ``__init__`` the manager's ``tokenizer`` is wrapped
     (and the dynamic-batch tokenizer's reference to it updated); around
     ``_tokenize_one_request`` the request's session key is bound, and the
     manager's own tokenize timing (``created_time`` to
     ``tokenize_finish_time``) is appended to the timing log so the SGLang
-    view and the adapter view of the same request sit side by side. When
-    the wrapper runs the pool scheduler, ``_tokenize_texts`` is patched
-    as well: a single string, or a list of strings, is awaited through
-    :meth:`SGLangToktierTokenizer.encode_async` (keeping the method's
-    ``(input_ids, token_type_ids)`` contract); cross-encoder inputs and
-    every other shape take the original path.
+    view and the adapter view of the same request sit side by side.
+    ``_tokenize_texts`` is patched as well: when the wrapper runs the
+    pool scheduler, a single string, or a list of strings, is awaited
+    through :meth:`SGLangToktierTokenizer.encode_async` (keeping the
+    method's ``(input_ids, token_type_ids)`` contract); cross-encoder
+    inputs, every other shape, and a wrapper without a pool take the
+    original path. The wrapper's ``stats()``
+    then carries ``sglang_shape: "verified"`` next to ``sglang_version``,
+    and an ``attach`` record goes to the timing log.
     """
     if getattr(manager_cls, "_toktier_attached", False):
         return False
     cfg = config if config is not None else AdapterConfig.from_env()
+    shape = check_manager_shape(manager_cls)
+    if shape["status"] != "verified":
+        _append_record(cfg.timing_log, {"kind": "attach", **shape})
+        if log is not None:
+            log(
+                "toktier sglang adapter not attached in pid "
+                f"{os.getpid()}: sglang_shape_unverified "
+                f"(sglang {shape['sglang_version']}): {shape['reason']}"
+            )
+        return False
     orig_init = manager_cls.__init__
     orig_tokenize = manager_cls._tokenize_one_request
-    orig_tokenize_texts = getattr(manager_cls, "_tokenize_texts", None)
+    orig_tokenize_texts = manager_cls._tokenize_texts
 
     def __init__(self: Any, *args: Any, **kwargs: Any) -> None:
         orig_init(self, *args, **kwargs)
@@ -1400,6 +1512,8 @@ def attach_to_tokenizer_manager(
         if tok is None:
             return
         wrapper = wrap_tokenizer(tok, cfg)
+        if isinstance(wrapper, SGLangToktierTokenizer):
+            wrapper._note_manager_shape(shape)
         self.tokenizer = wrapper
         batcher = getattr(self, "async_dynamic_batch_tokenizer", None)
         if batcher is not None and getattr(batcher, "tokenizer", None) is tok:
@@ -1455,12 +1569,10 @@ def attach_to_tokenizer_manager(
             ):
                 rows = await asyncio.gather(*(wrapper.encode_async(t) for t in texts))
                 return list(rows), None
-        assert orig_tokenize_texts is not None
         return await orig_tokenize_texts(self, texts, is_cross_encoder, *args, **kwargs)
 
     manager_cls.__init__ = __init__
     manager_cls._tokenize_one_request = _tokenize_one_request
-    if orig_tokenize_texts is not None:
-        manager_cls._tokenize_texts = _tokenize_texts
+    manager_cls._tokenize_texts = _tokenize_texts
     manager_cls._toktier_attached = True
     return True

@@ -12,6 +12,7 @@ directory of local artifacts (the convention of ``tests/test_chunked.py``).
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
 import time
@@ -33,6 +34,7 @@ from toktier.integrations.sglang import (
     attach_to_tokenizer_manager,
     bind_session_key,
     check_core_identity,
+    check_manager_shape,
     session_key_from_request,
     wrap_tokenizer,
 )
@@ -201,6 +203,11 @@ def test_attach_to_manager_wraps_and_binds() -> None:
             seen["key"] = SESSION_KEY.get()
             return self.tokenizer(obj.text)["input_ids"]
 
+        async def _tokenize_texts(
+            self, texts: Any, is_cross_encoder: bool = False
+        ) -> Any:
+            return self.tokenizer(texts)["input_ids"], None
+
     assert attach_to_tokenizer_manager(
         Manager, AdapterConfig(session_key="passthrough")
     )
@@ -216,6 +223,86 @@ def test_attach_to_manager_wraps_and_binds() -> None:
     assert ids == [104, 105]
     assert seen["key"] == "conv"
     assert SESSION_KEY.get() is None
+    assert m.tokenizer.stats()["sglang_shape"] == "verified"
+    assert "sglang_version" in m.tokenizer.stats()
+
+
+def _manager_class(
+    one_request: str = "self, obj",
+    texts: str = "self, texts, is_cross_encoder=False",
+    *,
+    sync_one_request: bool = False,
+    with_texts: bool = True,
+) -> type:
+    """A ``TokenizerManager``-shaped class with the given method shapes."""
+    namespace: dict[str, Any] = {}
+    one = "def" if sync_one_request else "async def"
+    source = (
+        "class Manager:\n"
+        "    def __init__(self):\n"
+        "        self.tokenizer = None\n"
+        f"    {one} _tokenize_one_request({one_request}):\n"
+        "        return None\n"
+    )
+    if with_texts:
+        source += (
+            f"    async def _tokenize_texts({texts}):\n"
+            "        return None, None\n"
+        )
+    exec(source, namespace)
+    manager: type = namespace["Manager"]
+    return manager
+
+
+def test_manager_shape_is_verified_on_the_expected_signatures() -> None:
+    shape = check_manager_shape(_manager_class())
+    assert shape["status"] == "verified" and shape["reason"] is None
+    assert shape["methods"] == {
+        "_tokenize_one_request": ["self", "obj"],
+        "_tokenize_texts": ["self", "texts", "is_cross_encoder"],
+    }
+    # Extra trailing parameters keep the shape: the wrappers forward them.
+    extra = _manager_class(texts="self, texts, is_cross_encoder=False, *, hint=None")
+    assert check_manager_shape(extra)["status"] == "verified"
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "fragment"),
+    [
+        ({"texts": "self, prompts, is_cross_encoder=False"}, "_tokenize_texts takes"),
+        ({"texts": "self, is_cross_encoder, texts"}, "_tokenize_texts takes"),
+        ({"texts": "self, texts"}, "_tokenize_texts takes"),
+        ({"one_request": "self, request"}, "_tokenize_one_request takes"),
+        ({"sync_one_request": True}, "not a coroutine function"),
+        ({"with_texts": False}, "_tokenize_texts is missing"),
+    ],
+)
+def test_unexpected_manager_shape_leaves_the_class_unchanged(
+    tmp_path: Path, kwargs: dict[str, Any], fragment: str
+) -> None:
+    manager = _manager_class(**kwargs)
+    before = dict(vars(manager))
+    lines: list[str] = []
+    timing = tmp_path / "timing.jsonl"
+    attached = attach_to_tokenizer_manager(
+        manager,
+        AdapterConfig(session_key="passthrough", timing_log=str(timing)),
+        log=lines.append,
+    )
+    assert attached is False
+    assert dict(vars(manager)) == before  # nothing replaced, nothing added
+    assert not hasattr(manager, "_toktier_attached")
+    assert len(lines) == 1 and "sglang_shape_unverified" in lines[0]
+    assert fragment in lines[0]
+    shape = check_manager_shape(manager)
+    assert shape["status"] == "sglang_shape_unverified"
+    assert fragment in shape["reason"]
+    records = [json.loads(line) for line in timing.read_text().splitlines()]
+    assert len(records) == 1
+    assert records[0]["kind"] == "attach"
+    assert records[0]["status"] == "sglang_shape_unverified"
+    assert records[0]["reason"] == shape["reason"]
+    assert "sglang_version" in records[0]
 
 
 # -- chunk-parallel encode wiring (0.3.0) -----------------------------------

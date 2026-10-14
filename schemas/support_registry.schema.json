@@ -575,6 +575,10 @@
         },
         "carryover": {
           "$ref": "#/$defs/carryover"
+        },
+        "loader_face_sha256": {
+          "description": "Digest of the loader-face document the record's readings were taken on: the tokenizer JSON text the reference executes for this artifact (the artifact file itself when the configuration sidecar contributes no added token, the pinned loader's serialization of the live object otherwise), sha256 over its UTF-8 encoding. Written by tools/update_loader_face_registry.py under the pinned loader. At load the facade compares the digest of the face it materialized with this value and closes the accelerated routes on a difference (R_LOADER_FACE_MISMATCH, routing.md Section 5.1).",
+          "$ref": "#/$defs/sha256_hex"
         }
       }
     },

@@ -229,6 +229,22 @@ def test_v2_identity_columns_are_additive_under_schema_version_one() -> None:
     assert registry_common.schema_violations(registry, REGISTRY_SCHEMA) == []
 
 
+def test_loader_face_digest_column_is_additive_under_schema_version_one() -> None:
+    """A record may carry the face digest it was judged on (0.3.0); it is optional."""
+    document = minimal_registry()
+    document["artifacts"][0]["loader_face_sha256"] = DIGEST_B
+    registry = with_root_digest(document, REGISTRY_DOMAIN_TAG)
+
+    assert registry["schema_version"] == 1
+    assert registry_common.schema_violations(registry, REGISTRY_SCHEMA) == []
+
+
+def test_loader_face_digest_must_be_a_digest() -> None:
+    document = with_root_digest(minimal_registry(), REGISTRY_DOMAIN_TAG)
+    document["artifacts"][0]["loader_face_sha256"] = "sha256:" + DIGEST_B
+    assert registry_common.schema_violations(document, REGISTRY_SCHEMA)
+
+
 def test_certified_source_without_its_bindings_is_rejected() -> None:
     document = with_root_digest(minimal_registry(), REGISTRY_DOMAIN_TAG)
     del document["artifacts"][0]["backends"]["gpu"]["source_digest"]

@@ -30,6 +30,16 @@ must answer identically:
   fail-closed: the running configuration would not be the one the
   certification readings were taken against.
 
+A fourth question, since 0.3.0, has one answer for every reader of a
+materialized face: what is the digest of the document the reference
+executes (:func:`loader_face_sha256`)? The facade compares it with the
+value the certification record carries (``loader_face_sha256`` on the
+artifact record, registry.md Section 1), and the chunk-parallel module
+compares it with the value its admission row carries. A face the
+installed loader materializes differently from the one the readings were
+taken on -- another loader release rebuilding the pre-tokenizer from its
+own defaults, for one -- is then named rather than labelled certified.
+
 The ``transformers`` import stays inside :func:`load_live_tokenizer`, so
 importing a backend module continues to load neither the loader nor the
 oracle.
@@ -55,6 +65,7 @@ __all__ = [
     "config_only_added_tokens",
     "live_tokenizer_json",
     "load_live_tokenizer",
+    "loader_face_sha256",
     "verify_declared_config_added_tokens",
 ]
 
@@ -214,6 +225,23 @@ def verify_declared_config_added_tokens(
             ),
         },
     )
+
+
+def loader_face_sha256(face_text: str) -> str:
+    """Digest of one materialized loader-face document.
+
+    The subject is the whole tokenizer JSON text a backend's
+    ``materialized_tokenizer_json()`` returns -- the verified artifact
+    document when the configuration sidecar contributes no added token,
+    the pinned loader's serialization of the live object otherwise --
+    hashed over its UTF-8 encoding. Hashing the whole document rather
+    than the sections known to decide ids keeps the comparison free of
+    any claim about which sections those are: a difference anywhere in
+    the face is a face the readings did not judge. The same function
+    computes the value recorded on a certification record and on a
+    chunked admission row, and the value compared against them at load.
+    """
+    return hashlib.sha256(face_text.encode("utf-8")).hexdigest()
 
 
 def live_tokenizer_json(hf_tokenizer: object) -> str:

@@ -33,9 +33,12 @@ fingerprints on the loader-face document
 once by maintainer tooling. This step recomputes them here, on every
 cached family, and requires them to equal the ids the shipped registry
 records -- so a moved loader, a changed artifact, or a hand-edited table
-is caught by the release gates rather than by a reader. Families whose
-artifact is not cached on this machine are reported and skipped, exactly
-like the probe comparison above.
+is caught by the release gates rather than by a reader. Since 0.3.0 the
+same step recomputes the loader-face digest each record carries
+(``loader_face_sha256``, written by
+``tools/update_loader_face_registry.py``), the value the facade compares
+at load. Families whose artifact is not cached on this machine are
+reported and skipped, exactly like the probe comparison above.
 
 Usage::
 
@@ -212,6 +215,7 @@ def check_fingerprints() -> tuple[int, dict[str, object]]:
     """
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from artifact_identity import added_frontend_fingerprint, pipeline_fingerprint
+    from update_loader_face_registry import loader_face_text
 
     from toktier import Config
     from toktier.artifacts import ArtifactManifest
@@ -219,6 +223,7 @@ def check_fingerprints() -> tuple[int, dict[str, object]]:
     from toktier.backends.loader_face import (
         live_tokenizer_json,
         load_live_tokenizer,
+        loader_face_sha256,
     )
     from toktier.paths import artifact_cache_dir
     from toktier.routing.tables import SUPPORT_REGISTRY
@@ -253,10 +258,15 @@ def check_fingerprints() -> tuple[int, dict[str, object]]:
         observed = {
             "pipeline": pipeline_fingerprint(face),
             "added_frontend": added_frontend_fingerprint(face),
+            # The digest the facade compares at load (registry.md Section
+            # 1): over the text the reference backend executes, which is
+            # the file itself unless the sidecar contributes added tokens.
+            "loader_face": loader_face_sha256(loader_face_text(root)),
         }
         recorded = {
             "pipeline": pipelines.get(row["pipeline_id"]),
             "added_frontend": frontends.get(row["added_frontend_id"]),
+            "loader_face": row.get("loader_face_sha256"),
         }
         if observed != recorded:
             mismatches.append(

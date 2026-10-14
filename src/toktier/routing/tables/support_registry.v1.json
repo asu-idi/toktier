@@ -6,7 +6,7 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:d4e995ee452c902e5787bcd058c0c72c73fd5c2b7cb34dc41517aba8607ac6c4",
+  "root_digest": "sha256:88d3f1109579c93dc16aaf6ba485ea1c125d84ebaf24330cd76adbc623015531",
   "oracles": [
     {
       "oracle_id": "tokenizers",
@@ -289,7 +289,8 @@
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
           "source_digest_v2": "31cafeecb98352e500975d84dc92b769f73a3a7468fab9beabb4c686e607a6b3"
         }
-      }
+      },
+      "loader_face_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41"
     },
     {
       "artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
@@ -413,7 +414,8 @@
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
           "source_digest_v2": "31cafeecb98352e500975d84dc92b769f73a3a7468fab9beabb4c686e607a6b3"
         }
-      }
+      },
+      "loader_face_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf"
     },
     {
       "artifact_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
@@ -537,7 +539,8 @@
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
           "source_digest_v2": "31cafeecb98352e500975d84dc92b769f73a3a7468fab9beabb4c686e607a6b3"
         }
-      }
+      },
+      "loader_face_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d"
     },
     {
       "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
@@ -661,7 +664,8 @@
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
           "source_digest_v2": "31cafeecb98352e500975d84dc92b769f73a3a7468fab9beabb4c686e607a6b3"
         }
-      }
+      },
+      "loader_face_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3"
     },
     {
       "artifact_sha256": "446e0b59cd941637c0ddfd84e12ee1f49480fd12097f86a9d2fec8ebd0c7ff6c",
@@ -773,7 +777,8 @@
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
         }
-      }
+      },
+      "loader_face_sha256": "446e0b59cd941637c0ddfd84e12ee1f49480fd12097f86a9d2fec8ebd0c7ff6c"
     },
     {
       "artifact_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
@@ -885,7 +890,8 @@
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
         }
-      }
+      },
+      "loader_face_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77"
     },
     {
       "artifact_sha256": "809240f7a182cde859a4fc4ebc902e619a173d507e99304c1092aa04e7a6658e",
@@ -997,7 +1003,8 @@
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
         }
-      }
+      },
+      "loader_face_sha256": "809240f7a182cde859a4fc4ebc902e619a173d507e99304c1092aa04e7a6658e"
     },
     {
       "artifact_sha256": "40fb9d7d7795b8bd305aeff39ce9963f3f450915b9553f2938e009be9a1fed60",
@@ -1109,7 +1116,8 @@
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
         }
-      }
+      },
+      "loader_face_sha256": "40fb9d7d7795b8bd305aeff39ce9963f3f450915b9553f2938e009be9a1fed60"
     },
     {
       "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
@@ -1233,7 +1241,8 @@
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
           "source_digest_v2": "31cafeecb98352e500975d84dc92b769f73a3a7468fab9beabb4c686e607a6b3"
         }
-      }
+      },
+      "loader_face_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa"
     },
     {
       "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
@@ -1357,7 +1366,8 @@
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
           "source_digest_v2": "31cafeecb98352e500975d84dc92b769f73a3a7468fab9beabb4c686e607a6b3"
         }
-      }
+      },
+      "loader_face_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e"
     },
     {
       "artifact_sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135",
@@ -1481,7 +1491,8 @@
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
           "source_digest_v2": "31cafeecb98352e500975d84dc92b769f73a3a7468fab9beabb4c686e607a6b3"
         }
-      }
+      },
+      "loader_face_sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135"
     },
     {
       "artifact_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
@@ -1605,7 +1616,8 @@
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
           "source_digest_v2": "31cafeecb98352e500975d84dc92b769f73a3a7468fab9beabb4c686e607a6b3"
         }
-      }
+      },
+      "loader_face_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7"
     },
     {
       "artifact_sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca",
@@ -1729,7 +1741,8 @@
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
           "source_digest_v2": "31cafeecb98352e500975d84dc92b769f73a3a7468fab9beabb4c686e607a6b3"
         }
-      }
+      },
+      "loader_face_sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca"
     },
     {
       "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
@@ -1880,7 +1893,8 @@
           "occurrences": 0
         },
         "note": "0.2.8 oracle redefinition (decision B, loader face authoritative). The in-archive readings were judged with an artifact-face oracle; on the certification corpus the two faces are provably the same function because every divergence-set literal occurs zero times there (PLAN/180 P3 absence scan, SLURM job 62244420). Sources: results/explore/plan180_families/REPORT.md section B.5.1; FINDING/025 evidence-append; known_issues_027.md section 7.0."
-      }
+      },
+      "loader_face_sha256": "a57b5c62cd5f242a06c632b82cc0b4f8239d08cc80fd9347fc1f629be977c6ca"
     },
     {
       "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
@@ -2004,7 +2018,8 @@
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
           "source_digest_v2": "31cafeecb98352e500975d84dc92b769f73a3a7468fab9beabb4c686e607a6b3"
         }
-      }
+      },
+      "loader_face_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
     }
   ],
   "compositions": [

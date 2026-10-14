@@ -122,6 +122,7 @@ from itertools import chain
 from typing import Any
 
 from ._jcs import canonical_json
+from .backends.loader_face import loader_face_sha256
 from .errors import RegistryInvalid
 from .facade.api import Encoding, Tokenizer
 from .policy import ReasonCode
@@ -575,9 +576,7 @@ class _Planner:
                 self.refusal = "no_loader_face_document"
             else:
                 face_text = loader_face()
-                self.loader_face_sha256 = hashlib.sha256(
-                    face_text.encode("utf-8")
-                ).hexdigest()
+                self.loader_face_sha256 = loader_face_sha256(face_text)
                 document = json.loads(face_text)
                 literals = [
                     str(row.get("content", ""))

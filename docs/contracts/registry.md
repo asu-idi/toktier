@@ -30,7 +30,21 @@ Every certification claim attaches to one of three identity kinds:
    the subset is empty. Readings taken before the 0.2.8 oracle
    redefinition remain valid under it through the corpus-equivalence
    carry-over annotation (``carryover``,
-   ``docs/contracts/evidence-carryover.md`` Section 3).
+   ``docs/contracts/evidence-carryover.md`` Section 3). Since 0.3.0 a
+   record also carries the digest of the loader-face document its
+   readings were taken on (``loader_face_sha256``: sha256 over the UTF-8
+   encoding of the tokenizer JSON text the reference executes, which is
+   the artifact file itself when the configuration-side subset is empty
+   and the pinned loader's serialization of the live object otherwise).
+   The value is written by ``tools/update_loader_face_registry.py`` under
+   the pinned loader, never by hand. At load the facade computes the same
+   digest of the face it materialized and compares; a difference keeps
+   the accelerated routes closed and reports the state as reference-only
+   with ``R_LOADER_FACE_MISMATCH`` (`routing.md` Section 5.1): the
+   installed reference still runs, on the face the installed loader
+   built, and nothing the record certifies is claimed for it. A record
+   without the member makes no face claim, and a face the facade did not
+   materialize is not compared.
 2. **Pipeline capability identity** -- the pipeline fingerprint
    (`fingerprint.md` Section 5): the core pipeline excluding added tokens.
    Certifies that the accelerated engine implements this pipeline class.

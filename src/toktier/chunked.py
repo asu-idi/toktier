@@ -74,7 +74,10 @@ have a repair-table entry -- the eleven byte-level BPE artifacts the
 shipped sync profile was certified on -- may be chunked when its loader
 face carries no normalizer, the empty normalizer sequence, or NFC with
 every added token matched on the input text (``normalized: false``),
-and when the shipped admission table
+with no added token that sets ``lstrip``, ``rstrip`` or ``single_word``
+(the reference then matches a literal together with its neighbourhood,
+which the cut rule does not reason about; refusal
+``added_token_strip_or_single_word``), and when the shipped admission table
 (``routing/tables/chunked_admission.v1.json``, generated from the
 campaign readings by ``tools/update_chunked_admission.py``) has a
 certified row for that family and artifact -- one with both levels of
@@ -230,6 +233,19 @@ _STABLE_CACHE_LIMIT = 1 << 16
 #: Loader-face normalizer shapes this module reasons about.
 _NORMALIZER_NONE = "none"
 _NORMALIZER_NFC = "nfc"
+
+#: Added-token flags under which the reference matches a literal by more
+#: than its own text: ``lstrip`` and ``rstrip`` take the neighbouring
+#: whitespace into the match, and ``single_word`` matches the literal only
+#: where no word character touches it. With ``rstrip`` or ``single_word``
+#: a cut the sync rule accepts beside such a literal can change the ids;
+#: ``lstrip`` takes whitespace on the literal's left only, where the rule
+#: never cuts, and is refused with the other two so that admission does
+#: not rest on that property of the profile. A loader face with an added
+#: token that sets any of them is not admitted (refusal
+#: ``added_token_strip_or_single_word``).
+_LITERAL_FLAGS = ("lstrip", "rstrip", "single_word")
+_R_LITERAL_FLAGS = "added_token_strip_or_single_word"
 
 _R_NO_CUT = ReasonCode.R_CHUNK_NO_CUT.value
 _R_FAMILY = ReasonCode.R_CHUNK_FAMILY_UNSUPPORTED.value
@@ -473,26 +489,42 @@ class _NfcRule:
         return _pair_ok(self._table, before[-1], after[0])
 
 
+def _flagged_literal(document: Mapping[str, object]) -> bool:
+    """Whether an added token of the face sets a flag in :data:`_LITERAL_FLAGS`."""
+    rows = document.get("added_tokens") or []
+    return isinstance(rows, Sequence) and any(
+        isinstance(row, Mapping) and any(row.get(flag) for flag in _LITERAL_FLAGS)
+        for row in rows
+    )
+
+
 def _normalizer_mode(document: Mapping[str, object]) -> tuple[str | None, str | None]:
-    """``(mode, refusal)`` for the loader face's normalizer section."""
+    """``(mode, refusal)`` for the loader face: its normalizer section
+    first, then the added-token flags the cut rule does not reason about
+    (:data:`_LITERAL_FLAGS`)."""
     section = document.get("normalizer")
     if section is None:
-        return _NORMALIZER_NONE, None
-    if not isinstance(section, Mapping):
+        mode = _NORMALIZER_NONE
+    elif not isinstance(section, Mapping):
         return None, "normalizer_not_supported"
-    kind = section.get("type")
-    if kind == "Sequence" and not section.get("normalizers"):
-        return _NORMALIZER_NONE, None
-    if kind == "NFC":
-        rows = document.get("added_tokens") or []
-        if isinstance(rows, Sequence) and any(
-            isinstance(row, Mapping) and row.get("normalized") for row in rows
-        ):
-            # Such a literal is matched on the normalized text, which the
-            # input-text guard does not see; not reasoned about here.
-            return None, "nfc_with_normalized_added_tokens"
-        return _NORMALIZER_NFC, None
-    return None, f"normalizer_not_supported:{kind}"
+    else:
+        kind = section.get("type")
+        if kind == "Sequence" and not section.get("normalizers"):
+            mode = _NORMALIZER_NONE
+        elif kind == "NFC":
+            rows = document.get("added_tokens") or []
+            if isinstance(rows, Sequence) and any(
+                isinstance(row, Mapping) and row.get("normalized") for row in rows
+            ):
+                # Such a literal is matched on the normalized text, which
+                # the input-text guard does not see; not reasoned about here.
+                return None, "nfc_with_normalized_added_tokens"
+            mode = _NORMALIZER_NFC
+        else:
+            return None, f"normalizer_not_supported:{kind}"
+    if _flagged_literal(document):
+        return None, _R_LITERAL_FLAGS
+    return mode, None
 
 
 @dataclass(frozen=True)
@@ -546,11 +578,11 @@ class _Planner:
 
     Admission is decided once, in this order: the certified repair roster
     (family and artifact digest), a loader face to read, a normalizer
-    shape the rule reasons about, and a row in the shipped admission
-    table. ``evidence_gate=False`` leaves the last step out; it exists
-    for the campaign that produces the table's rows and for the
-    equivalence tests of the two planners, and the report says when it
-    was used.
+    shape the rule reasons about, no added token with a strip or
+    single-word flag, and a row in the shipped admission table.
+    ``evidence_gate=False`` leaves the last step out; it exists for the
+    campaign that produces the table's rows and for the equivalence
+    tests of the two planners, and the report says when it was used.
     """
 
     def __init__(self, tokenizer: Tokenizer, *, evidence_gate: bool = True) -> None:
@@ -802,8 +834,8 @@ def _planner_for(
 
 def is_admitted(tokenizer: Tokenizer) -> bool:
     """Whether this tokenizer may be chunked: certified repair roster, a
-    normalizer this module reasons about, and a row in the admission
-    table."""
+    loader face this module reasons about (normalizer and added-token
+    flags), and a row in the admission table."""
     return _planner_for(tokenizer).admitted
 
 

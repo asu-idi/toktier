@@ -506,6 +506,89 @@ def test_normalizer_mode_admits_none_identity_and_nfc_only() -> None:
     )
 
 
+_LITERAL_FLAG_REFUSAL = "added_token_strip_or_single_word"
+
+
+def test_strip_and_single_word_literals_are_not_admitted() -> None:
+    """An added token with ``lstrip``, ``rstrip`` or ``single_word`` set is
+    matched by the reference together with its neighbourhood, which the
+    cut rule does not reason about: the face is refused whatever its
+    normalizer. The normalizer step keeps its own refusals first, and a
+    face whose tokens set all three flags false is admitted as before."""
+    normalizers: list[object] = [
+        None,
+        {"type": "Sequence", "normalizers": []},
+        {"type": "NFC"},
+    ]
+    for flag in ("lstrip", "rstrip", "single_word"):
+        for truthy in (True, 1, "yes"):
+            row = {"content": "<|x|>", "normalized": False, flag: truthy}
+            for normalizer in normalizers:
+                face = {
+                    "normalizer": normalizer,
+                    "added_tokens": [{"content": "<|y|>", "normalized": False}, row],
+                }
+                assert chunked._normalizer_mode(face) == (None, _LITERAL_FLAG_REFUSAL)
+    plain = {
+        "content": "<|x|>",
+        "normalized": False,
+        "lstrip": False,
+        "rstrip": False,
+        "single_word": False,
+    }
+    assert chunked._normalizer_mode({"added_tokens": [plain]}) == ("none", None)
+    assert chunked._normalizer_mode(
+        {"normalizer": {"type": "NFC"}, "added_tokens": [plain]}
+    ) == ("nfc", None)
+    flagged = {"content": "<|x|>", "rstrip": True}
+    assert chunked._normalizer_mode(
+        {"normalizer": {"type": "NFKC"}, "added_tokens": [flagged]}
+    ) == (None, "normalizer_not_supported:NFKC")
+    normalized = {**flagged, "normalized": True}
+    assert chunked._normalizer_mode(
+        {"normalizer": {"type": "NFC"}, "added_tokens": [normalized]}
+    ) == (None, "nfc_with_normalized_added_tokens")
+
+
+def test_strip_and_single_word_flags_move_ids_at_a_certified_cut() -> None:
+    """Why the flags are refused: on a byte-level BPE (bytes as the
+    vocabulary, no merges) a cut that the sync predicate accepts and the
+    literal guard allows splits the encoding once ``rstrip`` or
+    ``single_word`` is set, and does not without them. ``rstrip`` takes
+    the space after the literal into the match; ``single_word`` stops
+    matching a literal that a word character touches."""
+    from tokenizers import AddedToken, models, pre_tokenizers
+    from tokenizers import Tokenizer as RawTokenizer
+
+    alphabet = sorted(pre_tokenizers.ByteLevel.alphabet())
+
+    def build(**flags: bool) -> RawTokenizer:
+        raw = RawTokenizer(
+            models.BPE(vocab={char: i for i, char in enumerate(alphabet)}, merges=[])
+        )
+        raw.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+        raw.add_special_tokens(
+            [AddedToken("<|x|>", normalized=False, special=True, **flags)]
+        )
+        return raw
+
+    def ids(raw: RawTokenizer, text: str) -> list[int]:
+        return list(raw.encode(text, add_special_tokens=False).ids)
+
+    table = pclass_table()
+    guard = chunked._LiteralGuard(["<|x|>"])
+    for flag, (left, right) in {
+        "rstrip": ("<|x|>", " hello"),
+        "single_word": ("foo", "<|x|> bar"),
+    }.items():
+        text, position = left + right, len(left)
+        assert chunked._boundary_ok(table, text, position)
+        assert position not in guard.forbidden(text, position, position)
+        plain, flagged = build(), build(**{flag: True})
+        assert ids(plain, text) == ids(plain, left) + ids(plain, right)
+        assert ids(flagged, text) != ids(flagged, left) + ids(flagged, right), flag
+
+
 def test_default_chunks_follows_the_table_and_the_worker_floor() -> None:
     assert chunked.default_chunks(0) == 1
     assert chunked.default_chunks(255_999) == 1
@@ -747,6 +830,29 @@ def test_normalized_added_token_refuses_an_nfc_roster_artifact(
     assert planner.evidence_id == "ev-chunked-cuts-v1"
     assert "python" in planner.evidence_paths
     assert planner.admission_facts()["admission_gate"] == "evidence_table"
+
+
+@pytest.mark.parametrize("flag", ["lstrip", "rstrip", "single_word"])
+def test_flagged_added_token_refuses_a_roster_artifact(
+    stand_in_table: Callable[..., dict[str, Any]], flag: str
+) -> None:
+    """A roster artifact whose face carries an added token with a strip or
+    single-word flag is refused on the shape step, before the table step
+    and also with the evidence gate lifted (the lift covers the table
+    step only)."""
+    digest = _roster_digest("qwen3_8b")
+    face = copy.deepcopy(_NFC_FACE)
+    face["added_tokens"][0][flag] = True
+    planner = chunked._Planner(_stand_in("qwen3_8b", digest, face))
+    assert planner.admitted is False
+    assert planner.refusal == _LITERAL_FLAG_REFUSAL
+    assert planner.normalizer is None
+    assert planner.admission_facts()["refusal"] == _LITERAL_FLAG_REFUSAL
+    lifted = chunked._Planner(_stand_in("qwen3_8b", digest, face), evidence_gate=False)
+    assert lifted.admitted is False and lifted.refusal == _LITERAL_FLAG_REFUSAL
+    face["added_tokens"][0][flag] = False
+    planner = chunked._Planner(_stand_in("qwen3_8b", digest, face))
+    assert planner.refusal != _LITERAL_FLAG_REFUSAL
 
 
 def test_roster_artifact_without_a_table_row_is_refused(
@@ -1159,6 +1265,37 @@ def test_roster_families_are_the_admitted_set(
         finally:
             tokenizer.close()
     assert admitted == set(CANDIDATE_FAMILIES) & set(present)
+
+
+def test_packaged_artifacts_set_no_strip_or_single_word_flag() -> None:
+    """The refusal of flagged literals leaves every packaged artifact as it
+    was: none of the loader faces the reference executes (the artifact
+    file, or the pinned loader's serialization when the configuration
+    sidecar contributes added tokens) carries an added token with
+    ``lstrip``, ``rstrip`` or ``single_word`` set. Runs over every
+    packaged family whose artifact is present locally."""
+    from toktier.backends.loader_face import (
+        config_added_token_rows,
+        live_tokenizer_json,
+        load_live_tokenizer,
+    )
+
+    manifest = ArtifactManifest.load(ARTIFACT_MANIFEST)
+    checked: list[str] = []
+    for family in manifest.families():
+        root = _artifact_source(family)
+        if root is None:
+            continue
+        text = (root / "tokenizer.json").read_text(encoding="utf-8")
+        document = json.loads(text)
+        if config_added_token_rows(root, document):
+            document = json.loads(live_tokenizer_json(load_live_tokenizer(root)))
+        assert chunked._flagged_literal(document) is False, family
+        assert chunked._normalizer_mode(document)[1] != _LITERAL_FLAG_REFUSAL, family
+        checked.append(family)
+    if not checked:
+        pytest.skip("packaged artifacts not available under TOKTIER_TEST_ARTIFACTS")
+    assert set(available_families(sorted(TABLE_FAMILIES))) <= set(checked)
 
 
 @pytest.mark.parametrize("family", PARTIAL_FAMILIES)

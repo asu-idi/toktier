@@ -463,7 +463,7 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 | `jit_toolchain_satisfied` | JIT 交付下，本机检测到的编译器/运行时三元组是否属于注册表已评审的组合；预编译交付没有这项前提，因此报告 `null` |
 | `jit_toolchain_observed` / `jit_toolchain_constraint` | 本机检测到的三元组，以及用于对照的已评审集合 |
 | `automatic_routing_policy` | 0.2.8 起提供：下面两个字段的结论是按哪条策略算出来的。同一台机器在五条策略中的三条下会读到不同的实际后端，因此这两个答案只有和产出它们的策略放在一起才有意义 |
-| `automatic_gpu_eligible` | 当前生效策略所用的合取结果：候选条件成立；至少检测到一台设备；该交付方式自身的材料齐备；驱动版本不低于认证下限，且在预编译交付下，与 fatbin 配对的 Rust 宿主与其绑定一致（0.3.0 起，读取的是规划器据以拒绝的同一份清单）；在 `CERTIFIED` 下还要求架构与工具链均已评审。默认的 `SUPPORTED` 策略把后两项视为覆盖面缺口，照常运行并把该路径标为 `supported_untested`，本字段随之给出同样的结论 |
+| `automatic_gpu_eligible` | 当前生效策略所用的合取结果：候选条件成立；至少检测到一台设备；该交付方式自身的材料齐备；驱动版本不低于认证下限，且在预编译交付下，与 fatbin 配对的 Rust 宿主与其绑定一致（0.3.0 起，读取的是规划器据以拒绝的同一份清单）；在 `CERTIFIED` 下还要求架构与工具链均已评审。默认的 `SUPPORTED` 策略把后两项视为覆盖面缺口，照常运行并把该路径标为 `supported_untested`，本字段随之给出同样的结论。本字段不计入豁免：在只能通过显式参数选用的 `EXPERIMENTAL` 下，规划器可能带着一条记录在案的豁免越过驱动下限或宿主绑定的拒绝去运行 GPU，或越过引擎绑定的拒绝去运行修正版 Gigatoken CPU 引擎，而本字段与 `automatic_effective_backend` 在这种情形下仍分别给出 `false` 与 `fast_cpu` 或 `hf`；被豁免的项目以已加载 tokenizer 的 `explain()["experimental_waivers"]` 为准 |
 | `automatic_effective_backend` | 对具备 CPU 快路径认证的 family，达到或超过 crossover 的自动请求实际使用的后端：`gpu`、`fast_cpu` 或 `hf` |
 | `directory_roots_usable` / `directory_roots_problem` | 上述三个已解析目录根能否承载其用途，以及无法承载时的原因——与下一条命令会以 `CONFIG_INVALID` 作答的判断相同，且只读取、不创建任何目录 |
 
@@ -612,7 +612,7 @@ WordPiece；不同 family 可以共用同一工件）、**11 个具备 CPU 快�
 fallback 仍是系统契约的一部分。
 
 0.3.0 新增的分块并行编码有它自己的证据，与上表分开记录：上表的验证活动都是
-整篇编码，从不切分文档。分块路径的证据是一组对抗电池和一次网页语料切点对拍，
+整篇编码，从不切分文档。分块路径的证据是一组对抗测试集和一次网页语料分块对照，
 由此生成的准入表随包发布，逐个工件决定哪些可以分块（见
 [`docs/support-matrix.md`](docs/support-matrix.md#certified-chunk-cuts)，英文）。
 

@@ -64,7 +64,13 @@ coverage gap the route is admitted and labelled `supported_untested` for,
 while `CERTIFIED` refuses it, and `REFERENCE` plans no accelerated backend
 at all, so under it both this field and `automatic_effective_backend` read
 what the plan would do (`false` and `hf`) rather than what the hardware
-could do. Since 0.2.8 `automatic_routing_policy` names the policy those
+could do. Waivers are not counted: under `EXPERIMENTAL`, which only an
+explicit argument selects, the plan may run the GPU past a driver-floor or
+host-binding refusal, or the corrected Gigatoken CPU engine past an
+engine-binding refusal, with a recorded waiver, and these two fields still
+answer `false` and `fast_cpu` or `hf` there; the loaded tokenizer's
+`explain()["experimental_waivers"]` lists what was waived. Since 0.2.8
+`automatic_routing_policy` names the policy those
 answers were computed under, at the installation level and for the family
 section alike, because the same machine reads a different effective
 backend under three of the five policies. `automatic_effective_backend`

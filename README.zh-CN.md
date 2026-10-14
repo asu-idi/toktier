@@ -743,7 +743,7 @@ span，涵盖 normalization、pre-tokenization、merge 和 added-token 处理；
 
 ## 文档
 
-- [`docs/releases/v0.2.9.md`](docs/releases/v0.2.9.md) — 本版本发布说明（英文）。
+- [`docs/releases/v0.3.0.md`](docs/releases/v0.3.0.md) — 本版本发布说明（英文）。
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — 分层、路由与 store 格式。
 - [`docs/serving.md`](docs/serving.md) — 各类请求该用哪种 encode 调用、只返回差量的会话追加，以及长请求的分块并行编码。
 - [`docs/integration/sglang.md`](docs/integration/sglang.md) — 把 toktier 用作 SGLang 的 tokenizer 后端。

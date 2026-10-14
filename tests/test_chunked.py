@@ -1618,7 +1618,9 @@ def test_oracle_outside_the_certified_set_turns_a_certified_family_serial(
     tokenizer = load_isolated(family, tmp_path_factory)
     try:
         report = tokenizer.explain()
-        codes = {reason["code"] for reason in report["plan_reasons"]}  # type: ignore[union-attr]
+        plan_reasons = report["plan_reasons"]
+        assert isinstance(plan_reasons, list)
+        codes = {reason["code"] for reason in plan_reasons}
         assert "R_ORACLE_MISMATCH" in codes
         certification = report["certification"]
         assert isinstance(certification, dict)

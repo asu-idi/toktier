@@ -1078,7 +1078,7 @@ def encode(
     ``k`` is the requested chunk count (``None`` reads :data:`CHUNK_TABLE`
     for the document length); ``min_chunk`` the smallest chunk the plan
     may produce, first and last included (``None`` selects
-    ``min(1024, len // (4 k))``); ``scan_budget`` how far below each
+    ``max(16, min(1024, len // (4 k)))``); ``scan_budget`` how far below each
     target the cut search looks. The result is the core stream, exactly
     as ``encode(text, lookup="off")`` returns it: special tokens are a
     read-time template, as for sessions.

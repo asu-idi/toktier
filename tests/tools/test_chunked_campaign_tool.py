@@ -235,6 +235,83 @@ def _readings_from_rows(rows: dict[str, dict[str, Any]]) -> dict[str, Any]:
     return base
 
 
+def _battery(arm: str, plan_disagreements: int) -> dict[str, Any]:
+    """A finished battery document of one family with the given native arm."""
+    readings: dict[str, Any] = load_json(update_chunked_admission.READINGS_PATH)
+    row = readings["adversarial"]["families"][0]
+    python_runs, native_runs = arm != "on", arm != "off"
+    return {
+        "schema": tool.BATTERY_SCHEMA,
+        "tool": {"sha256": "1" * 64},
+        "manifest": {"final": True, "chunked_identity": "sha256:" + "2" * 64},
+        "generator": "generator-under-test",
+        "battery": {"native": arm},
+        "families": {
+            row["family"]: {
+                "artifact_sha256": row["artifact_sha256"],
+                "loader_face_sha256": row["loader_face_sha256"],
+                "normalizer": row["normalizer"],
+                "strings": 10,
+                "chars": 9000,
+                "chunked": 8,
+                "chunks": 30,
+                "cut_misses": 0,
+                "literal_rejects": 0,
+                "norm_rejects": 0,
+                "native": (
+                    {
+                        "chunks": 30,
+                        "chunked_docs": 8,
+                        "serial_fallbacks": 2,
+                        "serial_reasons": {"R_CHUNK_NO_CUT": 2},
+                        "plan_disagreements": plan_disagreements,
+                    }
+                    if native_runs
+                    else None
+                ),
+                "mismatches": {
+                    "python_vs_oracle": 0 if python_runs else None,
+                    "native_vs_oracle": 0 if native_runs else None,
+                    "python_vs_native": 0 if python_runs and native_runs else None,
+                    "serial_vs_oracle": 0,
+                },
+            }
+        },
+    }
+
+
+def test_battery_rows_carry_the_plan_comparison_when_both_paths_ran() -> None:
+    """The adversarial rows of the readings record how many strings the
+    native plan differed from the Python plan on, when the battery judged
+    both paths, so the readings themselves carry that count; with one path
+    there was no comparison and the field is left out. Both shapes are
+    readings the schema accepts."""
+    identity, digest = "sha256:" + "2" * 64, "1" * 64
+    readings: dict[str, Any] = load_json(update_chunked_admission.READINGS_PATH)
+    for arm, expected in (("both", 0), ("off", None), ("on", None)):
+        section = tool.battery_rows(_battery(arm, 0), identity, digest, [])
+        (row,) = section["families"]
+        assert row.get("plan_disagreements") == expected, arm
+        assert ("plan_disagreements" in row) == (arm == "both"), arm
+        document = dict(readings, adversarial=section)
+        assert validate_registry.check_schema(document, "chunked_readings") == (
+            True,
+            "",
+        ), arm
+    section = tool.battery_rows(_battery("both", 3), identity, digest, [])
+    assert section["families"][0]["plan_disagreements"] == 3
+    # The derivation reads the rows as before: the count is a reading, not
+    # an admission input.
+    section = tool.battery_rows(_battery("both", 0), identity, digest, [])
+    table, _manifest = update_chunked_admission.derive(
+        dict(readings, adversarial=section),
+        identity=update_chunked_admission.chunked_identity(),
+        engine_v2=compute_identity_v2.source_digest("fast_cpu"),
+        generated_by=GENERATED_BY,
+    )
+    assert table["rows"]
+
+
 # -- artifact tier --------------------------------------------------------------
 
 

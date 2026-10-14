@@ -1122,25 +1122,29 @@ def battery_rows(
                 f"{name}: the battery and the corpus units judged different "
                 "loader faces"
             )
-        rows.append(
-            {
-                "family": name,
-                "artifact_sha256": row["artifact_sha256"],
-                "loader_face_sha256": row.get("loader_face_sha256"),
-                "normalizer": row["normalizer"],
-                "paths": paths,
-                "strings": int(row["strings"]),
-                "chars": int(row["chars"]),
-                "chunked": int(row["chunked"]),
-                "chunks": int(row["chunks"]),
-                "cut_misses": int(row["cut_misses"]),
-                "literal_rejects": int(row["literal_rejects"]),
-                "norm_rejects": int(row["norm_rejects"]),
-                "mismatches": {
-                    column: row["mismatches"].get(column) for column in MISMATCH_COLUMNS
-                },
-            }
-        )
+        entry: dict[str, Any] = {
+            "family": name,
+            "artifact_sha256": row["artifact_sha256"],
+            "loader_face_sha256": row.get("loader_face_sha256"),
+            "normalizer": row["normalizer"],
+            "paths": paths,
+            "strings": int(row["strings"]),
+            "chars": int(row["chars"]),
+            "chunked": int(row["chunked"]),
+            "chunks": int(row["chunks"]),
+            "cut_misses": int(row["cut_misses"]),
+            "literal_rejects": int(row["literal_rejects"]),
+            "norm_rejects": int(row["norm_rejects"]),
+            "mismatches": {
+                column: row["mismatches"].get(column) for column in MISMATCH_COLUMNS
+            },
+        }
+        # The plan comparison runs only when both paths judged a string;
+        # the readings carry its count then, and leave it out otherwise.
+        native = row.get("native")
+        if paths == ["python", "native"] and isinstance(native, dict):
+            entry["plan_disagreements"] = int(native["plan_disagreements"])
+        rows.append(entry)
     return {"generator": str(battery.get("generator")), "families": rows}
 
 

@@ -284,7 +284,11 @@
         "cut_misses": { "$ref": "#/$defs/count" },
         "literal_rejects": { "$ref": "#/$defs/count" },
         "norm_rejects": { "$ref": "#/$defs/count" },
-        "mismatches": { "$ref": "#/$defs/mismatches" }
+        "mismatches": { "$ref": "#/$defs/mismatches" },
+        "plan_disagreements": {
+          "description": "Strings on which the native plan (chunk count, cuts, serial reason) differed from the Python plan. Present when the battery judged both paths; absent when it judged one, and in readings written before the battery recorded it.",
+          "$ref": "#/$defs/count"
+        }
       }
     }
   }

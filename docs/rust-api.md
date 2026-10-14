@@ -46,7 +46,11 @@ the release evidence as `readings/corpus_absence_qwen3_5_08b.json`, in
 the repository and the source archive rather than in the crate), so the
 certification readings
 cover both faces; on every other packaged artifact the two are the same
-function by construction.
+function by construction. For the same reason the loader-face comparison
+added in 0.3.0 (`R_LOADER_FACE_MISMATCH`, `docs/contracts/routing.md`
+Section 5.1) is made by the Python facade only: this crate materializes no
+loader face, so it has none to compare, and its plan carries no such
+check.
 
 The default cache entry is
 `<cache>/<family>-<revision-prefix>/tokenizer.json`. `ArtifactManager` can

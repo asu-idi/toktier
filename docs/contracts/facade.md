@@ -592,10 +592,14 @@ the two distributions share an import name, so whichever was installed
 last owns the bytes. `advisory` reports one of two states beside the assurance, in the
 number of distributions it is actually about: a distribution installed
 beside the one whose bytes are on disk and recording the same files, or a
-RECORD that names those files without describing them, which is why no
-distribution is reported as owning them. Both carry the reinstall
-command. `toktier doctor` prints the same sentence as
-`fastokens_advisory`, so neither face says less than the other.
+RECORD that names those files with recorded digests that do not match
+them, which is why no distribution is reported as owning them. Both carry
+the reinstall command. `toktier doctor` prints the same sentence as
+`fastokens_advisory`, so neither face says less than the other. A RECORD
+whose lines for those files carry no digest is read as not recording them
+at all: no advisory is reported, `toktier doctor` reads the assurance as
+`unverifiable`, and a session that asks for the adapter is refused with
+`BACKEND_UNAVAILABLE` and the install command in `details["remedy"]`.
 
 The family premise has two halves and they are not the same question.
 Whether the adapter can be opened for a family at all is the certified

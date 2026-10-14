@@ -268,7 +268,9 @@ as a mapping, so nothing reads the environment later. An unset or empty
 variable keeps the default. A value the adapter does not accept is
 refused rather than ignored: the attach form then leaves SGLang
 unchanged and passes the error to its `log` callback, and with the
-backend patch SGLang stops at startup. These names belong to the
+backend patch SGLang stops at startup. When a numeric value does not
+parse, or an on/off value is outside its set, the error message starts
+with the variable's name. These names belong to the
 adapter: they sit outside the frozen variable set of
 `docs/contracts/config.md`, and like the adapter itself they are
 provisional in 0.3.0.
@@ -282,7 +284,7 @@ provisional in 0.3.0.
 | `TOKTIER_SGLANG_STORE` | unset | a directory for persistent session state |
 | `TOKTIER_SGLANG_PER_PROCESS_STORE` | `1` | `1`, `true` or `yes` (any letter case) appends the process id to the store directory, so tokenizer worker processes never share one; `0`, `false` or `no` turns that off; any other value is refused |
 | `TOKTIER_SGLANG_IDENTITY` | `require` | the identity check is always on and `require` is the only accepted value; any other value is refused (the attach form does not attach and logs why; with the backend patch SGLang stops at startup) |
-| `TOKTIER_SGLANG_SHADOW` | `off` | `off`, `sync` (re-encode with the wrapped tokenizer, compare and correct) or `async` (compare after the fact) |
+| `TOKTIER_SGLANG_SHADOW` | `off` | `off`, `sync` (re-encode with the wrapped tokenizer, compare and correct) or `async` (compare after the fact), in any letter case; `0` and `false` also mean `off`, and `1` and `true` mean `sync` |
 | `TOKTIER_SGLANG_SHADOW_RATE` | `1.0` | the share of requests the shadow check takes |
 | `TOKTIER_SGLANG_SHADOW_DUMP_DIR` | unset | a directory that receives one JSON file per shadow mismatch |
 | `TOKTIER_SGLANG_TIMING_LOG` | unset | a JSONL file with one record per encode |
@@ -290,7 +292,7 @@ provisional in 0.3.0.
 | `TOKTIER_SGLANG_EXPLAIN_EVERY` | `0` | every this many calls, add the last execution path to the timing record; `0` is never |
 | `TOKTIER_SGLANG_CHUNKED_MIN_CHARS` | `0` | hand stateless requests of at least this many characters to `toktier.chunked.encode`; `0` is off |
 | `TOKTIER_SGLANG_CHUNKED_K` | `0` | force the chunk count of that encoder; `0` reads the shipped table |
-| `TOKTIER_SGLANG_SCHED_WORKERS` | `0` | the size of the worker pool; `0` is no pool, and the settings below are read only when it is positive |
+| `TOKTIER_SGLANG_SCHED_WORKERS` | `0` | the size of the worker pool, a non-negative integer (a negative value is refused); `0` is no pool, and the settings below are read only when it is positive |
 
 | Variable | Default | What it sets |
 |---|---|---|
@@ -495,7 +497,12 @@ fields built on it follow: `automatic_effective_backend` and, under
 about the installation profile, not about routing. What a loaded
 tokenizer actually runs is in its `explain()`, and
 `doctor --family FAMILY` lists the planner's own reasons under
-`family.plan_reasons`.
+`family.plan_reasons`. `doctor` does not materialize the loader face,
+so the face comparison is made only when a tokenizer is loaded and
+shows only in its `explain()`: beside `transformers` 5.12.1,
+`family.plan_reasons` for `qwen3_5_08b` carries no
+`R_LOADER_FACE_MISMATCH`, and its reasons can differ from those in the
+loaded tokenizer's `explain()`.
 <!-- TODO(fill): add the release-candidate reading of automatic_effective_backend and of explain() backend beside SGLang; the 2026-10-14 check ran on a build whose engine binding was not yet recertified, where both environments read hf for that reason. -->
 
 The combinations we have checked:
@@ -517,7 +524,8 @@ The combinations we have checked:
   `reference_only` and `unverified` with `R_LOADER_FACE_MISMATCH`, and
   280 of the 100,000 documents get different ids under 5.12.1 than under
   4.57.6, 269 of them with a combining mark after a letter and 11 with
-  the variation selector of an emoji.
+  the variation selector of an emoji. These counts are readings of that
+  check; they are not among the readings that ship with the package.
 - SGLang 0.5.19, 0.5.20 and 0.5.21 (each with `transformers` 5.12.1 and
   `tokenizers` 0.22.2), checked on 2026-10-13 on a pre-release build of
   this release: identity `equivalent` for `qwen3_8b`; a 390,000-character

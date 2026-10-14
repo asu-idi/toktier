@@ -931,8 +931,13 @@ campaign reading behind it, nothing carries over from `hy3`, and the equal
 splitter sections are a statement about future campaign cost rather than
 present evidence. No accelerated route is therefore eligible: wherever an
 accelerated backend is installed to be assessed, the plan records
-`R_UNCERTIFIED_ARTIFACT`, and `policy="require_accelerated"` refuses with that
-reason. `from_pretrained("tencent/Hy4-preview")` loads and returns the
+`R_UNCERTIFIED_ARTIFACT`. `policy="require_accelerated"` reports the first
+refusal in plan order, and the GPU is assessed first: where the GPU passes the
+machine and path checks (installed, enabled, and a device found by a probe the
+path performs), it refuses with that reason; elsewhere it names the GPU's own
+refusal instead, as it does for any family on that host, for example
+`BACKEND_UNAVAILABLE` with "backend 'gpu' is not installed" where the GPU
+extra is absent. `from_pretrained("tencent/Hy4-preview")` loads and returns the
 reference engine's ids, which is the same answer the package gives for any
 content it has not certified.
 

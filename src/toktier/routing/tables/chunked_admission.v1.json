@@ -4,10 +4,10 @@
   "generated_by": {
     "tool": "tools/update_chunked_admission.py",
     "tool_version": "1.0.0",
-    "source_commit": "b25c33e957b37a9c71fe7f133ab617135a1f1e88",
-    "generated_at": "2026-10-14T08:01:06Z"
+    "source_commit": "2b1e2cbca8ebade26039bdc4d73083cce9001ebf",
+    "generated_at": "2026-10-14T10:17:02Z"
   },
-  "chunked_identity": "sha256:20f64fc894309652a7cb949446e3cbe38cc97d1ae44f9929d689d23d4bcf2886",
+  "chunked_identity": "sha256:513999cac268b6d32b712fdde76b288f15abf6b0862b6321194398073b71b58a",
   "fast_cpu_source_digest_v2": "13245f222543f0395db48cef07588ecd05faf4dab5fae047a618ce2f26aaa781",
   "rows": [
     {
@@ -232,5 +232,5 @@
       "adversarial_strings": 100000
     }
   ],
-  "root_digest": "sha256:694635bcc82788ab7909a9dcdcf47f888e2a9123e2b1fe2471ca891ac77f6e3a"
+  "root_digest": "sha256:6497b43ca8fcf63ee742db5ccbc7567fcbd962e3bfb3e7063f42dd3465c2beaf"
 }

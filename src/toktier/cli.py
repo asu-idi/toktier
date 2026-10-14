@@ -283,8 +283,8 @@ def _policy_admits_coverage_gaps(policy: RoutingPolicy) -> bool:
     """Whether this policy proceeds past a gap nobody has measured.
 
     The planner has exactly two such refusals -- a device architecture and
-    a compiler/runtime pair no campaign judged (``docs/contracts/routing.md``
-    checks 9 and 13). Everything the record binds still has to verify; what
+    a compiler/runtime pair no campaign judged (checks 10 and 14 of
+    ``routing/plan.py``). Everything the record binds still has to verify; what
     is missing is coverage. ``SUPPORTED``, the default since 0.2.6, admits
     both and labels the route ``supported_untested``; ``EXPERIMENTAL``
     waives them along with everything else waivable; ``CERTIFIED`` refuses
@@ -377,7 +377,7 @@ def _family_report(
     # neither half of this family's answer survives it. ``gpu_eligible``
     # already carries that premise from the installation-level report;
     # the CPU lane needs it named here too.
-    # The plan does not stop at the entry's status: check 8 verifies the
+    # The plan does not stop at the entry's status: check 9 verifies the
     # executing extension against the binding that entry carries, and a
     # binding that does not verify sends this family to the reference
     # engine. Reading the status alone put two answers in one object --

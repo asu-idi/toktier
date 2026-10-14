@@ -31,9 +31,9 @@ Check order (stable, and the order the reason codes are assigned in):
 Checks 1-4 are facts about the machine or the requesting path (the
 unprobed case of check 4 is a fact about the caller, not the hardware)
 and hold under every policy.
-Checks 5-10, 12 and 13 are certification statements, so ``EXPERIMENTAL``
+Checks 5-11, 13 and 14 are certification statements, so ``EXPERIMENTAL``
 may proceed past them; each one it passes is recorded as a waiver and
-reported by ``explain()``, never silently. Check 11 blocks under every
+reported by ``explain()``, never silently. Check 12 blocks under every
 policy, because a kernel that failed to build cannot run. Check 5 has
 one exception: for the CPU fast path on content the registry carries no
 record for, there is no engine binding to run against, so the refusal is
@@ -191,7 +191,7 @@ class _RefuseFn(Protocol):
 def fast_cpu_binding_mismatches(
     entry: BackendEntry, facts: FastCpuEngineFacts
 ) -> tuple[tuple[str, dict[str, object]], ...]:
-    """Every engine-binding axis of check 8 that does not verify, in order.
+    """Every engine-binding axis of check 9 that does not verify, in order.
 
     The axis name and the reason detail for each, so one list answers
     both "may this route be planned?" and "which axis disagreed?". Pure;

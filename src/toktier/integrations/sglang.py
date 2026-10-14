@@ -1015,7 +1015,7 @@ class SGLangToktierTokenizer:
                 how = "chunked"
                 extra = {
                     "chunked_k": encoded.k_requested,
-                    "chunked_chunks": encoded.chunks,
+                    "chunk_count": encoded.chunks,
                     "chunked_serial_reason": encoded.serial_reason,
                 }
             elif key is not None:

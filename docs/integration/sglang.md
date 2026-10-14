@@ -456,9 +456,11 @@ loader face is materialized by the installed `transformers`. Under
 `transformers` 5.12.1 that face is not the one the readings were taken
 with: the 5.12.1 tokenizer class rebuilds the pre-tokenizer's split
 pattern without `\p{M}`, so a letter followed by a combining mark is
-split differently. toktier then returns the ids of the installed Hugging
-Face object, the same object SGLang uses. Those ids are outside what the
-certification covers, and since this release toktier says so itself: each
+split differently, and so is a mark after a symbol, such as the
+variation selector of an emoji. toktier then returns the ids of the
+installed Hugging Face object, the same object SGLang uses. Those ids
+are outside what the certification covers, and since this release
+toktier says so itself: each
 certification record carries the digest of the loader face its readings
 were taken on (`loader_face_sha256`, `docs/contracts/registry.md`
 Section 1), and at load the facade compares it with the digest of the
@@ -470,8 +472,11 @@ bytes are the certified ones), `planned_backend` `hf`, and under
 detail names the recorded face (`a57b5c62...`) and the observed one
 (`ffb7a28b...`); `probe.loader_face_sha256` carries the observed digest.
 The ids are those of the installed Hugging Face object, as they were, and
-no certified claim attaches to them. The chunk-parallel path refuses the
-same tokenizer on its own comparison
+no certified claim attaches to them. The chunk-parallel path does not
+chunk it either. In the admission table as it stands its row holds
+adversarial evidence only, so `explain()["chunked"]["refusal"]` reads
+`chunked_evidence_incomplete:adversarial_only` under both versions; once
+the row is certified, the face recorded in it refuses a different one
 (`loader_face_differs_from_chunked_evidence:<digest>`). The other ten
 families materialize the same face under both versions, and nothing
 about their `explain()` changes.
@@ -479,7 +484,7 @@ about their `explain()` changes.
 What it means for `toktier doctor`. Its `certified_cpu_profile_ready`
 field says whether the installed `tokenizers` and `transformers` are
 exactly the pair the loader-face readings were taken with, 0.22.2 and
-4.57.6. Beside SGLang it reads `false`: in our check on 2026-10-13,
+4.57.6. Beside SGLang it reads `false`: in our check on 2026-10-14,
 `doctor --json` reported `transformers_version` `"5.12.1"`,
 `tokenizers_version` `"0.22.2"` and `certified_cpu_profile_ready`
 `false` there, against `"4.57.6"`, `"0.22.2"` and `true` in a
@@ -491,7 +496,7 @@ about the installation profile, not about routing. What a loaded
 tokenizer actually runs is in its `explain()`, and
 `doctor --family FAMILY` lists the planner's own reasons under
 `family.plan_reasons`.
-<!-- TODO(fill): add the release-candidate reading of automatic_effective_backend and of explain() backend beside SGLang; the 2026-10-13 check ran on a build whose engine binding was not yet recertified, where both environments read hf for that reason. -->
+<!-- TODO(fill): add the release-candidate reading of automatic_effective_backend and of explain() backend beside SGLang; the 2026-10-14 check ran on a build whose engine binding was not yet recertified, where both environments read hf for that reason. -->
 
 The combinations we have checked:
 
@@ -501,15 +506,18 @@ The combinations we have checked:
   pool starts, and the session-path and chunked pool ids equal the
   Hugging Face ids.
 - `transformers` 5.12.1 with `tokenizers` 0.22.2 against `transformers`
-  4.57.6, checked on 2026-10-13 on a pre-release build of this release:
+  4.57.6, checked on 2026-10-14 on a pre-release build of this release:
   the eleven roster families, 100,000 web documents each, the same
   documents in both environments. In each environment toktier's ids
-  equal the reference built from that environment's loader face, for
+  equal the reference built from that environment's loader face, and
+  under 5.12.1 also the ids of the installed Hugging Face object, for
   every document and family. Ten families have the same loader face
-  under both versions, and their ids are the same in both environments.
-  `qwen3_5_08b` does not: its 5.12.1 face differs as described above,
-  and 280 of the 100,000 documents, all with a letter followed by a
-  combining mark, get different ids under 5.12.1 than under 4.57.6.
+  under both versions, and their ids are the same in both environments. `qwen3_5_08b` does not: its 5.12.1
+  face differs as described above, its `explain()` there reads
+  `reference_only` and `unverified` with `R_LOADER_FACE_MISMATCH`, and
+  280 of the 100,000 documents get different ids under 5.12.1 than under
+  4.57.6, 269 of them with a combining mark after a letter and 11 with
+  the variation selector of an emoji.
 - SGLang 0.5.19, 0.5.20 and 0.5.21 (each with `transformers` 5.12.1 and
   `tokenizers` 0.22.2), checked on 2026-10-13 on a pre-release build of
   this release: identity `equivalent` for `qwen3_8b`; a 390,000-character

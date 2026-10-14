@@ -112,7 +112,7 @@ it, and only two of them are about the chunked path.
 | Evidence | What it covers | Reading |
 |---|---|---|
 | Engine differential | the corrected CPU engine encoding whole documents; it never cuts one, so it says nothing about cuts | 41,800,181,401 checks, 11 artifacts x 3,800,016,491 documents, 0 divergences ([`tools/fast_cpu_binding.json`](../tools/fast_cpu_binding.json)) |
-| Adversarial battery | the cut rule on strings built to stress it: decomposing characters, combining sequences, jamo, kana voicing marks, literals beside marks | <!-- TODO(fill): strings per family, families, paths and mismatches from readings/chunked_cuts_campaign.json (adversarial section) --> |
+| Adversarial battery | the cut rule on strings built to stress it: decomposing characters, combining sequences, jamo, kana voicing marks, literals beside marks | 460,000 strings, 11 artifacts (100,000 each for qwen3_8b, qwen3_5_08b and minimax_m3, 20,000 for each of the other eight), Python and native paths, 0 mismatches in all four comparisons and 0 plan differences between the two paths, 2026-10-14 ([`readings/chunked_cuts_campaign.json`](../readings/chunked_cuts_campaign.json), adversarial section) |
 | Corpus cut comparison | web documents of 512 to 400,000 characters, encoded with forced cuts and compared id for id with the serial encode and the reference | <!-- TODO(fill): documents per family, families, paths, mismatches and serial fallbacks from readings/chunked_cuts_campaign.json --> |
 
 The engine differential stays what it was in the section above. It
@@ -135,8 +135,8 @@ on: the Python path to `chunked_identity`, a digest of
 path to the corrected CPU engine's version-normalized source digest. A
 change to either code takes the matching rows out of the evidence until
 it is measured again. In the table as it stands, four of the eleven
-roster artifacts have certified rows, on the Python path; two have rows
-with adversarial evidence only, and five have no row yet.
+roster artifacts have certified rows, on the Python path, and the other
+seven have rows with adversarial evidence only.
 <!-- TODO(fill): revise this coverage sentence once the release campaign readings are entered, e.g. "All eleven roster artifacts have rows, on both paths." -->
 
 ## Pinned Fastokens distribution (toktier-fastokens)
@@ -221,18 +221,18 @@ package.
 | `qwen3_5_08b` | `Qwen/Qwen3.5-0.8B` | 5f9e4d4901a9 | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
 | `llama_3_1_8b` | `meta-llama/Llama-3.1-8B` | 76e48799b099 | certified (Gigatoken) | certified (prebuilt) | certified (python) |
 | `deepseek_v3` | `deepseek-ai/DeepSeek-V3` | 621ac2e32d0d | certified (Gigatoken) | certified (prebuilt) | certified (python) |
-| `deepseek_v4_flash` | `deepseek-ai/DeepSeek-V4-Flash` | 8f9f37ca37fd | certified (Gigatoken) | certified (prebuilt) | not admitted (evidence pending) |
+| `deepseek_v4_flash` | `deepseek-ai/DeepSeek-V4-Flash` | 8f9f37ca37fd | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
 | `gpt_oss_120b` | `openai/gpt-oss-120b` | 0614fe83cada | certified (Gigatoken) | certified (prebuilt) | certified (python) |
-| `glm_5_2` | `zai-org/GLM-5.2` | 19e773648cb4 | certified (Gigatoken) | certified (prebuilt) | not admitted (evidence pending) |
+| `glm_5_2` | `zai-org/GLM-5.2` | 19e773648cb4 | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
 | `minimax_m3` | `MiniMaxAI/MiniMax-M3` | bb1f1626cf01 | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
-| `ministral_3_8b` | `mistralai/Ministral-3-8B-Instruct-2512-BF16` | d5f6046775b1 | certified (Gigatoken) | certified (prebuilt) | not admitted (evidence pending) |
-| `nemotron_3_nano_4b` | `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` | 623c34567aeb | certified (Gigatoken) | certified (prebuilt) | not admitted (evidence pending) |
-| `olmo_3_7b` | `allenai/Olmo-3-1025-7B` | 73fd5254624f | certified (Gigatoken) | certified (prebuilt) | not admitted (evidence pending) |
+| `ministral_3_8b` | `mistralai/Ministral-3-8B-Instruct-2512-BF16` | d5f6046775b1 | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
+| `nemotron_3_nano_4b` | `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` | 623c34567aeb | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
+| `olmo_3_7b` | `allenai/Olmo-3-1025-7B` | 73fd5254624f | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
 | `hy3` | `tencent/Hy3` | 446e0b59cd94 | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
 | `kimi_k3` | `moonshotai/Kimi-K3` | 773c2476259d | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
 | `ling_3_0_flash` | `inclusionAI/Ling-3.0-flash` | 40fb9d7d7795 | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
 | `laguna_s_2_1` | `poolside/Laguna-S-2.1` | 809240f7a182 | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
-<!-- TODO(fill): set the Chunked cuts column again from the shipped routing/tables/chunked_admission.v1.json once the release campaign readings are entered; the values above follow the table as it stands before that campaign (four certified on the Python path, two with adversarial evidence only, five without a row). -->
+<!-- TODO(fill): set the Chunked cuts column again from the shipped routing/tables/chunked_admission.v1.json once the release campaign readings are entered; the values above follow the table as it stands before that campaign (four certified on the Python path, seven with adversarial evidence only). -->
 
 Pinned upstream revisions are recorded per row as
 `support.repo_revision.{family}` in the generated table; the package verifies

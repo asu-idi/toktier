@@ -16,7 +16,7 @@ import json
 import os
 import shutil
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +38,7 @@ from toktier.integrations.sglang import (
     session_key_from_request,
     wrap_tokenizer,
 )
+from toktier.integrations.sglang_sched import SchedulerConfig
 from toktier.paths import artifact_cache_dir
 
 _ARTIFACTS = os.environ.get("TOKTIER_TEST_ARTIFACTS")
@@ -305,21 +306,84 @@ def test_unexpected_manager_shape_leaves_the_class_unchanged(
     assert "sglang_version" in records[0]
 
 
+@pytest.mark.parametrize(
+    ("variable", "value"),
+    [
+        ("TOKTIER_SGLANG_IDENTITY", "skip"),
+        ("TOKTIER_SGLANG_PER_PROCESS_STORE", "off"),
+        ("TOKTIER_SGLANG_SCHED_AFFINITY", "maybe"),
+        ("TOKTIER_SGLANG_SCHED_CALIBRATE", "2"),
+    ],
+)
 def test_an_invalid_setting_leaves_the_manager_unattached(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, variable: str, value: str
 ) -> None:
     """Form Z reads the environment itself; a refused setting fails closed."""
     manager = _manager_class()
     before = dict(vars(manager))
-    monkeypatch.setenv("TOKTIER_SGLANG_IDENTITY", "skip")
+    # The scheduler settings are read only when a pool is configured.
+    monkeypatch.setenv("TOKTIER_SGLANG_SCHED_WORKERS", "1")
+    monkeypatch.setenv(variable, value)
     lines: list[str] = []
     assert attach_to_tokenizer_manager(manager, log=lines.append) is False
     assert dict(vars(manager)) == before
     assert len(lines) == 1 and "invalid configuration" in lines[0]
-    assert "TOKTIER_SGLANG_IDENTITY" in lines[0]
+    assert variable in lines[0]
     # Through the explicit wrap, the same setting raises and names the variable.
-    with pytest.raises(ValueError, match="TOKTIER_SGLANG_IDENTITY"):
+    with pytest.raises(ValueError, match=variable):
         wrap_tokenizer(_StubHf())
+
+
+def _per_process_store(cfg: AdapterConfig) -> bool:
+    return cfg.per_process_store
+
+
+def _scheduler_flag(name: str) -> Callable[[AdapterConfig], bool]:
+    def read(cfg: AdapterConfig) -> bool:
+        assert cfg.scheduler is not None
+        return bool(getattr(cfg.scheduler, name))
+
+    return read
+
+
+_ON_OFF_SETTINGS: dict[str, Callable[[AdapterConfig], bool]] = {
+    "TOKTIER_SGLANG_PER_PROCESS_STORE": _per_process_store,
+    "TOKTIER_SGLANG_SCHED_AFFINITY": _scheduler_flag("affinity"),
+    "TOKTIER_SGLANG_SCHED_CALIBRATE": _scheduler_flag("calibrate"),
+}
+
+
+@pytest.mark.parametrize("variable", sorted(_ON_OFF_SETTINGS))
+def test_on_off_settings_accept_a_fixed_set_and_refuse_the_rest(
+    variable: str,
+) -> None:
+    read = _ON_OFF_SETTINGS[variable]
+    pool = {"TOKTIER_SGLANG_SCHED_WORKERS": "1"}  # so the scheduler is read
+    assert read(AdapterConfig.from_env(pool)) is True  # unset: the default
+    accepted = {
+        "": True,
+        "1": True,
+        "true": True,
+        "yes": True,
+        "TRUE": True,
+        "Yes": True,
+        "0": False,
+        "false": False,
+        "no": False,
+        "FALSE": False,
+        "No": False,
+    }
+    for value, expected in accepted.items():
+        cfg = AdapterConfig.from_env({**pool, variable: value})
+        assert read(cfg) is expected, (variable, value)
+    # Anything else is refused and named, including words that read as a
+    # switch but are not in the set ("off" was once taken as on).
+    for value in ("off", "on", "2", "y", "n", "enabled", " 1", "1 ", "nope"):
+        with pytest.raises(ValueError, match=variable):
+            AdapterConfig.from_env({**pool, variable: value})
+    if variable.startswith("TOKTIER_SGLANG_SCHED_"):
+        with pytest.raises(ValueError, match=variable):
+            SchedulerConfig.from_env({variable: "off"})
 
 
 # -- chunk-parallel encode wiring (0.3.0) -----------------------------------

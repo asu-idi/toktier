@@ -93,6 +93,28 @@ _K_RULES = ("fixed", "idle")
 _KINDS = ("free", "session", "auto")
 _TASK_KINDS = ("free", "session", "auto", "chunk")
 _CLOCK = time.perf_counter
+#: The values an on/off setting accepts, compared without regard to case.
+_FLAG_ON = ("1", "true", "yes")
+_FLAG_OFF = ("0", "false", "no")
+
+
+def _parse_flag(variable: str, value: str | None, default: bool) -> bool:
+    """One on/off setting: unset or empty keeps ``default``, a value in
+    :data:`_FLAG_ON` or :data:`_FLAG_OFF` (any case) sets it, and any other
+    value raises ``ValueError`` naming ``variable``, so a mistyped setting
+    is refused rather than read as on. Shared with the adapter's
+    ``PER_PROCESS_STORE``."""
+    if value is None or value == "":
+        return default
+    word = value.lower()
+    if word in _FLAG_ON:
+        return True
+    if word in _FLAG_OFF:
+        return False
+    raise ValueError(
+        f"{variable} must be one of {', '.join(_FLAG_ON)} (on) or "
+        f"{', '.join(_FLAG_OFF)} (off), in any case (got {value!r})"
+    )
 
 
 def parse_cores(text: str) -> tuple[int, ...]:
@@ -215,8 +237,10 @@ class SchedulerConfig:
         ``CHUNK_MIN_CHARS``, ``CHUNK_TARGET``, ``KMAX``, ``K_RULE``,
         ``AFFINITY``, ``MS_FIXED``, ``MS_PER_CHAR``, ``NON_ASCII_RATIO``,
         ``MS_PER_CHAR_SESSION``, ``CALIBRATE``, ``WORKER_TIMEOUT_S``,
-        ``START_TIMEOUT_S``, ``RAYON_THREADS``. The test-only ``loader``
-        and ``loader_path`` fields keep their defaults here.
+        ``START_TIMEOUT_S``, ``RAYON_THREADS``. ``AFFINITY`` and
+        ``CALIBRATE`` accept ``1``/``true``/``yes`` and ``0``/``false``/``no``
+        in any case. An invalid value raises ``ValueError``. The test-only
+        ``loader`` and ``loader_path`` fields keep their defaults here.
         """
 
         def get(name: str, default: Any) -> Any:
@@ -224,7 +248,7 @@ class SchedulerConfig:
             return default if value in (None, "") else value
 
         def flag(name: str, default: bool) -> bool:
-            return str(get(name, default)).lower() not in ("0", "false", "no")
+            return _parse_flag(_ENV_PREFIX + name, env.get(_ENV_PREFIX + name), default)
 
         base = cls()
         return cls(

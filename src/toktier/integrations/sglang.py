@@ -140,7 +140,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from .sglang_sched import SchedResult, Scheduler, SchedulerConfig
+from .sglang_sched import SchedResult, Scheduler, SchedulerConfig, _parse_flag
 
 __all__ = [
     "SESSION_KEY",
@@ -303,8 +303,9 @@ class AdapterConfig:
         ``SHADOW_DUMP_DIR``, ``TIMING_LOG``, ``STATS_FILE``,
         ``EXPLAIN_EVERY``, ``RID_SEPARATOR``, ``PER_PROCESS_STORE``,
         ``CHUNKED_MIN_CHARS``, ``CHUNKED_K``, ``IDENTITY``; the last accepts
-        only ``require``). An invalid value raises ``ValueError``. The
-        scheduler is read
+        only ``require``, and ``PER_PROCESS_STORE`` accepts
+        ``1``/``true``/``yes`` and ``0``/``false``/``no`` in any case). An
+        invalid value raises ``ValueError``. The scheduler is read
         from ``TOKTIER_SGLANG_SCHED_*`` when ``TOKTIER_SGLANG_SCHED_WORKERS``
         is set to a positive number (:meth:`SchedulerConfig.from_env`, given
         the same mapping). With ``env`` omitted the process environment is
@@ -334,8 +335,11 @@ class AdapterConfig:
             repo_id=get("REPO"),
             session_key=str(get("SESSION_KEY", "auto")),
             store=get("STORE"),
-            per_process_store=str(get("PER_PROCESS_STORE", "1")).lower()
-            not in ("0", "false"),
+            per_process_store=_parse_flag(
+                _ENV_PREFIX + "PER_PROCESS_STORE",
+                e.get(_ENV_PREFIX + "PER_PROCESS_STORE"),
+                True,
+            ),
             shadow=shadow,
             shadow_rate=float(get("SHADOW_RATE", 1.0)),
             shadow_dump_dir=get("SHADOW_DUMP_DIR"),

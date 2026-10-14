@@ -41,7 +41,9 @@
 //! matched, so a cut beside it would not be a certified boundary).
 //! Anything else is encoded serially under `R_CHUNK_FAMILY_UNSUPPORTED`;
 //! a document without a certified cut is encoded serially under
-//! `R_CHUNK_NO_CUT`.
+//! `R_CHUNK_NO_CUT`. These are structural criteria only: the shipped
+//! admission table (the per-artifact evidence gate) is read by the Python
+//! facade, not here.
 //!
 //! Each chunk runs through the engine's own guarded full-encode gate, so
 //! the added-token gate, the corrected-Gigatoken closure check and the
@@ -715,6 +717,12 @@ impl std::fmt::Debug for ChunkEncoder {
 impl ChunkEncoder {
     /// Build the planner from the exact artifact document the engine was
     /// constructed over.
+    ///
+    /// Admission here is structural only: the normalizer shape, and no
+    /// added token that sets `lstrip`, `rstrip` or `single_word` (see the
+    /// module documentation). The shipped admission table, which says
+    /// whether an artifact's chunked evidence is recorded, is read by the
+    /// Python facade (`toktier.chunked`), not by this type.
     pub fn new(
         tokenizer_json: &[u8],
         boundary: BpeSyncBoundary,
@@ -740,10 +748,15 @@ impl ChunkEncoder {
         })
     }
 
+    /// Whether the structural criteria admit this artifact. The shipped
+    /// admission table is checked by the Python facade, not here, so
+    /// `true` does not by itself mean the artifact's chunked evidence is
+    /// recorded.
     pub fn admitted(&self) -> bool {
         self.refusal.is_none()
     }
 
+    /// The structural refusal, when [`Self::admitted`] is false.
     pub fn refusal(&self) -> Option<&str> {
         self.refusal.as_deref()
     }
@@ -962,7 +975,7 @@ impl FastCpuEngine {
     /// core-stream encode of the same route.
     ///
     /// `k` is the requested chunk count; `min_chunk` the smallest chunk the
-    /// plan may produce (`None` selects `min(1024, len / (4 k))`);
+    /// plan may produce (`None` selects `max(16, min(1024, len / (4 k)))`);
     /// `scan_budget` how far below each target the cut search looks. A
     /// tokenizer outside the admitted set and a document without a
     /// certified cut are encoded serially through the same guarded gate;

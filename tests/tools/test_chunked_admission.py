@@ -199,6 +199,16 @@ def _with_native(row: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _python_only(row: dict[str, Any]) -> dict[str, Any]:
+    out = copy.deepcopy(row)
+    out["paths"] = ["python"]
+    out["mismatches"]["native_vs_oracle"] = None
+    out["mismatches"]["python_vs_native"] = None
+    if "docs" in out:
+        out["native"] = None
+    return out
+
+
 def _row_index(rows: list[dict[str, Any]], family: str) -> int:
     return next(i for i, row in enumerate(rows) if row["family"] == family)
 
@@ -212,6 +222,12 @@ def test_native_path_needs_both_levels_and_complete_columns() -> None:
     )
     corpus_i = _row_index(readings["families"], certified)
     battery_i = _row_index(readings["adversarial"]["families"], certified)
+    # Start from a Python-only reading of this family at both levels,
+    # whatever the shipped readings record for the native path.
+    readings["families"][corpus_i] = _python_only(readings["families"][corpus_i])
+    readings["adversarial"]["families"][battery_i] = _python_only(
+        readings["adversarial"]["families"][battery_i]
+    )
 
     def granted(document: dict[str, Any]) -> list[str]:
         table, _manifest = _derive(document)
@@ -245,6 +261,12 @@ def test_one_evidence_level_gives_a_named_partial_status() -> None:
         row["family"]
         for row in load_json(tool.TABLE_PATH)["rows"]
         if row["status"] == "certified"
+    )
+    # A Python-only battery row, whatever the shipped readings record for
+    # the native path.
+    battery_i = _row_index(readings["adversarial"]["families"], certified)
+    readings["adversarial"]["families"][battery_i] = _python_only(
+        readings["adversarial"]["families"][battery_i]
     )
     battery_only = copy.deepcopy(readings)
     battery_only["families"] = [

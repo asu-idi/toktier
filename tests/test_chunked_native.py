@@ -362,26 +362,40 @@ def test_route_without_the_corrected_cpu_engine_is_serial_by_name(
     """``R_CHUNK_ROUTE_NOT_FAST_CPU``: on a plan whose starting backend is
     not the corrected CPU engine (here the reference-only route of
     ``policy="reference"``), the native encoder encodes serially through
-    the normal route and says so; the ids are the plain encode's."""
+    the normal route and says so when it is demanded; the ids are the
+    plain encode's. The default ``native=None`` does not take it there,
+    even with the native path recorded (the lifted gate stands for a row
+    that records it): the encoder cannot run on that route, so the
+    Python path cuts the document."""
     if not _artifact_source(family):
         pytest.skip(f"{family}: artifact not available under TOKTIER_TEST_ARTIFACTS")
     tokenizer = load_isolated(family, tmp_path_factory, policy="reference")
     try:
         chain = tokenizer.explain()["fallback_chain"]
         assert isinstance(chain, (list, tuple)) and "fast_cpu" not in chain
-        if not chunked.native_available(tokenizer):
+        runtime = tokenizer._native_request_runtime()
+        if runtime is None or not callable(getattr(runtime, "chunked_encode", None)):
             pytest.skip(f"{family}: the reference route has no native runtime here")
-        chunked._planner_for(tokenizer, evidence_gate=False)
+        planner = chunked._planner_for(tokenizer, evidence_gate=False)
+        assert planner.native_evidence is True
+        assert chunked.native_available(tokenizer) is False
         text = _generated_corpora(300_000)["prose(generated)"]
+        expected = _reference(tokenizer)(text)
+        facts = chunked.admission(tokenizer)
+        assert facts["native_available"] is False
+        assert facts["native_by_default"] is False
+        auto = chunked.encode(tokenizer, text, k=4)
+        assert auto.native_facts is None and auto.serial_reason is None
+        assert auto.chunks > 1 and list(auto.ids) == expected
         encoded = chunked.encode(tokenizer, text, k=4, native=True)
         assert encoded.serial_reason == ReasonCode.R_CHUNK_ROUTE_NOT_FAST_CPU.value
         assert encoded.chunks == 1 and encoded.cuts == ()
         assert encoded.native_facts is not None
-        assert list(encoded.ids) == _reference(tokenizer)(text)
+        assert list(encoded.ids) == expected
         report = tokenizer.explain()["chunked"]
         assert isinstance(report, dict)
         assert report["fallback_counts"] == {"R_CHUNK_ROUTE_NOT_FAST_CPU": 1}
-        assert report["native_calls"] == 1 and report["applied"] == 0
+        assert report["native_calls"] == 1 and report["applied"] == 1
         facts = chunked.admission(tokenizer)
         assert facts["native"] is None
         assert "no corrected CPU engine" in str(facts["native_unavailable_reason"])

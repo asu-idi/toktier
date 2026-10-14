@@ -550,12 +550,13 @@ def load_families(
                 )
             if native != "off":
                 planned = tokenizer.explain().get("planned_backend")
-                surface = "present" if chunked.native_available(tokenizer) else "absent"
-                if surface == "absent" or planned != "fast_cpu":
+                runs = chunked.native_available(tokenizer)
+                if not runs or planned != "fast_cpu":
                     raise NativeRouteError(
                         f"{name}: the native arm needs a plan that starts on the "
                         f"corrected CPU engine (planned backend {planned!r}, native "
-                        f"surface {surface}); a different policy may be needed, and a "
+                        f"encoder {'can' if runs else 'cannot'} run on this route); "
+                        "a different policy may be needed, and a "
                         "reference-only route would only record "
                         "R_CHUNK_ROUTE_NOT_FAST_CPU"
                     )

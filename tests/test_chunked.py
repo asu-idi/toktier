@@ -644,7 +644,8 @@ def test_native_demand_on_a_refused_tokenizer_raises(tmp_path: Path) -> None:
     rig = build_rig(tmp_path)
     tokenizer = rig.tokenizer()
     text = "ab 12 " * 100
-    if not chunked.native_available(tokenizer):
+    runtime = tokenizer._native_request_runtime()
+    if runtime is None or not callable(getattr(runtime, "chunked_encode", None)):
         pytest.skip("the tiny family's route has no native runtime here")
     with pytest.raises(RuntimeError, match="not admitted"):
         chunked.encode(tokenizer, text, k=2, native=True)
@@ -656,11 +657,14 @@ def test_native_demand_on_a_refused_tokenizer_raises(tmp_path: Path) -> None:
     facts = chunked.admission(tokenizer)
     assert facts["admitted"] is False
     assert facts["refusal"] == "artifact_not_in_certified_repair_roster"
-    assert facts["native_available"] is True and facts["native_by_default"] is False
     assert facts["evidence_id"] is None and facts["evidence_paths"] == []
     assert facts["admission_gate"] == "evidence_table"
-    # The tiny family's route has no corrected CPU engine, so the native
-    # planner cannot be described; the merged facts say so instead of raising.
+    # The tiny family's runtime carries the surface, but its route has no
+    # corrected CPU engine: the native encoder cannot run there, so it is
+    # not available, the native planner cannot be described, and the
+    # merged facts say why instead of raising.
+    assert facts["native_available"] is False and facts["native_by_default"] is False
+    assert chunked.native_available(tokenizer) is False
     assert facts["native"] is None
     assert "no corrected CPU engine" in str(facts["native_unavailable_reason"])
 
@@ -1007,6 +1011,129 @@ def test_tampered_admission_table_fails_closed(
     admission_table(grant_native)
     planner = chunked._Planner(_stand_in("qwen3_8b", digest, _NFC_FACE))
     assert planner.native_evidence is True
+
+
+_NO_CPU_ENGINE = (
+    "native reference engine failed: this route has no corrected CPU engine "
+    "to chunk on"
+)
+
+
+class _Runtime:
+    """A native request runtime as far as ``toktier.chunked`` reads one:
+    ``cpu_engine`` says whether its route carries the corrected CPU engine
+    (the native planner answers ``chunked_admission``) or not (it raises,
+    and a native encode is serial by name, as the routing core does)."""
+
+    def __init__(self, *, cpu_engine: bool) -> None:
+        self.cpu_engine = cpu_engine
+        self.encodes = 0
+
+    def chunked_admission(self) -> dict[str, object]:
+        if not self.cpu_engine:
+            raise RuntimeError(_NO_CPU_ENGINE)
+        return {"admitted": True, "refusal": None, "normalizer": "nfc"}
+
+    def chunked_encode(
+        self, text: str, k: int, min_chunk: int | None, budget: int
+    ) -> tuple[list[int], dict[str, object]]:
+        self.encodes += 1
+        return [ord(char) for char in text], {
+            "chunks": 1,
+            "cuts": [],
+            "cut_misses": 0,
+            "literal_rejects": 0,
+            "norm_rejects": 0,
+            "serial_reason": (
+                None
+                if self.cpu_engine
+                else ReasonCode.R_CHUNK_ROUTE_NOT_FAST_CPU.value
+            ),
+            "below_threshold": False,
+        }
+
+
+class _RoutedStandIn:
+    """A roster stand-in (family, artifact digest, loader face) that also
+    encodes -- one id per character, so chunk rows concatenate to the
+    serial row -- and carries a chosen native runtime."""
+
+    def __init__(self, runtime: _Runtime | None) -> None:
+        self.family = "qwen3_8b"
+        self._artifact_sha256 = _roster_digest("qwen3_8b")
+        self._backend = SimpleNamespace(
+            materialized_tokenizer_json=lambda: json.dumps(_NFC_FACE)
+        )
+        self._runtime = runtime
+
+    def _native_request_runtime(self) -> _Runtime | None:
+        return self._runtime
+
+    def encode(self, text: str, *, lookup: str = "auto") -> Any:
+        return SimpleNamespace(ids=tuple(ord(char) for char in text))
+
+    def _encode_batch_core(self, chunks: Sequence[str]) -> list[list[int]]:
+        return [[ord(char) for char in chunk] for chunk in chunks]
+
+
+def _grant_native(document: dict[str, Any]) -> None:
+    """The stand-in's row bound to the stand-in face, recording both paths."""
+    _bind_face(document)
+    for row in document["rows"]:
+        if row["family"] == "qwen3_8b":
+            row["paths"] = ["python", "native"]
+            row["evidence"] = {
+                "python": ["adversarial", "corpus"],
+                "native": ["adversarial", "corpus"],
+            }
+
+
+def test_native_by_default_needs_a_route_the_native_encoder_can_run_on(
+    admission_table: Callable[..., dict[str, Any]],
+) -> None:
+    """``native=None`` takes the native encoder only where it can run: the
+    runtime carries the surface *and* its route carries the corrected CPU
+    engine. On a route without that engine the row's native evidence does
+    not make the default choose a path that is serial by construction: the
+    Python path cuts the document, ``native_available`` and
+    ``native_by_default`` are false, and the reason is named, never beside
+    ``native_by_default`` being true. ``native=True`` still demands the
+    native encoder there and gets its serial result by name."""
+    admission_table(_grant_native)
+    text = "The quick brown fox, 42 times. " * 40
+
+    no_engine = _RoutedStandIn(_Runtime(cpu_engine=False))
+    assert chunked.is_admitted(no_engine)  # type: ignore[arg-type]
+    assert chunked._planner_for(no_engine).native_evidence is True  # type: ignore[arg-type]
+    assert chunked.native_available(no_engine) is False  # type: ignore[arg-type]
+    facts = chunked.admission(no_engine)  # type: ignore[arg-type]
+    assert facts["native_available"] is False and facts["native_by_default"] is False
+    assert facts["native"] is None
+    assert facts["native_unavailable_reason"] == _NO_CPU_ENGINE
+    auto = chunked.encode(no_engine, text, k=4)  # type: ignore[arg-type]
+    assert auto.native_facts is None and auto.serial_reason is None
+    assert auto.chunks > 1 and list(auto.ids) == [ord(char) for char in text]
+    assert no_engine._runtime is not None and no_engine._runtime.encodes == 0
+    forced = chunked.encode(no_engine, text, k=4, native=True)  # type: ignore[arg-type]
+    assert forced.serial_reason == ReasonCode.R_CHUNK_ROUTE_NOT_FAST_CPU.value
+    assert forced.native_facts is not None and no_engine._runtime.encodes == 1
+
+    cpu_route = _RoutedStandIn(_Runtime(cpu_engine=True))
+    facts = chunked.admission(cpu_route)  # type: ignore[arg-type]
+    assert facts["native_available"] is True and facts["native_by_default"] is True
+    assert facts["native"] == {"admitted": True, "refusal": None, "normalizer": "nfc"}
+    assert facts["native_unavailable_reason"] is None
+    assert chunked.encode(cpu_route, text, k=4).native_facts is not None  # type: ignore[arg-type]
+
+    no_surface = _RoutedStandIn(None)
+    facts = chunked.admission(no_surface)  # type: ignore[arg-type]
+    assert facts["native_available"] is False and facts["native_by_default"] is False
+    assert facts["native_unavailable_reason"] == (
+        "the loaded runtime has no native chunked encoder"
+    )
+    with pytest.raises(RuntimeError, match="no native chunked encoder"):
+        chunked.encode(no_surface, text, k=4, native=True)  # type: ignore[arg-type]
+    assert chunked.encode(no_surface, text, k=4).chunks > 1  # type: ignore[arg-type]
 
 
 # -- artifact tier: identity against the oracle -----------------------------

@@ -99,11 +99,13 @@ counters, and the per-call facts, are read back from
 tokenizer, or from :func:`stats`.
 
 The table also says which paths were judged for a row. With
-``native=None`` (the default) the native encoder is used only when the
-loaded runtime has it and the row records the ``native`` path; otherwise
-the Python path runs. ``native=True`` demands the native encoder and
-raises when the runtime lacks it, when the tokenizer is not admitted, or
-when the row lacks the native path; ``native=False`` is the Python path.
+``native=None`` (the default) the native encoder is used only when it can
+run for the tokenizer -- the loaded runtime carries it and the route
+carries the corrected CPU engine it is built on -- and the row records
+the ``native`` path; otherwise the Python path runs. ``native=True``
+demands the native encoder and raises when the runtime does not carry
+it, when the tokenizer is not admitted, or when the row lacks the native
+path; ``native=False`` is the Python path.
 Collecting the evidence a row is made of needs the gate lifted for the
 tokenizer under judgement; the campaign tool does that through the
 private planner constructor, and ``explain()["chunked"]["admission_gate"]``
@@ -920,20 +922,49 @@ def plan(
     return planner.plan(text, chunks, min_chunk, budget)
 
 
+_NO_NATIVE_SURFACE = "the loaded runtime has no native chunked encoder"
+
+
 def _native_runtime(tokenizer: Tokenizer) -> Any:
     """The native request runtime with the chunked surface, or raise."""
     runtime = tokenizer._native_request_runtime()
     if runtime is None or not callable(getattr(runtime, "chunked_encode", None)):
-        raise RuntimeError("the loaded runtime has no native chunked encoder")
+        raise RuntimeError(_NO_NATIVE_SURFACE)
     return runtime
 
 
-def native_available(tokenizer: Tokenizer) -> bool:
-    """Whether the native chunked encoder is reachable for ``tokenizer``
-    (the loaded runtime has the surface; admission is a separate question,
-    answered by :func:`admission`)."""
+def _native_state(tokenizer: Tokenizer) -> tuple[dict[str, object] | None, str | None]:
+    """The native planner's admission facts, or why there are none.
+
+    ``(facts, None)`` when the native chunk encoder can run for
+    ``tokenizer``: the loaded runtime carries the chunked surface, and its
+    route carries the corrected CPU engine the native planner is built on,
+    which the runtime confirms by describing that planner. ``(None,
+    reason)`` otherwise: no surface, or a route without the corrected CPU
+    engine (the reference-only route, for one), where the surface is
+    present but the native encoder would only encode serially.
+    """
     runtime = tokenizer._native_request_runtime()
-    return runtime is not None and callable(getattr(runtime, "chunked_encode", None))
+    if runtime is None or not callable(getattr(runtime, "chunked_encode", None)):
+        return None, _NO_NATIVE_SURFACE
+    try:
+        return dict(runtime.chunked_admission()), None
+    except RuntimeError as exc:
+        return None, str(exc)
+
+
+def native_available(tokenizer: Tokenizer) -> bool:
+    """Whether the native chunk encoder can run for ``tokenizer``.
+
+    True when the loaded runtime carries the native chunked surface *and*
+    its route carries the corrected CPU engine the native planner runs on.
+    A runtime that carries the surface on a route without that engine
+    answers False: the native encoder would encode every input serially
+    there (``R_CHUNK_ROUTE_NOT_FAST_CPU``), so ``native=None`` takes the
+    Python path instead. Admission is a separate question, answered by
+    :func:`admission`, which also names the reason when this is False.
+    """
+    return _native_state(tokenizer)[1] is None
 
 
 def _require_native(tokenizer: Tokenizer, planner: _Planner) -> Any:
@@ -976,31 +1007,25 @@ def _select_native(
 def admission(tokenizer: Tokenizer) -> dict[str, object]:
     """The admission facts, merged.
 
-    This module's decision and what it rests on (roster, loader-face
-    normalizer, admission-table row and the paths it records), whether
-    the native encoder is reachable and whether ``native=None`` would
-    select it, and under ``"native"`` the native planner's own admission
-    facts when the loaded runtime has one and can describe it (``None``
-    otherwise, with ``"native_unavailable_reason"`` saying why: no native
-    surface, or a route without the corrected CPU engine the native
-    planner is built on).
+    This module's decision and what it rests on (roster, loader face,
+    admission-table row and the paths it records), whether the native
+    encoder can run (``native_available``, as :func:`native_available`
+    decides it) and whether ``native=None`` would select it, and under
+    ``"native"`` the native planner's own admission facts when it can run
+    (``None`` otherwise, with ``"native_unavailable_reason"`` saying why:
+    no native surface, or a route without the corrected CPU engine the
+    native planner is built on). ``native_by_default`` is true only when
+    ``native_available`` is, so it is never reported beside an
+    unavailable reason.
     """
     planner = _planner_for(tokenizer)
-    available = native_available(tokenizer)
+    native_facts, unavailable = _native_state(tokenizer)
+    available = unavailable is None
     facts: dict[str, object] = planner.admission_facts()
     facts["native_available"] = available
     facts["native_by_default"] = (
         planner.admitted and planner.native_evidence and available
     )
-    native_facts: dict[str, object] | None = None
-    unavailable: str | None = None
-    if not available:
-        unavailable = "the loaded runtime has no native chunked encoder"
-    else:
-        try:
-            native_facts = dict(_native_runtime(tokenizer).chunked_admission())
-        except RuntimeError as exc:
-            unavailable = str(exc)
     facts["native"] = native_facts
     facts["native_unavailable_reason"] = unavailable
     return facts
@@ -1067,11 +1092,15 @@ def encode(
 
     ``native`` selects the native chunk encoder, which runs the plan and
     the chunk encodes inside the native runtime. ``None`` (the default)
-    uses it when the loaded runtime has it and the admission table
-    records the native path for this artifact, and the Python path
-    otherwise; ``True`` demands it and raises ``RuntimeError`` when the
-    runtime lacks it, the tokenizer is not admitted, or the native path
-    has no recorded evidence; ``False`` is the Python path.
+    uses it when it can run for this tokenizer (:func:`native_available`:
+    the loaded runtime carries it and the route carries the corrected CPU
+    engine) and the admission table records the native path for this
+    artifact, and the Python path otherwise; ``True`` demands it and
+    raises ``RuntimeError`` when the runtime does not carry it, the
+    tokenizer is not admitted, or the native path has no recorded
+    evidence, and on an input whose route does not start at the corrected
+    CPU engine it encodes serially under ``R_CHUNK_ROUTE_NOT_FAST_CPU``;
+    ``False`` is the Python path.
     """
     if not isinstance(text, str):
         raise TypeError("text must be a str")

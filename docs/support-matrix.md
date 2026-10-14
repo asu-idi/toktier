@@ -1032,7 +1032,13 @@ rather than inside the wheel or the crate -- and the annotation as the
 record's `carryover` node
 (`docs/contracts/evidence-carryover.md` Section 3). Every
 other artifact listed here declares its added tokens in `tokenizer.json`
-only, where the two faces coincide by construction.
+only, where the two faces coincide by construction. Since 0.3.0 each
+record also carries the digest of the loader face its readings were taken
+on (`loader_face_sha256`), and a load whose installed loader materializes
+a different face is reported as reference-only (`R_LOADER_FACE_MISMATCH`)
+rather than certified, with the ids of the installed object; beside
+`transformers` 5.12.1 that is the case for `qwen3_5_08b`
+(`docs/integration/sglang.md`, Installing beside SGLang).
 
 Since 0.2.9 the capability ids in the certification registry are computed on
 this same loader face rather than on the artifact file, so the object a

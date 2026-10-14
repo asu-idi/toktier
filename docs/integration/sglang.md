@@ -458,9 +458,23 @@ with: the 5.12.1 tokenizer class rebuilds the pre-tokenizer's split
 pattern without `\p{M}`, so a letter followed by a combining mark is
 split differently. toktier then returns the ids of the installed Hugging
 Face object, the same object SGLang uses. Those ids are outside what the
-certification covers, though: for `qwen3_5_08b` beside `transformers`
-5.x, the certified claim does not apply.
-<!-- TODO(fill): P3 adds a run-time loader-face check; once it lands, say what explain() reports for qwen3_5_08b beside transformers 5.x. -->
+certification covers, and since this release toktier says so itself: each
+certification record carries the digest of the loader face its readings
+were taken on (`loader_face_sha256`, `docs/contracts/registry.md`
+Section 1), and at load the facade compares it with the digest of the
+face it materialized. Beside `transformers` 5.12.1, `explain()` for
+`qwen3_5_08b` reports `certification.state` `reference_only` and
+`effective_verdict` `unverified` (the identity is still `exact`: the
+bytes are the certified ones), `planned_backend` `hf`, and under
+`plan_reasons` an `R_LOADER_FACE_MISMATCH` entry for `fast_cpu` whose
+detail names the recorded face (`a57b5c62...`) and the observed one
+(`ffb7a28b...`); `probe.loader_face_sha256` carries the observed digest.
+The ids are those of the installed Hugging Face object, as they were, and
+no certified claim attaches to them. The chunk-parallel path refuses the
+same tokenizer on its own comparison
+(`loader_face_differs_from_chunked_evidence:<digest>`). The other ten
+families materialize the same face under both versions, and nothing
+about their `explain()` changes.
 
 What it means for `toktier doctor`. Its `certified_cpu_profile_ready`
 field says whether the installed `tokenizers` and `transformers` are
@@ -511,8 +525,12 @@ differently from 4.57.6. The ids are the same, and the identity check
 leaves that flag out on both sides. A loader face that `transformers`
 materializes itself, as for `qwen3_5_08b`, follows the installed
 version, and the identity check compares two objects built by that same
-version, so it does not see a change against the certified face; that
-is the `qwen3_5_08b` case above. For an artifact whose face toktier
+version, so it does not see a change against the certified face. The
+record's loader-face digest does: toktier compares the face it
+materialized with the one the readings were taken on and reports the
+tokenizer as reference-only (`R_LOADER_FACE_MISMATCH`) rather than
+certified, with the ids unchanged; that is the `qwen3_5_08b` case
+above. For an artifact whose face toktier
 reads from the verified file, a later `transformers` that materialized
 the supplied tokenizer differently in a way that changes ids would make
 the identity check find the two sides different, and the wrapper would

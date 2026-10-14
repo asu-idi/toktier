@@ -4,8 +4,9 @@ Offline tier: the shipped table, manifest and readings pass their own
 ``--check``; the table is a subset of the certified repair roster; the two
 identities it records are this tree's; a regenerated pair is byte-identical
 to the shipped pair (``generated_by`` excepted); the generator refuses a
-family with a recorded mismatch, an artifact outside the roster, and a
-digest that is not the roster's; ``--release-check`` names every roster
+family with a recorded mismatch, an artifact outside the roster, a
+digest that is not the roster's, and a certified row without a recorded
+loader face; ``--release-check`` names every roster
 family without a row rather than inventing one; and the tools-only
 ``chunked`` identity stays out of the three build-time identities.
 """
@@ -30,6 +31,7 @@ import update_chunked_admission as tool  # noqa: E402
 import validate_registry  # noqa: E402
 from registry_common import (  # noqa: E402
     CHUNKED_ADMISSION_DOMAIN_TAG,
+    CHUNKED_READINGS_DOMAIN_TAG,
     GenerationError,
     load_json,
     serialise_document,
@@ -287,6 +289,68 @@ def test_one_evidence_level_gives_a_named_partial_status() -> None:
     assert row["status"] == "corpus_only" and row["paths"] == []
     assert tool.partial_rows(table) and tool.absent_families(readings, table) == (
         tool.absent_families(readings, load_json(tool.TABLE_PATH))
+    )
+
+
+def test_a_certified_row_needs_a_recorded_loader_face(tmp_path: Path) -> None:
+    """The run-time admission compares the live loader face with the face a
+    certified row records, so the derivation refuses a certified row whose
+    readings recorded no face at either level; one level recording it is
+    enough, and a row that is not certified may go without (it is refused
+    at run time anyway). ``--check`` runs the same derivation, and also
+    names a certified row without a face in the table it is given."""
+    readings = _readings()
+    certified = next(
+        row["family"]
+        for row in load_json(tool.TABLE_PATH)["rows"]
+        if row["status"] == "certified"
+    )
+    corpus_i = _row_index(readings["families"], certified)
+    battery_i = _row_index(readings["adversarial"]["families"], certified)
+    face = (
+        readings["families"][corpus_i]["loader_face_sha256"]
+        or readings["adversarial"]["families"][battery_i]["loader_face_sha256"]
+    )
+    assert isinstance(face, str) and len(face) == 64
+
+    one_level = copy.deepcopy(readings)
+    one_level["families"][corpus_i]["loader_face_sha256"] = None
+    one_level["adversarial"]["families"][battery_i]["loader_face_sha256"] = face
+    table, _manifest = _derive(one_level)
+    row = next(r for r in table["rows"] if r["family"] == certified)
+    assert row["status"] == "certified" and row["loader_face_sha256"] == face
+
+    faceless = copy.deepcopy(one_level)
+    faceless["adversarial"]["families"][battery_i]["loader_face_sha256"] = None
+    with pytest.raises(GenerationError, match="certified row needs the loader face"):
+        _derive(faceless)
+
+    partial = copy.deepcopy(faceless)
+    partial["families"] = [r for r in partial["families"] if r["family"] != certified]
+    table, _manifest = _derive(partial)
+    row = next(r for r in table["rows"] if r["family"] == certified)
+    assert row["status"] == "adversarial_only" and row["loader_face_sha256"] is None
+
+    path = tmp_path / "readings.json"
+    path.write_bytes(
+        serialise_document(with_root_digest(faceless, CHUNKED_READINGS_DOMAIN_TAG))
+    )
+    result = _run("--check", "--readings", str(path))
+    assert result.returncode == 2
+    assert "certified row needs the loader face" in result.stderr
+
+    shipped: dict[str, Any] = load_json(tool.TABLE_PATH)
+    for entry in shipped["rows"]:
+        if entry["family"] == certified:
+            entry["loader_face_sha256"] = None
+    edited = tmp_path / "table.json"
+    edited.write_bytes(
+        serialise_document(with_root_digest(shipped, CHUNKED_ADMISSION_DOMAIN_TAG))
+    )
+    result = _run("--check", "--table", str(edited))
+    assert result.returncode == 1
+    assert f"{certified}: a certified row records no loader_face_sha256" in (
+        result.stderr
     )
 
 

@@ -15,13 +15,20 @@ turns the recorded judgement into the two shipped documents:
   evidence manifest in the frozen shape of
   ``schemas/evidence_manifest.schema.json`` (``ev-chunked-cuts-v1``),
   verified like every other manifest by ``tools/generate_evidence.py``.
+  Its ``corpora[].bytes`` and ``totals.bytes`` carry the character counts
+  the readings record (Unicode code points, a lower bound on the UTF-8
+  byte volume), the caliber ``tools/generate_evidence.py`` states for
+  every evidence manifest; the readings do not record byte counts.
 
 Both are derived from one input, ``readings/chunked_cuts_campaign.json``
 (``schemas/chunked_readings.schema.json``), which the campaign tool
 ``tools/run_chunked_cut_campaign.py summarize`` writes. The derivation is
 total and refuses rather than rounds: a family with any recorded mismatch,
-an artifact digest that differs from the certified repair roster, or a
-family outside the roster stops generation.
+an artifact digest that differs from the certified repair roster, a
+family outside the roster, or a certified row whose readings recorded no
+loader face (``loader_face_sha256``; the run-time admission compares the
+live face with it, and a row without one would be compared with nothing)
+stops generation.
 
 Two identities bind the table to the sources it speaks about. The
 ``chunked_identity`` (``tools/source_identity_common.py``,
@@ -313,6 +320,13 @@ def derive(
             status = "adversarial_only"
         else:
             status = "corpus_only"
+        if status == "certified" and known["loader_face_sha256"] is None:
+            raise GenerationError(
+                f"{family}: a certified row needs the loader face its evidence "
+                "was taken on, and neither the corpus campaign nor the "
+                "adversarial battery recorded loader_face_sha256; without it the "
+                "run-time admission would compare the live face with nothing"
+            )
         paths: list[str] = []
         if status == "certified":
             paths.append("python")
@@ -362,6 +376,9 @@ def derive(
         chars = _count(entry.get("chars"), f"corpus[{index}].chars")
         if docs is None or chars is None:
             raise GenerationError(f"corpus[{index}]: docs and chars are required")
+        # The frozen manifest schema calls the volume ``bytes``; it carries
+        # the recorded character count, as in every evidence manifest here
+        # (module docstring), a lower bound on the UTF-8 bytes.
         corpora.append(
             {"corpus_id": str(entry.get("corpus_id")), "docs": docs, "bytes": chars}
         )
@@ -463,6 +480,17 @@ def check(
     )
     if table_path.exists():
         shipped = _mapping(load_json(table_path), "admission table")
+        for row in shipped.get("rows") or []:
+            if (
+                isinstance(row, dict)
+                and row.get("status") == "certified"
+                and row.get("loader_face_sha256") is None
+            ):
+                problems.append(
+                    f"{table_path}: {row.get('family')}: a certified row records no "
+                    "loader_face_sha256, so the run-time admission would compare "
+                    "the live face with nothing"
+                )
         if shipped.get("chunked_identity") != identity:
             problems.append(
                 f"{table_path}: chunked_identity {shipped.get('chunked_identity')!r} "

@@ -123,15 +123,21 @@ What may be chunked is decided at run time from three conditions, all of
 which must hold: the artifact has a repair-roster entry, its loader face
 carries a normalizer the cut rule reasons about (none, the empty
 sequence, or NFC with input-matched added tokens), and the chunked
-admission table has a row for it. The table is generated from the two
+admission table has a certified row for it, one that holds both the
+adversarial battery and the corpus cut comparison. A row that holds
+only one of the two is recorded with that status (`adversarial_only` or
+`corpus_only`) and its artifact is refused at run time, like one without
+a row. The table is generated from the two
 evidence records named under the family table, and a standing check
 keeps it equal to them. Each row is bound to the code it was measured
 on: the Python path to `chunked_identity`, a digest of
 `toktier/chunked.py` and the two repair tables it reads, and the native
 path to the corrected CPU engine's version-normalized source digest. A
 change to either code takes the matching rows out of the evidence until
-it is measured again.
-<!-- TODO(fill): one sentence on coverage once the shipped table is final, e.g. "In this release six of the eleven roster artifacts have rows, on the Python path." or "All eleven roster artifacts have rows, on both paths." -->
+it is measured again. In the table as it stands, four of the eleven
+roster artifacts have certified rows, on the Python path; two have rows
+with adversarial evidence only, and five have no row yet.
+<!-- TODO(fill): revise this coverage sentence once the release campaign readings are entered, e.g. "All eleven roster artifacts have rows, on both paths." -->
 
 ## Pinned Fastokens distribution (toktier-fastokens)
 
@@ -212,21 +218,21 @@ package.
 | Family id | Anchor repository | Artifact sha256 (prefix) | CPU fast repair | GPU status | Chunked cuts |
 |---|---|---|---|---|---|
 | `qwen3_8b` | `Qwen/Qwen3-8B` | aeb13307a71a | certified (Gigatoken) | certified (prebuilt) | certified (python) |
-| `qwen3_5_08b` | `Qwen/Qwen3.5-0.8B` | 5f9e4d4901a9 | certified (Gigatoken) | certified (prebuilt) | certified (python) |
+| `qwen3_5_08b` | `Qwen/Qwen3.5-0.8B` | 5f9e4d4901a9 | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
 | `llama_3_1_8b` | `meta-llama/Llama-3.1-8B` | 76e48799b099 | certified (Gigatoken) | certified (prebuilt) | certified (python) |
 | `deepseek_v3` | `deepseek-ai/DeepSeek-V3` | 621ac2e32d0d | certified (Gigatoken) | certified (prebuilt) | certified (python) |
-| `deepseek_v4_flash` | `deepseek-ai/DeepSeek-V4-Flash` | 8f9f37ca37fd | certified (Gigatoken) | certified (prebuilt) | no evidence |
+| `deepseek_v4_flash` | `deepseek-ai/DeepSeek-V4-Flash` | 8f9f37ca37fd | certified (Gigatoken) | certified (prebuilt) | not admitted (evidence pending) |
 | `gpt_oss_120b` | `openai/gpt-oss-120b` | 0614fe83cada | certified (Gigatoken) | certified (prebuilt) | certified (python) |
-| `glm_5_2` | `zai-org/GLM-5.2` | 19e773648cb4 | certified (Gigatoken) | certified (prebuilt) | no evidence |
-| `minimax_m3` | `MiniMaxAI/MiniMax-M3` | bb1f1626cf01 | certified (Gigatoken) | certified (prebuilt) | certified (python) |
-| `ministral_3_8b` | `mistralai/Ministral-3-8B-Instruct-2512-BF16` | d5f6046775b1 | certified (Gigatoken) | certified (prebuilt) | no evidence |
-| `nemotron_3_nano_4b` | `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` | 623c34567aeb | certified (Gigatoken) | certified (prebuilt) | no evidence |
-| `olmo_3_7b` | `allenai/Olmo-3-1025-7B` | 73fd5254624f | certified (Gigatoken) | certified (prebuilt) | no evidence |
+| `glm_5_2` | `zai-org/GLM-5.2` | 19e773648cb4 | certified (Gigatoken) | certified (prebuilt) | not admitted (evidence pending) |
+| `minimax_m3` | `MiniMaxAI/MiniMax-M3` | bb1f1626cf01 | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
+| `ministral_3_8b` | `mistralai/Ministral-3-8B-Instruct-2512-BF16` | d5f6046775b1 | certified (Gigatoken) | certified (prebuilt) | not admitted (evidence pending) |
+| `nemotron_3_nano_4b` | `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` | 623c34567aeb | certified (Gigatoken) | certified (prebuilt) | not admitted (evidence pending) |
+| `olmo_3_7b` | `allenai/Olmo-3-1025-7B` | 73fd5254624f | certified (Gigatoken) | certified (prebuilt) | not admitted (evidence pending) |
 | `hy3` | `tencent/Hy3` | 446e0b59cd94 | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
 | `kimi_k3` | `moonshotai/Kimi-K3` | 773c2476259d | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
 | `ling_3_0_flash` | `inclusionAI/Ling-3.0-flash` | 40fb9d7d7795 | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
 | `laguna_s_2_1` | `poolside/Laguna-S-2.1` | 809240f7a182 | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
-<!-- TODO(fill): set the Chunked cuts column from the shipped routing/tables/chunked_admission.v1.json (rows and their paths); the values above follow the first version of that table, six artifacts on the Python path. -->
+<!-- TODO(fill): set the Chunked cuts column again from the shipped routing/tables/chunked_admission.v1.json once the release campaign readings are entered; the values above follow the table as it stands before that campaign (four certified on the Python path, two with adversarial evidence only, five without a row). -->
 
 Pinned upstream revisions are recorded per row as
 `support.repo_revision.{family}` in the generated table; the package verifies
@@ -240,11 +246,17 @@ the evidence in `evidence/evidence_manifest_chunked_cuts.json` and
 means the table's row covers both the Python path and the native chunk
 encoder, and `certified (python)` means it covers the Python path only;
 `chunked.encode` then takes the Python path by default, and asking for
-the native one raises. `no evidence` means the artifact is on the
-certified repair roster with a normalizer the cut rule reasons about,
-but no row exists yet, so chunked encode runs serially and names the
-refusal `artifact_without_chunked_evidence`. `not admitted` means the
-artifact is not on the repair roster at all. The whole-document routes
+the native one raises. `not admitted (adversarial evidence only)` means
+the table has a row that holds the adversarial battery and not yet the
+corpus cut comparison; such a row is not certified, so chunked encode
+runs serially and names the refusal
+`chunked_evidence_incomplete:adversarial_only` until the corpus
+comparison covers the artifact. `not admitted (evidence pending)` means
+the artifact is on the certified repair roster with a normalizer the cut
+rule reasons about, but no row exists yet, so chunked encode runs
+serially and names the refusal `artifact_without_chunked_evidence`.
+`not admitted` alone means the artifact is not on the repair roster at
+all. The whole-document routes
 in the other columns do not depend on this one; see
 [Certified chunk cuts](#certified-chunk-cuts).
 

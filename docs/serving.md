@@ -113,13 +113,18 @@ What decides whether it is worth it:
   input text (`normalized: false`), which are the normalizer shapes the
   cut rule reasons about. And the chunked admission table that ships
   with the package, `toktier/routing/tables/chunked_admission.v1.json`,
-  has a row for the artifact. That table is generated from the
-  chunked-path evidence, and each row names the paths the evidence
-  covers (`python`, `native`); `docs/support-matrix.md` shows it as the
+  has a certified row for the artifact. That table is generated from the
+  chunked-path evidence; a row is `certified` when it holds both levels
+  of that evidence (the adversarial battery and the corpus cut
+  comparison), and each row names the paths the evidence covers
+  (`python`, `native`); `docs/support-matrix.md` shows it as the
   "Chunked cuts" column. Any other tokenizer is encoded serially, and
   the result says so in `serial_reason` (`R_CHUNK_FAMILY_UNSUPPORTED`;
-  the `chunked` block of `explain()` names the refusal, which for an
-  artifact without a row is `artifact_without_chunked_evidence`).
+  the `chunked` block of `explain()` names the refusal: for the table
+  step, `artifact_without_chunked_evidence` for an artifact without a
+  row, `chunked_evidence_incomplete:<status>` for a row with one level of
+  evidence, and `loader_face_differs_from_chunked_evidence:<digest>` when
+  the loaded face is not the one the row's evidence was taken on).
 - **Normalization.** The cut rule speaks about the text the
   pre-tokenizer sees, which for an NFC family is the normalized text,
   not the input. A letter such as U+0958, which NFC writes as a letter
@@ -172,17 +177,24 @@ What decides whether it is worth it:
 
 Diagnostics. Once `chunked.encode` has served a tokenizer, its
 `explain()` report carries a `chunked` block. It holds the admission
-decision (`admitted`, `refusal`) and the normalizer shape, the number of
-calls and how many of them were cut (`applied`), serial fallbacks by
-reason code (`R_CHUNK_NO_CUT`, `R_CHUNK_FAMILY_UNSUPPORTED`,
-`R_CHUNK_ROUTE_NOT_FAST_CPU`), positions given up, literal and
-normalization rejections, how many calls took the native path
-(`native_calls`), and the last call's facts. These counters live in that
-block and not in the routing ledger's top-level `fallback_counts`,
-because a serial fallback here runs the same certified backend the
-chunks would have used, so nothing fell back between backends
+decision (`admitted`, `refusal`), the `family`, the `normalizer` shape
+and the `literals` count, the admission-table row behind the decision
+(`evidence_id`, `evidence_status`, `evidence_paths`,
+`loader_face_sha256`) and `admission_gate`; the number of calls
+(`calls`), how many of them were cut (`applied`), fell back to a serial
+encode (`serial`) or were encoded whole because one chunk was asked for
+or the text was too short to cut (`below_threshold`), and
+the chunks produced (`chunks_total`); serial fallbacks by reason code
+(`fallback_counts`:
+`R_CHUNK_NO_CUT`, `R_CHUNK_FAMILY_UNSUPPORTED`,
+`R_CHUNK_ROUTE_NOT_FAST_CPU`); positions given up (`cut_misses`);
+literal and normalization rejections (`literal_rejects`,
+`norm_rejects`); how many calls took the native path (`native_calls`);
+and the last call's facts (`last`). These counters live in that block
+and not in the routing ledger's top-level `fallback_counts`, because a
+serial fallback here runs the same certified backend the chunks would
+have used, so nothing fell back between backends
 ([`contracts/routing.md`](contracts/routing.md) Section 5.2).
-<!-- TODO(fill): check the block's key names (applied, and an evidence_id key if one is added) against the merged admission-table commit. -->
 
 Two things the chunked call does not do. It does not consult the store
 (it is a stateless call by construction; use a session for a transcript
@@ -208,7 +220,7 @@ Which path runs is decided per call:
 |---|---|
 | `None` (default) | the native path when the loaded runtime carries it and the admission table lists `native` for the artifact; the Python path otherwise |
 | `False` | the Python path |
-| `True` | the native path; `RuntimeError` when the runtime lacks it or the table does not list `native`, naming which |
+| `True` | the native path; `RuntimeError` when the runtime lacks it, the tokenizer is not admitted, or the table does not list `native`, naming which |
 
 `Tokenizer.encode(text, parallel="auto")`, or `parallel=` a positive
 chunk count, makes the same choice for a stateless core-stream call (no
@@ -219,7 +231,14 @@ text=None)` forks it ahead of the first request, to the Rayon thread
 count when `workers` is omitted, and with a sample `text` runs each new
 worker once so its caches are warm; a serving process should call it at
 start-up. `chunked.admission(tokenizer)` reports the decision for both
-paths, and `ChunkedEncoding.native_facts` carries the per-call facts of
+paths: the admission facts of the `chunked` block above (`admitted`,
+`refusal`, `family`, `normalizer`, `literals`, `evidence_id`,
+`evidence_status`, `evidence_paths`, `loader_face_sha256`,
+`admission_gate`), plus `native_available` (the loaded runtime carries
+the native encoder), `native_by_default` (`native=None` would take it)
+and `native`, the native planner's own admission facts, or `None` with
+`native_unavailable_reason` saying why. `ChunkedEncoding.native_facts`
+carries the per-call facts of
 the native path (how many rows each implementation produced, the plan,
 encode and concatenation times, and the workers forked during the call;
 `None` on the Python path). Two limits are worth knowing. Chunking is a
@@ -231,7 +250,6 @@ the normal route and the result says `R_CHUNK_ROUTE_NOT_FAST_CPU`. And
 inside a process whose Rayon thread count is 1, such as a worker of the
 SGLang adapter's pool at its default setting, the native chunks run one
 after another, exact and not faster.
-<!-- TODO(fill): check the admission() key names and the auto rule against the merged admission-table commit. -->
 
 ## 4. Process shape
 

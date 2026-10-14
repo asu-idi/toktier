@@ -709,8 +709,9 @@ well-formed-but-newer records, in the contract's explicit-verify split.
   rather than a new route. Admission takes three conditions: the
   certified repair roster (family and artifact digest), a normalizer
   shape the rule reasons about (none, the empty sequence, NFC with
-  input-matched added tokens), and a row in the chunked admission table
-  the package ships (`routing/tables/chunked_admission.v1.json`). The cut
+  input-matched added tokens), and a certified row, one with both levels
+  of chunked-path evidence, in the chunked admission table the package
+  ships (`routing/tables/chunked_admission.v1.json`). The cut
   predicate is the session-repair witness's synchronizing-transition
   rule plus an added-token literal guard and, for an NFC family, the
   requirement that the cut also be a certified cut of the normalized
@@ -743,4 +744,3 @@ well-formed-but-newer records, in the contract's explicit-verify split.
   do not move `API_VERSION`. `Session.append_patch` and `SessionPatch`
   are an addition on the frozen track, to be folded into `api.md`
   Section 5.1 at its next revision.
-<!-- TODO(fill): check native=None and the parallel= keyword against the merged code (the auto rule lives in the admission-table commits; Tokenizer._encode_parallel has to pass native=None for the shortcut to follow it). -->

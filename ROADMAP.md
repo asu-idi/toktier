@@ -153,15 +153,15 @@ over the batch path and inside a native chunk encoder, which encodes the
 chunks on its own worker pool and concatenates them before the ids reach
 Python; each call picks the path the admission table allows. Admission
 is the certified repair roster with a normalizer the rule reasons about,
-narrowed to the artifacts that have chunked-path evidence in the
-admission table the package ships. The SGLang adapter can use it for
-long stateless requests, and its worker pool cuts long requests into
-chunk tasks on the same rule.
+narrowed to the artifacts the admission table the package ships
+certifies, which takes both levels of chunked-path evidence. The SGLang
+adapter can use it for long stateless requests, and its worker pool
+cuts long requests into chunk tasks on the same rule.
 
 What remains is registered for a later release:
 
 - chunked-path evidence for every roster artifact the shipped admission
-  table does not yet list;
+  table does not yet certify;
 - a patch-shaped native return for session appends, behind the
   `Session.append_patch` surface shipped in 0.3.0;
 - a pool entry point outside SGLang, and chunk-parallel encode on the
@@ -174,7 +174,7 @@ What remains is registered for a later release:
   encoder's pool already has; and per-chunk guard judgement inside a
   plain `encode`, so that an unchunked request only pays reference speed
   for the passage that tripped a guard.
-<!-- TODO(fill): drop the first item if the shipped admission table lists every roster artifact. -->
+<!-- TODO(fill): drop the first item if the shipped admission table certifies every roster artifact. -->
 
 ## Routing large session deltas to the GPU
 

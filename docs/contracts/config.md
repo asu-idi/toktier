@@ -71,8 +71,10 @@ worker pool by the `TOKTIER_SGLANG_SCHED_*` names. Only the adapter
 reads them, once, when its configuration is built, and it passes the
 pool its settings as a mapping. They are outside the frozen set above
 and, like the adapter, provisional in 0.x; the facade and the `Config`
-object never read them.
-<!-- TODO(fill): confirm "passes the pool its settings as a mapping" against the merged SGLang compatibility commits (SchedulerConfig.from_env without an environment fallback). -->
+object never read them. None of these variables can turn off a check
+that guards the returned ids: the adapter's identity check is always
+on, and a value of `TOKTIER_SGLANG_IDENTITY` other than `require` is
+refused rather than ignored.
 
 Layer scope: this table is the Python product's configuration surface. The
 `toktier` Rust crate is configured through `RuntimeBuilder`, and since 0.2.4

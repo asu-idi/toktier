@@ -225,6 +225,24 @@ fn err_to_py(py: Python<'_>, err: StoreError) -> PyErr {
         StoreError::Engine(msg) => PyRuntimeError::new_err(format!("encoder error: {msg}")),
         StoreError::Internal(_) => PyRuntimeError::new_err(err.to_string()),
         _ => {
+            // The `details` keys `docs/contracts/errors.md` lists, where
+            // the variant carries the value: the three shapes of a record
+            // this reader cannot decode, and the failure of a corrupt one
+            // (the Python record reader names the same keys).
+            let recorded = match &err {
+                StoreError::UnsupportedFormatVersion(version) => {
+                    details.set_item("format_version", *version)
+                }
+                StoreError::UnknownMandatoryFlags(bits) => details.set_item("flags", *bits),
+                StoreError::UnknownWitnessCategory(category) => {
+                    details.set_item("witness_category", *category)
+                }
+                _ if err.code() == "STORE_CORRUPT" => details.set_item("failure", err.message()),
+                _ => Ok(()),
+            };
+            if let Err(item_err) = recorded {
+                return item_err;
+            }
             let class = match err.code() {
                 "STORE_CORRUPT" => &classes.store_corrupt,
                 "STORE_FORMAT_UNSUPPORTED" => &classes.store_format_unsupported,
@@ -1081,17 +1099,32 @@ struct PyNativeRuntime {
 
 fn entry_open_err(py: Python<'_>, error: EntryStoreOpenError) -> PyErr {
     match error {
-        EntryStoreOpenError::StateMismatch(message) => {
+        EntryStoreOpenError::StateMismatch {
+            message,
+            expected_fingerprint,
+            stored_fingerprint,
+        } => {
             let classes = match error_classes(py) {
                 Ok(classes) => classes,
                 Err(error) => return error,
             };
-            structured(
-                py,
-                &classes.session_state_mismatch,
-                &message,
-                &PyDict::new(py),
-            )
+            // The two keys `docs/contracts/errors.md` lists for this
+            // code, under the names the Python store uses. A refusal
+            // that stopped before comparing fingerprints carries
+            // neither, as the Python store's does.
+            let details = PyDict::new(py);
+            for (key, value) in [
+                ("expected_fingerprint", expected_fingerprint),
+                ("stored_fingerprint", stored_fingerprint),
+            ] {
+                let Some(value) = value else {
+                    continue;
+                };
+                if let Err(item_err) = details.set_item(key, value) {
+                    return item_err;
+                }
+            }
+            structured(py, &classes.session_state_mismatch, &message, &details)
         }
         EntryStoreOpenError::Store(error) => err_to_py(py, error),
         EntryStoreOpenError::Io(error) => PyRuntimeError::new_err(error.to_string()),

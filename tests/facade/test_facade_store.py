@@ -155,6 +155,44 @@ def test_store_written_under_another_fingerprint_is_refused(
         tokenizer.encode("hello", session="s")
     assert caught.value.code == "SESSION_STATE_MISMATCH"
 
+    # The refusal names both fingerprints, the two `details` keys the
+    # errors contract lists for this code: the one the store was written
+    # under, and the one the opener would have written. The second is
+    # read back from a store the same tokenizer opens fresh, so the
+    # assertion does not depend on which layer computed it.
+    details = dict(caught.value.details)
+    stored = json.loads((store_dir / "meta.json").read_text())["fingerprint"]
+    fresh_dir = rig.store_path("fresh")
+    other.tokenizer(store=fresh_dir).encode("hello", session="s")
+    expected = json.loads((fresh_dir / "meta.json").read_text())["fingerprint"]
+    assert stored != expected
+    assert details == {
+        "expected_fingerprint": expected,
+        "stored_fingerprint": stored,
+    }
+
+
+def test_python_store_refusal_names_both_fingerprints(
+    rig: Rig, span_reference: SpanEncode
+) -> None:
+    """The Python store gives the same two keys as the native one."""
+    directory = rig.store_path()
+    directory.mkdir()
+    stored = "ab" * 32
+    (directory / "meta.json").write_text(
+        json.dumps({"format": 1, "fingerprint": stored})
+    )
+    with pytest.raises(SessionStateMismatch) as caught:
+        EntryStore(
+            fingerprint=TEST_FINGERPRINT,
+            encode=span_reference,
+            directory=directory,
+        )
+    assert dict(caught.value.details) == {
+        "expected_fingerprint": TEST_FINGERPRINT.hex(),
+        "stored_fingerprint": stored,
+    }
+
 
 def test_unknown_store_meta_format_is_refused(
     rig: Rig, span_reference: SpanEncode

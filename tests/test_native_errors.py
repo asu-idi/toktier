@@ -121,6 +121,51 @@ def test_native_corruption_failure_is_public_with_read_only_details(
         cast(MutableMapping[str, object], error.details)["attempted_mutation"] = True
 
 
+def test_native_record_refusals_carry_the_contract_details(
+    native_module: ModuleType,
+) -> None:
+    """The ``details`` keys the errors contract lists cross the boundary.
+
+    ``STORE_FORMAT_UNSUPPORTED`` names the field the reader does not
+    know (``format_version``, ``flags`` or ``witness_category``) and
+    ``STORE_CORRUPT`` names its ``failure``, as the Python record reader
+    does. Each refusal below edits one header field of a record the
+    store exported itself.
+    """
+    from toktier import errors
+
+    engine = native_module.CallbackEncoder(0, _encode)
+    store = native_module.SessionStore()
+    key = store.register_fingerprint(b"\x44" * 32, 0)
+    handle, _revision, _token_count = store.put(key, "hello world", engine)
+    record = bytes(store.export_session(handle))
+
+    def refused(offset: int, value: bytes) -> errors.ToktierError:
+        edited = bytearray(record)
+        edited[offset : offset + len(value)] = value
+        with pytest.raises(errors.ToktierError) as caught:
+            store.import_session(key, bytes(edited), engine)
+        return cast(errors.ToktierError, caught.value)
+
+    newer = refused(8, (2).to_bytes(2, "little"))
+    assert isinstance(newer, errors.StoreFormatUnsupported)
+    assert dict(newer.details) == {"format_version": 2}
+
+    flagged = refused(12, (1).to_bytes(4, "little"))
+    assert isinstance(flagged, errors.StoreFormatUnsupported)
+    assert dict(flagged.details) == {"flags": 1}
+
+    unassigned = refused(18, (0x00FF).to_bytes(2, "little"))
+    assert isinstance(unassigned, errors.StoreFormatUnsupported)
+    assert dict(unassigned.details) == {"witness_category": 0x00FF}
+
+    corrupt = refused(len(record) - 1, bytes([record[-1] ^ 0x01]))
+    assert isinstance(corrupt, errors.StoreCorrupt)
+    assert set(corrupt.details) == {"failure"}
+    failure = corrupt.details["failure"]
+    assert isinstance(failure, str) and str(corrupt).endswith(failure)
+
+
 def test_native_reexports_are_the_public_error_classes(
     native_module: ModuleType,
 ) -> None:

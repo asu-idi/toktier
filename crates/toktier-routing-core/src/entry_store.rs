@@ -60,15 +60,41 @@ pub struct EntryStoreStats {
 
 #[derive(Debug)]
 pub enum EntryStoreOpenError {
-    StateMismatch(String),
+    /// The directory holds state this store does not open: its metadata
+    /// cannot be read, names a format this reader does not know, or was
+    /// written under a different semantic fingerprint.
+    ///
+    /// The two fingerprints are lowercase hex, the spelling the metadata
+    /// file uses. A refusal that compared fingerprints carries both; one
+    /// that stopped before the comparison carries neither, so a `None`
+    /// never stands for a fingerprint that was read and then dropped.
+    /// They are the `expected_fingerprint` and `stored_fingerprint`
+    /// details that `docs/contracts/errors.md` lists for
+    /// `SESSION_STATE_MISMATCH`.
+    StateMismatch {
+        message: String,
+        expected_fingerprint: Option<String>,
+        stored_fingerprint: Option<String>,
+    },
     Io(std::io::Error),
     Store(StoreError),
+}
+
+impl EntryStoreOpenError {
+    /// A refusal that names no fingerprint pair.
+    fn state(message: impl Into<String>) -> Self {
+        Self::StateMismatch {
+            message: message.into(),
+            expected_fingerprint: None,
+            stored_fingerprint: None,
+        }
+    }
 }
 
 impl std::fmt::Display for EntryStoreOpenError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::StateMismatch(message) => formatter.write_str(message),
+            Self::StateMismatch { message, .. } => formatter.write_str(message),
             Self::Io(error) => error.fmt(formatter),
             Self::Store(error) => error.fmt(formatter),
         }
@@ -222,25 +248,29 @@ impl NativeEntryStore {
                 format: META_FORMAT,
                 fingerprint: hex(&self.fingerprint),
             })
-            .map_err(|error| EntryStoreOpenError::StateMismatch(error.to_string()))?;
+            .map_err(|error| EntryStoreOpenError::state(error.to_string()))?;
             atomic_write(&meta_path, &payload)?;
         } else {
             let payload: MetaPayload =
                 serde_json::from_slice(&fs::read(&meta_path)?).map_err(|error| {
-                    EntryStoreOpenError::StateMismatch(format!(
+                    EntryStoreOpenError::state(format!(
                         "the store's metadata file cannot be read: {error}"
                     ))
                 })?;
             if payload.format != META_FORMAT {
-                return Err(EntryStoreOpenError::StateMismatch(format!(
+                return Err(EntryStoreOpenError::state(format!(
                     "the store metadata names unsupported format {}",
                     payload.format
                 )));
             }
-            if payload.fingerprint != hex(&self.fingerprint) {
-                return Err(EntryStoreOpenError::StateMismatch(
-                    "the store was written under a different semantic fingerprint".to_owned(),
-                ));
+            let expected = hex(&self.fingerprint);
+            if payload.fingerprint != expected {
+                return Err(EntryStoreOpenError::StateMismatch {
+                    message: "the store was written under a different semantic fingerprint"
+                        .to_owned(),
+                    expected_fingerprint: Some(expected),
+                    stored_fingerprint: Some(payload.fingerprint),
+                });
             }
         }
         ensure_private_dir(&directory.join(ENTRIES_DIR))?;
@@ -1065,6 +1095,63 @@ mod tests {
         assert_eq!(reopened.encode_session("chat", "aaaaaa"), Some(vec![0; 6]));
         assert_eq!(reopened.stats().session_hits, 1);
         assert_eq!(reopened.resident_bytes(), 0);
+    }
+
+    /// `docs/contracts/errors.md` lists `expected_fingerprint` and
+    /// `stored_fingerprint` for this refusal; the binding layer copies
+    /// them into the exception's `details`, so both are carried here.
+    #[test]
+    fn a_store_written_under_another_fingerprint_names_both_fingerprints() {
+        let directory = tempfile::tempdir().unwrap();
+        drop(
+            NativeEntryStore::open([7; 32], router(), Some(directory.path().to_owned()), 0, 0)
+                .unwrap(),
+        );
+
+        let error =
+            NativeEntryStore::open([8; 32], router(), Some(directory.path().to_owned()), 0, 0)
+                .unwrap_err();
+        match error {
+            EntryStoreOpenError::StateMismatch {
+                message,
+                expected_fingerprint,
+                stored_fingerprint,
+            } => {
+                assert_eq!(
+                    message,
+                    "the store was written under a different semantic fingerprint"
+                );
+                assert_eq!(expected_fingerprint, Some("08".repeat(32)));
+                assert_eq!(stored_fingerprint, Some("07".repeat(32)));
+            }
+            other => panic!("expected a state mismatch, got {other}"),
+        }
+    }
+
+    /// A refusal that stops before comparing fingerprints names none,
+    /// rather than an expected fingerprint beside a missing stored one.
+    #[test]
+    fn an_unreadable_metadata_file_names_no_fingerprint() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::write(directory.path().join(META_NAME), b"not json").unwrap();
+
+        let error =
+            NativeEntryStore::open([7; 32], router(), Some(directory.path().to_owned()), 0, 0)
+                .unwrap_err();
+        assert!(
+            matches!(
+                &error,
+                EntryStoreOpenError::StateMismatch {
+                    expected_fingerprint: None,
+                    stored_fingerprint: None,
+                    ..
+                }
+            ),
+            "{error:?}"
+        );
+        assert!(error
+            .to_string()
+            .starts_with("the store's metadata file cannot be read"));
     }
 
     /// A revision read is a fact about the store, not about how much of

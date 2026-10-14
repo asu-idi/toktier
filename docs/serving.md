@@ -111,9 +111,13 @@ What decides whether it is worth it:
   was certified on). Its loader face carries no normalizer, the empty
   normalizer sequence, or NFC with every added token matched on the
   input text (`normalized: false`), which are the normalizer shapes the
-  cut rule reasons about. And the chunked admission table that ships
-  with the package, `toktier/routing/tables/chunked_admission.v1.json`,
-  has a certified row for the artifact. That table is generated from the
+  cut rule reasons about, and none of its added tokens sets `lstrip`,
+  `rstrip` or `single_word`, under which the reference matches a literal
+  together with its neighbourhood (refusal
+  `added_token_strip_or_single_word`). And the chunked admission table
+  that ships with the package,
+  `toktier/routing/tables/chunked_admission.v1.json`, has a certified row
+  for the artifact. That table is generated from the
   chunked-path evidence; a row is `certified` when it holds both levels
   of that evidence (the adversarial battery and the corpus cut
   comparison), and each row names the paths the evidence covers
@@ -123,8 +127,12 @@ What decides whether it is worth it:
   the `chunked` block of `explain()` names the refusal: for the table
   step, `artifact_without_chunked_evidence` for an artifact without a
   row, `chunked_evidence_incomplete:<status>` for a row with one level of
-  evidence, and `loader_face_differs_from_chunked_evidence:<digest>` when
-  the loaded face is not the one the row's evidence was taken on).
+  evidence, `oracle_differs_from_chunked_evidence:<version>` when the
+  facade's probe finds the installed oracle outside the set the
+  artifact's record was judged with (the plan then reports
+  `R_ORACLE_MISMATCH`), and
+  `loader_face_differs_from_chunked_evidence:<digest>` when the loaded
+  face is not the one the row's evidence was taken on).
 - **Normalization.** The cut rule speaks about the text the
   pre-tokenizer sees, which for an NFC family is the normalized text,
   not the input. A letter such as U+0958, which NFC writes as a letter
@@ -218,7 +226,7 @@ Which path runs is decided per call:
 
 | `native=` | What runs |
 |---|---|
-| `None` (default) | the native path when the loaded runtime carries it and the admission table lists `native` for the artifact; the Python path otherwise |
+| `None` (default) | the native path when it can run here (the loaded runtime carries it and the route carries the corrected CPU engine) and the admission table lists `native` for the artifact; the Python path otherwise |
 | `False` | the Python path |
 | `True` | the native path; `RuntimeError` when the runtime lacks it, the tokenizer is not admitted, or the table does not list `native`, naming which |
 
@@ -234,8 +242,9 @@ start-up. `chunked.admission(tokenizer)` reports the decision for both
 paths: the admission facts of the `chunked` block above (`admitted`,
 `refusal`, `family`, `normalizer`, `literals`, `evidence_id`,
 `evidence_status`, `evidence_paths`, `loader_face_sha256`,
-`admission_gate`), plus `native_available` (the loaded runtime carries
-the native encoder), `native_by_default` (`native=None` would take it)
+`admission_gate`), plus `native_available` (the native encoder can run
+for this tokenizer: the loaded runtime carries it and the route carries
+the corrected CPU engine), `native_by_default` (`native=None` would take it)
 and `native`, the native planner's own admission facts, or `None` with
 `native_unavailable_reason` saying why. `ChunkedEncoding.native_facts`
 carries the per-call facts of
@@ -244,9 +253,10 @@ encode and concatenation times, and the workers forked during the call;
 `None` on the Python path). Two limits are worth knowing. Chunking is a
 CPU-route feature: when the native path is asked for an input whose
 route does not start at the corrected CPU engine (a plan with a GPU at
-its head, for an input at or above the GPU crossover, or a route
-without the corrected CPU engine), the input is encoded serially through
-the normal route and the result says `R_CHUNK_ROUTE_NOT_FAST_CPU`. And
+its head, for an input at or above the GPU crossover, or, through
+`native=True`, a route without the corrected CPU engine, where
+`native=None` takes the Python path), the input is encoded serially
+through the normal route and the result says `R_CHUNK_ROUTE_NOT_FAST_CPU`. And
 inside a process whose Rayon thread count is 1, such as a worker of the
 SGLang adapter's pool at its default setting, the native chunks run one
 after another, exact and not faster.

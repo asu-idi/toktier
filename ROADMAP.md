@@ -151,7 +151,9 @@ construction, and an input in which no certified cut exists is encoded
 serially with the reason named. The same plan runs as a Python helper
 over the batch path and inside a native chunk encoder, which encodes the
 chunks on its own worker pool and concatenates them before the ids reach
-Python; each call picks the path the admission table allows. Admission
+Python; each call picks the path the admission table allows. The Rust
+`toktier` crate reaches the native encoder through `Tokenizer::chunked()`
+under the same table. Admission
 is the certified repair roster with a normalizer the rule reasons about,
 narrowed to the artifacts the admission table the package ships
 certifies, which takes both levels of chunked-path evidence. The SGLang
@@ -164,8 +166,7 @@ What remains is registered for a later release:
   table does not yet certify;
 - a patch-shaped native return for session appends, behind the
   `Session.append_patch` surface shipped in 0.3.0;
-- a pool entry point outside SGLang, and chunk-parallel encode on the
-  Rust `toktier` crate;
+- a pool entry point outside SGLang;
 - a second cut mode at the edges of special-token strings;
 - a bytes entry point with UTF-8 validation outside the GIL;
 - for the batch path's own workers, forking and warming at construction,

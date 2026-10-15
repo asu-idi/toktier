@@ -220,7 +220,9 @@ for one chunk and returned, so concurrent callers do not share a prefix
 of the pool, and the pool size does not depend on the chunk count. Each
 chunk still passes the engine's guarded full-encode gate, so a chunk
 that holds an added-token literal or trips a guard is encoded by the
-reference on its own.
+reference on its own. The Rust `toktier` crate reaches the same encoder
+through `Tokenizer::chunked()`, under the same admission table and with
+the same refusal vocabulary ([`rust-api.md`](rust-api.md)).
 
 Which path runs is decided per call:
 

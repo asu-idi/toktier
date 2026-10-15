@@ -425,7 +425,12 @@ accelerated route would have produced -- what is lost is the acceleration, not
 the answer. An explicit `Device::Cuda` request says so with
 `UNCERTIFIED_RUNTIME` rather than running uncertified. `Policy::Experimental`
 can opt such a build into an accelerated candidate, and every result stays
-labelled experimental.
+labelled experimental. Since 0.3.0 that includes the fast CPU route: under
+`Policy::Experimental` the engine's source binding in the registry is not a
+condition of admission, the way the Python facade's experimental policy
+waives `R_ENGINE_BINDING_MISMATCH`, so a build whose engine sources the
+registry does not record can still run the engine, labelled experimental;
+the artifact's row and its status are not waived.
 
 Two paths lead back to `verified`, on either reading, and `doctor()` prints
 the first one:
@@ -739,12 +744,108 @@ does not claim that a CUDA launch or committed SQLite transaction was rolled
 back. Timings report queue, engine, durable-store, and result-view
 materialization separately.
 
-Chunk-parallel encode of one long request (`toktier.chunked`,
-[`serving.md`](serving.md) Section 3) is reachable from the Python facade
-in this release and not from the `toktier` crate; a Rust entry point is
-registered for a later release. The native chunk encoder itself lives in
-the internal `toktier-routing-core` crate, whose exports carry no
-stability promise of their own (`docs/contracts/versioning.md`).
+## Chunk-parallel encode of one long request
+
+A single encode runs on one core. `Tokenizer::chunked()` is the Rust
+face of `toktier.chunked` ([`serving.md`](serving.md) Section 3): it
+cuts a long request at certified stable boundaries, encodes the chunks
+in parallel on the corrected CPU engine's worker pool, and concatenates
+the id rows. The native chunk encoder itself lives in the internal
+`toktier-routing-core` crate; this surface is a wrapper over it, and the
+plan it makes is the one the Python module's native path makes,
+position for position, under the same chunk-count table.
+
+```rust,no_run
+# use toktier::Runtime;
+use toktier::chunked::ChunkOptions;
+# let tok = Runtime::builder().build()?.load("qwen3_8b")?;
+# let text = String::new();
+let chunked = tok.chunked();
+let admission = chunked.admission()?;          // decided once per tokenizer
+let encoded = chunked.encode(&text, &ChunkOptions::default())?;
+assert_eq!(encoded.ids(), tok.encode(&text)?.ids());
+let plan = chunked.plan(&text, &ChunkOptions::default().k(8))?;
+let stats = chunked.stats();
+# let _ = (admission, plan, stats);
+# Ok::<(), toktier::Error>(())
+```
+
+The ids equal the serial encode of the same route by construction, and
+`ChunkedEncoding` says how they were produced: `chunks`, `cuts`, the
+three reject counters, `serial_reason` when the document was encoded
+serially instead (`ReasonCode::ChunkNoCut`, `ChunkFamilyUnsupported` or
+`ChunkRouteNotFastCpu`, the three `R_CHUNK_*` codes of
+`docs/contracts/routing.md` Section 5.2 as named variants), the rows
+each implementation produced (`sources`), the phase timings and the
+label of the route (`certification`). `ChunkOptions` carries the keyword
+arguments of `toktier.chunked.encode`: `k` (`None` reads the chunk
+table, `chunked::default_chunks`), `min_chunk` and `scan_budget`; a zero
+for either bound is `INVALID_ARGUMENT`.
+
+**Admission.** `admission()` reads four things in order and reports
+them, with the refusal in the vocabulary the Python facade's
+`chunked.admission(tokenizer)["refusal"]` uses: the certified repair
+roster (`artifact_not_in_certified_repair_roster`); the native
+encoder's structural rule over the artifact file this crate executes,
+a normalizer shape the rule reasons about and no added token with a
+strip or single-word flag (`normalizer_not_supported[:<type>]`,
+`nfc_with_normalized_added_tokens`, `added_token_strip_or_single_word`);
+the chunked admission table that ships with the crate
+(`data/src/toktier/routing/tables/chunked_admission.v1.json`, the same
+file the Python package ships, read for the **native** path:
+`artifact_without_chunked_evidence`, `chunked_evidence_incomplete:<status>`
+with the status the row's native levels spell,
+`loader_face_differs_from_chunked_evidence:<digest>` when the row's
+readings were taken on a loader face other than the artifact file); and
+whether the admitted route carries the corrected CPU engine
+(`cpu_route`), reported beside the refusal rather than as one. A refused
+tokenizer is encoded serially on the plain route under
+`ChunkFamilyUnsupported`, and `plan()` says why with
+`UNCERTIFIED_TOKENIZER`; a route without the engine encodes serially
+under `ChunkRouteNotFastCpu`. The one step of the Python face with no
+counterpart here is the installed-reference check: on this crate the
+embedded reference is judged at build time against its certified
+reference versions, and a build that resolves another version has no
+corrected CPU route at all.
+
+In this release the shipped table records the adversarial battery alone
+for the native path on every roster artifact, so under the default
+policy every family answers `chunked_evidence_incomplete:adversarial_only`
+and is encoded serially, which is the answer
+`toktier.chunked.encode(..., native=True)` gives for the same artifacts;
+the corpus cut comparison for the native path is registered with the
+campaign that produces it, and a table that records it opens this
+surface without a code change. `Policy::Experimental` lifts the table
+step, the way the campaign tool lifts it to collect the evidence a row
+is made of; `admission().gate` says when that happened and every result
+is labelled `Certification::Experimental` like the rest of the route.
+
+**Threads and workers.** The chunks are encoded by corrected-CPU workers
+forked from the engine on first use and kept on a free list;
+`warm(workers, text)` forks them ahead of the first request (the Rayon
+thread count when `workers` is `None`), and `stats().workers` counts
+them. The chunk encodes run as one parallel iteration on the
+process-wide Rayon pool the batch path and the Python native path
+already share, sized by `RAYON_NUM_THREADS` or the CPU count, so one
+setting governs every parallel section of the process and nothing is
+spawned per request. A host that wants the chunks on a pool of its own
+runs the call inside that pool's `install`, which is the documented
+contract of `rayon::ThreadPool::install`; this crate takes no `rayon`
+edge of its own for it. With one thread the chunks run one after
+another and stay exact.
+
+**Counters.** `stats()` keeps what `toktier.chunked.stats(tokenizer)`
+keeps: calls, applied, serial and below-threshold calls, rows run, the
+three reject totals, and `fallback_counts` by `R_*` code. They are this
+surface's own; the per-row executions are counted in the router's
+ledger as on the Python native path.
+
+`cargo run --release -p toktier --example chunked` loads one family,
+reports its admission, plans and encodes a long text both ways and
+checks the ids; `--json` prints the same facts for a control plane, and
+`--docs <file.jsonl>` runs every document of a file in one process. The
+Python test `tests/test_chunked_rust.py` runs it and compares the
+answers with `toktier.chunked` on the same artifacts and text.
 
 ## Threading, errors, and features
 
@@ -776,18 +877,21 @@ reference-engine load). The `serde` feature serializes typed plans, execution
 facts, doctor facts, and store statistics.
 
 **`#[non_exhaustive]` is the crate's default for a public type that
-describes an answer.** Twenty of them carry it, and the reason is the same
-one the code table below states for `ErrorCode`: what this crate can
-observe grows, so a downstream that enumerates today's answers should keep
-compiling when a release names one more. Nine are enums, and a `match` on
-any of them needs a catch-all arm -- `ErrorCode`, `Policy`, `Device`,
-`GpuDelivery`, `Backend`, `ReasonCode`, `Certification`,
-`DeviceFailurePolicy` and `ArtifactSource`. Eleven are structs, and they
-are read field by field rather than built with a literal or destructured
-exhaustively -- `RoutePlan`, `ExecutionFacts`, `DoctorFacts`,
-`RuntimeBuildFacts`, `BehaviorVersion`, `CudaFacts`, `StoreStats`,
-`ServingTimings`, `ArtifactInspection`, `BundleInspection` and
-`BundleFileInspection`. A field or variant added to one of these is a
+describes an answer.** Twenty-eight of them carry it, and the reason is
+the same one the code table below states for `ErrorCode`: what this
+crate can observe grows, so a downstream that enumerates today's answers
+should keep compiling when a release names one more. Ten are enums, and
+a `match` on any of them needs a catch-all arm -- `ErrorCode`, `Policy`,
+`Device`, `GpuDelivery`, `Backend`, `ReasonCode`, `Certification`,
+`DeviceFailurePolicy`, `ArtifactSource` and `chunked::AdmissionGate`.
+Eighteen are structs, and they are read field by field rather than
+built with a literal or destructured exhaustively -- `RoutePlan`,
+`ExecutionFacts`, `DoctorFacts`, `RuntimeBuildFacts`, `BehaviorVersion`,
+`ReferenceVersion`, `CudaFacts`, `StoreStats`, `ServingTimings`,
+`ArtifactInspection`, `BundleInspection`, `BundleFileInspection` and,
+under `chunked`, `ChunkOptions` (built from `Default` and its setters),
+`ChunkPlan`, `RowSources`, `ChunkedEncoding`, `Admission` and
+`ChunkedStats`. A field or variant added to one of these is a
 minor-release change; removing or re-meaning one is not.
 
 ### `ErrorCode` on the Rust surface
@@ -896,6 +1000,7 @@ refuse with `UncertifiedRuntime`.
 - `cargo run --release -p toktier --all-features --example native_jit`
 - `cargo run --release -p toktier --example correctness_campaign`
 - `cargo run --release -p toktier --example rust_api_bench`
+- `cargo run --release -p toktier --example chunked`
 
 The `toktier-rust` binary exposes `doctor`, artifact lifecycle operations, and
 direct JIT compilation without importing Python. Run `toktier-rust` without

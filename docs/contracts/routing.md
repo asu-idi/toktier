@@ -186,8 +186,11 @@ behind that one execution, as `toktier::ReasonCode`. It is the code the
 router recorded for the input, not a second reading of the path string,
 so the two cannot come to disagree. `R_INPUT_ADDED_TOKEN`,
 `R_INPUT_BELOW_GPU_THRESHOLD`, `R_INPUT_GUARD_ROUTED`, `R_EXEC_FAULT`,
-`R_INPUT_POSTPROCESS_ROUTED`, `R_SESSION_NO_SAFE_CUT` and, from 0.2.7,
-`R_INVALID_PRIOR_STATE` have named variants; a code without one arrives
+`R_INPUT_POSTPROCESS_ROUTED`, `R_SESSION_NO_SAFE_CUT`, from 0.2.7
+`R_INVALID_PRIOR_STATE` and, from 0.3.0, the three `R_CHUNK_*` codes
+(`ChunkNoCut`, `ChunkFamilyUnsupported`, `ChunkRouteNotFastCpu`, which
+`toktier::chunked::ChunkedEncoding::serial_reason` carries) have named
+variants; a code without one arrives
 as `ReasonCode::Other` carrying the code itself, which is how Section 5.4
 asks consumers to treat it. `ReasonCode::Other` carries a code from this
 namespace and nothing else: a Rust session used to report
@@ -211,7 +214,7 @@ this, and it is append-only on the same terms as Section 5.4:
 | `RuntimeBuildUncertified` | This build's own source identity is not in the shipped `runtime_builds` register, or one of this project's own crates resolves from another copy or version than the judged one (`core_closure: mismatched`), so no accelerated route is admitted whatever the artifact is. Since 0.3.0 neither a rustc or feature recipe no campaign judged nor a reference library outside its certified reference versions is recorded here under any policy: a build from judged sources admits the fast CPU route and labels it `Supported`, with `reference_certification_reason: uncertified_reference` in `doctor` for the second case. There is no Python code for it: the Python facade does not certify a Rust build. |
 | `GpuUnavailable` | A GPU route was wanted and the runtime could not offer one here: no `prebuilt-gpu` feature in this build, or the GPU runtime failed to open on this machine. The nearest Python codes are `R_BACKEND_UNAVAILABLE` and `R_GPU_DISABLED`. |
 | `GpuUncertified` | A GPU route was wanted, and either this build is not certified for one or the artifact has no eligible GPU identity. The nearest Python codes are `R_UNCERTIFIED_ARTIFACT` and `R_SM_UNCERTIFIED`. |
-| `CpuUncertified` | The fast CPU route was refused: the artifact has no certified repair row, or the engine's status, artifact or source binding does not match the registry. Since 0.3.0 the compiler is not part of this refusal; a compiler no campaign used decides the route's label, not its admission. The nearest Python code is `R_ENGINE_BINDING_MISMATCH`. |
+| `CpuUncertified` | The fast CPU route was refused: the artifact has no certified repair row, or the engine's status, artifact or source binding does not match the registry. Since 0.3.0 the compiler is not part of this refusal; a compiler no campaign used decides the route's label, not its admission. Under `Policy::Experimental` the source binding is not part of it either (since 0.3.0), as the Python facade's experimental policy waives `R_ENGINE_BINDING_MISMATCH`, and the route is labelled experimental. The nearest Python code is `R_ENGINE_BINDING_MISMATCH`. |
 
 One of the five has no Python counterpart at all, which is why the set is
 named here rather than folded into Section 5.1: a Rust build certifies

@@ -21,7 +21,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -36,6 +36,7 @@ from registry_common import (  # noqa: E402
     REGISTRY_DOMAIN_TAG,
     GenerationError,
     root_digest,
+    serialise_document,
 )
 
 VERSION = "0.23.3"
@@ -43,7 +44,7 @@ IDENTITIES = {"fast_cpu_v2": "f" * 64, "native_host_v2": "e" * 64}
 
 
 def _read(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
 
 
 def build_tree(tmp_path: Path) -> Path:
@@ -207,7 +208,7 @@ def test_check_reports_a_reading_outside_the_set_and_a_set_without_evidence(
     registry = _read(tool.registry_path(root))
     widened = tool.widened_document(copy.deepcopy(registry), [VERSION])
     for path in (tool.registry_path(root), tool.packaged_path(root)):
-        path.write_bytes(tool.serialise_document(widened))
+        path.write_bytes(serialise_document(widened))
     problems = tool.check_problems(root, IDENTITIES)
     assert sum("compatibility reading is missing" in p for p in problems) == 1 + len(
         tool.GPU_ARCHITECTURES

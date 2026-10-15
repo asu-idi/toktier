@@ -446,8 +446,9 @@ toktier's ranges, so `pip check` has nothing to report about toktier in
 either environment. The two pairs do not mix: `transformers` 4.57.6 and
 5.12.1 declare `tokenizers<=0.23.0`, and 5.19.0 declares
 `tokenizers>=0.23.1,<0.24`, so the certified 0.23 releases install beside a
-loader of the 5.19 line and 0.22.2 beside an earlier one; pip enforces this
-from those packages' own metadata.
+`transformers` 5.x loader that accepts them (the certification readings were
+taken with 5.19.0, and pip resolved 5.20.0 on 2026-10-15) and 0.22.2 beside
+an earlier one; pip enforces this from those packages' own metadata.
 With toktier 0.3.0, `pip check` reported "No broken requirements found."
 on 2026-10-14 in a new environment holding SGLang 0.5.21's two pins
 (`tokenizers==0.22.2`, `transformers==5.12.1`) and in one holding SGLang
@@ -467,7 +468,12 @@ If you want toktier's pinned Fastokens adapter, install
 `toktier-fastokens==0.3.1.2` as well, and keep in mind that it uses the
 import name `fastokens`, which is also the name of the package SGLang's
 own `fastokens` backend installs. Install one of the two, not both
-(`packaging/fastokens-pinned/README.md`).
+(`packaging/fastokens-pinned/README.md`). The adapter's exact-id assurance
+(`certified_pinned`) holds with `tokenizers==0.22.2`, the version it was
+judged against and the one SGLang 0.5.19 to 0.5.21 pin; with another
+installed `tokenizers`, such as the 0.23.2 that SGLang's main branch pins,
+the adapter reports `oracle_mismatch` and no exact-id guarantee, and the
+default routes are unaffected.
 
 What this means for toktier. Routing admission is bound to the artifact
 bytes, the engine identity and the installed `tokenizers` being one of the

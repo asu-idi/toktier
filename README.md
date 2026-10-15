@@ -96,8 +96,9 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
   check` reported no broken requirements beside SGLang 0.5.21 and beside
   SGLang main's pins (checked on 2026-10-14 and 2026-10-15). The certificates
   speak for the certified reference versions `tokenizers` 0.22.2, 0.23.2 and
-  0.23.3, the two 0.23 releases install beside a `transformers` loader of the
-  5.19 line, and an installed `tokenizers` outside that set runs on the
+  0.23.3, the two 0.23 releases install beside a `transformers` 5.x loader
+  (the certification readings were taken with 5.19.0, and pip resolved 5.20.0
+  on 2026-10-15), and an installed `tokenizers` outside that set runs on the
   reference route. On the Rust crate every third-party dependency takes a
   caret edge (most were exact before; `Cargo.lock` is unchanged); the fast CPU
   engine is admitted by its source identity under every policy but
@@ -462,6 +463,14 @@ mirrors, imports, exports, and runs from a verified cache.
 | `toktier[gpu]` | Strict superset of `toktier`; automatic 64 KiB crossover to the shipped multi-architecture CUDA fatbin | NVIDIA GPU, driver 580.65.06+, `torch`; no compiler or first-use build |
 | `toktier[gpu-jit]` | Same CPU/GPU routing as `toktier[gpu]`; compiles the certified kernel source locally | judged NVCC / torch-runtime CUDA / PyTorch triple, `torch`, `ninja`; first-use compilation |
 
+The `fastokens` extra adds an explicit experimental adapter
+([Experimental: the pinned Fastokens adapter](#experimental-the-pinned-fastokens-adapter)),
+and its exact-id assurance (`certified_pinned`) holds with `tokenizers==0.22.2`,
+the version it was judged against, so install the two together with
+`pip install "toktier[fastokens]" "tokenizers==0.22.2"`; with another installed
+`tokenizers` the adapter reports `oracle_mismatch` and no exact-id guarantee,
+and the default routes are unaffected.
+
 Both GPU extras pull in `torch` and its CUDA wheels, so budget for it: a fresh
 `[gpu]` or `[gpu-jit]` virtual environment measures around 5 GiB, and an
 uncached install downloads several wheels in the hundreds-of-megabytes range
@@ -716,7 +725,12 @@ The comparison uses the engine digest, not the wheel builder's identity. A
 build whose digest is not among the published ones reports `false`. This
 includes the upstream wheel and, usually, a build from the sdist produced on
 another host or with another toolchain. A build with an identical digest reads
-exactly as the published one does. The pinned distribution keeps the upstream
+exactly as the published one does. The exact-id assurance (`certified_pinned`)
+holds with `tokenizers==0.22.2`, the version the pinned build was judged
+against, so install the two together with
+`pip install "toktier[fastokens]" "tokenizers==0.22.2"`; with another installed
+`tokenizers` the adapter reports `oracle_mismatch` and no exact-id guarantee,
+and the default routes are unaffected. The pinned distribution keeps the upstream
 import name, so having both installed is not recommended: they share the files
 that `import fastokens` runs, and whichever was installed last owns them
 (`toktier doctor` reports which one that is, and names the other as

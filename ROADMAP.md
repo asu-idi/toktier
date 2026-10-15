@@ -167,6 +167,9 @@ continues to route to the HF reference implementation. Widening the
 adapter's reach from the eleven families with a repair-table entry to the
 fifteen the evidence covers is later work.
 
+0.3.1: the `fastokens` extra carries its own `tokenizers==0.22.2` constraint,
+or `toktier-fastokens` is judged against the 0.23 line.
+
 ## CPU parallel BPE for long requests
 
 **Shipped in 0.3.0, on both paths** (`toktier.chunked.encode`,

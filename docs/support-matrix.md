@@ -81,8 +81,10 @@ ranges (`tokenizers>=0.22.2,<0.24`, `transformers>=4.57.6,<6`); the embedded
 reference is the `tokenizers` crate at exactly 0.22.2, and the Python
 `tokenizers` releases the certificates speak for are the registry's certified
 reference versions (0.22.2, 0.23.2 and 0.23.3 in this release; the two 0.23
-releases install only beside a `transformers` release of the 5.19 line, since
-`transformers` 4.57.6 and 5.12.1 declare `tokenizers<=0.23.0`) -- the shipped
+releases install only beside a `transformers` 5.x release that accepts them,
+since `transformers` 4.57.6 and 5.12.1 declare `tokenizers<=0.23.0`; their
+certification readings were taken with 5.19.0, and pip resolved 5.20.0 on
+2026-10-15) -- the shipped
 extras are
 `fastokens`, `gpu`, and `gpu-jit` -- and there is no separately installed
 Gigatoken distribution or second native extension. Its route is
@@ -209,6 +211,15 @@ one of these states in `explain()["session_repair"]["engine_assurance"]` and
 | `oracle_mismatch` | the installed `tokenizers` is not the judged version | `false` |
 | `family_outside_evidence` | no pinned-build reading is on file for this family | `false` |
 | `unverifiable` | the bytes the import system would run are not the ones any installed distribution recorded (a shadowing copy on `sys.path`); the adapter refuses to open | `false` |
+
+The exact-id assurance (`certified_pinned`) holds with `tokenizers==0.22.2`,
+the version the pinned build was judged against (the Reference row above), so
+install the two together with
+`pip install "toktier[fastokens]" "tokenizers==0.22.2"`; with another
+installed `tokenizers` the adapter reports `oracle_mismatch` and no exact-id
+guarantee, and the default routes are unaffected. Since 0.3.0 the base
+package admits `tokenizers>=0.22.2,<0.24`, so a new environment may resolve
+a later release unless the version is given.
 
 The distribution keeps the upstream import name `fastokens`. Installing it
 beside the upstream distribution overwrites the shared files silently, and

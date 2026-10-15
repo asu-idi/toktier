@@ -77,8 +77,9 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
   `pip install toktier` 按常规方式解析即可（新环境会多装 `platformdirs`），在
   SGLang 0.5.21 旁边和 SGLang main 的版本组合旁边，`pip check` 都报告没有依赖
   问题（2026-10-14 与 2026-10-15 核对）。认证只对已认证的参考版本 `tokenizers`
-  0.22.2、0.23.2 与 0.23.3 成立，两个 0.23 版本需要与 5.19 一系的 `transformers`
-  加载器同装，本机安装的 `tokenizers` 不在该集合内时走参考路由。Rust crate 方面，
+  0.22.2、0.23.2 与 0.23.3 成立，两个 0.23 版本需要与 5.x 的 `transformers`
+  加载器同装（认证读数取自 5.19.0，2026-10-15 pip 解析到的是 5.20.0），本机
+  安装的 `tokenizers` 不在该集合内时走参考路由。Rust crate 方面，
   所有第三方依赖改为 caret 边（此前多数为精确钉版；`Cargo.lock` 不变）；快速 CPU
   引擎按源码身份准入，除 `Reference` 外的所有策略都放行，因此用别的 rustc 或
   feature 配方构建的版本也会运行它，并标为 `supported_untested`；`rust-version`
@@ -387,6 +388,12 @@ Python 包不受 Rust crate feature 的影响，仍通过 `huggingface-hub`
 | `toktier[gpu]` | `toktier` 的严格超集；通过 64 KiB crossover 自动路由到随包的多架构 CUDA fatbin | NVIDIA GPU、驱动版本 580.65.06+、`torch`；无需编译器，首次使用不编译 |
 | `toktier[gpu-jit]` | CPU/GPU 路由与 `toktier[gpu]` 相同；在本机编译认证 kernel 源码 | 经评审的 NVCC / torch-runtime CUDA / PyTorch 三元组、`torch`、`ninja`；首次使用需要编译 |
 
+`fastokens` extra 提供一个需显式选择的实验性适配器（见下文“实验性：钉住的
+Fastokens 适配器”一节），其精确 id 保证（`certified_pinned`）以
+`tokenizers==0.22.2` 为前提，即该构建评判时所用的版本，因此请两者一起安装：
+`pip install "toktier[fastokens]" "tokenizers==0.22.2"`；装的是其他
+`tokenizers` 时，适配器报告 `oracle_mismatch`、不给精确 id 保证，默认路由不受影响。
+
 两个 GPU extras 都会引入 `torch` 及其 CUDA wheel，请预留空间：全新的
 `[gpu]` 或 `[gpu-jit]` 虚拟环境实测约 5 GiB，无缓存安装会下载数个几百 MB 级
 的 wheel（pip 缓存规模相当）。这是 Torch 生态的体量，而非 TokTier 自身——基础
@@ -608,6 +615,10 @@ Unicode 守卫作用下改由参考实现回答。这里比较的是引擎摘要
 如果某个构建的摘要不在已发布摘要之列——无论该构建是上游 wheel，
 还是从 sdist 自行构建的 wheel（换一台主机或一套工具链通常就会得到不同摘要）——
 就会报告 `false`；如果其摘要与已发布 wheel 完全相同，读数也相同。
+精确 id 保证（`certified_pinned`）以 `tokenizers==0.22.2` 为前提，即钉住构建评判时
+所用的版本，因此请两者一起安装：`pip install "toktier[fastokens]" "tokenizers==0.22.2"`；
+装的是其他 `tokenizers` 时，适配器报告 `oracle_mismatch`、不给精确 id 保证，默认路由
+不受影响。
 钉住分发沿用上游的 import 名，因此不建议两者同时安装：它们共用 `import
 fastokens` 实际运行的那些文件，文件归最后装的那个所有（`toktier doctor` 会
 报告归属于哪一个，并把另一个如实报成 co-installed）。若已安装上游分发，请整体

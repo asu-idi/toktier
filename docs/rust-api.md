@@ -343,7 +343,13 @@ A shared `CARGO_TARGET_DIR` outside the project tree is the common such
 layout, and a benign one: `OUT_DIR` then has no lockfile above it, so the
 answer is `unlocated` even though the workspace resolved the judged
 graph. Point `TOKTIER_CARGO_LOCK` at that workspace's own `Cargo.lock`
-and the comparison runs as usual.
+and the comparison runs as usual. The same setting matters for a path
+dependency built with a `CARGO_TARGET_DIR` outside the consumer's tree:
+the lookup can then find this crate's own `Cargo.lock` and read
+`verified` although the consumer compiled another version of a package
+(an `icu_properties` release, for one), so set `TOKTIER_CARGO_LOCK` to the
+consumer's lockfile for the reading that describes the build. A lookup
+that finds the consumer's lockfile in that layout is planned for 0.3.1.
 Content hashes and origins come from the judged `Cargo.lock`, which travels
 with the crate as well, so the two shipped records cannot hold different
 opinions about one package; a compiled closure naming something that lockfile
@@ -483,7 +489,7 @@ are now separate:
 | Assurance | What it says | Reached under |
 |---|---|---|
 | `certified` | The exact configuration appears in the shipped registry and every constraint it binds verifies here. | every policy except `Reference` |
-| `supported_untested` | The engines and digests are the judged ones; the device architecture, the NVCC triple or -- since 0.3.0, for the fast CPU route -- the Rust compiler or feature recipe is one no campaign ran on, and the engine loads and runs here. | `Policy::Supported` (the default) |
+| `supported_untested` | The engines and digests are the judged ones; the device architecture, the NVCC triple or -- since 0.3.0, for the fast CPU route -- the Rust compiler or feature recipe is one no campaign ran on, and the engine loads and runs here. | `Policy::Supported` (the default); for the fast CPU route, every policy except `Reference` |
 | `locally_verified` | The same, plus a local check on this machine compared the route with this binary's reference engine and they agreed. | `Policy::Supported` |
 | refused | Something that was bound did not verify: a source digest, a host digest, build flags, the certified core of the closure, or a compiler component anyone can write to. | nothing but an explicit opt-in |
 

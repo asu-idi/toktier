@@ -183,6 +183,13 @@ What remains is registered for a later release:
   for the passage that tripped a guard.
 <!-- TODO(fill): drop the first item if the shipped admission table certifies every roster artifact. -->
 
+0.3.1: segment the serial fast route at added-token literals the way the
+chunked rows are. Today a prompt that contains an added-token literal, as
+every prompt rendered from a chat template does, goes whole to the
+reference engine on the serial route, so such a request below the chunked
+threshold runs at reference speed; above it the chunked path already
+encodes the literals apart and keeps the fast engine for the rest.
+
 ## Routing large session deltas to the GPU
 
 Session appends run on the CPU repair lane regardless of the delta's size;

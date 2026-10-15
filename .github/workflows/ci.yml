@@ -99,6 +99,7 @@ jobs:
           maturin build --locked --release --out dist
           python -m pip install --disable-pip-version-check "numpy>=1.24" dist/*.whl
       - run: python tools/generate_registry.py --check
+      - run: python tools/update_oracle_certified_versions.py --check
       - run: python tools/update_fast_cpu_registry.py --check
       - run: python tools/generate_evidence.py --check --campaign main
       - run: python tools/generate_evidence.py --check --campaign extra

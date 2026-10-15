@@ -44,6 +44,18 @@ EXTRA = "<x_extra>"
 EXTRA_ID = 256
 
 
+# 4.x: PreTrainedTokenizerFast, unknown class raises; 5.x: TokenizersBackend, loads it
+def _transformers_major() -> int:
+    transformers = pytest.importorskip("transformers")
+    return int(transformers.__version__.split(".", 1)[0])
+
+
+def _file_only_class_name() -> str:
+    if _transformers_major() < 5:
+        return "PreTrainedTokenizerFast"
+    return "TokenizersBackend"
+
+
 def _decoder_row(content: str, **flags: bool) -> dict[str, Any]:
     row = {
         "content": content,
@@ -388,6 +400,12 @@ def test_unknown_loader_class_with_config_tokens_propagates(
         decoder={str(EXTRA_ID): _decoder_row(EXTRA)},
         tokenizer_class="SomeUnknownBackend",
     )
+    if _transformers_major() >= 5:
+        # The loader itself keeps the configuration-side token, so nothing
+        # can be dropped: it encodes as the one id the artifact declares.
+        live: Any = load_live_tokenizer(artifact.root)
+        assert live.encode(EXTRA, add_special_tokens=False) == [EXTRA_ID]
+        return
     with pytest.raises(Exception) as caught:
         load_live_tokenizer(artifact.root)
     # The original loader error propagates; the fallback that would have
@@ -426,7 +444,7 @@ def test_no_configuration_file_materializes_file_only_directly(
     # A raising stub would be swallowed by the fallback's own error
     # handling, so the proof is a recorded call count, not an exception.
     assert consulted == []
-    assert type(live).__name__ == "PreTrainedTokenizerFast"
+    assert type(live).__name__ == _file_only_class_name()
     crate = tokenizers.Tokenizer.from_file(str(artifact.root / "tokenizer.json"))
     text = "some text"
     assert live.encode(text, add_special_tokens=False) == [
@@ -455,5 +473,5 @@ def test_no_configuration_face_does_not_depend_on_the_directory_path(
         live: Any = load_live_tokenizer(artifact.root)
         classes.append(type(live).__name__)
         faces.append(live_tokenizer_json(live))
-    assert classes == ["PreTrainedTokenizerFast"] * 3
+    assert classes == [_file_only_class_name()] * 3
     assert len(set(faces)) == 1

@@ -356,3 +356,5 @@ effort is the pre-tokenizer structure, not the vocabulary size.
   Dynamo frontend, so that it can sit next to the existing in-process cache, is
   a candidate for collaboration rather than a unilateral plan; the same document
   describes the shape it would take.
+
+0.3.1: run the CI python-tests job over `transformers` 4.57.6 and the 5.x line.

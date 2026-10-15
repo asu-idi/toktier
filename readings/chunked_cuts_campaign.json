@@ -4,8 +4,8 @@
   "generated_by": {
     "tool": "maintainer transcription of the 2026-09-17 campaign records, with the adversarial section from tools/run_chunked_cut_campaign.py adversarial",
     "tool_version": "1.0.0",
-    "source_commit": "b25c33e957b37a9c71fe7f133ab617135a1f1e88",
-    "generated_at": "2026-10-14T08:01:06Z"
+    "source_commit": "b5967c17a81779b4939718b74e55291a9f706318",
+    "generated_at": "2026-10-15T10:48:20Z"
   },
   "campaign": {
     "run_id": "chunked-cuts-20260917",
@@ -191,7 +191,8 @@
           "native_vs_oracle": 0,
           "python_vs_native": 0,
           "serial_vs_oracle": 0
-        }
+        },
+        "plan_disagreements": 0
       },
       {
         "family": "deepseek_v4_flash",
@@ -214,7 +215,8 @@
           "native_vs_oracle": 0,
           "python_vs_native": 0,
           "serial_vs_oracle": 0
-        }
+        },
+        "plan_disagreements": 0
       },
       {
         "family": "glm_5_2",
@@ -237,7 +239,8 @@
           "native_vs_oracle": 0,
           "python_vs_native": 0,
           "serial_vs_oracle": 0
-        }
+        },
+        "plan_disagreements": 0
       },
       {
         "family": "gpt_oss_120b",
@@ -260,7 +263,8 @@
           "native_vs_oracle": 0,
           "python_vs_native": 0,
           "serial_vs_oracle": 0
-        }
+        },
+        "plan_disagreements": 0
       },
       {
         "family": "llama_3_1_8b",
@@ -283,7 +287,8 @@
           "native_vs_oracle": 0,
           "python_vs_native": 0,
           "serial_vs_oracle": 0
-        }
+        },
+        "plan_disagreements": 0
       },
       {
         "family": "minimax_m3",
@@ -306,7 +311,8 @@
           "native_vs_oracle": 0,
           "python_vs_native": 0,
           "serial_vs_oracle": 0
-        }
+        },
+        "plan_disagreements": 0
       },
       {
         "family": "ministral_3_8b",
@@ -329,7 +335,8 @@
           "native_vs_oracle": 0,
           "python_vs_native": 0,
           "serial_vs_oracle": 0
-        }
+        },
+        "plan_disagreements": 0
       },
       {
         "family": "nemotron_3_nano_4b",
@@ -352,7 +359,8 @@
           "native_vs_oracle": 0,
           "python_vs_native": 0,
           "serial_vs_oracle": 0
-        }
+        },
+        "plan_disagreements": 0
       },
       {
         "family": "olmo_3_7b",
@@ -375,7 +383,8 @@
           "native_vs_oracle": 0,
           "python_vs_native": 0,
           "serial_vs_oracle": 0
-        }
+        },
+        "plan_disagreements": 0
       },
       {
         "family": "qwen3_5_08b",
@@ -398,7 +407,8 @@
           "native_vs_oracle": 0,
           "python_vs_native": 0,
           "serial_vs_oracle": 0
-        }
+        },
+        "plan_disagreements": 0
       },
       {
         "family": "qwen3_8b",
@@ -421,11 +431,12 @@
           "native_vs_oracle": 0,
           "python_vs_native": 0,
           "serial_vs_oracle": 0
-        }
+        },
+        "plan_disagreements": 0
       }
     ]
   },
   "not_reasoned": [],
-  "notes": "Transcribed from the campaign records of 2026-09-17, taken on the chunk-cut rule as it stood before this release renamed the module and added the admission gate: the chunked source identity was not recorded then (null above), the native path did not run, and the serial reason codes are written under their current names. The operating system of the compute nodes was not recorded beyond the kernel family. These readings seed the admission table until the release campaign (every roster family, Python and native paths, four-way comparison) replaces this file. The adversarial section was taken on 2026-10-14 with tools/run_chunked_cut_campaign.py adversarial (tool sha256 7093d669c36116173361da20ffa6939b17025a6f0c857ede015702ba1c45b230), one process per family, under chunked_identity sha256:20f64fc894309652a7cb949446e3cbe38cc97d1ae44f9929d689d23d4bcf2886 and the native extension reporting fast_cpu source digest c4bb7e1d0fded2945f97e7011574cf6430a42d1f07a716e34a5e8234b114e4df (tokenizers 0.22.2, transformers 4.57.6, Python 3.12.3, Linux x86_64); both chunked paths ran (--native both, one native worker), min_chunk 64, seed offset 0, 460,000 strings over 11 families. The routing policy was experimental, because the engine binding of that build was not yet recertified; the only waived reason was that binding. The top-level identity fields above describe the corpus run, which the adversarial section does not change.",
-  "root_digest": "sha256:f019f37aba515af0742b60dc15a4f64bd53d438fb95bf8753926c274bbef27ef"
+  "notes": "Transcribed from the campaign records of 2026-09-17, taken on the chunk-cut rule as it stood before this release renamed the module and added the admission gate: the chunked source identity was not recorded then (null above), the native path did not run, and the serial reason codes are written under their current names. The operating system of the compute nodes was not recorded beyond the kernel family. These readings seed the admission table until the release campaign (every roster family, Python and native paths, four-way comparison) replaces this file. The adversarial section was taken on 2026-10-15 with tools/run_chunked_cut_campaign.py adversarial (tool sha256 7cb1a473a287482fe1a4a6683580a450a3dd708b81a7c82a78f244435b82308c), one process per family, under chunked_identity sha256:a3da80d03fd46140936abfedd54edbc17ad3d6d14f8e885f8aee195adac19c21 and the native extension reporting fast_cpu source digest 9594ff243421b89ff95137bda5a439a314343470951b6b7c0a98238bf51c4f41 (tokenizers 0.22.2, transformers 4.57.6, Python 3.12.3, Linux x86_64); both chunked paths ran (--native both, one native worker), min_chunk 64, seed offset 0, 460,000 strings over 11 families, and the native plan was compared with the Python plan on every string. The routing policy was the default one, on a tree whose engine bindings were recertified, so no reason was waived. The top-level identity fields above describe the corpus run, which the adversarial section does not change.",
+  "root_digest": "sha256:e03bcd80598cb1532e802ea4eae5c7288ff34a23758faf900c0d134fe9f401d0"
 }

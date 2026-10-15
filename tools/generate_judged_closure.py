@@ -149,6 +149,7 @@ FACADE_LIFECYCLE_SOURCES = (
 FACADE_ENCODE_SOURCES = (
     "behavior_version.rs",
     "buffer.rs",
+    "chunked.rs",
     "gpu_data.rs",
     "jit.rs",
     "lib.rs",

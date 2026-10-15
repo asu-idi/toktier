@@ -554,6 +554,25 @@ impl Registry {
             .map(|(family, row)| (family.as_str(), row))
     }
 
+    /// The canonical family whose shipped `tokenizer.json` carries this
+    /// digest, when this build packages one.
+    ///
+    /// Canonical artifacts only: a sibling repository whose file is
+    /// byte-identical to a canonical one carries the canonical digest
+    /// and is found here; one admitted as equivalent rather than
+    /// identical has another digest and is reached through
+    /// `resolve_repo` by its repository and revision instead.
+    pub(crate) fn family_for_tokenizer_sha256(&self, sha256: &str) -> Option<&str> {
+        self.artifacts
+            .iter()
+            .find(|(_, row)| {
+                row.files
+                    .get("tokenizer.json")
+                    .is_some_and(|file| file.sha256 == sha256)
+            })
+            .map(|(family, _)| family.as_str())
+    }
+
     pub(crate) fn repair(&self, family: &str) -> Option<&RepairRow> {
         self.repairs.get(family)
     }

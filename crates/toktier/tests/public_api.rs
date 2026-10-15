@@ -501,6 +501,49 @@ fn a_bundle_file_record_is_nameable_from_the_crate_root() {
     assert_eq!(first.sha256.len(), 64);
 }
 
+/// The shipped artifact manifest answers which family a `tokenizer.json`
+/// digest belongs to, so a host that already holds the file can ask
+/// before loading it; a digest outside the shipped families is `None`,
+/// and the lookup touches no file and needs no cache.
+#[test]
+fn a_tokenizer_digest_names_its_family_without_touching_a_file() {
+    let runtime = Runtime::builder().device(Device::Cpu).build().unwrap();
+    let manifest: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("data/src/toktier/artifacts/tables/artifact_manifest.v1.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let artifacts = manifest.as_object().unwrap();
+    assert!(!artifacts.is_empty());
+    let mut checked = 0;
+    for (family, artifact) in artifacts {
+        let Some(digest) = artifact["files"]["tokenizer.json"]["sha256"].as_str() else {
+            continue;
+        };
+        assert_eq!(
+            runtime.family_for_sha256(digest).as_deref(),
+            Some(family.as_str())
+        );
+        // Case matters: the manifest records lowercase hex and so must
+        // the caller.
+        assert_eq!(
+            runtime.family_for_sha256(&digest.to_ascii_uppercase()),
+            None
+        );
+        checked += 1;
+    }
+    assert!(checked > 0);
+    assert_eq!(runtime.family_for_sha256(""), None);
+    assert_eq!(
+        runtime.family_for_sha256(&"0".repeat(64)),
+        None,
+        "a digest no shipped artifact carries"
+    );
+}
+
 /// The default policy runs a device or compiler toolchain no campaign
 /// judged, and says so rather than calling it certified. Selecting
 /// `Policy::Certified` is the one-line way back to the previous rule.

@@ -31,7 +31,13 @@ the manifest-pinned `tokenizer.json` as a regular, non-symlink file and checks
 its size and SHA-256 before retaining the verified bytes. A sibling repository
 can be selected with `load_repository(repo_id, revision)` only when the exact
 immutable revision is in the shipped identity/equivalence table; execution is
-then bound to the verified canonical artifact.
+then bound to the verified canonical artifact. A host that already holds a
+`tokenizer.json` can ask `family_for_sha256(sha256_hex)` (lowercase hex)
+whether its digest is one of the shipped canonical artifacts before calling
+`load_local(family, directory)` on it; the lookup reads the shipped manifest
+and touches no file, and `None` means the file is outside the shipped
+families -- a sibling admitted as equivalent rather than byte-identical has
+another digest and is reached through `load_repository` instead.
 
 One scoping fact belongs here. This crate executes the artifact file itself
 on every route -- it has no `transformers`, so it cannot materialize the

@@ -342,6 +342,20 @@ impl Runtime {
         self.build_tokenizer(artifact)
     }
 
+    /// The canonical family whose packaged `tokenizer.json` has the SHA-256
+    /// `sha256_hex` (lowercase), when this crate ships one. A host that
+    /// already holds a tokenizer file can ask whether it is one this crate
+    /// admits before calling [`Runtime::load_local`] on its directory; a
+    /// `None` means the file is outside the shipped families and the host
+    /// keeps whatever engine it would otherwise use. The lookup reads the
+    /// shipped artifact manifest and touches no file.
+    pub fn family_for_sha256(&self, sha256_hex: &str) -> Option<String> {
+        self.inner
+            .registry
+            .family_for_tokenizer_sha256(sha256_hex)
+            .map(str::to_owned)
+    }
+
     /// Resolve a frozen repository/revision through the shipped verified
     /// sibling table, then execute its canonical digest-identical or proven
     /// equivalent tokenizer artifact.

@@ -396,7 +396,7 @@ def test_every_gpu_parity_reading_says_what_it_covers() -> None:
 
     Every certified GPU architecture reports zero mismatches. They differ
     in how much each wave re-takes: `sm_120` runs the full per-family
-    campaign, and the other three a bounded spot check on the same
+    campaign, and the other two a bounded spot check on the same
     protocol and roster. Before the field existed the only thing
     separating them was an unlabelled document count, which says nothing
     on its own about the protocol a campaign followed.
@@ -409,7 +409,6 @@ def test_every_gpu_parity_reading_says_what_it_covers() -> None:
         "sm_120": "full",
         "sm_80": "spot",
         "sm_89": "spot",
-        "sm_90": "spot",
     }
     per_family: dict[str, int] = {}
     for architecture, scale in expected.items():

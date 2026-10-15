@@ -6,7 +6,7 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:b6611138b680c91792702257779896c96867ef1ba6b49efae9b299c02310eadc",
+  "root_digest": "sha256:c4bc4288aedcd98fa7c6aee082f09d8a1b21971297c3a70872abc23725cbe228",
   "oracles": [
     {
       "oracle_id": "tokenizers",
@@ -238,13 +238,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89",
-                "sm_90"
+                "sm_89"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86"
+                "sm_86",
+                "sm_90"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -363,13 +363,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89",
-                "sm_90"
+                "sm_89"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86"
+                "sm_86",
+                "sm_90"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -488,13 +488,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89",
-                "sm_90"
+                "sm_89"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86"
+                "sm_86",
+                "sm_90"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -613,13 +613,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89",
-                "sm_90"
+                "sm_89"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86"
+                "sm_86",
+                "sm_90"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -738,13 +738,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89",
-                "sm_90"
+                "sm_89"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86"
+                "sm_86",
+                "sm_90"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -851,13 +851,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89",
-                "sm_90"
+                "sm_89"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86"
+                "sm_86",
+                "sm_90"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -964,13 +964,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89",
-                "sm_90"
+                "sm_89"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86"
+                "sm_86",
+                "sm_90"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1077,13 +1077,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89",
-                "sm_90"
+                "sm_89"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86"
+                "sm_86",
+                "sm_90"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1190,13 +1190,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89",
-                "sm_90"
+                "sm_89"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86"
+                "sm_86",
+                "sm_90"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1315,13 +1315,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89",
-                "sm_90"
+                "sm_89"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86"
+                "sm_86",
+                "sm_90"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1440,13 +1440,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89",
-                "sm_90"
+                "sm_89"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86"
+                "sm_86",
+                "sm_90"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1565,13 +1565,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89",
-                "sm_90"
+                "sm_89"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86"
+                "sm_86",
+                "sm_90"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1690,13 +1690,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89",
-                "sm_90"
+                "sm_89"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86"
+                "sm_86",
+                "sm_90"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1815,13 +1815,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89",
-                "sm_90"
+                "sm_89"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86"
+                "sm_86",
+                "sm_90"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1967,13 +1967,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89",
-                "sm_90"
+                "sm_89"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86"
+                "sm_86",
+                "sm_90"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",

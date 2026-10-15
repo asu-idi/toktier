@@ -18,7 +18,7 @@ audit records behind this document and does not ship inside the package.
 
 | Status | Meaning |
 |---|---|
-| `certified` | Evidence on file for this artifact and this backend, with the backend identified by a binary digest. The prebuilt GPU kernel delivery in this release is in this state on its judged architectures (sm_80, sm_89, sm_90 and sm_120). |
+| `certified` | Evidence on file for this artifact and this backend, with the backend identified by a binary digest. The prebuilt GPU kernel delivery in this release is in this state on its judged architectures (sm_80, sm_89 and sm_120); sm_90 is not certified in this release. |
 | `certified_source` | Evidence binds source identity rather than one platform-specific binary, and records the build flags and toolchain it was taken with. The integrated corrected-Gigatoken CPU engine and the locally compiled GPU JIT use this state; each also binds its backend-specific inputs. Since 0.3.0 the CPU engine's flags and toolchain are reported, not required: a build from the bound sources with another compiler runs and is labelled `supported_untested`. |
 | `reference-only` | No accelerated route is offered. The reference implementation runs and the reason is reported by `explain()`. This is also the state when the installed reference version differs from the certified one. |
 | `experimental` | Available only by explicit opt-in; no certified exact-ID claim attaches to the admission itself. Fastokens is exposed only in this state; what is known about the installed Fastokens engine is reported separately as `engine_assurance` (see [Pinned Fastokens distribution](#pinned-fastokens-distribution-toktier-fastokens)). |
@@ -64,6 +64,12 @@ readings were taken on NCSA Delta, on an `A100-SXM4-40GB` and an `H200`
 respectively, both on driver 595.71.05, against the architecture images
 the shipped fatbin already carried. What the two rows claim is what was
 measured on that hardware, and no more.
+
+`sm_90` is not certified in 0.3.0. The 0.2.9 reading is not carried over
+because the host build changed, and no reading on the 0.3.0 host build was
+taken on a Hopper host, so the `sm_90` image the fatbin still carries is
+listed as experimental, like the other embedded architectures outside the
+certified list. Certifying it again on a Hopper host is planned for 0.3.1.
 
 ## Certified CPU fast repair
 
@@ -271,7 +277,7 @@ in the other columns do not depend on this one; see
 
 GPU status names the prebuilt kernel delivery: `certified (prebuilt)` is
 binary-digest bound to the shipped fatbin, source/build bound to its Rust
-request host, and judged on sm_80, sm_89, sm_90 and sm_120. The JIT delivery of the same
+request host, and judged on sm_80, sm_89 and sm_120. The JIT delivery of the same
 kernels remains `certified_source`;
 the registry records both, per delivery, and the loader verifies the
 delivery it actually runs.

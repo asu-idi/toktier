@@ -284,7 +284,7 @@ The install profile and input shape then determine the automatic route:
 
 The two GPU rows describe what happens when the GPU route is admitted, and
 admission is narrower than "a GPU is present". The shipped evidence covers
-`sm_80`, `sm_89`, `sm_90` and `sm_120` for the prebuilt delivery. On any
+`sm_80`, `sm_89` and `sm_120` for the prebuilt delivery. On any
 other architecture the default `SUPPORTED` policy still runs the shipped
 kernel when it loads and every constraint the registry does bind verifies,
 and labels that route `supported_untested` rather than certified;
@@ -462,7 +462,7 @@ release decision.
 
 The prebuilt fatbin contains `sm_75/80/86/89/90/100/120` images and a
 `compute_75` PTX fallback. Its binary-digest-bound certificate covers
-`sm_80`, `sm_89`, `sm_90` and `sm_120`; the other embedded architectures are marked `experimental`. With
+`sm_80`, `sm_89` and `sm_120`; the other embedded architectures, `sm_90` among them in this release, are marked `experimental`. With
 the default facade, `toktier[gpu]` selects this prebuilt delivery and
 `toktier[gpu-jit]` selects JIT from the detected profile; an explicit
 `gpu_delivery=` argument can override that detection. Under prebuilt delivery,

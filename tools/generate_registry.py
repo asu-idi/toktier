@@ -109,7 +109,6 @@ PACKAGED_OUTPUT = (
 PREBUILT_HARDWARE_READINGS = {
     "sm_80": REPOSITORY_ROOT / "readings" / "gpu_native_frontend_sm80_parity.json",
     "sm_89": REPOSITORY_ROOT / "readings" / "gpu_native_frontend_sm89_parity.json",
-    "sm_90": REPOSITORY_ROOT / "readings" / "gpu_native_frontend_sm90_parity.json",
     "sm_120": REPOSITORY_ROOT / "readings" / "gpu_native_frontend_sm120_parity.json",
 }
 

@@ -246,7 +246,7 @@ tok = toktier.load("qwen3_8b", policy=RoutingPolicy.CERTIFIED)
 | Added-token 或 repair guard 无法证明前提 | 该输入使用 HF 参考路径 |
 
 表中两行 GPU 描述的是 GPU 路由被准入之后的行为，而准入条件比“机器上有 GPU”
-更窄。随包证据覆盖到的架构为：预编译交付的 `sm_80`、`sm_89`、`sm_90` 与
+更窄。随包证据覆盖到的架构为：预编译交付的 `sm_80`、`sm_89` 与
 `sm_120`。在其他架构上，默认的 `SUPPORTED` 策略仍会运行随包 kernel——只要它
 能装载，且注册表确实绑定的每一项约束都通过——并把该路由标为
 `supported_untested` 而不是 certified；`toktier verify-local` 可以用你自己的
@@ -404,7 +404,7 @@ TokTier 当前只发布 ABI3 Linux x86-64 wheel，不发布 sdist。从带 tag �
 
 预编译 fatbin 包含 `sm_75/80/86/89/90/100/120` 镜像以及
 `compute_75` PTX fallback。绑定二进制摘要的认证覆盖
-`sm_80`、`sm_89`、`sm_90` 与 `sm_120`；其他随包架构标记为 `experimental`。使用默认 facade 时，
+`sm_80`、`sm_89` 与 `sm_120`；其他随包架构（本版包括 `sm_90`）标记为 `experimental`。使用默认 facade 时，
 `toktier[gpu]` 选择预编译交付，`toktier[gpu-jit]` 则根据检测到的配置选择
 JIT；显式 `gpu_delivery=` 参数可覆盖该检测结果。预编译交付下，GPU 引擎按需
 初始化：只有首个路由到 GPU（达到或超过 crossover）的请求才会触发加载，因此

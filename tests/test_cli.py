@@ -46,7 +46,7 @@ BAD = b"corrupted bytes\n"
 
 _DOCTOR_DEVICES = (
     (0, "NVIDIA Test GPU", "sm_120"),
-    (1, "NVIDIA Test GPU 2", "sm_90"),
+    (1, "NVIDIA Test GPU 2", "sm_80"),
 )
 _DOCTOR_DRIVER_VERSION = "595.84"
 #: (torch distribution version, torch runtime CUDA). Together with the
@@ -418,11 +418,11 @@ def test_doctor_human(
         "(environment fact; not a certificate premise)\n"
         "cuda_hardware_present: true\n"
         "devices: 0: NVIDIA Test GPU (sm_120); "
-        "1: NVIDIA Test GPU 2 (sm_90)\n"
+        "1: NVIDIA Test GPU 2 (sm_80)\n"
         f"driver_version: {_DOCTOR_DRIVER_VERSION} "
         "(environment fact; not a certificate premise)\n"
         "automatic_gpu_delivery_certification: "
-        "sm_120=certified; sm_90=certified\n"
+        "sm_120=certified; sm_80=certified\n"
         "prebuilt_fatbin_available: true\n"
         f"prebuilt_fatbin_digest: {_shipped_prebuilt_digest()}\n"
         "prebuilt_native_host_ready: true\n"
@@ -561,13 +561,13 @@ def test_doctor_json(
             {
                 "index": 1,
                 "name": "NVIDIA Test GPU 2",
-                "architecture": "sm_90",
+                "architecture": "sm_80",
             },
         ],
         "driver_version": _DOCTOR_DRIVER_VERSION,
         "automatic_gpu_delivery_certification": {
             "sm_120": "certified",
-            "sm_90": "certified",
+            "sm_80": "certified",
         },
         "prebuilt_fatbin_available": True,
         "prebuilt_fatbin_digest": _shipped_prebuilt_digest(),
@@ -639,7 +639,7 @@ def test_doctor_certification_follows_the_selected_jit_delivery(
     assert report["automatic_gpu_delivery"] == "jit"
     assert report["automatic_gpu_delivery_certification"] == {
         "sm_120": "certified_source",
-        "sm_90": "uncertified",
+        "sm_80": "uncertified",
     }
 
 
@@ -911,7 +911,7 @@ def test_doctor_answers_under_the_reference_policy_the_way_the_plan_does(
     assert report["automatic_gpu_candidate"] is True
     assert report["automatic_gpu_delivery_certification"] == {
         "sm_120": "certified",
-        "sm_90": "certified",
+        "sm_80": "certified",
     }
     assert report["automatic_gpu_eligible"] is False
     assert report["automatic_effective_backend"] == "hf"

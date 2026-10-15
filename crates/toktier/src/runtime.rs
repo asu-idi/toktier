@@ -404,16 +404,18 @@ impl Runtime {
         // recipe -- judged sources, judged toolchain, judged flags, the
         // certified core verified -- admits every accelerated route the
         // way it always has. The judged sources alone, with the core
-        // verified, admit the fast CPU engine under a policy that admits
-        // what no campaign judged: the engine is the judged one by
-        // source identity, and the compiler or feature recipe that built
-        // it is the coverage gap, labelled rather than refused (since
-        // 0.3.0). The GPU route keeps the first premise: a prebuilt
+        // verified, admit the fast CPU engine under every policy but
+        // `Reference` (since 0.3.0; user rule of 2026-10-14): the engine
+        // is the judged one by source identity, and the compiler or
+        // feature recipe that built it is a coverage gap the label
+        // carries, never a reason to run full encodes on the reference
+        // engine. The reference route is for builds whose sources do not
+        // verify. The GPU route keeps the first premise: a prebuilt
         // fatbin is paired with a judged host build.
         let runtime_build_certified = self.inner.registry.rust_api_build_certified();
         let accelerated_build_allowed = runtime_build_certified || policy == Policy::Experimental;
-        let fast_cpu_build_allowed = accelerated_build_allowed
-            || (self.inner.registry.rust_api_sources_judged() && policy.admits_unjudged_device());
+        let fast_cpu_build_allowed =
+            accelerated_build_allowed || self.inner.registry.rust_api_sources_judged();
         if !fast_cpu_build_allowed && policy != Policy::Reference {
             reasons.push(ReasonCode::RuntimeBuildUncertified);
         }

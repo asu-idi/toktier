@@ -129,9 +129,7 @@ class BackendAssessment:
     supported: tuple[PlanReason, ...] = ()
 
 
-def _reason(
-    code: ReasonCode, backend: str, **detail: object
-) -> PlanReason:
+def _reason(code: ReasonCode, backend: str, **detail: object) -> PlanReason:
     return PlanReason(code=code, backend=backend, detail=dict(detail))
 
 
@@ -179,11 +177,19 @@ class _RefuseFn(Protocol):
     ``waivable`` says whether ``EXPERIMENTAL`` may waive the refusal.
     ``coverage`` says whether the refusal is about a combination nobody
     has measured, rather than about something that failed to verify;
-    only a coverage refusal is admitted by ``SUPPORTED``.
+    only a coverage refusal is admitted by ``SUPPORTED``. ``noted`` says
+    the entry is a coverage gap every policy admits (the fast CPU
+    engine's recipe, since 0.3.0): recorded for ``explain()``, never a
+    refusal and never a waiver.
     """
 
     def __call__(
-        self, reason: PlanReason, *, waivable: bool, coverage: bool = False
+        self,
+        reason: PlanReason,
+        *,
+        waivable: bool,
+        coverage: bool = False,
+        noted: bool = False,
     ) -> None:
         """Refuse the backend, unless the policy waives this check."""
 
@@ -246,23 +252,6 @@ def fast_cpu_binding_mismatches(
                 },
             )
         )
-    if facts.build_flags != entry.build_flags:
-        mismatches.append(
-            (
-                "build_flags",
-                {
-                    "expected": list(entry.build_flags),
-                    "observed": list(facts.build_flags),
-                },
-            )
-        )
-    if facts.toolchain != entry.toolchain:
-        mismatches.append(
-            (
-                "toolchain",
-                {"expected": entry.toolchain, "observed": facts.toolchain},
-            )
-        )
     if entry.config_id != "toktier-fast-repair-v1":
         mismatches.append(
             (
@@ -284,6 +273,41 @@ def fast_cpu_binding_mismatches(
             )
         )
     return tuple(mismatches)
+
+
+def fast_cpu_recipe_divergences(
+    entry: BackendEntry, facts: FastCpuEngineFacts
+) -> tuple[tuple[str, dict[str, object]], ...]:
+    """The recipe axes of the CPU engine binding that differ: build flags
+    and Rust toolchain.
+
+    Recorded by the registry for every judged build and reported by the
+    plan and by ``doctor``; since 0.3.0 never a reason to fall back (user
+    rule of 2026-10-14). An engine built from the bound sources with
+    another compiler or another release profile is the judged engine by
+    source identity, and runs; what it does not carry is the judged
+    recipe, which the ``supported_untested`` entry says. Pure.
+    """
+
+    divergences: list[tuple[str, dict[str, object]]] = []
+    if facts.build_flags != entry.build_flags:
+        divergences.append(
+            (
+                "build_flags",
+                {
+                    "certified": list(entry.build_flags),
+                    "observed": list(facts.build_flags),
+                },
+            )
+        )
+    if facts.toolchain != entry.toolchain:
+        divergences.append(
+            (
+                "toolchain",
+                {"certified": entry.toolchain, "observed": facts.toolchain},
+            )
+        )
+    return tuple(divergences)
 
 
 def prebuilt_host_binding_mismatches(
@@ -370,8 +394,18 @@ def assess_backend(
     supported: list[PlanReason] = []
 
     def refuse(
-        reason: PlanReason, *, waivable: bool, coverage: bool = False
+        reason: PlanReason,
+        *,
+        waivable: bool,
+        coverage: bool = False,
+        noted: bool = False,
     ) -> None:
+        # ``noted``: a coverage gap every policy admits (the fast CPU
+        # engine's recipe, since 0.3.0); it is reported beside the plan,
+        # never a waiver and never a refusal.
+        if noted:
+            supported.append(reason)
+            return
         if waivable and policy is RoutingPolicy.EXPERIMENTAL:
             waived.append(reason)
             return
@@ -596,9 +630,16 @@ def _assess(
         )
 
     # 9. The corrected engine is linked into the core native extension. Its
-    #    source set, release build flags and exact Rust compiler are reported
-    #    by the executing extension and bound by the registry. Its row carries
-    #    no device/kernel facts, so a successful check terminates here.
+    #    source set is reported by the executing extension and bound by the
+    #    registry, together with its engine identity and repair
+    #    configuration; a mismatch there closes the route. The release
+    #    build flags and the Rust compiler it reports are the recipe: since
+    #    0.3.0 they are recorded and reported (``supported_untested``) and
+    #    never a reason to fall back -- an engine built from the bound
+    #    sources with another rustc is the judged engine, and runs, under
+    #    every policy but REFERENCE (user rule of 2026-10-14). Its row
+    #    carries no device/kernel facts, so a successful check terminates
+    #    here.
     if backend == BACKEND_FAST_CPU:
         for axis, detail in fast_cpu_binding_mismatches(
             entry, snapshot.fast_cpu_engine
@@ -611,6 +652,20 @@ def _assess(
                     **detail,
                 ),
                 waivable=True,
+            )
+        for axis, detail in fast_cpu_recipe_divergences(
+            entry, snapshot.fast_cpu_engine
+        ):
+            refuse(
+                _reason(
+                    ReasonCode.R_ENGINE_BINDING_MISMATCH,
+                    backend,
+                    axis=axis,
+                    cause="recipe_unjudged",
+                    **detail,
+                ),
+                waivable=True,
+                noted=True,
             )
         return
 
@@ -727,10 +782,7 @@ def _delivery_view(entry: BackendEntry, snapshot: ProbeSnapshot) -> BackendEntry
     """
     if not entry.deliveries:
         return entry
-    active = (
-        snapshot.kernel_cache.delivery
-        or snapshot.kernel_cache.preferred_delivery
-    )
+    active = snapshot.kernel_cache.delivery or snapshot.kernel_cache.preferred_delivery
     if active is None:
         active = (
             "prebuilt"
@@ -795,11 +847,7 @@ def plan(
 
     assessments = assessments_for(snapshot, policy, registry, config)
     eligible = tuple(item.backend for item in assessments if item.eligible)
-    reasons = tuple(
-        item.blocking
-        for item in assessments
-        if item.blocking is not None
-    )
+    reasons = tuple(item.blocking for item in assessments if item.blocking is not None)
 
     if not eligible:
         if policy is RoutingPolicy.REQUIRE_ACCELERATED:

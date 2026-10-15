@@ -19,11 +19,16 @@ entry and verified before the backend is planned or opened:
    integrated source identity and pinned provenance record;
 3. oracle version (the record's oracle id; the shared oracle check);
 4. patch-set digest (``patch_sha256``), with the compiled implementation
-   bound by a domain-separated ``source_digest``, exact Rust toolchain, and
-   release build flags reported by the extension itself.
+   bound by a domain-separated ``source_digest`` reported by the extension
+   itself.
 
 Any mismatch closes the accelerated entry and the plan degrades to the
-reference backend with reason ``R_ENGINE_BINDING_MISMATCH``.
+reference backend with reason ``R_ENGINE_BINDING_MISMATCH``. The Rust
+toolchain and release build flags the extension reports are the build's
+recipe: recorded by the registry for every judged build, compared and
+reported by the plan (``supported_untested``) and by ``doctor``, and since
+0.3.0 never a reason to fall back. An extension built from the bound sources
+with another compiler is the judged engine by source identity, and runs.
 
 Three loading-surface rules are this backend's own (they are the
 package-side form of the judged front-end constraints):
@@ -419,9 +424,7 @@ class FastCpuBackend:
             artifact_sha256=observed,
             root=path.parent,
             artifact_json=raw,
-            config_only_added_tokens=tuple(
-                str(row["content"]) for row in config_rows
-            ),
+            config_only_added_tokens=tuple(str(row["content"]) for row in config_rows),
             adds_special_tokens=bool(inserts),
             hf_tokenizer=hf_tokenizer,
             engine_factory=(

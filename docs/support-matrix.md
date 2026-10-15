@@ -19,7 +19,7 @@ audit records behind this document and does not ship inside the package.
 | Status | Meaning |
 |---|---|
 | `certified` | Evidence on file for this artifact and this backend, with the backend identified by a binary digest. The prebuilt GPU kernel delivery in this release is in this state on its judged architectures (sm_80, sm_89, sm_90 and sm_120). |
-| `certified_source` | Evidence binds source identity, build flags, and exact toolchain rather than one platform-specific binary. The integrated corrected-Gigatoken CPU engine and the locally compiled GPU JIT use this state; each also binds its backend-specific inputs. |
+| `certified_source` | Evidence binds source identity rather than one platform-specific binary, and records the build flags and toolchain it was taken with. The integrated corrected-Gigatoken CPU engine and the locally compiled GPU JIT use this state; each also binds its backend-specific inputs. Since 0.3.0 the CPU engine's flags and toolchain are reported, not required: a build from the bound sources with another compiler runs and is labelled `supported_untested`. |
 | `reference-only` | No accelerated route is offered. The reference implementation runs and the reason is reported by `explain()`. This is also the state when the installed reference version differs from the certified one. |
 | `experimental` | Available only by explicit opt-in; no certified exact-ID claim attaches to the admission itself. Fastokens is exposed only in this state; what is known about the installed Fastokens engine is reported separately as `engine_assurance` (see [Pinned Fastokens distribution](#pinned-fastokens-distribution-toktier-fastokens)). |
 | `unsupported` | The named engine is known not to load or represent this artifact and is never planned. |
@@ -91,9 +91,12 @@ inherits the same artifact-bound certificate; it is not counted as a twelfth
 independent tokenizer implementation.
 
 The route opens only when the integrated module, domain-separated source
-digest, Cargo release flags, exact rustc, repair-table digest, patch, oracle
-version, and tokenizer artifact all match the registry. Otherwise the facade
-runs HF and gives the failed axis in `explain()`. The Fastokens adapter is a
+digest, repair-table digest, patch, oracle version, and tokenizer artifact
+all match the registry. Otherwise the facade runs HF and gives the failed
+axis in `explain()`. The Cargo release flags and the rustc the extension
+reports are compared with the recorded ones and reported
+(`explain()["supported_untested"]`, `doctor`'s `gigatoken_recipe_judged`);
+since 0.3.0 they do not close the route. The Fastokens adapter is a
 separate, explicit experimental route; the pinned build this project publishes
 for it, and what its readings cover, have their own section below.
 

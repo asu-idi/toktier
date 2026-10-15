@@ -629,6 +629,8 @@ impl Registry {
     }
 
     /// The judged rows whose three source identities are this build's.
+    /// (Named by their sources, not their recipes: since 0.3.0 the
+    /// sources are what admit the fast CPU engine.)
     fn judged_rows_for_these_sources(&self) -> impl Iterator<Item = &RuntimeBuildRow> {
         self.runtime_builds.iter().filter(|row| {
             row.runtime == "rust_api"
@@ -650,8 +652,9 @@ impl Registry {
     /// decide the label it is admitted under. A build from the judged
     /// sources on a compiler no campaign used is `supported_untested`
     /// under `Policy::Supported`, the way an unjudged GPU architecture
-    /// has been since 0.2.6; `Policy::Certified` still wants the whole
-    /// recipe.
+    /// has been since 0.2.6 -- and, by the user's rule of 2026-10-14,
+    /// under every policy but `Reference`: the label carries the recipe,
+    /// the reference route is for sources that do not verify.
     pub(crate) fn rust_api_build_standing(&self) -> BuildStanding {
         let observed_flags = env!("TOKTIER_RUST_API_BUILD_FLAGS")
             .split('\x1f')
@@ -687,9 +690,9 @@ impl Registry {
         Some(format!(
             "this build was compiled by `{}`; the judged builds from these sources were compiled \
              by `{}`. The fast CPU engine is the judged one by source identity, so it is admitted \
-             under Policy::Supported and labelled Certification::Supported (supported_untested); \
-             Policy::Certified routes it to the reference engine. `toktier-rust verify-local \
-             --engine cpu` compares the two engines on this machine",
+             under every policy but Reference and labelled Certification::Supported \
+             (supported_untested) rather than CertifiedSource. `toktier-rust verify-local --engine \
+             cpu` compares the two engines on this machine",
             env!("TOKTIER_RUST_API_TOOLCHAIN"),
             judged.join("`, `")
         ))
@@ -714,8 +717,8 @@ impl Registry {
 
     /// Whether the fast CPU engine of this build is the judged one by
     /// source identity, with the certified core verified: the premise
-    /// under which `Policy::Supported` admits it on a compiler or recipe
-    /// no campaign judged.
+    /// under which every policy but `Reference` admits it on a compiler
+    /// or recipe no campaign judged.
     pub(crate) fn rust_api_sources_judged(&self) -> bool {
         crate::behavior_version::core_closure_verified()
             && self.rust_api_build_standing().source_identity_judged

@@ -85,9 +85,10 @@ frontend does not require a Python callback.
   one-call runtime share that implementation.
 - The **fast CPU backend** compiles the corrected, data-version-pinned
   Gigatoken core directly into `toktier._native`. The planner verifies its
-  integrated delivery, domain-separated source identity, Cargo release flags,
-  exact rustc, patch/configuration, oracle, and tokenizer artifact before
-  admitting it. Full encode and bounded append repair execute directly under
+  integrated delivery, domain-separated source identity, patch/configuration,
+  oracle, and tokenizer artifact before admitting it, and reports whether the
+  Cargo release flags and rustc it was built with are the judged recipe
+  (since 0.3.0 a label, not a condition). Full encode and bounded append repair execute directly under
   the native router. Its single core is verified at runtime construction so
   first-append latency is bounded; payload-sized batch workers remain lazy. A
   failed premise returns the request to the native HF path with a

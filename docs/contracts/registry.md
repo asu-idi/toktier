@@ -104,9 +104,10 @@ the rustc that built it, which together are the judged recipe. Since 0.3.0
 the rule read against those entries is in two parts: the source identities
 admit the fast CPU engine, and the toolchain and flags decide its label. A
 build from the judged sources on a rustc or feature recipe no campaign used
-is `supported_untested` under `SUPPORTED` (Section 3.0) and falls back to
-HF under `CERTIFIED`; a build whose sources are not registered falls back
-to HF under both, and an explicit CUDA request on it reports
+is admitted under every policy but `REFERENCE` and labelled
+`supported_untested` (Section 3.0); the reference route is only for a build
+whose sources do not verify, which falls back to HF under every policy but
+`EXPERIMENTAL`, and an explicit CUDA request on it reports
 `UNCERTIFIED_RUNTIME`. The GPU route keeps the judged-recipe requirement
 (see `docs/rust-api.md`).
 
@@ -194,7 +195,7 @@ Each record carries per-backend entries with one of:
 | Status | Meaning |
 |---|---|
 | `certified` | The judged binary itself is bound: the record carries a binary digest, and the loader must match it before the backend opens under `CERTIFIED`. In this release, the prebuilt GPU delivery also binds the source/build identity of the Rust host paired with that binary; either mismatch closes the route. |
-| `certified_source` | The judged implementation is bound by source identity plus its reproducibility inputs instead of by one platform-specific output binary. Every backend must match its schema-defined source digest exactly; the Python facade also requires the recorded build flags and toolchain exactly, while the Rust runtime since 0.3.0 reads the flags and toolchain for the route's label rather than for its admission (Section 1.1). GPU JIT additionally binds the generated class table, selected NVCC, torch runtime CUDA, exact PyTorch version, and judged device architecture. The integrated CPU engine binds its Rust/Python source set, Cargo release profile, exact rustc, repair configuration, patch, oracle, and artifact. This status is eligible under `CERTIFIED` only when every applicable axis verifies and is reported distinctly from `certified` everywhere. |
+| `certified_source` | The judged implementation is bound by source identity plus its reproducibility inputs instead of by one platform-specific output binary. Every backend must match its schema-defined source digest exactly; the recorded build flags and toolchain are the judged recipe, which since 0.3.0 both the Python facade and the Rust runtime record and report rather than require for admission of the fast CPU route (Section 1.1; the GPU host still binds them). GPU JIT additionally binds the generated class table, selected NVCC, torch runtime CUDA, exact PyTorch version, and judged device architecture. The integrated CPU engine binds its Rust/Python source set, Cargo release profile, exact rustc, repair configuration, patch, oracle, and artifact. This status is eligible under `CERTIFIED` only when every applicable axis verifies and is reported distinctly from `certified` everywhere. |
 | `experimental` | Present but not certified; reachable only under `EXPERIMENTAL` policy. |
 | `unsupported` | Known not to work; never planned. |
 
@@ -202,8 +203,10 @@ The reference backend needs no status: it is always available and is
 the definition of correct output for certified configurations.
 
 CPU engines additionally bind `engine`, exact `engine_version`,
-`engine_delivery`, `engine_module`, `source_digest`, `build_flags`, exact
-`toolchain`, `patch_sha256`, `config_id`, and `config_digest`. The corrected
+`engine_delivery`, `engine_module`, `source_digest`, `patch_sha256`,
+`config_id`, and `config_digest`, and record `build_flags` and `toolchain`
+(the judged recipe, compared and reported, since 0.3.0 not a condition of
+admission). The corrected
 Gigatoken implementation in this release is compiled into the single private
 `toktier._native` extension (`engine_delivery=integrated`); no separately
 installed Gigatoken distribution or second native extension participates. Its

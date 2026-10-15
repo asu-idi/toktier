@@ -268,6 +268,7 @@ def _set_doctor_probes(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_engine_facts(monkeypatch, _bound_engine_facts)
     # The prebuilt request host the registry binds, for the same reason.
     _set_native_host_facts(monkeypatch, _bound_native_host_facts)
+
     # The adapter resolves the engine by its import package; the doctor
     # fixture stands in for an environment where the upstream distribution
     # owns the bytes on disk and the registry lists no published wheel.
@@ -437,6 +438,7 @@ def test_doctor_human(
         f"gigatoken_source_digest: {_bound.source_digest}\n"
         f"gigatoken_build_flags: {'; '.join(_bound.build_flags)}\n"
         f"gigatoken_toolchain: {_bound.toolchain}\n"
+        "gigatoken_recipe_judged: true\n"
         f"gigatoken_repair_config_digest: {_bound.config_digest}\n"
         "fastokens_available: true\n"
         "fastokens_distribution: fastokens\n"
@@ -582,6 +584,7 @@ def test_doctor_json(
         "gigatoken_source_digest": _bound.source_digest,
         "gigatoken_build_flags": list(_bound.build_flags),
         "gigatoken_toolchain": _bound.toolchain,
+        "gigatoken_recipe_judged": True,
         "gigatoken_repair_config_digest": _bound.config_digest,
         "fastokens_available": True,
         "fastokens_distribution": "fastokens",
@@ -844,15 +847,11 @@ def test_doctor_reports_an_unjudged_architecture_the_way_the_policy_reads_it(
         importlib.metadata, "version", lambda name: certified.get(name, "1.2.3")
     )
     _set_doctor_probes(monkeypatch)
-    _set_doctor_device_probe(
-        monkeypatch, devices=((0, "Unjudged device", "sm_61"),)
-    )
+    _set_doctor_device_probe(monkeypatch, devices=((0, "Unjudged device", "sm_61"),))
 
     assert cli.main(["doctor", "--json", "--family", "qwen3_8b"]) == 0
     report = json.loads(capsys.readouterr().out)
-    assert report["automatic_gpu_delivery_certification"] == {
-        "sm_61": "uncertified"
-    }
+    assert report["automatic_gpu_delivery_certification"] == {"sm_61": "uncertified"}
     assert report["automatic_gpu_eligible"] is True
     assert report["automatic_effective_backend"] == "gpu"
     assert report["family"]["automatic_gpu_eligible"] is True
@@ -1080,9 +1079,7 @@ def test_artifacts_verify_resolves_a_shipped_family(
     """
     monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
     family, _ = _smallest_shipped_family()
-    searched = (
-        tmp_path / "toktier-home" / "cache" / "artifacts"
-    )
+    searched = tmp_path / "toktier-home" / "cache" / "artifacts"
     # The manifest pins the loader-face input closure, checked in entry
     # order; with an empty cache the first pinned file is the one the
     # sentence names.
@@ -1575,9 +1572,7 @@ class _FakeVerifyTokenizer:
     def encode(self, text: str, *, lookup: str | None = None) -> object:
         import dataclasses as _dataclasses
 
-        return _dataclasses.make_dataclass("E", ["ids"])(
-            self._ids.get(text, (1, 2, 3))
-        )
+        return _dataclasses.make_dataclass("E", ["ids"])(self._ids.get(text, (1, 2, 3)))
 
     def explain(self, *, summary: bool = False) -> dict[str, object]:
         return {"last_execution_backend": self._backend}
@@ -1597,16 +1592,12 @@ class _FakeVerifyTokenizer:
         self.closed = True
 
 
-def _verify_loader(
-    monkeypatch: pytest.MonkeyPatch, *, subject_backend: str
-) -> None:
+def _verify_loader(monkeypatch: pytest.MonkeyPatch, *, subject_backend: str) -> None:
     from toktier import facade
 
     def fake_load(_family: str, **keywords: object) -> _FakeVerifyTokenizer:
         reference = keywords.get("policy") == "reference"
-        return _FakeVerifyTokenizer(
-            {}, "hf" if reference else subject_backend
-        )
+        return _FakeVerifyTokenizer({}, "hf" if reference else subject_backend)
 
     monkeypatch.setattr(facade, "load", fake_load)
 
@@ -1665,9 +1656,7 @@ def test_verify_local_reports_a_disagreement_and_changes_nothing(
         cli, "_verify_documents", lambda _arguments: (["x"], "your text")
     )
 
-    exit_code = cli.main(
-        ["verify-local", "--family", "qwen3_8b", "--engine", "gpu"]
-    )
+    exit_code = cli.main(["verify-local", "--family", "qwen3_8b", "--engine", "gpu"])
 
     captured = capsys.readouterr()
     # A disagreement is a non-zero exit and a sentence, not a policy
@@ -1877,9 +1866,7 @@ def test_verify_local_names_an_engine_this_machine_cannot_open(
 
     def fake_load(_family: str, **keywords: object) -> _FakeVerifyTokenizer:
         if keywords.get("device") == "cuda":
-            raise BackendUnavailable(
-                "no usable device", details={"backend": "gpu"}
-            )
+            raise BackendUnavailable("no usable device", details={"backend": "gpu"})
         reference = keywords.get("policy") == "reference"
         return _FakeVerifyTokenizer({}, "hf" if reference else "fast_cpu")
 
@@ -2202,9 +2189,7 @@ def test_doctor_family_json_does_not_contradict_its_own_plan_reasons(
     # shape the report used to misread: the entry is still
     # ``certified_source``, so a status-only reading still says
     # ``fast_cpu`` while the plan refuses it.
-    _set_engine_facts(
-        monkeypatch, lambda: _bound_engine_facts(source_digest="c" * 64)
-    )
+    _set_engine_facts(monkeypatch, lambda: _bound_engine_facts(source_digest="c" * 64))
 
     assert cli.main(["doctor", "--json", "--family", "qwen3_8b"]) == 0
     drifted = json.loads(capsys.readouterr().out)
@@ -2328,9 +2313,7 @@ def test_doctor_never_names_a_gpu_its_own_plan_refuses(
     # The case really moves a fact the plan reads.
     assert "gpu" in refused
     (reason,) = (
-        item
-        for item in drifted["family"]["plan_reasons"]
-        if item["backend"] == "gpu"
+        item for item in drifted["family"]["plan_reasons"] if item["backend"] == "gpu"
     )
     assert reason["code"] == code
     assert detail.items() <= reason["detail"].items()
@@ -2437,9 +2420,7 @@ def test_doctor_family_reports_the_plan_reasons_verify_local_points_at(
     reasons = family["plan_reasons"]
 
     assert isinstance(reasons, list)
-    binding = [
-        item for item in reasons if item["code"] == "R_ENGINE_BINDING_MISMATCH"
-    ]
+    binding = [item for item in reasons if item["code"] == "R_ENGINE_BINDING_MISMATCH"]
     assert binding, reasons
     # The doctor fixture reports a fast-CPU engine whose source digest is
     # not the bound one, which is the state the sentence is about.
@@ -2564,9 +2545,7 @@ def test_a_failed_conversion_gate_reports_a_code(
         "added_tokens_fully_described": True,
     }
     monkeypatch.setattr(cli, "recipe_for", lambda family: object())
-    monkeypatch.setattr(
-        cli, "conversion_report", lambda *args, **kwargs: report
-    )
+    monkeypatch.setattr(cli, "conversion_report", lambda *args, **kwargs: report)
 
     exit_code = cli.main(["--json", "artifacts", "check-conversion", "kimi_k3"])
 

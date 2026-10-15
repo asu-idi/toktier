@@ -115,11 +115,11 @@ to be the judged one. A build that also carries that entry's rustc and build
 flags is the judged recipe: `runtime_build.certified` is `true` and the fast
 CPU route is labelled `CertifiedSource`. Since 0.3.0 a build from the judged
 sources on a compiler or feature recipe no campaign used is admitted to the
-fast CPU route under `Policy::Supported` and labelled
-`Certification::Supported` (`supported_untested`), the way an unjudged GPU
-architecture has been since 0.2.6; `Policy::Certified` routes it to the
-reference engine, and the GPU route keeps the judged-recipe requirement,
-because a prebuilt fatbin is paired with a judged host build.
+fast CPU route under every policy but `Policy::Reference` and labelled
+`Certification::Supported` (`supported_untested`); the reference route is
+only for a build whose sources do not verify. The GPU route keeps the
+judged-recipe requirement, because a prebuilt fatbin is paired with a judged
+host build.
 `runtime_build.source_identity_judged` and `runtime_build.recipe_judged`
 report the two axes, and `runtime_build.toolchain_divergence` names the
 compiler that built this binary beside the ones that built the judged
@@ -373,10 +373,10 @@ What still earns no certificate at all:
 - a build whose compiler or flags are not a judged recipe: another rustc,
   `RUSTFLAGS`, a development profile, or a feature list no judged recipe
   carries, `network` and a CPU-only build without `prebuilt-gpu` among them.
-  Since 0.3.0 such a build still admits the fast CPU route as
-  `supported_untested` under `Policy::Supported` when its sources and its
-  certified core are the judged ones; `Policy::Certified` keeps it on the
-  reference engine;
+  Since 0.3.0 such a build still admits the fast CPU route, labelled
+  `supported_untested`, under every policy but `Policy::Reference` when its
+  sources and its certified core are the judged ones; what it does not earn
+  is the `certified` label;
 - a build whose R0 or R2 packages resolve from somewhere other than the
   judged package -- a `[patch]`, a fork, a mirror, a vendored copy. An
   implementation library from another source is reported in the advisory
@@ -460,18 +460,19 @@ unlisted device or an unjudged compiler triple routes to the reference
 engine as it always has. The last row does not move under either: a
 coverage gap is admitted, a verification failure is not.
 
-The fast CPU route joined this vocabulary in 0.3.0. A build from the judged
-engine sources whose rustc or build flags are not a judged recipe -- a host
-on rustc 1.92, a CPU-only build without `prebuilt-gpu` -- is
-`supported_untested` under `Policy::Supported`, `locally_verified` once
-`toktier-rust verify-local --engine cpu` compared it with this binary's
-reference engine on this machine (the record is filed under the compiler
-that built the binary, so another compiler's build is compared afresh), and
-routes to the reference engine under `Policy::Certified`.
-`runtime_build.toolchain_divergence` names both compilers, and
-`runtime_build.source_identity_judged` says that the sources, at least, are
-the judged ones; a build whose sources are not registered stays in the last
-row.
+The fast CPU route joined this vocabulary in 0.3.0, with one difference
+from the GPU rows: it is admitted under every policy but `Policy::Reference`.
+A build from the judged engine sources whose rustc or build flags are not a
+judged recipe -- a host on rustc 1.92, a CPU-only build without
+`prebuilt-gpu` -- runs the fast CPU engine and is labelled
+`supported_untested`, `locally_verified` once `toktier-rust verify-local
+--engine cpu` compared it with this binary's reference engine on this machine
+(the record is filed under the compiler that built the binary, so another
+compiler's build is compared afresh). The reference route is only for a
+build whose sources do not verify. `runtime_build.toolchain_divergence` names
+both compilers, and `runtime_build.source_identity_judged` says that the
+sources are the judged ones; a build whose sources are not registered stays
+in the last row.
 
 The JIT path splits the same way. A source, host or flags mismatch still
 refuses, and so does a world-writable compiler component unless the
@@ -839,9 +840,9 @@ build flag rather than a package, so the tier rules above do not reach it:
 a build that turns `network` on is not certified even though the two
 engines it compiles are byte for byte the judged ones. Since 0.3.0 such a
 build -- `network` on, or `prebuilt-gpu` off for a CPU-only host -- still
-admits the fast CPU route as `supported_untested` under `Policy::Supported`,
-because the engine it compiles is the judged one by source identity; what it
-does not earn is the `certified` label, which `Policy::Certified` requires.
+admits the fast CPU route as `supported_untested`, under every policy but
+`Policy::Reference`, because the engine it compiles is the judged one by
+source identity; what it does not earn is the `certified` label.
 
 The normal dependency graph contains no PyO3, Python, PyTorch, or mandatory
 async executor. The prebuilt GPU host dynamically uses the CUDA Driver API and

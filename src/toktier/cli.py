@@ -384,7 +384,10 @@ def _family_report(
     # "fast_cpu will run" beside a ``plan_reasons`` entry refusing
     # fast_cpu and naming the axis that disagreed. Same list of axes, so
     # the two cannot come apart again.
-    from .routing.plan import fast_cpu_binding_mismatches
+    from .routing.plan import (
+        fast_cpu_binding_mismatches,
+        fast_cpu_recipe_divergences,
+    )
 
     family_cpu_ready = (
         config.routing_policy is not RoutingPolicy.REFERENCE
@@ -393,12 +396,24 @@ def _family_report(
         and fast_cpu is not None
         and not fast_cpu_binding_mismatches(fast_cpu, engine_facts)
     )
+    # The recipe axes the engine reports beside the ones the record
+    # bound: reported, never a reason the plan refuses (since 0.3.0).
+    fast_cpu_recipe = (
+        []
+        if fast_cpu is None
+        else [
+            f"{axis} certified={_recipe_value(detail['certified'])} "
+            f"observed={_recipe_value(detail['observed'])}"
+            for axis, detail in fast_cpu_recipe_divergences(fast_cpu, engine_facts)
+        ]
+    )
     return {
         "family": entry.family,
         "artifact_sha256": artifact_sha256,
         "certification_identity": None if match is None else match.identity,
         "evidence_id": None if match is None else match.record.evidence_id,
         "fast_cpu_status": fast_cpu_status,
+        "fast_cpu_recipe_divergences": fast_cpu_recipe,
         "gpu_status": gpu_status,
         "gpu_delivery_certification": architecture_certification,
         "automatic_gpu_eligible": family_gpu_eligible,
@@ -429,6 +444,14 @@ def _family_report(
     }
 
 
+def _recipe_value(value: object) -> str:
+    """One recipe axis value as a word for the human report."""
+
+    if isinstance(value, (list, tuple)):
+        return ",".join(str(item) for item in value)
+    return "none" if value is None else str(value)
+
+
 def _directory_roots_problem(config: Config) -> str | None:
     """Why this machine's resolved roots cannot hold what they are for.
 
@@ -451,8 +474,7 @@ def _directory_roots_problem(config: Config) -> str | None:
             problems.setdefault(problem, []).append(name)
     return (
         "; ".join(
-            f"{', '.join(names)}: {problem}"
-            for problem, names in problems.items()
+            f"{', '.join(names)}: {problem}" for problem, names in problems.items()
         )
         or None
     )
@@ -553,9 +575,7 @@ def _doctor_report(
         and fast_cpu.config_digest is not None
         and reference_certification_reason is None
     )
-    gigatoken_runtime_ready = (
-        fast_cpu.version is not None and transformers_available
-    )
+    gigatoken_runtime_ready = fast_cpu.version is not None and transformers_available
     prebuilt_native_host_ready = (
         prebuilt_available
         and native_host.source_digest is not None
@@ -646,11 +666,24 @@ def _doctor_report(
     # question is whether the installed engine verifies against any
     # record eligible to take the fast path at all.
     from .policy import BACKEND_FAST_CPU
-    from .routing.plan import fast_cpu_binding_mismatches
+    from .routing.plan import (
+        fast_cpu_binding_mismatches,
+        fast_cpu_recipe_divergences,
+    )
 
+    eligible_fast_cpu_entries = list(
+        shipped_registry().eligible_entries(BACKEND_FAST_CPU)
+    )
     fast_cpu_binding_verifies = any(
         not fast_cpu_binding_mismatches(entry, fast_cpu)
-        for entry in shipped_registry().eligible_entries(BACKEND_FAST_CPU)
+        for entry in eligible_fast_cpu_entries
+    )
+    # Whether the build flags and the Rust compiler the engine reports are
+    # a recipe some judged row records. Reported beside the facts; since
+    # 0.3.0 the plan admits the engine by source identity either way.
+    gigatoken_recipe_judged = fast_cpu.version is not None and any(
+        not fast_cpu_recipe_divergences(entry, fast_cpu)
+        for entry in eligible_fast_cpu_entries
     )
     automatic_effective_backend = (
         "gpu"
@@ -756,6 +789,7 @@ def _doctor_report(
         "gigatoken_source_digest": fast_cpu.source_digest,
         "gigatoken_build_flags": list(fast_cpu.build_flags),
         "gigatoken_toolchain": fast_cpu.toolchain,
+        "gigatoken_recipe_judged": gigatoken_recipe_judged,
         "gigatoken_repair_config_digest": fast_cpu.config_digest,
         **_fastokens_doctor_facts(
             fastokens_adapter,
@@ -905,19 +939,22 @@ def _print_doctor_human(report: dict[str, object]) -> None:
                     print(f"  {key}: {'none' if item is None else item}")
             continue
         if name == "devices" and isinstance(value, list):
-            rendered = "; ".join(
-                f"{item['index']}: {item['name']} ({item['architecture']})"
-                for item in value
-                if isinstance(item, Mapping)
-            ) or "none"
+            rendered = (
+                "; ".join(
+                    f"{item['index']}: {item['name']} ({item['architecture']})"
+                    for item in value
+                    if isinstance(item, Mapping)
+                )
+                or "none"
+            )
         elif isinstance(value, bool):
             rendered = str(value).lower()
         elif isinstance(value, list):
             rendered = "; ".join(str(item) for item in value)
         elif isinstance(value, Mapping):
-            rendered = "; ".join(
-                f"{key}={item}" for key, item in value.items()
-            ) or "none"
+            rendered = (
+                "; ".join(f"{key}={item}" for key, item in value.items()) or "none"
+            )
         elif value is None:
             rendered = "none"
         else:
@@ -1368,9 +1405,7 @@ def _verify_one_engine(
             }
         judge = load(family, config=config, device="cpu", policy="reference")
         try:
-            comparison = compare(
-                subject, judge, documents, expected_backend=backend
-            )
+            comparison = compare(subject, judge, documents, expected_backend=backend)
         finally:
             judge.close()
     finally:
@@ -1411,9 +1446,7 @@ def _verify_one_engine(
         "bytes": record.bytes,
         "mismatches": record.mismatches,
         "first_mismatch": (
-            None
-            if record.first_mismatch is None
-            else list(record.first_mismatch)
+            None if record.first_mismatch is None else list(record.first_mismatch)
         ),
         # How many of those documents the engine under test actually
         # served. A route that fell back would otherwise compare the
@@ -1439,9 +1472,7 @@ def _verify_local(arguments: argparse.Namespace) -> int:
     the combination on the reference route.
     """
     config = Config.resolve()
-    engines = (
-        ["cpu", "gpu"] if arguments.engine == "both" else [arguments.engine]
-    )
+    engines = ["cpu", "gpu"] if arguments.engine == "both" else [arguments.engine]
     forget = bool(arguments.forget)
     documents: list[str] = []
     source = "none"
@@ -1522,9 +1553,7 @@ def uncovered_note(
         )
     elif served == 0:
         recorded = (
-            ", ".join(
-                f"{path['path']} x{path['documents']}" for path in unserved_paths
-            )
+            ", ".join(f"{path['path']} x{path['documents']}" for path in unserved_paths)
             or "no path was recorded"
         )
         body = (
@@ -1557,17 +1586,12 @@ def _print_verify_human(payload: Mapping[str, object]) -> None:
         status = item["status"]
         if status in {"forgotten", "no_record"}:
             removed = status == "forgotten"
-            print(
-                f"{engine}: "
-                f"{'record removed' if removed else 'no record to remove'}"
-            )
+            print(f"{engine}: {'record removed' if removed else 'no record to remove'}")
             continue
         documents = item["documents"]
         if status == "not_measured":
             served = item["served_by_engine"]
-            paths = cast(
-                Sequence[Mapping[str, object]], item.get("unserved_paths", [])
-            )
+            paths = cast(Sequence[Mapping[str, object]], item.get("unserved_paths", []))
             print(
                 uncovered_note(
                     str(engine),
@@ -1855,8 +1879,7 @@ def _error_payload(error: ToktierError) -> dict[str, object]:
             "code": error.code,
             "message": str(error),
             "details": {
-                str(key): _json_safe(value)
-                for key, value in error.details.items()
+                str(key): _json_safe(value) for key, value in error.details.items()
             },
         }
     }

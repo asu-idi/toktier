@@ -394,9 +394,11 @@ Rust-API 覆盖集计算哈希；`--show-diff` 会逐行打印归一化后的内
 tokenizer 工件一并验证。核心 wheel 还包含 Gigatoken 的 MIT 许可证、TokTier
 修改声明、依赖 SBOM 和依赖许可证合集。
 
-TokTier 当前只发布 ABI3 Linux x86-64 wheel，不发布 sdist。任意安装期重编译
-都会产生不同的工具链/构建身份，因此在单独认证前会 fail-closed。带有 tag 的仓库
-包含完整源码与固定构建记录；是否发布 sdist 仍是独立的发布决策。
+TokTier 当前只发布 ABI3 Linux x86-64 wheel，不发布 sdist。从带 tag 的源码用另一套
+工具链安装期重编译，源码身份不变，fast CPU 引擎照常运行；它不带的是判定过的构建配方，
+`doctor` 以 `gigatoken_recipe_judged: false`、`explain()` 以一条 `supported_untested`
+如实报出（0.3.0 起；更早版本在工具链不同时 fail-closed）。带有 tag 的仓库包含完整源码与
+固定构建记录；是否发布 sdist 仍是独立的发布决策。
 
 ### GPU 交付
 

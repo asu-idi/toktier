@@ -442,17 +442,21 @@ select runtime behavior.
 
 The [provenance and build record](https://github.com/asu-idi/toktier/blob/v0.3.0/packaging/fast_cpu/README.md) pins the
 upstream commit, patch, Unicode inputs, compiler, and release flags. The
-executing extension reports its domain-separated source digest, exact Rust
-toolchain, and build flags; the registry verifies all of them together with the
-repair configuration, oracle, and tokenizer artifact before opening the route.
+executing extension reports its domain-separated source digest, Rust
+toolchain, and build flags; the registry verifies the source digest together
+with the repair configuration, oracle, and tokenizer artifact before opening
+the route, and reports whether the toolchain and flags are the judged recipe.
 The core wheel carries Gigatoken's MIT license, TokTier's modification notice,
 the dependency SBOM, and the dependency-license bundle.
 
 TokTier is currently published as an ABI3 Linux x86-64 wheel, not an sdist.
-An arbitrary install-time rebuild would have a different toolchain/build
-identity and therefore fail closed until separately certified. The tagged
-repository contains the complete source and pinned build record; sdist
-publication remains a separate release decision.
+An install-time rebuild from the tagged source with another toolchain carries
+the same source identity and runs the fast CPU engine; what it does not carry
+is the judged recipe, which `doctor` reports as `gigatoken_recipe_judged:
+false` and `explain()` as a `supported_untested` entry (since 0.3.0; earlier
+releases failed closed on the toolchain). The tagged repository contains the
+complete source and pinned build record; sdist publication remains a separate
+release decision.
 
 ### GPU delivery
 
@@ -709,7 +713,7 @@ Three status values keep evidence and runtime behavior distinct:
 | Status | Meaning |
 |---|---|
 | `certified` | Evidence binds the exact artifact and accelerated binary. The prebuilt GPU delivery additionally binds the Rust host's source digest, exact rustc, and release build facts. |
-| `certified_source` | Evidence binds source, build inputs, and toolchain; used by the integrated CPU engine and locally built GPU JIT. |
+| `certified_source` | Evidence binds source identity and records the build inputs and toolchain it was taken with; used by the integrated CPU engine and locally built GPU JIT. Since 0.3.0 the CPU engine's recipe is reported, not required. |
 | `reference-only` | No accelerated route is admitted; HF `tokenizers` runs. |
 
 These are empirical differential results, not a proof over all possible inputs.

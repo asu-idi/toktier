@@ -258,6 +258,8 @@ def _install_certified_probe(
     registry: RegistryView,
     *,
     source_digest: str = _SOURCE_DIGEST,
+    toolchain: str = _TOOLCHAIN,
+    build_flags: tuple[str, ...] = _BUILD_FLAGS,
 ) -> None:
     match = registry.certification(artifact_sha256=rig.artifact_sha256)
     assert match is not None
@@ -269,8 +271,8 @@ def _install_certified_probe(
         fast_cpu_engine=FastCpuEngineFacts(
             version=_ENGINE_VERSION,
             source_digest=source_digest,
-            build_flags=_BUILD_FLAGS,
-            toolchain=_TOOLCHAIN,
+            build_flags=build_flags,
+            toolchain=toolchain,
             config_digest=_CONFIG_DIGEST,
         ),
         certification=match,
@@ -407,9 +409,7 @@ def test_native_session_append_records_the_bounded_repair_execution(
     assert seeded_last["path"] == "gigatoken_full"
     seeded_state = tokenizer.explain()["state_encode"]
     assert isinstance(seeded_state, dict)
-    assert seeded_state["counts"] == {
-        "accelerated_with_lazy_span_checkpoints": 1
-    }
+    assert seeded_state["counts"] == {"accelerated_with_lazy_span_checkpoints": 1}
     assert seeded_state["last"] == {
         "path": "accelerated_with_lazy_span_checkpoints",
         "backend": BACKEND_FAST_CPU,
@@ -964,9 +964,7 @@ def test_gpu_admitted_plan_routes_cold_auto_lookup_through_the_executor(
     # A shorter follow-up extension is still served from the store.
     grown = text + " short extension"
     followup = tokenizer.encode(grown)
-    assert list(followup.ids) == list(
-        live.encode(grown, add_special_tokens=False).ids
-    )
+    assert list(followup.ids) == list(live.encode(grown, add_special_tokens=False).ids)
     store = tokenizer.explain()["store"]
     assert isinstance(store, dict)
     assert store["auto_appends"] == 1
@@ -1238,6 +1236,54 @@ def test_binding_mismatch_keeps_public_session_on_reference(
     )
 
 
+@pytest.mark.parametrize("policy", ["supported", "certified"])
+def test_another_recipe_keeps_the_fast_engine_and_reports_it(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, policy: str
+) -> None:
+    """An extension built from the bound sources by another rustc, or with
+    other release flags, is the judged engine by source identity: it runs
+    under every policy but REFERENCE, and the plan says what no campaign
+    judged under ``supported_untested`` rather than refusing (user rule of
+    2026-10-14; earlier releases closed the route on either axis)."""
+
+    registry = _registry(rig)
+    _install_certified_probe(
+        monkeypatch,
+        rig,
+        registry,
+        toolchain="rustc 1.92.0 (test fixture)",
+        build_flags=("profile=release", "opt-level=2"),
+    )
+    tokenizer = rig.tokenizer(policy=policy)
+    assert tokenizer.plan.backend == BACKEND_FAST_CPU
+    report = tokenizer.explain()
+    assert not any(
+        reason["code"] == "R_ENGINE_BINDING_MISMATCH"
+        for reason in report["plan_reasons"]
+    )
+    untested = report["supported_untested"]
+    assert isinstance(untested, list)
+    axes = {
+        entry["detail"]["axis"]: entry["detail"]
+        for entry in untested
+        if entry["backend"] == BACKEND_FAST_CPU
+        and entry["code"] == "R_ENGINE_BINDING_MISMATCH"
+    }
+    assert set(axes) == {"toolchain", "build_flags"}
+    assert axes["toolchain"] == {
+        "axis": "toolchain",
+        "cause": "recipe_unjudged",
+        "certified": _TOOLCHAIN,
+        "observed": "rustc 1.92.0 (test fixture)",
+    }
+    assert axes["build_flags"]["observed"] == ["profile=release", "opt-level=2"]
+    assert axes["build_flags"]["certified"] == list(_BUILD_FLAGS)
+    # The source identity still decides: a digest the record does not bind
+    # closes the route as before.
+    _install_certified_probe(monkeypatch, rig, registry, source_digest="d" * 64)
+    assert rig.tokenizer(policy=policy).plan.backend == BACKEND_REFERENCE
+
+
 def test_fastokens_requires_explicit_experimental_policy(rig: Rig) -> None:
     with pytest.raises(UnsupportedConfig) as caught:
         rig.tokenizer(repair_backend="fastokens")
@@ -1455,9 +1501,7 @@ def test_a_repair_that_falls_back_headlines_the_reference_execution(
     tokenizer.encode(base, session="short")
     actual = tokenizer.encode(grown, session="short")
 
-    assert list(actual.ids) == list(
-        live.encode(grown, add_special_tokens=False).ids
-    )
+    assert list(actual.ids) == list(live.encode(grown, add_special_tokens=False).ids)
     report = tokenizer.explain()
     repair = report["session_repair"]
     assert isinstance(repair, dict)

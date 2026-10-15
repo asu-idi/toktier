@@ -19,8 +19,12 @@ pub enum Policy {
     #[default]
     Supported,
     /// Admit only evidence-bound accelerated routes; fall back exactly.
-    /// Unchanged in meaning: a device architecture or a compiler triple
-    /// the registry has not judged is not eligible here.
+    /// Unchanged in meaning for the GPU route: a device architecture or
+    /// an NVCC triple the registry has not judged is not eligible here.
+    /// Since 0.3.0 the fast CPU route is admitted by its source identity
+    /// under this policy too, labelled [`Certification::Supported`] when
+    /// the Rust compiler or feature recipe is not a judged one; only a
+    /// build whose sources do not verify routes to the reference engine.
     Certified,
     /// Force the frozen Hugging Face reference implementation.
     Reference,
@@ -127,15 +131,15 @@ pub enum ReasonCode {
     /// artifact, or an engine status, artifact or source binding that
     /// does not match the registry. Since 0.3.0 the compiler is not part
     /// of this refusal: the judged engine sources built by another rustc
-    /// are admitted under [`Policy::Supported`] and labelled
-    /// [`Certification::Supported`].
+    /// are admitted under every policy but [`Policy::Reference`] and
+    /// labelled [`Certification::Supported`].
     CpuUncertified,
     /// This build's own source identity is not in the shipped
     /// `runtime_builds` register, or its certified core does not verify,
     /// so no accelerated route is admitted whatever the artifact is.
     /// Since 0.3.0 the compiler and build flags are not part of this
-    /// reason under [`Policy::Supported`]; under [`Policy::Certified`]
-    /// a recipe no campaign judged is recorded here as before.
+    /// reason under any policy: a build from judged sources on an
+    /// unjudged recipe admits the fast CPU route and labels it.
     RuntimeBuildUncertified,
     /// [`Policy::Reference`] was asked for, so no accelerated option
     /// was considered.
@@ -185,8 +189,10 @@ pub enum Certification {
     /// architecture or NVCC triple no campaign ran on, or, since 0.3.0,
     /// a Rust compiler or feature recipe no campaign built the fast CPU
     /// engine with -- so no campaign has measured this combination.
-    /// Admitted by default under [`Policy::Supported`];
-    /// `Policy::Certified` routes it to the reference engine instead.
+    /// An unjudged device is admitted under [`Policy::Supported`] and
+    /// routed to the reference engine under `Policy::Certified`; an
+    /// unjudged compiler or recipe for the fast CPU route is admitted
+    /// under every policy but `Policy::Reference`.
     Supported,
     /// A `Supported` route that a local check has compared against this
     /// binary's reference engine on this machine. The record is not a

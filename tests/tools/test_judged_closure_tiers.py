@@ -2,9 +2,9 @@
 
 The tier split decides which packages can withhold a certificate, so the
 tool that derives it refuses rather than guesses: a text-semantics name it
-has not been told about, an R1 package no edge of ours pins exactly, a
-package classified as text-semantics core that nothing links, and a new
-facade source file nobody has placed on or off the encode path.
+has not been told about, a third-party package an edge of ours still pins
+exactly, a package classified as text-semantics core that nothing links,
+and a new facade source file nobody has placed on or off the encode path.
 
 Whether the shipped record still describes this tree is a question for
 Cargo, so it is asked where Cargo can be asked: `python3
@@ -92,7 +92,7 @@ def _graph(
         members=members if members is not None else {"toktier": ["serde"]},
         reachable=reachable if reachable is not None else ["serde"],
         requirements=(
-            requirements if requirements is not None else {"serde": ["=1.0.0"]}
+            requirements if requirements is not None else {"serde": ["^1.0"]}
         ),
         proc_macros=proc_macros,
         versions=versions,
@@ -110,20 +110,25 @@ def test_every_shipped_package_carries_a_tier_and_a_criterion() -> None:
     assert document["schema"] == "toktier.rust_compiled_closure.v2"
     assert document["tier_rule"]["statement"]
     for entry in document["packages"]:
-        assert entry["tier"] in {"core", "periphery"}
+        assert entry["tier"] in {"core", "implementation", "periphery"}
         assert entry["criterion"]
         if entry["tier"] == "core":
-            assert entry["criterion"] in {"R0", "R1", "R2"}
+            assert entry["criterion"] in {"R0", "R2"}
+        elif entry["tier"] == "implementation":
+            assert entry["criterion"] == "R1"
         else:
             assert entry["criterion"].startswith("periphery")
 
 
-def test_a_workspace_member_and_a_named_direct_dependency_are_core() -> None:
-    tiers, criteria = closure.classify(_compiled("toktier", "serde"), [_graph()])
+def test_a_workspace_member_is_core_and_a_direct_dependency_is_implementation() -> None:
+    graph = _graph(requirements={"serde": ["^1.0"]})
+    tiers, criteria = closure.classify(_compiled("toktier", "serde"), [graph])
     assert tiers[("toktier", "1.0.0")] == "core"
     assert criteria[("toktier", "1.0.0")] == "R0"
     # `serde` is named from encode-path sources of this repository, so the
-    # reference test finds it.
+    # reference test finds it; since 0.3.0 it is an implementation library
+    # on a caret edge, reported rather than gating.
+    assert tiers[("serde", "1.0.0")] == "implementation"
     assert criteria[("serde", "1.0.0")] == "R1"
 
 
@@ -131,7 +136,7 @@ def test_a_direct_dependency_no_encode_path_source_names_is_periphery() -> None:
     graph = _graph(
         members={"toktier": ["a-package-nothing-names"]},
         reachable=["a-package-nothing-names"],
-        requirements={"a-package-nothing-names": ["=1.0.0"]},
+        requirements={"a-package-nothing-names": ["^1.0.0"]},
     )
     tiers, criteria = closure.classify(
         _compiled("toktier", "a-package-nothing-names"), [graph]
@@ -147,7 +152,7 @@ def test_a_second_copy_of_a_core_package_is_judged_on_its_own() -> None:
     """Only the version an own edge resolves is the copy that edge names;
     `base64 0.13.1` arrives under `spm_precompiled` and is periphery."""
 
-    graph = _graph(versions={"serde": "1.0.0"})
+    graph = _graph(versions={"serde": "1.0.0"}, requirements={"serde": ["^1.0"]})
     compiled = {("toktier", "1.0.0"), ("serde", "1.0.0"), ("serde", "0.9.0")}
     tiers, criteria = closure.classify(compiled, [graph])
     assert criteria[("serde", "1.0.0")] == "R1"
@@ -158,7 +163,7 @@ def test_the_name_net_refuses_an_unclassified_text_semantics_package() -> None:
     graph = _graph(
         members={"toktier": ["serde"]},
         reachable=["serde", "unicode-something-new"],
-        requirements={"serde": ["=1.0.0"]},
+        requirements={"serde": ["^1.0"]},
     )
     with pytest.raises(closure.GenerationError) as refusal:
         closure.classify(
@@ -168,19 +173,43 @@ def test_the_name_net_refuses_an_unclassified_text_semantics_package() -> None:
     assert "TEXT_SEMANTICS_TABLE" in str(refusal.value)
 
 
-def test_an_r1_package_no_edge_pins_exactly_is_refused() -> None:
-    graph = _graph(requirements={"serde": ["^1.0"]})
+def test_a_third_party_package_on_an_exact_edge_is_refused() -> None:
+    graph = _graph(requirements={"serde": ["=1.0.0"]})
     with pytest.raises(closure.GenerationError) as refusal:
         closure.classify(_compiled("toktier", "serde"), [graph])
-    assert "pins them exactly" in str(refusal.value)
+    assert "exact (`=`) edge" in str(refusal.value)
     assert "serde" in str(refusal.value)
+
+
+def test_a_reference_library_on_an_exact_edge_is_refused_too() -> None:
+    graph = _graph(
+        members={"toktier": ["serde", "regex"]},
+        reachable=["serde", "regex"],
+        requirements={"serde": ["^1.0"], "regex": ["=1.0.0"]},
+    )
+    with pytest.raises(closure.GenerationError) as refusal:
+        closure.classify(_compiled("toktier", "serde", "regex"), [graph])
+    assert "regex" in str(refusal.value)
+    assert "certified reference versions" in str(refusal.value)
+
+
+def test_the_certified_reference_versions_always_hold_the_judged_one() -> None:
+    assert closure.certified_reference_versions("tokenizers", "0.22.2") == ["0.22.2"]
+    assert closure.certified_reference_versions("a-unit-not-in-the-table", "1.2.3") == [
+        "1.2.3"
+    ]
+    for unit in closure.CERTIFIED_REFERENCE_VERSIONS:
+        assert closure.BEHAVIOUR_SOURCES[unit] == "crate-version"
+    for unit, source in closure.BEHAVIOUR_SOURCES.items():
+        if source == "crate-version":
+            assert unit in closure.CERTIFIED_REFERENCE_VERSIONS
 
 
 def test_a_text_semantics_core_package_nothing_links_is_refused() -> None:
     graph = _graph(
         members={"toktier": ["serde"]},
         reachable=["serde"],
-        requirements={"serde": ["=1.0.0"]},
+        requirements={"serde": ["^1.0"]},
     )
     with pytest.raises(closure.GenerationError) as refusal:
         closure.classify(_compiled("toktier", "serde", "regex"), [graph])
@@ -207,9 +236,7 @@ def test_the_shipped_closure_covers_every_classified_package() -> None:
 def test_an_unplaced_facade_source_file_is_refused(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        closure, "FACADE_ENCODE_SOURCES", ("lib.rs",), raising=True
-    )
+    monkeypatch.setattr(closure, "FACADE_ENCODE_SOURCES", ("lib.rs",), raising=True)
     with pytest.raises(closure.GenerationError) as refusal:
         closure.check_facade_source_classification()
     message = str(refusal.value)
@@ -245,10 +272,26 @@ def test_the_behaviour_units_of_the_shipped_record_agree_with_the_table() -> Non
         assert entry["tier"] == "core"
         assert entry["criterion"] == "R2"
         assert entry["behavior_unit"] == closure.BEHAVIOUR_UNITS[name]
-        assert entry["behavior_source"] == closure.BEHAVIOUR_SOURCES[
-            entry["behavior_unit"]
-        ]
+        assert (
+            entry["behavior_source"]
+            == closure.BEHAVIOUR_SOURCES[entry["behavior_unit"]]
+        )
         assert entry["behavior_version"]
+        # A unit read by crate version carries its certified reference
+        # versions, the judged one first; a probed unit carries none.
+        if entry["behavior_source"] == "crate-version":
+            assert entry["certified_versions"][0] == entry["version"]
+            assert entry["behavior_version"] == f"crate:{entry['version']}"
+            assert (
+                document["tier_rule"]["certified_reference_versions"][
+                    entry["behavior_unit"]
+                ]
+                == entry["certified_versions"]
+            )
+        else:
+            assert "certified_versions" not in entry
+    # The embedded reference engine is a reference library since 0.3.0.
+    assert probed["tokenizers"]["behavior_source"] == "crate-version"
     # One version per unit, whatever the package versions are.
     for unit in set(closure.BEHAVIOUR_UNITS.values()):
         versions = {
@@ -257,4 +300,3 @@ def test_the_behaviour_units_of_the_shipped_record_agree_with_the_table() -> Non
             if entry["behavior_unit"] == unit
         }
         assert len(versions) == 1
-

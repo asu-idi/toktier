@@ -317,13 +317,18 @@ pub(crate) fn gpu_key(
 }
 
 /// The key the CPU fast path is filed under on this machine.
+///
+/// Filed under the Rust compiler that built this binary as well as
+/// under its source digests: since 0.3.0 the fast CPU engine is admitted
+/// on compilers no campaign judged, and a comparison made with one
+/// compiler's output does not speak for another's.
 pub(crate) fn cpu_key(family: &str, artifact_sha256: &str) -> VerificationKey {
     VerificationKey {
         engine: "cpu".to_owned(),
         architecture: None,
         delivery: None,
         image_digest: None,
-        toolchain: None,
+        toolchain: Some(env!("TOKTIER_RUST_API_TOOLCHAIN").to_owned()),
         driver_api_version: None,
         native_host_source_digest: env!("TOKTIER_RUST_API_NATIVE_HOST_SOURCE_SHA256").to_owned(),
         rust_api_source_digest: env!("TOKTIER_RUST_API_SOURCE_SHA256").to_owned(),

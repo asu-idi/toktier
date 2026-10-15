@@ -12,29 +12,42 @@ stands on the packages Cargo compiles for the judged build, which is what
 this tool writes down.
 
 Since 0.2.6 each package also carries the tier that decides what it can
-do to the certificate. The certified core -- TokTier's own crates, the
-packages they call directly, and the text-semantics libraries beneath
-them -- decides `certified`; everything else the build compiles is
-compared as before and reported as an advisory. The three rules that
-draw that line are mechanical, so anyone can re-derive the split from
-this repository:
+do to the certificate. The certified core -- TokTier's own crates and the
+reference libraries beneath them -- decides `certified`; everything else
+the build compiles is compared as before and reported as an advisory. The
+three rules that draw that line are mechanical, so anyone can re-derive
+the split from this repository:
 
-- **R0**: a workspace member of this repository.
+- **R0**: a workspace member of this repository. Core.
 - **R1**: a non-development direct dependency of one of those members
-  that is also named from an encode-path source file. Every one of them
-  is pinned exactly by at least one of our own edges, which is what
-  ``--check`` requires.
-- **R2**: a text-semantics library (regex engine; Unicode property,
-  normalization or segmentation data and algorithms; SentencePiece
-  normalization) reachable through normal edges from an engine crate.
-  These are the packages whose correct behaviour is defined by an
-  evolving external standard, so a version of one of them really can
-  change ids by design rather than by fault.
+  that is also named from an encode-path source file and carries no text
+  semantics of its own: serialization, hashing, parallelism, byte search,
+  containers. Since 0.3.0 these are *implementation libraries*, taken on
+  caret edges: Cargo.lock records the version every judged build
+  resolved, a consumer who resolves inside the range compiles, and the
+  version it resolves is compared and reported in the advisory rather
+  than deciding the certificate. ``--check`` refuses an exact (``=``)
+  edge of ours on one of them.
+- **R2**: a reference library (the embedded reference engine; a regex
+  engine; Unicode property, normalization or segmentation data and
+  algorithms; SentencePiece normalization) reachable through normal
+  edges from an engine crate. These are the packages whose correct
+  behaviour is defined by an evolving external standard or is the
+  reference itself, so a version of one of them really can change ids
+  by design rather than by fault. Core. A unit with a readable behaviour
+  version is compared by that version at run time; a unit read by crate
+  version is compared against its **certified reference versions** --
+  the judged version and any later version a campaign certified
+  (``CERTIFIED_REFERENCE_VERSIONS``) -- and a build that resolves a
+  version outside that set holds the accelerated engines on the
+  reference route and reports ``uncertified_reference``.
 
 The classification of R2 is data -- ``TEXT_SEMANTICS_TABLE`` -- and its
 completeness is a gate: any package in the closure whose name matches the
 text-semantics name net has to be classified explicitly, with a reason,
-or generation stops.
+or generation stops. The embedded reference engine and the three
+libraries both engines share for normalization and property lookups are
+in that table since 0.3.0, because they answer for ids directly.
 
 Where the answer comes from, and why here rather than in the build
 script: only this workspace can ask Cargo the question with the whole
@@ -202,6 +215,36 @@ TEXT_SEMANTICS_TABLE: dict[str, dict[str, str]] = {
             "the fast CPU pre-tokenizer's character classes"
         ),
     },
+    "icu_properties": {
+        "tier": "core",
+        "reason": (
+            "the property lookup API the fast CPU pre-tokenizer calls; its "
+            "version selects the icu_properties_data series it links"
+        ),
+    },
+    "tokenizers": {
+        "tier": "core",
+        "reason": (
+            "the embedded reference engine: the Hugging Face implementation "
+            "every certification reading compares the accelerated engines "
+            "against, executing tokenizer.json inside the native request path"
+        ),
+    },
+    "unicode-normalization-alignments": {
+        "tier": "core",
+        "reason": (
+            "the NFC and NFKC tables and algorithm shared by the reference "
+            "engine's normalizers and the corrected CPU engine's "
+            "normalization guard"
+        ),
+    },
+    "spm_precompiled": {
+        "tier": "core",
+        "reason": (
+            "the SentencePiece precompiled-charsmap normalizer shared by the "
+            "reference engine and the corrected CPU engine"
+        ),
+    },
     "icu_collections": {
         "tier": "periphery",
         "reason": (
@@ -248,6 +291,10 @@ BEHAVIOUR_UNITS: dict[str, str] = {
     "unicode-segmentation": "unicode-segmentation",
     "unicode_categories": "unicode_categories",
     "icu_properties_data": "icu_properties_data",
+    "icu_properties": "icu_properties",
+    "tokenizers": "tokenizers",
+    "unicode-normalization-alignments": "unicode-normalization-alignments",
+    "spm_precompiled": "spm_precompiled",
 }
 
 #: Where the version of each behaviour unit is read at generation time,
@@ -260,6 +307,28 @@ BEHAVIOUR_SOURCES: dict[str, str] = {
     "unicode-segmentation": "const:UNICODE_VERSION",
     "unicode_categories": "crate-version",
     "icu_properties_data": "crate-version",
+    "icu_properties": "crate-version",
+    "tokenizers": "crate-version",
+    "unicode-normalization-alignments": "crate-version",
+    "spm_precompiled": "crate-version",
+}
+
+#: The certified reference versions of each unit read by crate version,
+#: beyond the judged version, which is always a member. A version joins a
+#: set only on evidence taken with a lockfile that resolves it: the cargo
+#: gates, the Rust API matrix on every venue and the parity readings, the
+#: same evidence the judged version carries. The set is what lets a
+#: consumer resolve a later release of the embedded reference engine or
+#: of the Unicode data and keep the accelerated routes; a version outside
+#: it holds them on the reference route. Widening is a reviewed edit here
+#: followed by regeneration; the shipped record lists every member.
+CERTIFIED_REFERENCE_VERSIONS: dict[str, tuple[str, ...]] = {
+    "unicode_categories": (),
+    "icu_properties_data": (),
+    "icu_properties": (),
+    "tokenizers": (),
+    "unicode-normalization-alignments": (),
+    "spm_precompiled": (),
 }
 
 #: The package whose vendored sources answer for each unit at generation
@@ -271,14 +340,19 @@ BEHAVIOUR_WITNESS: dict[str, str] = {
 }
 
 TIER_STATEMENT = (
-    "The certified core is R0 the workspace members, R1 their non-development "
-    "direct dependencies that encode-path sources name, and R2 the "
-    "text-semantics libraries reachable from an engine crate through normal "
-    "edges. Everything else this build compiles is periphery: it is compared "
-    "and reported, and it does not decide certification. R0 and R1 are pinned "
-    "exactly by our own edges, so they cannot move by version; R2 is compared "
-    "by behaviour version, and its package versions are reported in the "
-    "advisory."
+    "The certified core is R0 the workspace members and R2 the reference "
+    "libraries: the embedded reference engine and the text-semantics libraries "
+    "reachable from an engine crate through normal edges. R1, the "
+    "implementation libraries the workspace members call directly from "
+    "encode-path sources, is taken on caret edges since 0.3.0: the version a "
+    "build resolves is compared and reported in the advisory, and it does not "
+    "decide certification. Everything else this build compiles is periphery: "
+    "compared and reported. An R2 unit with a readable behaviour version is "
+    "compared by that version, and its package versions are reported in the "
+    "advisory; an R2 unit read by crate version is compared against its "
+    "certified reference versions, the judged version and any later version a "
+    "campaign certified, and a version outside that set holds the accelerated "
+    "engines on the reference route."
 )
 
 
@@ -337,9 +411,7 @@ def run_cargo(command: list[str]) -> str:
         env={**os.environ, "CARGO_TERM_COLOR": "never"},
     )
     if completed.returncode != 0:
-        raise GenerationError(
-            f"{' '.join(command)} failed: {completed.stderr.strip()}"
-        )
+        raise GenerationError(f"{' '.join(command)} failed: {completed.stderr.strip()}")
     return completed.stdout
 
 
@@ -567,11 +639,7 @@ def check_facade_source_classification() -> None:
             + " -- classify each one, because whether a dependency it names "
             "is part of the certified core depends on the answer"
         )
-    missing = sorted(
-        name
-        for name in known
-        if not (source_root / name).is_file()
-    )
+    missing = sorted(name for name in known if not (source_root / name).is_file())
     if missing:
         raise GenerationError(
             f"{TOOL_NAME} classifies files crates/toktier/src no longer holds: "
@@ -587,9 +655,7 @@ def referenced_from_encode_path(name: str, sources: list[Path]) -> int:
         rf"(?:^|[^A-Za-z0-9_]){re.escape(identifier)}\s*::|\buse\s+{re.escape(identifier)}\b"
     )
     return sum(
-        1
-        for path in sources
-        if pattern.search(path.read_text(encoding="utf-8"))
+        1 for path in sources if pattern.search(path.read_text(encoding="utf-8"))
     )
 
 
@@ -665,8 +731,6 @@ def check_table_covers(compiled: set[Package]) -> None:
         )
 
 
-
-
 def classify(
     compiled: set[Package], graphs: Sequence[ResolveGraph]
 ) -> tuple[dict[Package, str], dict[Package, str]]:
@@ -706,9 +770,7 @@ def classify(
                 proc_macro.add((graph.name(identifier), graph.version(identifier)))
 
     table_core = {
-        name
-        for name, entry in TEXT_SEMANTICS_TABLE.items()
-        if entry["tier"] == "core"
+        name for name, entry in TEXT_SEMANTICS_TABLE.items() if entry["tier"] == "core"
     }
     own = {name for name, _ in workspace}
     references = {
@@ -730,7 +792,7 @@ def classify(
             # that name in the graph, which is the conservative direction.
             tiers[package], criteria[package] = "core", "R2"
         elif package in direct and references.get(name, 0) > 0:
-            tiers[package], criteria[package] = "core", "R1"
+            tiers[package], criteria[package] = "implementation", "R1"
         elif name in TEXT_SEMANTICS_TABLE:
             tiers[package], criteria[package] = "periphery", "periphery:classified"
         elif package in direct:
@@ -760,22 +822,26 @@ def classify(
             + " -- add each one with a reason, on either side"
         )
 
-    unpinned = sorted(
+    exact = sorted(
         f"{name} {version}"
         for (name, version), criterion in criteria.items()
-        if criterion == "R1"
-        and not any(
+        if criterion in ("R1", "R2")
+        and name not in own
+        and any(
             requirement.startswith("=")
             for graph in graphs
             for requirement in graph.own_requirements(name)
         )
     )
-    if unpinned:
+    if exact:
         raise GenerationError(
-            "these packages are in the certified core by R1 and no edge of "
-            "ours pins them exactly: "
-            + ", ".join(unpinned)
-            + " -- pin one edge with `=`, or classify the package instead"
+            "these third-party packages are taken on an exact (`=`) edge of "
+            "ours: "
+            + ", ".join(exact)
+            + " -- since 0.3.0 third-party crates are taken on caret edges, "
+            "with Cargo.lock recording the resolved version; an R2 package "
+            "that must not move is held by its certified reference versions "
+            "instead"
         )
 
     unreachable_core = sorted(
@@ -791,6 +857,17 @@ def classify(
             + " -- nothing of them is linked into the running artifact"
         )
     return tiers, criteria
+
+
+def certified_reference_versions(unit: str, judged: str) -> list[str]:
+    """The versions the certificate speaks for: the judged one first.
+
+    The table may name the judged version or not; it is a member either
+    way, and a set that does not hold it would be a record contradicting
+    its own lockfile.
+    """
+    extra = CERTIFIED_REFERENCE_VERSIONS.get(unit, ())
+    return [judged, *sorted(version for version in extra if version != judged)]
 
 
 def build_document() -> dict[str, object]:
@@ -814,7 +891,7 @@ def build_document() -> dict[str, object]:
     entries = []
     for package in sorted(packages):
         name, version = package
-        entry = {
+        entry: dict[str, object] = {
             "name": name,
             "version": version,
             "tier": tiers[package],
@@ -825,6 +902,10 @@ def build_document() -> dict[str, object]:
             entry["behavior_unit"] = unit
             entry["behavior_version"] = behaviour_versions[unit]
             entry["behavior_source"] = BEHAVIOUR_SOURCES[unit]
+            if BEHAVIOUR_SOURCES[unit] == "crate-version":
+                entry["certified_versions"] = certified_reference_versions(
+                    unit, version
+                )
         entries.append(entry)
     return {
         "schema": SCHEMA,
@@ -851,6 +932,13 @@ def build_document() -> dict[str, object]:
             "text_semantics_table": TEXT_SEMANTICS_TABLE,
             "behavior_units": BEHAVIOUR_UNITS,
             "behavior_sources": BEHAVIOUR_SOURCES,
+            "certified_reference_versions": {
+                unit: certified_reference_versions(
+                    unit, behaviour_versions[unit].removeprefix("crate:")
+                )
+                for unit, source in sorted(BEHAVIOUR_SOURCES.items())
+                if source == "crate-version"
+            },
         },
         "packages": entries,
     }
@@ -886,9 +974,11 @@ def main() -> int:
     OUTPUT.write_text(rendered, encoding="utf-8")
     entries = cast(list[dict[str, str]], document["packages"])
     core = sum(1 for entry in entries if entry["tier"] == "core")
+    implementation = sum(1 for entry in entries if entry["tier"] == "implementation")
     print(
         f"wrote {OUTPUT} ({len(entries)} packages: "
-        f"{core} core, {len(entries) - core} periphery)"
+        f"{core} core, {implementation} implementation, "
+        f"{len(entries) - core - implementation} periphery)"
     )
     return 0
 

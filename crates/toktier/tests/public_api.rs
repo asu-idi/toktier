@@ -109,6 +109,39 @@ fn doctor_is_typed_and_python_free() {
     assert_eq!(toktier::DEPENDENCY_CLOSURE, "verified");
     assert_eq!(facts.runtime_build.core_closure, "verified");
     assert_eq!(facts.runtime_build.dependency_advisory, None);
+    // The reference libraries resolve at their judged versions here, the
+    // embedded reference engine among them, so no reason is reported;
+    // the record names every certified reference version beside the one
+    // this build resolved.
+    assert_eq!(facts.runtime_build.reference_certification_reason, None);
+    assert!(facts
+        .runtime_build
+        .reference_versions
+        .iter()
+        .any(|reference| reference.package == "tokenizers"));
+    for reference in &facts.runtime_build.reference_versions {
+        assert!(reference.certified, "{}", reference.package);
+        assert_eq!(
+            reference.resolved.as_deref(),
+            Some(reference.judged.as_str())
+        );
+        assert!(reference.certified_versions.contains(&reference.judged));
+    }
+    // `certified` is the judged recipe: judged sources on the judged
+    // compiler with the judged flags. The two axes it is made of are
+    // reported on their own, and the toolchain divergence is reported
+    // only when the sources are judged and the compiler is not.
+    assert_eq!(
+        facts.runtime_build.certified,
+        facts.runtime_build.source_identity_judged && facts.runtime_build.recipe_judged
+    );
+    if facts.runtime_build.recipe_judged {
+        assert_eq!(facts.runtime_build.toolchain_divergence, None);
+    }
+    if !facts.runtime_build.source_identity_judged {
+        assert_eq!(facts.runtime_build.toolchain_divergence, None);
+        assert!(!facts.runtime_build.recipe_judged);
+    }
     // The text-semantics units this binary carries are reported beside
     // the versions the evidence was taken on, and they agree here.
     assert!(!facts.runtime_build.behavior_versions.is_empty());

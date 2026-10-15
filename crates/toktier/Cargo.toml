@@ -52,7 +52,7 @@ unicode-segmentation = "1"
 ureq = { workspace = true, optional = true }
 
 [dev-dependencies]
-tempfile = "=3.23.0"
+tempfile = "3.23.0"
 
 [build-dependencies]
 sha2.workspace = true

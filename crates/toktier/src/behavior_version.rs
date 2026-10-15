@@ -24,7 +24,7 @@
 
 use std::sync::OnceLock;
 
-use crate::diagnostics::BehaviorVersion;
+use crate::diagnostics::{BehaviorVersion, ReferenceVersion};
 
 /// Separators of the one-line values the build script emits. Both are
 /// ASCII separators, so neither can appear in a version or a report.
@@ -269,6 +269,65 @@ pub(crate) fn dependency_advisory() -> Option<&'static str> {
         .as_deref()
 }
 
+/// The reference libraries judged by crate version -- the embedded
+/// reference engine, the Unicode property data, the normalization and
+/// SentencePiece tables -- each with the version this build resolved,
+/// the judged version, and the certified reference versions. The build
+/// script read them from the governing lockfile; this module only
+/// renders the record.
+fn reference_readings() -> &'static Vec<ReferenceVersion> {
+    static READINGS: OnceLock<Vec<ReferenceVersion>> = OnceLock::new();
+    READINGS.get_or_init(|| {
+        let recorded = env!("TOKTIER_RUST_API_REFERENCE_VERSIONS");
+        if recorded.is_empty() {
+            return Vec::new();
+        }
+        recorded
+            .split(FIELD_SEPARATOR)
+            .filter_map(|record| {
+                let mut fields = record.split(RECORD_SEPARATOR);
+                let package = fields.next()?;
+                let judged = fields.next()?;
+                let resolved = fields.next()?;
+                let certified = fields.next()?;
+                let status = fields.next()?;
+                if package.is_empty() || judged.is_empty() {
+                    return None;
+                }
+                Some(ReferenceVersion {
+                    package: package.to_owned(),
+                    judged: judged.to_owned(),
+                    resolved: (!resolved.is_empty()).then(|| resolved.to_owned()),
+                    certified_versions: certified
+                        .split(',')
+                        .filter(|version| !version.is_empty())
+                        .map(str::to_owned)
+                        .collect(),
+                    certified: status == "certified",
+                })
+            })
+            .collect()
+    })
+}
+
+/// The reference libraries, as a reader of `doctor` sees them.
+pub(crate) fn reference_facts() -> Vec<ReferenceVersion> {
+    reference_readings().clone()
+}
+
+/// Why the reference libraries of this build are not the certified ones,
+/// in the word the Python facade's `doctor` uses for the same state:
+/// `None` when every reference library resolves at a certified reference
+/// version, `uncertified_reference` otherwise -- a version outside the
+/// set, a copy from another source, or a build whose governing lockfile
+/// could not be located, which is answered fail-closed.
+pub(crate) fn reference_certification_reason() -> Option<&'static str> {
+    reference_readings()
+        .iter()
+        .any(|reading| !reading.certified)
+        .then_some("uncertified_reference")
+}
+
 /// The behaviour version of each unit, as a reader of `doctor` sees it.
 pub(crate) fn facts() -> Vec<BehaviorVersion> {
     readings()
@@ -374,6 +433,24 @@ mod tests {
             decide("unlocated: no lockfile", &[], &no_drift),
             "unlocated: no lockfile"
         );
+    }
+
+    /// Inside this workspace every reference library resolves at its
+    /// judged version, the record names the embedded reference engine
+    /// among them, and there is no reason to report.
+    #[test]
+    fn every_reference_library_resolves_at_a_certified_version_here() {
+        let readings = super::reference_facts();
+        assert!(!readings.is_empty(), "no reference library was recorded");
+        assert!(readings
+            .iter()
+            .any(|reading| reading.package == "tokenizers"));
+        for reading in &readings {
+            assert_eq!(reading.resolved.as_deref(), Some(reading.judged.as_str()));
+            assert!(reading.certified_versions.contains(&reading.judged));
+            assert!(reading.certified, "{} is not certified", reading.package);
+        }
+        assert_eq!(super::reference_certification_reason(), None);
     }
 
     /// The record and the libraries agree in this workspace. The judged

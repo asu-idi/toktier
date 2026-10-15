@@ -124,12 +124,18 @@ pub enum ReasonCode {
     /// identity.
     GpuUncertified,
     /// The fast CPU route was refused: no certified repair row for this
-    /// artifact, or an engine status, artifact, source or toolchain
-    /// binding that does not match the registry.
+    /// artifact, or an engine status, artifact or source binding that
+    /// does not match the registry. Since 0.3.0 the compiler is not part
+    /// of this refusal: the judged engine sources built by another rustc
+    /// are admitted under [`Policy::Supported`] and labelled
+    /// [`Certification::Supported`].
     CpuUncertified,
-    /// This build's own identity is not in the shipped `runtime_builds`
-    /// register, or its certified core does not verify, so no
-    /// accelerated route is admitted whatever the artifact is.
+    /// This build's own source identity is not in the shipped
+    /// `runtime_builds` register, or its certified core does not verify,
+    /// so no accelerated route is admitted whatever the artifact is.
+    /// Since 0.3.0 the compiler and build flags are not part of this
+    /// reason under [`Policy::Supported`]; under [`Policy::Certified`]
+    /// a recipe no campaign judged is recorded here as before.
     RuntimeBuildUncertified,
     /// [`Policy::Reference`] was asked for, so no accelerated option
     /// was considered.
@@ -175,10 +181,12 @@ pub enum Certification {
     Certified,
     CertifiedSource,
     /// The engines are the judged ones and they run here, but this
-    /// device or compiler toolchain is outside the judged list, so no
-    /// campaign has measured this combination. Admitted by default under
-    /// [`Policy::Supported`]; `Policy::Certified` routes it to the
-    /// reference engine instead.
+    /// device or compiler toolchain is outside the judged list -- a GPU
+    /// architecture or NVCC triple no campaign ran on, or, since 0.3.0,
+    /// a Rust compiler or feature recipe no campaign built the fast CPU
+    /// engine with -- so no campaign has measured this combination.
+    /// Admitted by default under [`Policy::Supported`];
+    /// `Policy::Certified` routes it to the reference engine instead.
     Supported,
     /// A `Supported` route that a local check has compared against this
     /// binary's reference engine on this machine. The record is not a
@@ -263,13 +271,42 @@ pub struct RuntimeBuildFacts {
     /// flags match, or when something else is the disagreement.
     pub build_flag_divergence: Option<String>,
     /// `true` when the certified core of this build -- TokTier's own
-    /// crates, the packages they call directly, and the text-semantics
-    /// libraries beneath them -- is the one the certification evidence
-    /// was taken on, together with the source identities, toolchain and
-    /// build flags of a judged entry. Packages outside that core are
-    /// compared as well and reported in `dependency_advisory`; they do
-    /// not decide this field.
+    /// crates and the reference libraries beneath them -- is the one the
+    /// certification evidence was taken on, together with the source
+    /// identities, toolchain and build flags of a judged entry: the
+    /// judged recipe, built from the judged sources. Packages outside
+    /// that core are compared as well and reported in
+    /// `dependency_advisory`; they do not decide this field. Since 0.3.0
+    /// this is not the only state that admits the fast CPU route:
+    /// `source_identity_judged` with the core verified admits it under
+    /// `Policy::Supported` as `Certification::Supported`.
     pub certified: bool,
+    /// `true` when the three source identities of this build -- the
+    /// facade, the fast CPU engine and the native host -- are those of
+    /// a judged entry in the shipped `runtime_builds` register, whatever
+    /// compiler and flags built them.
+    pub source_identity_judged: bool,
+    /// `true` when a judged entry with this build's source identities
+    /// also records this build's toolchain and build flags: the recipe
+    /// the campaign built, not only the sources it built from.
+    pub recipe_judged: bool,
+    /// Why the compiler of this build is not a judged one, when a judged
+    /// entry agrees with it on the source identities. `None` when the
+    /// toolchain is recorded for these sources, or when the sources
+    /// themselves are not judged.
+    pub toolchain_divergence: Option<String>,
+    /// The reference libraries judged by crate version -- the embedded
+    /// reference engine, the Unicode property data, the normalization
+    /// and SentencePiece tables -- each with the version this build
+    /// resolved, the judged version and the certified reference
+    /// versions.
+    pub reference_versions: Vec<ReferenceVersion>,
+    /// `None` when every reference library resolves at a certified
+    /// reference version; `"uncertified_reference"` otherwise, the word
+    /// the Python facade's `doctor` uses for the same state. A build in
+    /// that state holds the accelerated engines on the reference route
+    /// and is not refused.
+    pub reference_certification_reason: Option<String>,
     /// The same comparison as `dependency_closure`, restricted to the
     /// certified core. Anything other than `"verified"` here holds
     /// `certified` at `false` and says what differs and what aligns it.
@@ -303,6 +340,24 @@ pub struct BehaviorVersion {
     pub observed: Option<String>,
     pub judged: String,
     pub source: String,
+}
+
+/// One reference library judged by crate version, as this build
+/// resolved it and as the certification evidence recorded it.
+///
+/// `resolved` is the version or versions this build's governing lockfile
+/// reaches, `None` when no lockfile could be located; `certified` is
+/// whether that resolution is one the certified reference versions
+/// speak for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
+pub struct ReferenceVersion {
+    pub package: String,
+    pub judged: String,
+    pub resolved: Option<String>,
+    pub certified_versions: Vec<String>,
+    pub certified: bool,
 }
 
 /// Non-invasive CUDA probe result. Probe failure is data, not a panic.

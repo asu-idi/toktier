@@ -60,6 +60,29 @@ fn read_judged_closure(path: &Path) -> Result<Vec<JudgedPackage>, String> {
                     .filter(|value| !value.is_empty())
                     .map(str::to_owned)
             };
+            // The certified reference versions, when the entry carries
+            // them. An entry that names the key with anything other than
+            // a list of non-empty strings is unreadable, which withholds
+            // certification rather than widening it.
+            let certified_versions = match entry.get("certified_versions") {
+                None => Ok(Vec::new()),
+                Some(serde_json::Value::Array(values)) => values
+                    .iter()
+                    .map(|value| {
+                        value
+                            .as_str()
+                            .filter(|version| !version.is_empty())
+                            .map(str::to_owned)
+                            .ok_or_else(|| {
+                                "the judged compiled closure has an unreadable certified version"
+                                    .to_owned()
+                            })
+                    })
+                    .collect::<Result<Vec<_>, _>>(),
+                Some(_) => Err(
+                    "the judged compiled closure has an unreadable certified version".to_owned(),
+                ),
+            }?;
             match (field("name"), field("version")) {
                 (Some(name), Some(version)) => Ok(JudgedPackage {
                     name,
@@ -68,6 +91,7 @@ fn read_judged_closure(path: &Path) -> Result<Vec<JudgedPackage>, String> {
                     behavior_unit: field("behavior_unit"),
                     behavior_version: field("behavior_version"),
                     behavior_source: field("behavior_source"),
+                    certified_versions,
                 }),
                 _ => Err("the judged compiled closure has an unreadable entry".to_owned()),
             }
@@ -156,13 +180,16 @@ fn main() {
     if let GoverningLock::Found(path) | GoverningLock::JudgedRecordNamed(path) = &governing {
         println!("cargo:rerun-if-changed={}", path.display());
     }
-    // One reading of the two lockfiles, reported four ways: the whole
+    // One reading of the two lockfiles, reported five ways: the whole
     // closure as before; the certified core, which is what decides
     // certification; the core packages whose behaviour version the
     // running binary reads for itself, which the build script can only
-    // report the package move of; and everything outside the core, which
-    // travels as an advisory. The judged behaviour versions travel with
-    // them so the runtime has both sides of that comparison.
+    // report the package move of; everything outside the core and the
+    // implementation libraries, which travel as an advisory; and the
+    // reference libraries judged by crate version, each with the version
+    // this build resolved beside its certified reference versions. The
+    // judged behaviour versions travel with them so the runtime has both
+    // sides of that comparison.
     let statuses = closure_statuses(&judged_lock, &judged_closure, &governing);
     println!(
         "cargo:rustc-env=TOKTIER_RUST_API_DEPENDENCY_CLOSURE={}",
@@ -183,6 +210,10 @@ fn main() {
     println!(
         "cargo:rustc-env=TOKTIER_RUST_API_JUDGED_BEHAVIOR={}",
         statuses.judged_behavior
+    );
+    println!(
+        "cargo:rustc-env=TOKTIER_RUST_API_REFERENCE_VERSIONS={}",
+        statuses.reference_versions
     );
 
     println!("cargo:rerun-if-env-changed={IDENTITY_SENTINEL_ENV}");

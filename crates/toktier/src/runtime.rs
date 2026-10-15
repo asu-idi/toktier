@@ -268,6 +268,7 @@ impl Runtime {
     /// Return machine-readable build and non-invasive device facts. This does
     /// not load a tokenizer or CUDA kernel and never widens routing policy.
     pub fn doctor(&self) -> DoctorFacts {
+        let standing = self.inner.registry.rust_api_build_standing();
         let runtime_build = RuntimeBuildFacts {
             source_digest: env!("TOKTIER_RUST_API_SOURCE_SHA256").to_owned(),
             fast_cpu_source_digest: env!("TOKTIER_RUST_API_FAST_CPU_SOURCE_SHA256").to_owned(),
@@ -281,9 +282,15 @@ impl Runtime {
             dependency_closure: crate::DEPENDENCY_CLOSURE.to_owned(),
             build_flag_divergence: self.inner.registry.rust_api_build_flag_divergence(),
             certified: self.inner.registry.rust_api_build_certified(),
+            source_identity_judged: standing.source_identity_judged,
+            recipe_judged: standing.recipe_judged,
+            toolchain_divergence: self.inner.registry.rust_api_toolchain_divergence(),
             core_closure: crate::behavior_version::core_closure().to_owned(),
             dependency_advisory: crate::behavior_version::dependency_advisory().map(str::to_owned),
             behavior_versions: crate::behavior_version::facts(),
+            reference_versions: crate::behavior_version::reference_facts(),
+            reference_certification_reason:
+                crate::behavior_version::reference_certification_reason().map(str::to_owned),
         };
         let ordinal = match self.inner.config.device {
             Device::Cuda(ordinal) => ordinal,
@@ -392,20 +399,49 @@ impl Runtime {
         })?);
         let family = artifact.identity().family.clone();
         let mut reasons = Vec::new();
+        let policy = self.inner.config.policy;
+        // Two premises, read against the shipped register. The judged
+        // recipe -- judged sources, judged toolchain, judged flags, the
+        // certified core verified -- admits every accelerated route the
+        // way it always has. The judged sources alone, with the core
+        // verified, admit the fast CPU engine under a policy that admits
+        // what no campaign judged: the engine is the judged one by
+        // source identity, and the compiler or feature recipe that built
+        // it is the coverage gap, labelled rather than refused (since
+        // 0.3.0). The GPU route keeps the first premise: a prebuilt
+        // fatbin is paired with a judged host build.
         let runtime_build_certified = self.inner.registry.rust_api_build_certified();
-        let accelerated_build_allowed =
-            runtime_build_certified || self.inner.config.policy == Policy::Experimental;
-        if !accelerated_build_allowed && self.inner.config.policy != Policy::Reference {
+        let accelerated_build_allowed = runtime_build_certified || policy == Policy::Experimental;
+        let fast_cpu_build_allowed = accelerated_build_allowed
+            || (self.inner.registry.rust_api_sources_judged() && policy.admits_unjudged_device());
+        if !fast_cpu_build_allowed && policy != Policy::Reference {
             reasons.push(ReasonCode::RuntimeBuildUncertified);
         }
-        let fast_cpu = if self.inner.config.policy == Policy::Reference {
+        let fast_cpu_route = if policy == Policy::Reference {
             reasons.push(ReasonCode::ReferenceRequested);
             None
-        } else if !accelerated_build_allowed {
+        } else if !fast_cpu_build_allowed {
             None
         } else {
             self.build_fast_cpu(&artifact, Arc::clone(&reference), &mut reasons)?
         };
+        // What the fast CPU route can be called. The judged recipe on the
+        // judged compiler is certified by source; anything else that was
+        // admitted is supported, or locally verified when a check this
+        // machine ran compared the two engines and they agreed.
+        let fast_cpu_certification = fast_cpu_route.as_ref().map(|route| {
+            if runtime_build_certified && route.toolchain_judged {
+                Certification::CertifiedSource
+            } else if crate::verify_local::is_locally_verified(&crate::verify_local::cpu_key(
+                &family,
+                &artifact.identity().tokenizer_sha256,
+            )) {
+                Certification::LocallyVerified
+            } else {
+                Certification::Supported
+            }
+        });
+        let fast_cpu = fast_cpu_route.map(|route| route.engine);
 
         #[allow(unused_mut)]
         let mut gpu = None;
@@ -634,8 +670,8 @@ impl Runtime {
                 Certification::Reference
             } else if let Some(assurance) = gpu_assurance {
                 assurance
-            } else if fast_cpu.is_some() {
-                Certification::CertifiedSource
+            } else if let Some(certification) = fast_cpu_certification {
+                certification
             } else {
                 Certification::Reference
             },
@@ -661,7 +697,7 @@ impl Runtime {
         artifact: &LocalArtifact,
         reference: Arc<ReferenceEngine>,
         reasons: &mut Vec<ReasonCode>,
-    ) -> Result<Option<Arc<FastCpuEngine>>> {
+    ) -> Result<Option<FastCpuRoute>> {
         let family = &artifact.identity().family;
         let Some(repair) = self.inner.registry.repair(family) else {
             reasons.push(ReasonCode::CpuUncertified);
@@ -680,6 +716,11 @@ impl Runtime {
         let fast_source = fast_support
             .and_then(|value| value.get("source_digest"))
             .and_then(serde_json::Value::as_str);
+        // The toolchain the campaign built this engine with is recorded
+        // on the row and read for the label, not for admission: since
+        // 0.3.0 the engine is admitted by its source identity, and a
+        // compiler no campaign used makes the route supported rather
+        // than refused (`Certification::Supported`).
         let fast_toolchain = fast_support
             .and_then(|value| value.get("toolchain"))
             .and_then(serde_json::Value::as_str);
@@ -687,11 +728,11 @@ impl Runtime {
             || support.artifact_sha256 != artifact.identity().tokenizer_sha256
             || repair.artifact_sha256 != artifact.identity().tokenizer_sha256
             || fast_source != Some(env!("TOKTIER_RUST_API_FAST_CPU_SOURCE_SHA256"))
-            || fast_toolchain != Some(env!("TOKTIER_RUST_API_TOOLCHAIN"))
         {
             reasons.push(ReasonCode::CpuUncertified);
             return Ok(None);
         }
+        let toolchain_judged = fast_toolchain == Some(env!("TOKTIER_RUST_API_TOOLCHAIN"));
         let spec = FastRepairSpec::new(
             family.clone(),
             repair.artifact_sha256.clone(),
@@ -711,8 +752,20 @@ impl Runtime {
                 format!("certified corrected-CPU construction failed: {error}"),
             )
         })?;
-        Ok(Some(Arc::new(engine)))
+        Ok(Some(FastCpuRoute {
+            engine: Arc::new(engine),
+            toolchain_judged,
+        }))
     }
+}
+
+/// An admitted fast CPU engine, with the one fact about its row that
+/// decides its label rather than its admission.
+struct FastCpuRoute {
+    engine: Arc<FastCpuEngine>,
+    /// Whether the compiler of this build is the one the registry row
+    /// records for the engine.
+    toolchain_judged: bool,
 }
 
 #[cfg(feature = "prebuilt-gpu")]

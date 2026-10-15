@@ -276,6 +276,16 @@ pub(crate) fn admitted_alias_basis(basis: &str) -> bool {
     )
 }
 
+/// Where a build stands to the shipped `runtime_builds` register.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct BuildStanding {
+    /// The three source identities are those of a judged row.
+    pub(crate) source_identity_judged: bool,
+    /// A judged row with these sources also records this build's
+    /// toolchain and build flags.
+    pub(crate) recipe_judged: bool,
+}
+
 #[derive(Debug)]
 #[cfg_attr(not(feature = "prebuilt-gpu"), allow(dead_code))]
 pub(crate) struct Registry {
@@ -593,18 +603,11 @@ impl Registry {
         let observed = env!("TOKTIER_RUST_API_BUILD_FLAGS")
             .split('\x1f')
             .collect::<Vec<_>>();
-        let candidates = self
-            .runtime_builds
-            .iter()
-            .filter(|row| {
-                row.runtime == "rust_api"
-                    && row.source_digest == env!("TOKTIER_RUST_API_SOURCE_SHA256")
-                    && row.fast_cpu_source_digest == env!("TOKTIER_RUST_API_FAST_CPU_SOURCE_SHA256")
-                    && row.native_host_source_digest
-                        == env!("TOKTIER_RUST_API_NATIVE_HOST_SOURCE_SHA256")
-                    && row.toolchain == env!("TOKTIER_RUST_API_TOOLCHAIN")
-            })
-            .collect::<Vec<_>>();
+        // Rows built from these sources, whatever compiler built them:
+        // since 0.3.0 the toolchain is reported on its own axis
+        // (`rust_api_toolchain_divergence`), so a build on another rustc
+        // still learns which flag differs.
+        let candidates = self.judged_rows_for_these_sources().collect::<Vec<_>>();
         if candidates.is_empty()
             || candidates
                 .iter()
@@ -625,33 +628,97 @@ impl Registry {
         describe_flag_divergence(&observed, &closest.build_flags)
     }
 
+    /// The judged rows whose three source identities are this build's.
+    fn judged_rows_for_these_sources(&self) -> impl Iterator<Item = &RuntimeBuildRow> {
+        self.runtime_builds.iter().filter(|row| {
+            row.runtime == "rust_api"
+                && row.source_digest == env!("TOKTIER_RUST_API_SOURCE_SHA256")
+                && row.fast_cpu_source_digest == env!("TOKTIER_RUST_API_FAST_CPU_SOURCE_SHA256")
+                && row.native_host_source_digest
+                    == env!("TOKTIER_RUST_API_NATIVE_HOST_SOURCE_SHA256")
+                && !row.evidence_id.is_empty()
+        })
+    }
+
+    /// Where this build stands to the judged builds of the register, on
+    /// the two axes the register binds besides the compiled closure.
+    ///
+    /// The rows still describe the judged builds exactly -- sources,
+    /// toolchain, flags -- and nothing about them changed. What changed
+    /// in 0.3.0 is the rule read against them: the source identities
+    /// are what admits the fast CPU engine, and the toolchain and flags
+    /// decide the label it is admitted under. A build from the judged
+    /// sources on a compiler no campaign used is `supported_untested`
+    /// under `Policy::Supported`, the way an unjudged GPU architecture
+    /// has been since 0.2.6; `Policy::Certified` still wants the whole
+    /// recipe.
+    pub(crate) fn rust_api_build_standing(&self) -> BuildStanding {
+        let observed_flags = env!("TOKTIER_RUST_API_BUILD_FLAGS")
+            .split('\x1f')
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        let mut rows = self.judged_rows_for_these_sources().peekable();
+        let source_identity_judged = rows.peek().is_some();
+        let recipe_judged = rows.any(|row| {
+            row.build_flags == observed_flags && row.toolchain == env!("TOKTIER_RUST_API_TOOLCHAIN")
+        });
+        BuildStanding {
+            source_identity_judged,
+            recipe_judged,
+        }
+    }
+
+    /// Why the compiler of this build is not a judged one, when the
+    /// sources are: the toolchain this build reports beside the ones the
+    /// judged rows for these sources record, and what the difference
+    /// means for the fast CPU route. `None` when a judged row records
+    /// this toolchain, or when the sources themselves are not judged
+    /// (the toolchain is then not the thing to change).
+    pub(crate) fn rust_api_toolchain_divergence(&self) -> Option<String> {
+        let mut judged = self
+            .judged_rows_for_these_sources()
+            .map(|row| row.toolchain.as_str())
+            .collect::<Vec<_>>();
+        judged.sort_unstable();
+        judged.dedup();
+        if judged.is_empty() || judged.contains(&env!("TOKTIER_RUST_API_TOOLCHAIN")) {
+            return None;
+        }
+        Some(format!(
+            "this build was compiled by `{}`; the judged builds from these sources were compiled \
+             by `{}`. The fast CPU engine is the judged one by source identity, so it is admitted \
+             under Policy::Supported and labelled Certification::Supported (supported_untested); \
+             Policy::Certified routes it to the reference engine. `toktier-rust verify-local \
+             --engine cpu` compares the two engines on this machine",
+            env!("TOKTIER_RUST_API_TOOLCHAIN"),
+            judged.join("`, `")
+        ))
+    }
+
     pub(crate) fn rust_api_build_certified(&self) -> bool {
         // The register binds compile-time facts about this crate's own
         // sources. Those sources are compiled together with whatever
         // versions Cargo resolved for the transitive graph, so a build
         // whose certified core is not the judged one is not the build
         // the evidence was taken on, whatever its source digests say.
-        // The core is this crate's own crates, the packages they call
-        // directly, and the text-semantics libraries beneath them;
-        // everything else the build compiles is compared and reported
+        // The core is this crate's own crates and the reference
+        // libraries beneath them; the implementation libraries and
+        // everything else the build compiles are compared and reported
         // rather than gating (`crate::DEPENDENCY_CLOSURE`).
         if !crate::behavior_version::core_closure_verified() {
             return false;
         }
-        let observed_flags = env!("TOKTIER_RUST_API_BUILD_FLAGS")
-            .split('\x1f')
-            .map(str::to_owned)
-            .collect::<Vec<_>>();
-        self.runtime_builds.iter().any(|row| {
-            row.runtime == "rust_api"
-                && row.source_digest == env!("TOKTIER_RUST_API_SOURCE_SHA256")
-                && row.build_flags == observed_flags
-                && row.toolchain == env!("TOKTIER_RUST_API_TOOLCHAIN")
-                && row.fast_cpu_source_digest == env!("TOKTIER_RUST_API_FAST_CPU_SOURCE_SHA256")
-                && row.native_host_source_digest
-                    == env!("TOKTIER_RUST_API_NATIVE_HOST_SOURCE_SHA256")
-                && !row.evidence_id.is_empty()
-        })
+        let standing = self.rust_api_build_standing();
+        standing.source_identity_judged && standing.recipe_judged
+    }
+
+    /// Whether the fast CPU engine of this build is the judged one by
+    /// source identity, with the certified core verified: the premise
+    /// under which `Policy::Supported` admits it on a compiler or recipe
+    /// no campaign judged.
+    pub(crate) fn rust_api_sources_judged(&self) -> bool {
+        crate::behavior_version::core_closure_verified()
+            && self.rust_api_build_standing().source_identity_judged
     }
 
     pub(crate) fn pclass(&self) -> Vec<u8> {

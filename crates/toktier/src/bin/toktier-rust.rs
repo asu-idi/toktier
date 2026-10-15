@@ -138,6 +138,9 @@ fn doctor_json(facts: &DoctorFacts) -> Value {
             "dependency_closure": build.dependency_closure,
             "build_flag_divergence": build.build_flag_divergence,
             "certified": build.certified,
+            "source_identity_judged": build.source_identity_judged,
+            "recipe_judged": build.recipe_judged,
+            "toolchain_divergence": build.toolchain_divergence,
             "core_closure": build.core_closure,
             "dependency_advisory": build.dependency_advisory,
             "behavior_versions": build.behavior_versions.iter().map(|unit| json!({
@@ -146,6 +149,14 @@ fn doctor_json(facts: &DoctorFacts) -> Value {
                 "judged": unit.judged,
                 "source": unit.source,
             })).collect::<Vec<_>>(),
+            "reference_versions": build.reference_versions.iter().map(|reference| json!({
+                "package": reference.package,
+                "judged": reference.judged,
+                "resolved": reference.resolved,
+                "certified_versions": reference.certified_versions,
+                "certified": reference.certified,
+            })).collect::<Vec<_>>(),
+            "reference_certification_reason": build.reference_certification_reason,
         },
         "cuda": facts.cuda.as_ref().map(|cuda| json!({
             "device_ordinal": cuda.device_ordinal,

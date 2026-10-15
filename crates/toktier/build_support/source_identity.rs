@@ -233,9 +233,16 @@ pub fn closure<'a>(packages: &'a [LockPackage], root: &str) -> Vec<&'a LockPacka
 /// direction.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tier {
-    /// TokTier's own crates, the packages they call directly, and the
-    /// text-semantics libraries beneath them.
+    /// TokTier's own crates and the reference libraries beneath them:
+    /// the embedded reference engine and the Unicode, normalization and
+    /// regex libraries whose tables decide where text is cut.
     Core,
+    /// The implementation libraries TokTier's own crates call directly
+    /// from encode-path sources -- serialization, hashing, parallelism,
+    /// byte search -- taken on caret edges since 0.3.0. A version Cargo
+    /// resolves inside the range is compared and reported, and it does
+    /// not decide the certificate.
+    Implementation,
     /// Everything else the judged build compiled.
     Periphery,
 }
@@ -246,6 +253,7 @@ impl Tier {
     pub fn from_record(value: Option<&str>) -> Self {
         match value {
             Some("periphery") => Self::Periphery,
+            Some("implementation") => Self::Implementation,
             _ => Self::Core,
         }
     }
@@ -264,8 +272,10 @@ impl Tier {
 /// correct behaviour is defined by an evolving external standard, so
 /// their package version moving is not by itself a change of behaviour.
 /// The comparison of the unit itself happens at run time, in the binary
-/// that links it; a package with no readable unit is compared exactly
-/// here, which is the strict direction.
+/// that links it; a package with no readable unit is compared here
+/// against its certified reference versions -- the judged version and
+/// any later version a campaign certified -- which is the strict
+/// direction when that list holds the judged version alone.
 pub struct JudgedPackage {
     pub name: String,
     pub version: String,
@@ -273,6 +283,11 @@ pub struct JudgedPackage {
     pub behavior_unit: Option<String>,
     pub behavior_version: Option<String>,
     pub behavior_source: Option<String>,
+    /// The versions of this package the certificate speaks for, the
+    /// judged one included, for a core package whose behaviour is read
+    /// from its crate version. Empty for every other package: the judged
+    /// version is then the only one the exact comparison accepts.
+    pub certified_versions: Vec<String>,
 }
 
 impl JudgedPackage {
@@ -290,6 +305,22 @@ impl JudgedPackage {
                 .behavior_source
                 .as_deref()
                 .is_some_and(|source| source != CRATE_VERSION_BEHAVIOR_SOURCE)
+    }
+
+    /// Whether this is a reference library whose behaviour version is its
+    /// crate version: the embedded reference engine, the Unicode property
+    /// data, the normalization tables. These are the packages the
+    /// certified reference versions are kept for, and the ones the
+    /// runtime reports beside the version this build resolved.
+    pub fn behavior_is_crate_version(&self) -> bool {
+        self.tier == Tier::Core
+            && self.behavior_source.as_deref() == Some(CRATE_VERSION_BEHAVIOR_SOURCE)
+    }
+
+    /// Whether `version` is one the certificate speaks for: the judged
+    /// version, or one of the certified reference versions.
+    pub fn version_is_certified(&self, version: &str) -> bool {
+        version == self.version || self.certified_versions.iter().any(|v| v == version)
     }
 }
 
@@ -330,6 +361,10 @@ pub struct Divergence {
     /// The behaviour unit this package belongs to, when the record names
     /// one whose version a running binary can read.
     pub behavior_unit: Option<String>,
+    /// True when this is a version move of a core package onto versions
+    /// every one of which is a certified reference version of it, each
+    /// resolved from the registry: reported, and not a core mismatch.
+    pub certified_version: bool,
 }
 
 impl Divergence {
@@ -552,6 +587,23 @@ pub fn closure_divergences<'a>(
         if same_copy && competitor.is_none() {
             continue;
         }
+        // A reference library resolved at another of its certified
+        // reference versions. Every copy of the name this build reaches
+        // has to be a registry package at a version the certificate
+        // speaks for; the judged version itself has to be the judged
+        // copy. A [patch], a fork or a path copy is not a version that
+        // moved, and no list of versions can speak for it.
+        let certified_version = judged.tier == Tier::Core
+            && !judged.certified_versions.is_empty()
+            && !same_name.is_empty()
+            && same_name.iter().all(|package| {
+                package
+                    .source
+                    .as_deref()
+                    .is_some_and(|source| source.starts_with("registry+"))
+                    && judged.version_is_certified(&package.version)
+                    && (package.version != judged.version || same_copy)
+            });
         divergences.push(Divergence {
             name: judged.name.clone(),
             judged_version: judged.version.clone(),
@@ -566,6 +618,7 @@ pub fn closure_divergences<'a>(
                 .behavior_is_probed()
                 .then(|| judged.behavior_unit.clone())
                 .flatten(),
+            certified_version,
         });
         diverging_packages.push(competitor.or(exact));
     }
@@ -686,6 +739,68 @@ pub fn render_advisory(divergences: &[Divergence]) -> String {
     }
     report.push_str(&render_tail(divergences));
     report
+}
+
+/// The implementation libraries, said as an advisory.
+///
+/// These packages are inside the build and the certificate does not pin
+/// them: since 0.3.0 they are taken on caret edges, so a consumer who
+/// resolves today compiles a version inside the range, and that version
+/// is named here with the command that aligns it anyway.
+pub fn render_implementation_advisory(divergences: &[Divergence]) -> String {
+    let mut report = match divergences {
+        [single] => format!(
+            "one implementation library this build compiles is not the judged version; it is \
+             taken on a caret edge, so it is reported here and the certificate does not pin it: \
+             {}",
+            single.summary()
+        ),
+        many => format!(
+            "{} implementation libraries this build compiles are not the judged versions; they \
+             are taken on caret edges, so they are reported here and the certificate does not \
+             pin them: {}",
+            many.len(),
+            many.iter()
+                .map(Divergence::summary)
+                .collect::<Vec<_>>()
+                .join("; ")
+        ),
+    };
+    let commands = divergences
+        .iter()
+        .filter_map(Divergence::alignment_command)
+        .collect::<Vec<_>>();
+    if !commands.is_empty() {
+        report.push_str(&format!(
+            ". To align them anyway, run in the workspace that owns the governing lockfile: {}",
+            commands.join(" && ")
+        ));
+    }
+    report.push_str(&render_tail(divergences));
+    report
+}
+
+/// The reference libraries resolved at certified reference versions
+/// other than the judged one, said as an advisory: the certificate
+/// speaks for these versions, and the move is named rather than hidden.
+pub fn render_certified_reference_advisory(divergences: &[Divergence]) -> String {
+    match divergences {
+        [single] => format!(
+            "{} resolves at a certified reference version other than the judged one ({}); the \
+             certificate speaks for it",
+            single.name,
+            single.version_move()
+        ),
+        many => format!(
+            "{} reference libraries resolve at certified reference versions other than the \
+             judged ones; the certificate speaks for them: {}",
+            many.len(),
+            many.iter()
+                .map(Divergence::version_move)
+                .collect::<Vec<_>>()
+                .join("; ")
+        ),
+    }
 }
 
 /// The clauses both reports end with: what a version change cannot
@@ -999,7 +1114,20 @@ pub struct ClosureStatuses {
     /// `unit<RS>version<RS>source` records separated by
     /// `FIELD_SEPARATOR`.
     pub judged_behavior: String,
+    /// The reference libraries judged by crate version, one
+    /// `package<RS>judged<RS>resolved<RS>certified<RS>status` record per
+    /// package, separated by `FIELD_SEPARATOR`. `resolved` is the
+    /// version or versions this build's graph reaches (empty when the
+    /// comparison could not be made), `certified` the certified
+    /// reference versions joined by `,`, and `status` one of
+    /// `certified`, `uncertified_reference` and `unlocated`.
+    pub reference_versions: String,
 }
+
+/// The status words of one reference library in `reference_versions`.
+pub const REFERENCE_CERTIFIED: &str = "certified";
+pub const REFERENCE_UNCERTIFIED: &str = "uncertified_reference";
+pub const REFERENCE_UNLOCATED: &str = "unlocated";
 
 /// Which behaviour units the record describes consistently.
 ///
@@ -1076,7 +1204,9 @@ pub fn closure_statuses(
         divergences
             .iter()
             .filter(|divergence| {
-                divergence.tier == Tier::Core && !is_probed_move(divergence, &units)
+                divergence.tier == Tier::Core
+                    && !is_probed_move(divergence, &units)
+                    && !divergence.certified_version
             })
             .collect(),
     );
@@ -1096,24 +1226,35 @@ pub fn closure_statuses(
     }
     let advisory = match &comparison {
         Comparison::Compared(_) => {
-            let outside = divergences
-                .iter()
-                .filter(|divergence| divergence.tier == Tier::Periphery)
-                .collect::<Vec<_>>();
-            if outside.is_empty() {
-                String::new()
-            } else {
-                render_advisory(
-                    &outside
-                        .iter()
-                        .map(|divergence| (*divergence).clone())
-                        .collect::<Vec<_>>(),
-                )
+            let selected = |keep: &dyn Fn(&Divergence) -> bool| {
+                divergences
+                    .iter()
+                    .filter(|divergence| keep(divergence))
+                    .cloned()
+                    .collect::<Vec<_>>()
+            };
+            let outside = selected(&|divergence| divergence.tier == Tier::Periphery);
+            let implementation = selected(&|divergence| divergence.tier == Tier::Implementation);
+            let certified_moves = selected(&|divergence| divergence.certified_version);
+            let mut parts = Vec::new();
+            if !outside.is_empty() {
+                parts.push(render_advisory(&outside));
             }
+            if !implementation.is_empty() {
+                parts.push(render_implementation_advisory(&implementation));
+            }
+            if !certified_moves.is_empty() {
+                parts.push(render_certified_reference_advisory(&certified_moves));
+            }
+            parts.join(". ")
         }
         // A build that could not be compared has nothing to advise
         // about: the core answer already says so.
         _ => String::new(),
+    };
+    let reference_versions = match judged_closure {
+        Ok(packages) => reference_version_records(packages, &comparison, divergences),
+        Err(_) => String::new(),
     };
     ClosureStatuses {
         strict,
@@ -1121,7 +1262,55 @@ pub fn closure_statuses(
         r2_drift: drift.join(&FIELD_SEPARATOR.to_string()),
         advisory,
         judged_behavior,
+        reference_versions,
     }
+}
+
+/// One record per reference library judged by crate version: what the
+/// judged build compiled, what this build resolves, which versions the
+/// certificate speaks for, and the verdict. The runtime reports these
+/// beside the probed units, so a reader of `doctor` sees the embedded
+/// reference engine's version whether or not it moved.
+fn reference_version_records(
+    packages: &[JudgedPackage],
+    comparison: &Comparison,
+    divergences: &[Divergence],
+) -> String {
+    let mut records = Vec::new();
+    let mut seen: Vec<&str> = Vec::new();
+    for package in packages {
+        if !package.behavior_is_crate_version() || seen.contains(&package.name.as_str()) {
+            continue;
+        }
+        seen.push(&package.name);
+        let certified = if package.certified_versions.is_empty() {
+            package.version.clone()
+        } else {
+            package.certified_versions.join(",")
+        };
+        let (resolved, status) = match comparison {
+            Comparison::Compared(_) => {
+                match divergences
+                    .iter()
+                    .find(|divergence| divergence.name == package.name)
+                {
+                    None => (package.version.clone(), REFERENCE_CERTIFIED),
+                    Some(divergence) if divergence.certified_version => {
+                        (divergence.found_versions.join(","), REFERENCE_CERTIFIED)
+                    }
+                    Some(divergence) => {
+                        (divergence.found_versions.join(","), REFERENCE_UNCERTIFIED)
+                    }
+                }
+            }
+            _ => (String::new(), REFERENCE_UNLOCATED),
+        };
+        records.push(format!(
+            "{}{RECORD_SEPARATOR}{}{RECORD_SEPARATOR}{resolved}{RECORD_SEPARATOR}{certified}{RECORD_SEPARATOR}{status}",
+            package.name, package.version
+        ));
+    }
+    records.join(&FIELD_SEPARATOR.to_string())
 }
 
 fn collect_tree(root: &Path, path: &Path, output: &mut Vec<PathBuf>) {
@@ -1374,6 +1563,7 @@ checksum = "ffff"
             behavior_unit: None,
             behavior_version: None,
             behavior_source: None,
+            certified_versions: Vec::new(),
         }
     }
 
@@ -1383,6 +1573,31 @@ checksum = "ffff"
             tier: Tier::Periphery,
             ..core_package(name, version)
         }
+    }
+
+    /// The same package as an implementation library on a caret edge.
+    fn implementation_package(name: &str, version: &str) -> JudgedPackage {
+        JudgedPackage {
+            tier: Tier::Implementation,
+            ..core_package(name, version)
+        }
+    }
+
+    /// A reference library judged by crate version, with the versions
+    /// the certificate speaks for.
+    fn reference_package(name: &str, version: &str, certified: &[&str]) -> JudgedPackage {
+        JudgedPackage {
+            behavior_unit: Some(name.to_owned()),
+            behavior_version: Some(format!("crate:{version}")),
+            behavior_source: Some(CRATE_VERSION_BEHAVIOR_SOURCE.to_owned()),
+            certified_versions: certified.iter().map(|v| (*v).to_owned()).collect(),
+            ..core_package(name, version)
+        }
+    }
+
+    /// A consumer graph in which `serde` moved to `version`.
+    fn serde_moved(version: &str) -> String {
+        CONSUMER.replace("version = \"1.0.228\"", &format!("version = \"{version}\""))
     }
 
     /// A core package whose behaviour version a running binary reads.
@@ -1728,6 +1943,10 @@ checksum = "9999"
         assert_eq!(Tier::from_record(Some("")), Tier::Core);
         assert_eq!(Tier::from_record(Some("advisory")), Tier::Core);
         assert_eq!(Tier::from_record(Some("periphery")), Tier::Periphery);
+        assert_eq!(
+            Tier::from_record(Some("implementation")),
+            Tier::Implementation
+        );
         // And end to end: the same drift as above, from a record whose
         // entries carry no tier at all.
         let answers = statuses(compiled(), &memchr_moved());
@@ -1804,6 +2023,164 @@ checksum = "9999"
             answers.core_static
         );
         assert!(answers.r2_drift.is_empty(), "{}", answers.r2_drift);
+    }
+
+    /// An implementation library that moved inside its caret range is
+    /// named in the advisory with its own frame, and the core answer
+    /// stands: the certificate does not pin it.
+    #[test]
+    fn an_implementation_library_that_moved_is_reported_rather_than_refused() {
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| package.name != "memchr");
+        judged_closure.push(implementation_package("memchr", "2.8.3"));
+        let answers = statuses(judged_closure, &memchr_moved());
+        assert_eq!(answers.core_static, "verified");
+        assert!(
+            answers.strict.starts_with("mismatched: "),
+            "{}",
+            answers.strict
+        );
+        assert_eq!(
+            answers.advisory,
+            "one implementation library this build compiles is not the judged version; it is \
+             taken on a caret edge, so it is reported here and the certificate does not pin it: \
+             memchr 2.8.3 (this build compiles 2.8.4). To align them anyway, run in the \
+             workspace that owns the governing lockfile: cargo update --precise 2.8.3 memchr"
+        );
+        for word in ["harmless", "safe", "cannot"] {
+            assert!(!answers.advisory.contains(word), "{}", answers.advisory);
+        }
+        assert!(answers.reference_versions.is_empty());
+    }
+
+    /// A reference library resolved at another of its certified reference
+    /// versions keeps the core answer, is named in the advisory, and
+    /// reports `certified` in its reference record.
+    #[test]
+    fn a_reference_library_at_a_certified_version_keeps_the_core_answer() {
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| package.name != "serde");
+        judged_closure.push(reference_package(
+            "serde",
+            "1.0.228",
+            &["1.0.228", "1.0.229"],
+        ));
+        let answers = statuses(judged_closure, &serde_moved("1.0.229"));
+        assert_eq!(answers.core_static, "verified");
+        assert!(
+            answers.strict.starts_with("mismatched: "),
+            "{}",
+            answers.strict
+        );
+        assert_eq!(
+            answers.advisory,
+            "serde resolves at a certified reference version other than the judged one (serde \
+             1.0.228 -> 1.0.229); the certificate speaks for it"
+        );
+        assert_eq!(
+            answers.reference_versions,
+            format!(
+                "serde{RECORD_SEPARATOR}1.0.228{RECORD_SEPARATOR}1.0.229{RECORD_SEPARATOR}\
+                 1.0.228,1.0.229{RECORD_SEPARATOR}certified"
+            )
+        );
+        // Nothing probed: a crate-version unit is not a behaviour unit
+        // the runtime can read.
+        assert!(answers.judged_behavior.is_empty());
+        assert!(answers.r2_drift.is_empty());
+    }
+
+    /// The same library at a version outside the certified set holds the
+    /// core answer and reports `uncertified_reference`: the accelerated
+    /// engines are held on the reference route, nothing is refused.
+    #[test]
+    fn a_reference_library_outside_its_certified_versions_holds_the_core_answer() {
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| package.name != "serde");
+        judged_closure.push(reference_package(
+            "serde",
+            "1.0.228",
+            &["1.0.228", "1.0.229"],
+        ));
+        let answers = statuses(judged_closure, &serde_moved("1.0.230"));
+        assert!(
+            answers
+                .core_static
+                .starts_with("mismatched: the judged build compiled serde 1.0.228"),
+            "{}",
+            answers.core_static
+        );
+        assert!(answers.advisory.is_empty(), "{}", answers.advisory);
+        assert_eq!(
+            answers.reference_versions,
+            format!(
+                "serde{RECORD_SEPARATOR}1.0.228{RECORD_SEPARATOR}1.0.230{RECORD_SEPARATOR}\
+                 1.0.228,1.0.229{RECORD_SEPARATOR}uncertified_reference"
+            )
+        );
+    }
+
+    /// A certified version reached as something other than a registry
+    /// package is not a version that moved, so the set does not speak
+    /// for it.
+    #[test]
+    fn a_certified_version_from_another_source_is_not_certified() {
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| package.name != "serde");
+        judged_closure.push(reference_package(
+            "serde",
+            "1.0.228",
+            &["1.0.228", "1.0.229"],
+        ));
+        let registry = "version = \"1.0.229\"\nsource = \"registry+https://github.com/rust-lang/crates.io-index\"";
+        let patched = serde_moved("1.0.229").replace(
+            registry,
+            "version = \"1.0.229\"\nsource = \"git+https://example.invalid/serde#abcdef\"",
+        );
+        assert_ne!(patched, serde_moved("1.0.229"));
+        let answers = statuses(judged_closure, &patched);
+        assert!(
+            answers.core_static.starts_with("mismatched: "),
+            "{}",
+            answers.core_static
+        );
+        assert!(answers
+            .reference_versions
+            .ends_with("uncertified_reference"));
+    }
+
+    /// A reference library that did not move reports the judged version
+    /// as resolved and `certified`; a build that could not be compared
+    /// reports `unlocated` with no resolved version.
+    #[test]
+    fn a_reference_record_is_written_whether_or_not_the_library_moved() {
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| package.name != "serde");
+        judged_closure.push(reference_package("serde", "1.0.228", &["1.0.228"]));
+        let answers = statuses(judged_closure, CONSUMER);
+        assert_eq!(answers.core_static, "verified");
+        assert_eq!(
+            answers.reference_versions,
+            format!(
+                "serde{RECORD_SEPARATOR}1.0.228{RECORD_SEPARATOR}1.0.228{RECORD_SEPARATOR}\
+                 1.0.228{RECORD_SEPARATOR}certified"
+            )
+        );
+        let temporary = tempfile::tempdir().unwrap();
+        let judged_lock = temporary.path().join("judged.lock");
+        fs::write(&judged_lock, JUDGED).unwrap();
+        let mut judged_closure = compiled();
+        judged_closure.retain(|package| package.name != "serde");
+        judged_closure.push(reference_package("serde", "1.0.228", &[]));
+        let unlocated =
+            closure_statuses(&judged_lock, &Ok(judged_closure), &GoverningLock::Missing);
+        assert_eq!(
+            unlocated.reference_versions,
+            format!(
+                "serde{RECORD_SEPARATOR}1.0.228{RECORD_SEPARATOR}{RECORD_SEPARATOR}\
+                 1.0.228{RECORD_SEPARATOR}unlocated"
+            )
+        );
     }
 
     /// A unit whose behaviour version is its package version is compared

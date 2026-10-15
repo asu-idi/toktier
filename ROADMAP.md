@@ -172,6 +172,9 @@ What remains is registered for a later release:
 - a pool entry point outside SGLang;
 - a second cut mode at the edges of special-token strings;
 - a bytes entry point with UTF-8 validation outside the GIL;
+- a Unicode quick-check in front of the corrected CPU engine's
+  normalization guard, so non-ASCII text already in NFC skips the full
+  normalization;
 - for the batch path's own workers, forking and warming at construction,
   disjoint idle workers for concurrent `encode_batch` callers, and the
   64 KiB-per-worker floor as a parameter, which the native chunk
@@ -283,6 +286,7 @@ carries no coverage; the Hy4-preview row below points at one such record.
 | Step 3.7 Flash | `stepfun-ai/Step-3.7-Flash` | pre-tokenizer, normalizer and decoder segments match an already certified splitter group; new vocabulary, merges and added-token table |
 | LongCat 2.0 | `meituan-longcat/LongCat-2.0` | script-partitioned pre-splits; each stage is a plain character-class run, so an existing construction applies, but it is a new kernel group |
 | Hy4-preview | `tencent/Hy4-preview` | normalizer, pre-tokenizer, post-processor and decoder segments are byte-equal to the certified `hy3` splitter; vocabulary, merges and added-token table are a retrain rather than an edit. A preview publication, so a revision that changes the bytes is a different artifact; what was examined is recorded in `docs/support-matrix.md` |
+| DeepSeek-V4.1-Flash | `deepseek-ai/DeepSeek-V4.1-Flash` | the same pipeline as the certified `deepseek_v4_flash` with a different added-token table; examined and recorded in `docs/support-matrix.md`, not certified. Its certification is registered for a later release |
 
 Requests for additional families are welcome as issues; what determines the
 effort is the pre-tokenizer structure, not the vocabulary size.
@@ -295,6 +299,10 @@ effort is the pre-tokenizer structure, not the vocabulary size.
 - An SGLang adapter ships since 0.3.0, attached without changes to SGLang
   or through a small backend patch kept in this repository
   ([`docs/integration/sglang.md`](docs/integration/sglang.md)).
+  Recording the loader faces under a second `transformers` release, so
+  that an artifact whose face the installed loader materializes
+  (`qwen3_5_08b`) can read as certified beside a loader other than
+  4.57.6, is registered for a later release.
 - A persistent layer that implements the tokenizer traits used by the NVIDIA
   Dynamo frontend, so that it can sit next to the existing in-process cache, is
   a candidate for collaboration rather than a unilateral plan; the same document

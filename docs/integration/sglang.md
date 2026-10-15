@@ -535,7 +535,17 @@ shows only in its `explain()`: beside `transformers` 5.12.1,
 `family.plan_reasons` for `qwen3_5_08b` carries no
 `R_LOADER_FACE_MISMATCH`, and its reasons can differ from those in the
 loaded tokenizer's `explain()`.
-<!-- TODO(fill): add the release-candidate reading of automatic_effective_backend and of explain() backend beside SGLang; the 2026-10-14 check ran on a build whose engine binding was not yet recertified, where both environments read hf for that reason. -->
+On the release candidate, checked on 2026-10-15 after the roster was
+recertified and with no GPU visible, `doctor` reads
+`automatic_effective_backend` as `fast_cpu`, at the installation level and
+under `--family` for each of the eleven roster families, in three
+environments alike: beside `transformers` 5.12.1 with `tokenizers` 0.22.2
+(SGLang 0.5.19 to 0.5.21), beside `transformers` 5.19.0 with `tokenizers`
+0.23.2 (SGLang's main branch), and beside `transformers` 4.57.6 with
+`tokenizers` 0.22.2. A loaded tokenizer's `explain()` reads `backend` as
+`fast_cpu` for ten families in all three environments. `qwen3_5_08b`
+reads `fast_cpu` beside 4.57.6 and `hf` beside 5.12.1 and 5.19.0, with
+`R_LOADER_FACE_MISMATCH` among its plan reasons, as described above.
 
 The combinations we have checked:
 

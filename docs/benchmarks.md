@@ -421,7 +421,6 @@ was 65,536 characters, so a 100K-character stateless request was cut.
 Every answer of the pool equalled the reference ids. They were taken on
 2026-10-01 on the code that became this release, on an otherwise idle
 host.
-<!-- TODO(fill): if the release battery re-takes this microbenchmark on the release candidate, replace the cells and the date together. -->
 
 | Call | 100K characters | 1M characters |
 |---|---:|---:|
@@ -457,8 +456,15 @@ which also quotes the readings behind that table.
 
 ### Native chunk encoder
 
-<!-- TODO(fill): readings to be added from the release battery (machine, date, pinned cores, family, input sizes, serial against Python path against native path, and the identity check). Leave this subsection out of the release if no such readings are taken. -->
-Readings to be added from the release battery.
+This release publishes no timings for the native chunk encoder. A
+reading of it compares three calls on the same input in one process
+pinned to a stated set of cores: the serial `encode`,
+`chunked.encode(native=False)` and `chunked.encode(native=True)`, each
+after `chunked.warm` and each answer checked id for id against the
+serial encode, with the machine, the date, the cores, the family and the
+input sizes written beside the numbers. Which artifacts the native path
+may serve is read from the admission table, as described in
+[`serving.md`](serving.md) Section 3.
 
 ## Certification scale behind the GPU numbers
 

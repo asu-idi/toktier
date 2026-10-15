@@ -124,7 +124,7 @@ it, and only two of them are about the chunked path.
 | Evidence | What it covers | Reading |
 |---|---|---|
 | Engine differential | the corrected CPU engine encoding whole documents; it never cuts one, so it says nothing about cuts | 41,800,181,401 checks, 11 artifacts x 3,800,016,491 documents, 0 divergences ([`tools/fast_cpu_binding.json`](../tools/fast_cpu_binding.json)) |
-| Adversarial battery | the cut rule on strings built to stress it: decomposing characters, combining sequences, jamo, kana voicing marks, literals beside marks | 460,000 strings, 11 artifacts (100,000 each for qwen3_8b, qwen3_5_08b and minimax_m3, 20,000 for each of the other eight), Python and native paths, 0 mismatches in all four comparisons and 0 plan differences between the two paths, 2026-10-14 ([`readings/chunked_cuts_campaign.json`](../readings/chunked_cuts_campaign.json), adversarial section) |
+| Adversarial battery | the cut rule on strings built to stress it: decomposing characters, combining sequences, jamo, kana voicing marks, literals beside marks | 460,000 strings, 11 artifacts (100,000 each for qwen3_8b, qwen3_5_08b and minimax_m3, 20,000 for each of the other eight), Python and native paths, 0 mismatches in all four comparisons and 0 plan differences between the two paths, 2026-10-15 ([`readings/chunked_cuts_campaign.json`](../readings/chunked_cuts_campaign.json), adversarial section) |
 | Corpus cut comparison | web documents of 512 to 400,000 characters, encoded with forced cuts and compared id for id with the serial encode and the reference | <!-- TODO(fill): documents per family, families, paths, mismatches and serial fallbacks from readings/chunked_cuts_campaign.json --> |
 
 The engine differential stays what it was in the section above. It

@@ -173,6 +173,11 @@ encoder for the same requests.
 The parallelism comes from the engine's Rayon worker pool, sized by
 `RAYON_NUM_THREADS` at first use in the tokenizer process; with that
 variable at `1` the chunks are encoded one after another (still exact).
+A deployment that exports `RAYON_NUM_THREADS=1`, a common companion of
+`TOKENIZERS_PARALLELISM=false`, therefore loses the chunk parallelism
+without any message: leave the variable unset in the tokenizer process,
+or set it to the cores you give tokenization, where chunked dispatch is
+wanted.
 The workers are forked lazily on the first batch that needs them, about
 20 ms each, once per process.
 
@@ -394,7 +399,9 @@ on 2026-10-13: its unit tests in each release's environment, the attach
 to the real `TokenizerManager` class, the backend patch applied to each
 release's published wheel, and token ids on a real Qwen3-8B tokenizer
 through both forms, including the worker pool. These checks ran on the
-CPU side, without a model server. In all three releases the two methods
+CPU side, without a model server. A model-server check on SGLang 0.5.21
+followed on 2026-10-15; it is the last entry of the list of combinations
+we have checked, below. In all three releases the two methods
 the adapter wraps have the same signatures. The backend patch comes in
 two files: `patches/sglang-0.5.19-toktier-backend.patch` for 0.5.19,
 and `patches/sglang-0.5.21-toktier-backend.patch` for 0.5.20 and 0.5.21
@@ -436,15 +443,22 @@ SGLang 0.5.19, 0.5.20 and 0.5.21 pin `transformers==5.12.1`,
 `tokenizers==0.22.2` and `torch==2.13.0`; SGLang's main branch has moved
 to `transformers==5.19.0` and `tokenizers==0.23.2`. Both pairs are inside
 toktier's ranges, so `pip check` has nothing to report about toktier in
-either environment.
+either environment. The two pairs do not mix: `transformers` 4.57.6 and
+5.12.1 declare `tokenizers<=0.23.0`, and 5.19.0 declares
+`tokenizers>=0.23.1,<0.24`, so the certified 0.23 releases install beside a
+loader of the 5.19 line and 0.22.2 beside an earlier one; pip enforces this
+from those packages' own metadata.
 With toktier 0.3.0, `pip check` reported "No broken requirements found."
 on 2026-10-14 in a new environment holding SGLang 0.5.21's two pins
 (`tokenizers==0.22.2`, `transformers==5.12.1`) and in one holding SGLang
 main's two pins (`tokenizers==0.23.2`, `transformers==5.19.0`), and on
 2026-10-15 in the Python 3.10 environment the release is rehearsed in. In
-an existing SGLang 0.5.21 environment, `pip install --dry-run
-toktier==0.3.0` lists toktier and no other package to install, since
-SGLang's own pins already satisfy toktier's requirements.
+a new environment that holds SGLang 0.5.21 and its dependencies, `pip
+install toktier==0.3.0` also installs `platformdirs`, which toktier
+requires and SGLang's dependencies do not bring; on 2026-10-15 a dry run
+in such an environment listed `platformdirs` and toktier, a real install
+on a second host did the same, and `pip check` then reported "No broken
+requirements found." in both.
 Older toktier releases pinned `transformers==4.57.6` and had to be
 installed with `--no-deps` beside SGLang, together with `platformdirs`,
 the one dependency SGLang's own dependencies do not bring; that is no
@@ -575,7 +589,19 @@ The combinations we have checked:
   pool starts and stops, and its chunked, session and session-append
   ids equal the Hugging Face ids, through the attach form and through
   the backend patch.
-<!-- TODO(fill): add the real-server smoke test on the release candidate. -->
+- SGLang 0.5.21 with `transformers` 5.12.1 and `tokenizers` 0.22.2,
+  checked on 2026-10-15 on the release candidate of this release, with a
+  real Qwen3-8B (bf16) model server on one RTX 5090: through the attach
+  form (defaults; synchronous shadow; chunked dispatch at the default
+  chunk count and with four chunks forced; a four-worker pool) and
+  through the backend patch with a four-worker pool, identity
+  `equivalent` in every server, and the token ids of all 138 requests,
+  read from `meta_info.input_token_logprobs`, equal the Hugging Face ids
+  of the same text. The shadow found no mismatch in 32 comparisons, and
+  in both pool servers the four workers ran under the `TokenizerManager`
+  process only. A Qwen3-1.7B server without `TOKTIER_SGLANG_FAMILY`
+  resolved its tokenizer to `qwen3_8b` and gave the Hugging Face ids for
+  8 of 8 requests.
 
 The risks, stated plainly. Under `transformers` 5.12.1 the live
 tokenizer objects of the two Qwen families report `trim_offsets`

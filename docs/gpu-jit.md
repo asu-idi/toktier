@@ -363,6 +363,18 @@ print(tok.explain()["runtime_policy"])
 detection, and `gpu_min_bytes=` changes the UTF-8 byte crossover. The explicit
 engine below remains available for benchmarking and low-level integration.
 
+With `gpu_delivery="auto"`, an importable `ninja` module is read as the
+`gpu-jit` profile, and the facade then selects the JIT delivery even when the
+shipped prebuilt fatbin covers the device. Serving environments often install
+`ninja` for their own extensions. On such a host the first request at or above
+`gpu_min_bytes` compiles the kernel into the cache directory, which takes tens
+of seconds (about 43 s on an RTX PRO 6000, sm_120). Later calls in that process
+take milliseconds, and later processes reuse the build. `toktier doctor`
+reports the choice as `automatic_gpu_delivery`. To use the shipped prebuilt
+kernel, pass `gpu_delivery="prebuilt"`; to stay on the CPU path, pass
+`device="cpu"`. The SGLang adapter passes `device="cpu"`, and the Rust crate's
+`GpuDelivery::Auto` already prefers the prebuilt delivery.
+
 When the GPU engine opens is a separate question from which backend runs a
 given input, and both deliveries answer it the same way. Under certified
 prebuilt delivery -- the default path on a supported GPU -- requests take the

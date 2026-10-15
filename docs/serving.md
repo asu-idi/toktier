@@ -173,7 +173,12 @@ What decides whether it is worth it:
   than pay that inside a request. The native path has its own pool,
   described below, and runs its chunks on the same Rayon threads. On
   either path a process started with `RAYON_NUM_THREADS=1` gets the
-  chunks encoded one after another: still exact, not faster.
+  chunks encoded one after another: still exact, not faster. Deployments
+  often export `RAYON_NUM_THREADS=1` beside
+  `TOKENIZERS_PARALLELISM=false` to keep library thread pools quiet, and
+  that also caps this pool at one worker without any message; where
+  chunk-parallel encode is wanted, leave `RAYON_NUM_THREADS` unset or
+  set it to the number of cores the process may use.
 - **What it saves.** On the Python path, 1 M-character English prose
   with 16 workers takes 8.6 ms against 26.5 ms serial for the slower of the certified engines
   (3.1x), and 6.9 ms against 9.8 ms for the faster ones (1.4x): the
@@ -257,7 +262,10 @@ The pool is forked on first use. `chunked.warm(tokenizer, workers=None,
 text=None)` forks it ahead of the first request, to the Rayon thread
 count when `workers` is omitted, and with a sample `text` runs each new
 worker once so its caches are warm; a serving process should call it at
-start-up. `chunked.admission(tokenizer)` reports the decision for both
+start-up, together with `chunked.admission(tokenizer)`, because `warm`
+does not run the admission check and the first chunked call would
+otherwise pay for it (the SGLang adapter does both when it wraps a
+tokenizer). `chunked.admission(tokenizer)` reports the decision for both
 paths: the admission facts of the `chunked` block above (`admitted`,
 `refusal`, `family`, `normalizer`, `literals`, `evidence_id`,
 `evidence_status`, `evidence_paths`, `loader_face_sha256`,

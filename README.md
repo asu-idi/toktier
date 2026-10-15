@@ -21,9 +21,12 @@ offers a certified GPU path for fresh or large requests. Both fast paths return 
   engine; it is not a cold first-call figure. The repair reading measures the repair
   operation itself; it excludes materializing the full historical token
   sequence as a Python tuple.
-- **Certified before acceleration.** Fast paths are admitted only for the exact
-  tokenizer artifact, oracle version, kernel delivery, and architecture covered
-  by recorded evidence. `explain()` reports the route and its reasons.
+- **Certified before acceleration.** Fast paths run only for the exact
+  tokenizer artifacts, under the reference versions, that recorded evidence
+  covers. Under the default `SUPPORTED` policy a device architecture or
+  compiler no campaign has judged still runs when every constraint the
+  registry binds verifies, labelled `supported_untested` rather than
+  certified. `explain()` reports the route and its reasons.
 
 <picture>
   <source media="(prefers-color-scheme: dark)"
@@ -189,7 +192,11 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
 ## Quick start
 
 Install with `pip install toktier`; GPU options are described in
-[Install](#install).
+[Install](#install). On a GPU host where `ninja` is importable, the default
+`gpu_delivery="auto"` selects the JIT delivery, so the first long request
+compiles the kernel for tens of seconds; pass `gpu_delivery="prebuilt"` to use
+the shipped kernel or `device="cpu"` to stay on the CPU route
+([GPU delivery](#gpu-delivery)).
 
 ```python
 import toktier
@@ -272,7 +279,7 @@ tok = toktier.load("qwen3_8b", policy=RoutingPolicy.CERTIFIED)
 | Policy | What runs | If a fast-path premise fails |
 |---|---|---|
 | `SUPPORTED` (default since 0.2.6) | Everything `CERTIFIED` admits, and in addition a device architecture or compiler toolchain no campaign has judged, provided the shipped kernel loads and runs there and every constraint the registry does bind still verifies; such a route is labelled `supported_untested` rather than certified | Falls back to HF and records the reason |
-| `CERTIFIED` (the strict setting; the default through 0.2.5) | Only routes covered for the exact artifact, HF version, engine/kernel bytes, delivery, and hardware | Falls back to HF and records the reason |
+| `CERTIFIED` (the strict setting; the default through 0.2.5) | Only routes the evidence covers: the exact artifact under a certified reference version and, for the GPU, the exact kernel bytes, delivery, a judged architecture and a judged toolchain. The fast CPU engine is admitted by its source identity, as under the default; a build of it with another compiler or flags is labelled `supported_untested` | Falls back to HF and records the reason |
 | `REFERENCE` | HF `tokenizers` only | No accelerated route is attempted |
 | `REQUIRE_ACCELERATED` | The same routes the default policy admits | Construction raises if no fast path is eligible; per-input safety fallbacks remain enabled |
 | `EXPERIMENTAL` | May admit an unjudged combination for evaluation | Labels every waived premise; never the default |
@@ -422,8 +429,11 @@ deliberately not persisted or inherited by later certified processes. Inspect
 The corrected, data-version-pinned Gigatoken implementation is linked directly
 into the core `toktier._native` extension. TokTier does not install or trust a
 top-level package named `gigatoken`, and the wheel carries no second CPU native
-module. The base wheel also pins the HF loader and oracle versions needed to
-open this certified route; there is no separate CPU-fast installation step.
+module. The base wheel also requires the HF loader and oracle packages as
+ranges (`tokenizers>=0.22.2,<0.24`, `transformers>=4.57.6,<6`); the route is
+certified under the `tokenizers` releases the registry lists as certified
+reference versions (0.22.2, 0.23.2 and 0.23.3 in this release). There is no
+separate CPU-fast installation step.
 
 For provenance, a source checkout can independently recompute the active source
 identity and build the same release profile:
@@ -659,7 +669,9 @@ adapter reports and what each one means.
 
 The certified reference is Hugging Face `tokenizers` 0.22.2 with default
 settings: the reference engine compiled into the native extension is that
-release exactly, and every certification reading was judged against it.
+release exactly, and the roster certification readings use it as the
+reference; 0.23.2 and 0.23.3 have their own shipped reference-compatibility
+readings (`readings/oracle_compat/`).
 Certification is bound to exact artifact bytes and to the certified reference
 versions, the exact `tokenizers` releases the support registry's oracle record
 lists; a later release joins that set only on evidence that it agrees with the

@@ -18,9 +18,10 @@ TokTier 是面向智能体 LLM 服务的有状态分词系统。它保留每个�
   的前提是引擎已构造并就绪，不是冷启动首次调用的数字。repair 读数只测量
   repair 操作本身，
   不包含将完整历史 token 序列物化为 Python tuple 的成本。
-- **先认证，再加速。** 只有在精确的 tokenizer 工件、参考实现版本、kernel 交付方式
-  和架构均有记录证据覆盖时，系统才会采用快速路径。`explain()` 会报告实际路由
-  及其原因。
+- **先认证，再加速。** 快速路径只用于记录证据覆盖的精确 tokenizer 工件，并且
+  只在已认证的参考版本下运行。在默认的 `SUPPORTED` 策略下，认证活动没有测过的
+  设备架构或编译器，只要注册表绑定的每一项约束都仍然通过，照样可以运行，并标为
+  `supported_untested` 而不是 certified。`explain()` 会报告实际路由及其原因。
 
 <picture>
   <source media="(prefers-color-scheme: dark)"
@@ -155,7 +156,10 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 
 ## 快速开始
 
-运行 `pip install toktier` 即可安装；GPU 选项见[安装](#安装)。
+运行 `pip install toktier` 即可安装；GPU 选项见[安装](#安装)。在可以导入
+`ninja` 的 GPU 主机上，默认的 `gpu_delivery="auto"` 会选择 JIT 交付，于是首个
+长请求要先现场编译 kernel，耗时数十秒；传入 `gpu_delivery="prebuilt"` 可使用随包
+kernel，传入 `device="cpu"` 则留在 CPU 路由上（见 [GPU 交付](#gpu-交付)）。
 
 ```python
 import toktier
@@ -230,7 +234,7 @@ tok = toktier.load("qwen3_8b", policy=RoutingPolicy.CERTIFIED)
 | 策略 | 执行的路由 | 快速路径前提不成立时 |
 |---|---|---|
 | `SUPPORTED`（0.2.6 起为默认） | `CERTIFIED` 放行的全部路由，另外还包括认证活动没有测过的设备架构或编译工具链——前提是随包 kernel 在那里能装载并运行，且注册表确实绑定的每一项约束都仍然通过；这样的路由标为 `supported_untested`，而不是 certified | fallback 到 HF，并记录原因 |
-| `CERTIFIED`（严格档；0.2.5 及以前的默认） | 只执行精确工件、HF 版本、引擎/kernel 字节、交付方式和硬件均有证据覆盖的路由 | fallback 到 HF，并记录原因 |
+| `CERTIFIED`（严格档；0.2.5 及以前的默认） | 只执行证据覆盖的路由：精确工件、已认证的参考版本；GPU 还要求精确的 kernel 字节、交付方式、经评审的架构和工具链。快速 CPU 引擎与默认策略相同，按源码身份准入；用别的编译器或编译参数构建的引擎标为 `supported_untested` | fallback 到 HF，并记录原因 |
 | `REFERENCE` | 只使用 HF `tokenizers` | 不尝试任何加速路径 |
 | `REQUIRE_ACCELERATED` | 与默认策略相同的路由 | 若构造时没有合格快速路径则报错；仍启用针对单个输入的安全 fallback |
 | `EXPERIMENTAL` | 评估时可以采用未经评审的组合 | 明确标出每项获豁免的前提；永远不是默认策略 |
@@ -366,8 +370,10 @@ toktier gpu compile qwen3_8b --accept-uncertified-jit
 
 经过修正并固定 Unicode 数据版本的 Gigatoken 实现已直接链接到核心 `toktier._native`
 扩展中。TokTier 不会安装或信任名为 `gigatoken` 的顶层包，wheel 也不包含第二个
-CPU 原生模块。基础 wheel 还固定了启用这条认证路径所需的 HF 加载器和参考实现
-版本，无需另行安装 CPU-fast 组件。
+CPU 原生模块。基础 wheel 还以版本范围的形式依赖 HF 加载器和参考实现
+（`tokenizers>=0.22.2,<0.24`、`transformers>=4.57.6,<6`）；这条路径的认证只对
+注册表列为已认证参考版本的 `tokenizers` 版本成立（本版为 0.22.2、0.23.2 与
+0.23.3）。无需另行安装 CPU-fast 组件。
 
 如需核对来源，可在源码检出目录中独立重算当前源码身份，并使用相同的发布配置
 构建：
@@ -568,7 +574,8 @@ pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
 ## 正确性与证据
 
 认证参考实现是默认配置下的 Hugging Face `tokenizers` 0.22.2：编进原生扩展的
-参考引擎正是这一版，所有认证读数都以它为判据。认证绑定精确的工件字节与
+参考引擎正是这一版，roster 的认证读数以它为参照；0.23.2 与 0.23.3 另有随包的
+参照兼容读数（`readings/oracle_compat/`）。认证绑定精确的工件字节与
 已认证的参考版本集合，即随包注册表 oracle 记录列出的那些 `tokenizers` 版本；
 更新的版本只在有证据表明它在认证面上与内嵌参考一致时才进入这个集合，而包的
 依赖声明接受一个版本范围，以便与其他钉死版本的软件装在一起。如果本机

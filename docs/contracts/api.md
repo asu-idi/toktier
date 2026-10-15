@@ -169,6 +169,12 @@ session.final_ids(add_special_tokens: bool = True) -> list[int]
   expected revision; a mismatch raises `SessionRevisionConflict`
   (code `SESSION_REVISION_CONFLICT`). Last-writer-wins behavior is not
   offered.
+- Known limitation (0.2.9 and 0.3.0): when the planned route puts the GPU
+  ahead of the fast CPU engine, reading `revision` on a newly opened
+  persistent session before its first write raises `RuntimeError` ("fast
+  CPU backend lost its live tokenizer") instead of returning the count.
+  The session is not harmed: appends after it proceed and their ids are
+  exact, and a tokenizer loaded with `device="cpu"` returns `0` there.
 
 ## 6. Diagnostics (reserved name, shape not frozen)
 

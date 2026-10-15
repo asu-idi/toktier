@@ -143,9 +143,11 @@ frontend does not require a Python callback.
   the artifact is not certified, the reference runs and the result is marked as
   uncertified. Two things are kept apart here. The embedded reference is the
   `tokenizers` crate compiled into the native extension, at exactly 0.22.2;
-  it is what the reference backend executes and what every certification
-  reading was judged against. The certified reference versions are the exact
-  Python `tokenizers` releases the registry's oracle record lists
+  it is what the reference backend executes, and the roster certification
+  readings use it as the reference; 0.23.2 and 0.23.3 have their own shipped
+  reference-compatibility readings (`readings/oracle_compat/`). The certified
+  reference versions are the exact Python `tokenizers` releases the
+  registry's oracle record lists
   (`certified_versions`): the embedded release, plus any later release judged
   equivalent to it on the certified surface. Package metadata admits a range
   (`tokenizers>=0.22.2,<0.24`, with the Python loader at

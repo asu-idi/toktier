@@ -175,8 +175,11 @@ on, and says where it is read: the newest `\p{Age=...}` the regex engine
 accepts, `onig::version()`, and `unicode_segmentation::UNICODE_VERSION`. So a
 build whose `regex` moved a patch version while its Unicode tables stayed put
 is still certified, and the move is named in `dependency_advisory`; **a build
-whose tables moved to another Unicode version is not certified** and routes
-to the reference engine.
+whose tables moved to another Unicode version is not certified**: since 0.3.0
+it still runs the fast CPU engine, under every policy but `Policy::Reference`,
+labelled `supported_untested` with `reference_certification_reason:
+"uncertified_reference"`, while the GPU route, which keeps the certified-build
+requirement, is admitted only under `Policy::Experimental`.
 
 The R2 units a binary cannot ask -- the embedded reference engine
 `tokenizers`, `icu_properties` and its `icu_properties_data`,
@@ -390,16 +393,21 @@ the commands. When a reference library moved to another of its certified
 reference versions, the same holds and the advisory says which. When an R2
 unit moved to another Unicode version, or a reference library resolved a
 version outside its certified reference versions, `core_closure` still
-reads `verified`, the accelerated engines run, `certified` is `false`,
+reads `verified`, the fast CPU engine runs, `certified` is `false`,
 `reference_certification_reason` reads `uncertified_reference`, and the
 route is labelled `supported_untested` until the lockfile is aligned, a
 later release certifies the newer version, or `verify-local --engine cpu`
-compares the two engines here. When one of this project's own crates
+compares the two engines here. The GPU route keeps the certified-build
+requirement, so on such a build it is admitted only under
+`Policy::Experimental` (`GpuUncertified` among the plan reasons
+otherwise); the refusal message of an explicitly named CUDA device says
+the build is not in the shipped runtime-build registry, where the cause
+is the reference version. When one of this project's own crates
 resolves from another copy or version, `core_closure` reads `mismatched`
 and no accelerated route is admitted. A crate an optional feature brings in
 (`toktier-store-sqlite` under `sqlite`) is compared only when the feature
 is on; a build with `default-features = false` is not asked about packages
-it does not compile, and the advisory names them as absent.
+it does not compile.
 
 What still earns no certificate at all:
 
@@ -785,8 +793,10 @@ serially instead (`ReasonCode::ChunkNoCut`, `ChunkFamilyUnsupported` or
 each implementation produced (`sources`), the phase timings and the
 label of the route (`certification`). `ChunkOptions` carries the keyword
 arguments of `toktier.chunked.encode`: `k` (`None` reads the chunk
-table, `chunked::default_chunks`), `min_chunk` and `scan_budget`; a zero
-for either bound is `INVALID_ARGUMENT`.
+table, `chunked::default_chunks`), `min_chunk` and `scan_budget`. A zero
+`scan_budget` or `k` is `INVALID_ARGUMENT`; `min_chunk` accepts zero,
+which means no lower bound on a chunk's length, and the Python call
+accepts it the same way.
 
 **Admission.** `admission()` reads four things in order and reports
 them, with the refusal in the vocabulary the Python facade's
@@ -815,7 +825,9 @@ encodes serially under `ChunkRouteNotFastCpu`. The one step of the
 Python face with no counterpart here is the installed-reference check:
 on this crate the embedded reference is judged at build time against
 its certified reference versions, and a build that resolves another
-version has no corrected CPU route at all.
+version keeps the corrected CPU route, labelled `supported_untested`
+with `reference_certification_reason: "uncertified_reference"`, so its
+chunked admission reads the same table rows.
 
 **Evidence label.** The row also records which levels of evidence were
 taken on the native chunk encoder this crate runs (`native_evidence`,
@@ -1007,11 +1019,12 @@ does not link a system CUDA runtime.
 
 ## Runnable verification
 
-Run the examples with `--release`. A development (dev-profile) build is
-not present in the shipped runtime-build registry, so certified
-accelerated routes are not admitted in it: a debug run of the CPU
-example silently routes `[HuggingFace]` only, and the GPU examples
-refuse with `UncertifiedRuntime`.
+Run the examples with `--release`. A development (dev-profile) build
+compiles the judged sources with a build recipe no campaign judged
+(`recipe_judged: false`), so it is not certified: a debug run of the CPU
+example still routes `[FastCpu, HuggingFace]` under the default policy,
+labelled `supported_untested`, and the GPU examples, whose route keeps
+the judged-recipe requirement, refuse with `UncertifiedRuntime`.
 
 - `cargo run --release -p toktier --example cpu`
 - `cargo run --release -p toktier --example batch`

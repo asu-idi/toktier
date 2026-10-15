@@ -80,7 +80,10 @@ loader/oracle companions are mandatory base dependencies of that wheel, as
 ranges (`tokenizers>=0.22.2,<0.24`, `transformers>=4.57.6,<6`); the embedded
 reference is the `tokenizers` crate at exactly 0.22.2, and the Python
 `tokenizers` releases the certificates speak for are the registry's certified
-reference versions -- the shipped extras are
+reference versions (0.22.2, 0.23.2 and 0.23.3 in this release; the two 0.23
+releases install only beside a `transformers` release of the 5.19 line, since
+`transformers` 4.57.6 and 5.12.1 declare `tokenizers<=0.23.0`) -- the shipped
+extras are
 `fastokens`, `gpu`, and `gpu-jit` -- and there is no separately installed
 Gigatoken distribution or second native extension. Its route is
 certified for **11 unique

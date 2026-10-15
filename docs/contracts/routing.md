@@ -118,7 +118,7 @@ Backend ids are lowercase strings. v1 assigns:
 |---|---|
 | `hf` | Reference backend: pinned HF tokenizers path. Always present; always last in every fallback chain. |
 | `gpu` | CUDA kernel backend, with prebuilt and JIT deliveries. |
-| `fast_cpu` | Corrected Gigatoken backend compiled into the private `toktier._native` extension in the core wheel; eligible only under its exact integrated module/source/build/toolchain/configuration and artifact binding. |
+| `fast_cpu` | Corrected Gigatoken backend compiled into the private `toktier._native` extension in the core wheel; eligible under its integrated module, source identity, engine version, delivery, repair configuration and artifact binding. Since 0.3.0 the build flags and the Rust toolchain are recorded rather than required: an extension built from the bound sources with another recipe is eligible under every policy but `REFERENCE` and labelled `supported_untested` (`R_ENGINE_BINDING_MISMATCH` with `cause: recipe_unjudged`, Section 5). |
 | `fastokens` | Explicit experimental session adapter; never an automatic certified route. |
 
 New backends append to this table; ids are never reused or renamed.

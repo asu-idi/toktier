@@ -133,10 +133,11 @@ package's **certified reference versions** -- the judged version and every
 later version a campaign certified with a lockfile that resolves it,
 listed in the shipped judged-closure record. A reference library outside
 that list, or one whose tables are another Unicode version, is reported
-as `uncertified_reference`: the accelerated engines run, the route is
-labelled `supported_untested` rather than `certified`, and the alignment
-command is printed (added in 0.3.0; each list holds the judged version
-alone in that release; the case in hand is `icu_properties` 2.3.0 with its
+as `uncertified_reference`: the fast CPU engine runs, the route is
+labelled `supported_untested` rather than `certified`, the GPU route,
+which needs a certified build, is admitted only under the experimental
+policy, and the alignment command is printed (added in 0.3.0; each list
+holds the judged version alone in that release; the case in hand is `icu_properties` 2.3.0 with its
 Unicode 17.0 property data where the judged 2.0.2 carries 16.0, see
 `docs/rust-api.md`).
 

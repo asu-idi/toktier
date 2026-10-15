@@ -37,6 +37,7 @@ from registry_common import (  # noqa: E402
     GenerationError,
     root_digest,
     serialise_document,
+    with_root_digest,
 )
 
 VERSION = "0.23.3"
@@ -50,7 +51,9 @@ def _read(path: Path) -> dict[str, Any]:
 def build_tree(tmp_path: Path) -> Path:
     """A tree with the shipped registry, schema, metadata and readings,
     and a complete set of compatibility readings for ``VERSION`` whose
-    identities are the ones the tests inject."""
+    identities are the ones the tests inject. The registry copies certify
+    the embedded reference alone, whatever the shipped set is, so that
+    ``VERSION`` is a release the tree has not certified yet."""
     root = tmp_path / "tree"
     for relative in (
         "tables/support_registry.json",
@@ -63,6 +66,7 @@ def build_tree(tmp_path: Path) -> Path:
         target = root / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / relative, target)
+    _certify_the_embedded_reference_only(root)
     (root / tool.COMPAT_DIRECTORY).mkdir(parents=True)
     cpu = _read(root / tool.CPU_READING)
     cpu["oracle"] = {"package": "tokenizers", "version": VERSION}
@@ -76,6 +80,15 @@ def build_tree(tmp_path: Path) -> Path:
         ]
         _write(tool.compat_path(root, tool.gpu_reading(arch), VERSION), gpu)
     return root
+
+
+def _certify_the_embedded_reference_only(root: Path) -> None:
+    registry = _read(tool.registry_path(root))
+    for record in tool.oracle_records(registry):
+        record["certified_versions"] = [tool.EMBEDDED_REFERENCE_VERSION]
+    payload = serialise_document(with_root_digest(registry, REGISTRY_DOMAIN_TAG))
+    for path in (tool.registry_path(root), tool.packaged_path(root)):
+        path.write_bytes(payload)
 
 
 def _write(path: Path, document: dict[str, Any]) -> None:

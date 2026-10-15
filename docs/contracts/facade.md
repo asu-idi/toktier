@@ -732,11 +732,19 @@ well-formed-but-newer records, in the contract's explicit-verify split.
 - The plan runs on one of two paths with the same cuts: the Python path,
   which runs the chunks through the public batch path, and the native
   chunk encoder inside the native runtime. `native=None` takes the
-  native path when it can run here (the loaded runtime carries it and
-  the route carries the corrected CPU engine) and the admission table
-  lists `native` for the artifact, and the Python path otherwise;
+  native path for an admitted tokenizer whenever it can run here (the
+  loaded runtime carries it and the route carries the corrected CPU
+  engine), and the Python path otherwise. What the admission table
+  records for the native path is reported, not required:
+  `chunked.admission` and `chunked.stats` carry it as
+  `native_evidence_label`, which reads
+  `native_evidence:adversarial_only` while the row holds the
+  adversarial battery but not yet the corpus cut comparison for that
+  path, and `None` once both are recorded; both paths return the serial
+  ids by construction, with a serial fallback where no cut is made.
   `native=False` takes the Python path; `native=True` takes the native
-  path or raises `RuntimeError` naming what is missing.
+  path or raises `RuntimeError` naming what is missing (the native
+  encoder, or the admission).
   `chunked.plan(..., native=True)`, `chunked.warm`,
   `chunked.admission`, `chunked.native_available` and
   `ChunkedEncoding.native_facts` (`None` on the Python path) belong to

@@ -180,11 +180,12 @@ Each served request is recorded in the timing log with `how: "chunked"`
 and the fields `chunked_k`, `chunk_count` and `chunked_serial_reason`
 (`null` when the chunks ran, and a reason code such as `R_CHUNK_NO_CUT`
 when the document was encoded serially after all). The stats file
-carries the tokenizer's `chunked` diagnostics block. The encoder takes
-the native path where the admission table lists it for the artifact and
-the Python path otherwise (`docs/serving.md` Section 3), and an artifact
-the table does not admit is encoded serially and counted under
-`R_CHUNK_FAMILY_UNSUPPORTED`.
+carries the tokenizer's `chunked` diagnostics block. For an admitted
+artifact the encoder takes the native path wherever it can run and the
+Python path otherwise, with the native path's evidence level shown as
+`native_evidence_label` in that block (`docs/serving.md` Section 3), and
+an artifact the table does not admit is encoded serially and counted
+under `R_CHUNK_FAMILY_UNSUPPORTED`.
 
 Correctness posture is unchanged: the chunked result equals the
 from-scratch reference encode (for an NFC family such as qwen3_8b, cuts

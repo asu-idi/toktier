@@ -84,9 +84,10 @@ assert encoded.ids == tokenizer.encode(text, lookup="off").ids
 The same plan runs on one of two paths, and both return the same ids.
 The Python path cuts in Python and runs the chunks through the
 tokenizer's own batch path; the native path makes the same cuts inside
-the native runtime (the end of this section). `encode` picks the native
-path when the loaded runtime carries it and the admission table lists
-the native path for the artifact, and the Python path otherwise.
+the native runtime (the end of this section). For an admitted
+tokenizer `encode` picks the native path whenever the loaded runtime
+carries it and the route carries the corrected CPU engine, and the
+Python path otherwise.
 
 How it keeps the contract. The document is cut only at *certified
 stable boundaries*: positions at which the pre-tokenizer of the
@@ -188,7 +189,9 @@ Diagnostics. Once `chunked.encode` has served a tokenizer, its
 decision (`admitted`, `refusal`), the `family`, the `normalizer` shape
 and the `literals` count, the admission-table row behind the decision
 (`evidence_id`, `evidence_status`, `evidence_paths`,
-`loader_face_sha256`) and `admission_gate`; the number of calls
+`loader_face_sha256`), the label of what that row records for the
+native path (`native_evidence_label`, below) and `admission_gate`; the
+number of calls
 (`calls`), how many of them were cut (`applied`), fell back to a serial
 encode (`serial`) or were encoded whole because one chunk was asked for
 or the text was too short to cut (`below_threshold`), and
@@ -228,9 +231,23 @@ Which path runs is decided per call:
 
 | `native=` | What runs |
 |---|---|
-| `None` (default) | the native path when it can run here (the loaded runtime carries it and the route carries the corrected CPU engine) and the admission table lists `native` for the artifact; the Python path otherwise |
+| `None` (default) | for an admitted tokenizer, the native path when it can run here (the loaded runtime carries it and the route carries the corrected CPU engine); the Python path otherwise |
 | `False` | the Python path |
-| `True` | the native path; `RuntimeError` when the runtime lacks it, the tokenizer is not admitted, or the table does not list `native`, naming which |
+| `True` | the native path; `RuntimeError` when the runtime lacks it or the tokenizer is not admitted, naming which |
+
+The native path does not wait for a complete record of its own
+evidence. Both paths make the same cuts and return the serial ids by
+construction, and a call that cannot be cut is encoded serially, so
+the table's record for the native path is shown as a label rather than
+used as a condition. Where that record holds the adversarial battery
+but not yet the corpus cut comparison, as on the certified rows of the
+table shipped with this release, the native encoder runs on the
+certified row and `native_evidence_label` reads
+`native_evidence:adversarial_only` (`corpus_only` and `none` are
+spelled the same way). When the corpus comparison for the native path
+is recorded in the table, the label reads `None`, with no change of
+code. A row that is not certified is
+refused on both paths alike.
 
 `Tokenizer.encode(text, parallel="auto")`, or `parallel=` a positive
 chunk count, makes the same choice for a stateless core-stream call (no
@@ -244,9 +261,11 @@ start-up. `chunked.admission(tokenizer)` reports the decision for both
 paths: the admission facts of the `chunked` block above (`admitted`,
 `refusal`, `family`, `normalizer`, `literals`, `evidence_id`,
 `evidence_status`, `evidence_paths`, `loader_face_sha256`,
-`admission_gate`), plus `native_available` (the native encoder can run
-for this tokenizer: the loaded runtime carries it and the route carries
-the corrected CPU engine), `native_by_default` (`native=None` would take it)
+`native_evidence_label`, `admission_gate`), plus `native_available` (the
+native encoder can run for this tokenizer: the loaded runtime carries it
+and the route carries the corrected CPU engine), `native_by_default`
+(`native=None` would take it: the tokenizer is admitted and
+`native_available` is true)
 and `native`, the native planner's own admission facts, or `None` with
 `native_unavailable_reason` saying why. `ChunkedEncoding.native_facts`
 carries the per-call facts of

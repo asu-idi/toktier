@@ -249,10 +249,13 @@ the chunked admission table that ships with the package
 (`toktier/routing/tables/chunked_admission.v1.json`) records it, with
 the evidence in `evidence/evidence_manifest_chunked_cuts.json` and
 `readings/chunked_cuts_campaign.json`. `certified (python, native)`
-means the table's row covers both the Python path and the native chunk
-encoder, and `certified (python)` means it covers the Python path only;
-`chunked.encode` then takes the Python path by default, and asking for
-the native one raises. `not admitted (adversarial evidence only)` means
+means the table's row holds both levels of evidence for the Python path
+and for the native chunk encoder, and `certified (python)` means it
+holds both for the Python path and the adversarial battery alone for
+the native one. The artifact is admitted either way, and
+`chunked.encode` runs the native encoder by default wherever it can run;
+in the second case `chunked.admission` labels it
+`native_evidence:adversarial_only`. `not admitted (adversarial evidence only)` means
 the table has a row that holds the adversarial battery and not yet the
 corpus cut comparison; such a row is not certified, so chunked encode
 runs serially and names the refusal

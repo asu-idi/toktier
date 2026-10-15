@@ -155,6 +155,16 @@ jobs:
         # what actually breaks when a feature gate is misplaced.
         run: cargo build -p toktier --no-default-features
       - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
+        # The floor `rust-version` declares, measured rather than stated:
+        # the default feature set and the CPU-only recipe a Rust front end
+        # takes, type-checked on the oldest compiler the crate admits. The
+        # judged builds stay on the toolchain `rust-toolchain.toml` names.
+        run: rustup toolchain install 1.89 --profile minimal
+      - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
+        run: cargo +1.89 check -p toktier --locked
+      - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
+        run: cargo +1.89 check -p toktier --locked --no-default-features --features serving
+      - if: ${{ steps.rust_phase.outputs.enabled == 'true' }}
         # The legal closure reads `cargo metadata --offline --locked` across
         # every target, so the local cache must hold the full dependency
         # set; the build steps above only download what the host build

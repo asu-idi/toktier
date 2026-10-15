@@ -25,7 +25,7 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
 import pytest
 
@@ -201,6 +201,18 @@ def _bound_entry() -> Any:
     from toktier.routing.registry_load import shipped_registry
 
     return shipped_registry().eligible_entries(BACKEND_FAST_CPU)[0]
+
+
+def _certified_reference_versions() -> list[str]:
+    """The certified reference versions the shipped registry records.
+
+    Read from the registry for the reason the engine binding is: the
+    report lists the set the plan consults, so a literal here would go
+    stale the day a release is certified or withdrawn.
+    """
+    from toktier.routing.registry_load import shipped_registry
+
+    return list(shipped_registry().certified_versions("tokenizers"))
 
 
 def _bound_engine_facts(**overrides: object) -> Any:
@@ -388,6 +400,8 @@ def test_doctor_human(
         "tokenizers_version: 1.2.3\n"
         "transformers_version: 1.2.3\n"
         "certified_cpu_profile_ready: false\n"
+        f"certified_reference_versions: {'; '.join(_certified_reference_versions())}\n"
+        "reference_certification_reason: uncertified_reference\n"
         "torch_available: true\n"
         "ninja_available: false\n"
         "automatic_gpu_delivery: prebuilt\n"
@@ -521,6 +535,8 @@ def test_doctor_json(
         "tokenizers_version": "2.0.0",
         "transformers_version": "2.0.0",
         "certified_cpu_profile_ready": False,
+        "certified_reference_versions": _certified_reference_versions(),
+        "reference_certification_reason": "uncertified_reference",
         "torch_available": True,
         "ninja_available": False,
         "automatic_gpu_delivery": "prebuilt",
@@ -624,10 +640,65 @@ def test_doctor_certification_follows_the_selected_jit_delivery(
     }
 
 
-def _set_certified_oracle_versions(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Report the oracle pair the certified CPU profile is bound to."""
-    versions = {"tokenizers": "0.22.2", "transformers": "4.57.6"}
+def _set_certified_oracle_versions(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    tokenizers: str = "0.22.2",
+    transformers: str = "4.57.6",
+) -> None:
+    """Report an installed oracle and loader pair; the default is the pair
+    the loader-face readings were taken with, inside the certified set."""
+    versions = {"tokenizers": tokenizers, "transformers": transformers}
     monkeypatch.setattr(cli, "_installed_version", versions.get)
+
+
+def test_doctor_judges_the_installed_oracle_against_the_certified_set(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The CPU-profile premise on the oracle is membership in the
+    registry's certified reference versions, the set the plan consults
+    for ``R_ORACLE_MISMATCH``, and the report says which set and whether
+    the installed release is in it. The loader version is not a premise:
+    a loader inside the admitted range reads as ready, because the loader
+    is judged per artifact by the recorded face at load. An oracle outside
+    the set is reported as ``uncertified_reference`` and nothing refuses.
+    """
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    _set_doctor_probes(monkeypatch)
+    certified = _certified_reference_versions()
+    assert "0.22.2" in certified
+
+    def report(tokenizers: str, transformers: str) -> dict[str, Any]:
+        _set_certified_oracle_versions(
+            monkeypatch, tokenizers=tokenizers, transformers=transformers
+        )
+        assert cli.main(["doctor", "--json"]) == 0
+        return cast(dict[str, Any], json.loads(capsys.readouterr().out))
+
+    inside = report("0.22.2", "4.57.6")
+    assert inside["certified_reference_versions"] == certified
+    assert inside["reference_certification_reason"] is None
+    assert inside["certified_cpu_profile_ready"] is True
+
+    later_loader = report("0.22.2", "5.12.1")
+    assert later_loader["reference_certification_reason"] is None
+    assert later_loader["certified_cpu_profile_ready"] is True
+    assert later_loader["transformers_version"] == "5.12.1"
+
+    outside = report("0.22.1", "4.57.6")
+    assert outside["certified_reference_versions"] == certified
+    assert outside["reference_certification_reason"] == "uncertified_reference"
+    assert outside["certified_cpu_profile_ready"] is False
+    assert outside["tokenizers_version"] == "0.22.1"
+
+    absent = report(None, "4.57.6")  # type: ignore[arg-type]
+    assert absent["tokenizers_version"] is None
+    assert absent["reference_certification_reason"] == "uncertified_reference"
+    assert absent["certified_cpu_profile_ready"] is False
 
 
 def _select_jit_profile(monkeypatch: pytest.MonkeyPatch) -> None:

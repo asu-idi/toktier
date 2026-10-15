@@ -88,15 +88,34 @@ FIELD = "loader_face_sha256"
 #: and nothing that was cached mismatched: not a pass, not a failure.
 ABSENT = 3
 
-_LOADER_PIN = re.compile(r'"transformers==(?P<version>[^"]+)"')
+#: The ``transformers`` release every ``loader_face_sha256`` in the registry
+#: was recorded with. Package metadata admits a range of loaders
+#: (``transformers>=4.57.6,<6``); the faces are still those of one release,
+#: and a face another loader builds from the same bytes is compared against
+#: them at load. Re-recording the faces under a later loader means running
+#: this tool under it and moving this constant with the records.
+RECORDED_LOADER_VERSION = "4.57.6"
+
+_LOADER_FLOOR = re.compile(r'"transformers>=(?P<version>[^,"]+)')
 
 
 def pinned_loader_version(pyproject: Path = PYPROJECT_PATH) -> str:
-    """The ``transformers`` release the package metadata pins."""
-    match = _LOADER_PIN.search(pyproject.read_text(encoding="utf-8"))
+    """The ``transformers`` release the recorded faces belong to.
+
+    The lower bound of the loader range in the package metadata has to be
+    that release: no loader older than the recorded one was ever judged,
+    and the faces were not recorded under a later one. The two are read
+    and compared so that neither can move alone.
+    """
+    match = _LOADER_FLOOR.search(pyproject.read_text(encoding="utf-8"))
     if match is None:
-        raise GenerationError(f"{pyproject} does not pin transformers")
-    return match["version"]
+        raise GenerationError(f"{pyproject} does not state a transformers floor")
+    if match["version"] != RECORDED_LOADER_VERSION:
+        raise GenerationError(
+            f"{pyproject} admits transformers from {match['version']}, the "
+            f"registry's faces were recorded with {RECORDED_LOADER_VERSION}"
+        )
+    return RECORDED_LOADER_VERSION
 
 
 def installed_loader_version() -> str | None:
@@ -251,7 +270,7 @@ def main(argv: list[str] | None = None) -> int:
     installed = installed_loader_version()
     if installed != pinned:
         print(
-            f"error: the recorded face is the pinned loader's "
+            f"error: the recorded face is the recorded loader's "
             f"(transformers=={pinned}); installed: {installed}",
             file=sys.stderr,
         )

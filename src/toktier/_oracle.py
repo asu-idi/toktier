@@ -26,8 +26,10 @@ from .errors import OracleVersionUnsupported
 __all__ = ["ORACLE_PACKAGE", "import_oracle", "oracle_version"]
 
 #: The package whose behavior defines correct output. The registry names
-#: it per record and binds a semantic id for it; package metadata
-#: deliberately does not pin the version.
+#: it per record, binds a semantic id for it and lists the certified
+#: reference versions; package metadata constrains the installed release
+#: to a range rather than to one version, and membership in the certified
+#: set is what the routing plan and ``doctor`` report.
 ORACLE_PACKAGE = "tokenizers"
 
 

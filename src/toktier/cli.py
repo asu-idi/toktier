@@ -525,14 +525,33 @@ def _doctor_report(
         status in {STATUS_CERTIFIED, STATUS_CERTIFIED_SOURCE}
         for status in architecture_certification.values()
     )
+    # The installed oracle against the certified reference versions: the
+    # exact ``tokenizers`` releases the registry's oracle records name as
+    # judged, or judged equivalent to the embedded reference on the
+    # certified surface (registry.md Section 2). This is the set the plan
+    # consults for ``R_ORACLE_MISMATCH``, read from the same registry, so
+    # the two cannot answer differently. A version outside it installs and
+    # runs on the reference route; the reason says so and nothing refuses.
+    # The loader version is not a premise here: the loader is judged per
+    # artifact by the recorded loader-face digest at load (check 8 of
+    # ``routing/plan.py``), which ``doctor`` does not materialize.
+    from ._oracle import ORACLE_PACKAGE
+
+    certified_reference_versions = list(
+        shipped_registry().certified_versions(ORACLE_PACKAGE)
+    )
+    reference_certification_reason = (
+        None
+        if tokenizers_version in certified_reference_versions
+        else "uncertified_reference"
+    )
     certified_cpu_profile_ready = (
         fast_cpu.version is not None
         and fast_cpu.source_digest is not None
         and bool(fast_cpu.build_flags)
         and fast_cpu.toolchain is not None
         and fast_cpu.config_digest is not None
-        and tokenizers_version == "0.22.2"
-        and transformers_version == "4.57.6"
+        and reference_certification_reason is None
     )
     gigatoken_runtime_ready = (
         fast_cpu.version is not None and transformers_available
@@ -683,6 +702,12 @@ def _doctor_report(
         "tokenizers_version": tokenizers_version,
         "transformers_version": transformers_version,
         "certified_cpu_profile_ready": certified_cpu_profile_ready,
+        # The exact oracle releases the shipped registry certifies, and
+        # whether the installed one is among them. The reference engine
+        # compiled into the extension is a different thing: it is the
+        # tokenizers crate at exactly 0.22.2 whatever is installed here.
+        "certified_reference_versions": certified_reference_versions,
+        "reference_certification_reason": reference_certification_reason,
         "torch_available": torch_available,
         "ninja_available": ninja_available,
         "automatic_gpu_delivery": automatic_delivery,

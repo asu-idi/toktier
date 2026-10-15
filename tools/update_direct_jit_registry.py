@@ -98,6 +98,11 @@ def validate(reading: dict[str, Any]) -> None:
         for raw in registry.get("artifacts", [])
         if (artifact := mapping(raw, "registry artifact"))
     }
+    oracles_by_id = {
+        str(oracle["oracle_id"]): oracle
+        for raw in registry.get("oracles", [])
+        if (oracle := mapping(raw, "registry oracle"))
+    }
     families: set[str] = set()
     for raw in rows:
         row = mapping(raw, "direct-JIT family row")
@@ -110,9 +115,18 @@ def validate(reading: dict[str, Any]) -> None:
             raise GenerationError(
                 f"{family}: direct-JIT artifact identity does not match the registry"
             )
+        # The oracle the matrix ran under has to be one of the certified
+        # reference versions the registry records for the artifact's
+        # oracle, the same set the plan admits (registry.md Section 2).
+        oracle_record = oracles_by_id.get(str(expected_artifact.get("oracle_id")))
+        certified_versions = (
+            oracle_record.get("certified_versions", [])
+            if isinstance(oracle_record, dict)
+            else []
+        )
         if (
             row.get("oracle_id") != expected_artifact.get("oracle_id")
-            or row.get("oracle_version") != "0.22.2"
+            or row.get("oracle_version") not in certified_versions
             or row.get("artifact_evidence_id") != expected_artifact.get("evidence_id")
         ):
             raise GenerationError(

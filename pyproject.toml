@@ -56,12 +56,21 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    # Exact reference oracle used by the shipped CPU and GPU certificates.
-    "tokenizers==0.22.2",
+    # The oracle package. The reference engine compiled into the native
+    # extension is the tokenizers crate at exactly 0.22.2 and does not move
+    # with this range; the Python releases certified compatible with it on
+    # evidence are the certified reference versions recorded on the oracle
+    # record of the support registry (certified_versions). A release inside
+    # the range but outside that set installs and runs, and doctor reports
+    # it as uncertified_reference.
+    "tokenizers>=0.22.2,<0.24",
     # Loader used to materialize the live tokenizer object consumed by the
     # vendored corrected-Gigatoken engine. The base install is deliberately
-    # complete; users do not need a second "fast" installation step.
-    "transformers==4.57.6",
+    # complete; users do not need a second "fast" installation step. The
+    # lower bound is the release the loader-face readings were taken with;
+    # a later loader is judged per artifact by the recorded loader-face
+    # digest at load, not by its version.
+    "transformers>=4.57.6,<6",
     # Artifact retrieval from the upstream hub.
     "huggingface-hub>=0.30",
     # Platform-conventional cache and state directories (config.md section 5).

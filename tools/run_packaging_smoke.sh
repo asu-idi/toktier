@@ -42,8 +42,24 @@ repository = Path(os.environ["TOKTIER_REPOSITORY_ROOT"]).resolve()
 installed = Path(toktier.__file__).resolve()
 assert repository not in installed.parents, installed
 assert toktier.__version__ == "0.3.0"
-assert tokenizers.__version__ == "0.22.2"
-assert transformers.__version__ == "4.57.6"
+
+
+def release(version):
+    # The numeric prefix of a release string, for the range checks below.
+    numbers = []
+    for part in version.split("."):
+        if not part.isdigit():
+            break
+        numbers.append(int(part))
+    return tuple(numbers)
+
+
+# A fresh environment resolves the two ranges the wheel states; the exact
+# releases are whatever the index offered inside them, so the smoke checks
+# the ranges and reports what was resolved.
+assert (0, 22, 2) <= release(tokenizers.__version__) < (0, 24), tokenizers.__version__
+assert (4, 57, 6) <= release(transformers.__version__) < (6,), transformers.__version__
+print(f"resolved tokenizers {tokenizers.__version__}, transformers {transformers.__version__}")
 assert importlib.util.find_spec("gigatoken") is None
 assert ENGINE_MODULE not in sys.modules
 assert callable(toktier.from_pretrained)

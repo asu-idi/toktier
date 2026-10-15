@@ -29,6 +29,7 @@ for entry in (str(ROOT), str(TOOLS)):
 import update_loader_face_registry as tool  # noqa: E402
 from registry_common import (  # noqa: E402
     REGISTRY_DOMAIN_TAG,
+    GenerationError,
     root_digest,
     serialise_document,
 )
@@ -61,8 +62,27 @@ def _sidecar_rig(tmp_path: Path) -> Rig:
     return rig
 
 
-def test_the_pinned_loader_is_read_from_the_package_metadata() -> None:
-    assert tool.pinned_loader_version() == "4.57.6"
+def test_the_recorded_loader_is_the_floor_of_the_package_metadata() -> None:
+    """The faces were recorded with one loader release, and the package
+    metadata admits no loader older than it: the tool states the release
+    and reads the floor, and refuses when the two have moved apart."""
+    assert tool.RECORDED_LOADER_VERSION == "4.57.6"
+    assert tool.pinned_loader_version() == tool.RECORDED_LOADER_VERSION
+
+
+def test_a_moved_loader_floor_is_refused(tmp_path: Path) -> None:
+    moved = tmp_path / "pyproject.toml"
+    moved.write_text(
+        'dependencies = [\n    "transformers>=5.0,<6",\n]\n', encoding="utf-8"
+    )
+    with pytest.raises(GenerationError, match=r"recorded with 4\.57\.6"):
+        tool.pinned_loader_version(moved)
+    exact = tmp_path / "exact.toml"
+    exact.write_text(
+        'dependencies = [\n    "transformers==4.57.6",\n]\n', encoding="utf-8"
+    )
+    with pytest.raises(GenerationError, match="floor"):
+        tool.pinned_loader_version(exact)
 
 
 def test_file_only_face_is_the_artifact_text(tmp_path: Path) -> None:

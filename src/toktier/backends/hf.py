@@ -103,9 +103,13 @@ class _CrateTokenizer(Protocol):
 def _load_crate_tokenizer(path: Path) -> _CrateTokenizer:
     """Open a verified ``tokenizer.json`` through the native oracle.
 
-    The Rust crate is exactly ``tokenizers==0.22.2``, matching the Python
-    package used for certification. Request execution releases the GIL and no
-    longer calls through the Python wrapper.
+    The Rust crate is exactly ``tokenizers==0.22.2``: the embedded reference
+    every certification reading was judged against. The installed Python
+    ``tokenizers`` package may be a later release; the ones judged equivalent
+    to the embedded reference on the certified surface are the certified
+    reference versions the support registry records, and the routing plan
+    compares the installed one with that set (``R_ORACLE_MISMATCH``). Request
+    execution releases the GIL and no longer calls through the Python wrapper.
     """
     from .. import _native
 

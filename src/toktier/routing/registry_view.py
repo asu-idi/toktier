@@ -59,6 +59,19 @@ STATUS_UNSUPPORTED = "unsupported"
 ELIGIBLE_STATUSES = frozenset({STATUS_CERTIFIED, STATUS_CERTIFIED_SOURCE})
 
 
+def _version_key(version: str) -> tuple[tuple[int, int | str], ...]:
+    """Sort key that orders dotted release numbers numerically.
+
+    Numeric components sort before and among themselves as integers; any
+    other component sorts after them as text, so a pre-release tag never
+    raises and never interleaves with the numbered releases.
+    """
+    return tuple(
+        (0, int(part)) if part.isdigit() else (1, part)
+        for part in version.split(".")
+    )
+
+
 class _BackendDocumentOptional(TypedDict, total=False):
     binary_digest: str
     source_digest: str
@@ -428,6 +441,23 @@ class RegistryView:
     def oracle(self, oracle_id: str) -> OracleRecord | None:
         """Oracle record by id."""
         return self._oracles.get(oracle_id)
+
+    def certified_versions(self, package: str) -> tuple[str, ...]:
+        """The certified reference versions of ``package``, sorted.
+
+        The union of the certified sets of every oracle record that names
+        the package: the exact releases of the oracle whose behavior the
+        certification readings were judged against, or were judged
+        equivalent to on the certified surface
+        (``docs/contracts/registry.md`` Section 2). An empty tuple when no
+        record names the package, which every membership question then
+        answers as "outside".
+        """
+        versions: set[str] = set()
+        for record in self._oracles.values():
+            if record.package == package:
+                versions.update(record.certified_versions)
+        return tuple(sorted(versions, key=_version_key))
 
     def pipeline_id(self, fingerprint: str | None) -> str | None:
         """Certified pipeline capability id for a pipeline fingerprint."""

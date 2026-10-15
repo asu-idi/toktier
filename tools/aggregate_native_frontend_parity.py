@@ -162,6 +162,14 @@ def aggregate_gpu(
         for value in devices
     ):
         raise GenerationError(f"GPU readings do not report {architecture} hardware")
+    # The oracle the rows were judged against, recorded as the CPU reading
+    # records it, so a GPU reading taken under another certified reference
+    # version says which one on its face.
+    oracle_versions = {
+        str((row.get("environment") or {}).get("tokenizers")) for row in rows
+    }
+    if len(oracle_versions) != 1:
+        raise GenerationError("GPU parity rows do not share one oracle version")
     output_rows = [
         {
             "family": row["family"],
@@ -183,6 +191,10 @@ def aggregate_gpu(
         "architecture_digest": bare_sha256(str(architecture_facts["digest"])),
         "toolchain": manifest["toolchain"],
         "native_host_build_facts": bound_host_facts,
+        "oracle": {
+            "package": "tokenizers",
+            "version": oracle_versions.pop(),
+        },
         "devices": devices,
         "families": GPU_FAMILIES,
         "documents": sum(int(row["documents"]) for row in rows),

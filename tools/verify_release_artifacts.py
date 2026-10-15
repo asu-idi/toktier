@@ -19,6 +19,14 @@ from typing import NoReturn
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_WHEEL = "toktier-0.3.0-cp310-abi3-manylinux_2_34_x86_64.whl"
+#: The base requirements on the oracle and the loader, as the wheel has to
+#: state them. The oracle range admits the releases the registry may
+#: certify as reference versions (its ``certified_versions`` is the
+#: certified set; the range is only what installs); the loader range starts
+#: at the release the loader-face readings were taken with. Both are held
+#: to the ``pyproject.toml`` table by ``tests/packaging/test_release_tools.py``.
+ORACLE_REQUIREMENT = "tokenizers>=0.22.2,<0.24"
+LOADER_REQUIREMENT = "transformers>=4.57.6,<6"
 IDENTITY_SENTINEL_HEX = "73656e74696e656c" * 4
 IDENTITY_SENTINEL_BYTES = bytes.fromhex(IDENTITY_SENTINEL_HEX)
 
@@ -83,10 +91,10 @@ def verify_metadata(raw: bytes) -> None:
     if not {"gpu", "gpu-jit"}.issubset(extras):
         _fail("wheel metadata does not expose both GPU delivery profiles")
     normalized = [item.replace(" ", "").lower() for item in requirements]
-    if "tokenizers==0.22.2" not in normalized:
-        _fail("base metadata does not pin tokenizers==0.22.2")
-    if "transformers==4.57.6" not in normalized:
-        _fail("base metadata does not pin transformers==4.57.6")
+    if ORACLE_REQUIREMENT.lower() not in normalized:
+        _fail(f"base metadata does not require {ORACLE_REQUIREMENT}")
+    if LOADER_REQUIREMENT.lower() not in normalized:
+        _fail(f"base metadata does not require {LOADER_REQUIREMENT}")
 
 
 def _verify_no_identity_sentinel(

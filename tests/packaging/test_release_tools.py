@@ -112,6 +112,29 @@ def test_release_artifact_gate_requires_the_pinned_fastokens_extra() -> None:
     assert extra == [f"{pinned['name']}=={pinned['version']}"]
 
 
+def test_release_artifact_gate_requires_the_declared_ranges() -> None:
+    """The two base requirements the gate demands are the ones the table
+    declares.
+
+    The oracle range is what installs; which releases inside it are
+    certified reference versions is the registry's statement, not the
+    metadata's. The loader range starts at the release the loader-face
+    readings were taken with. Reading both from `pyproject.toml` here keeps
+    the gate's constants from drifting away from the metadata they judge.
+    """
+    verifier = _artifact_verifier()
+    toml_module = "tomllib" if sys.version_info >= (3, 11) else "tomli"
+    toml = importlib.import_module(toml_module)
+    project = toml.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    dependencies = [
+        item.replace(" ", "") for item in project["project"]["dependencies"]
+    ]
+    assert verifier.ORACLE_REQUIREMENT in dependencies
+    assert verifier.LOADER_REQUIREMENT in dependencies
+    assert verifier.ORACLE_REQUIREMENT.startswith("tokenizers>=0.22.2,")
+    assert verifier.LOADER_REQUIREMENT.startswith("transformers>=4.57.6,")
+
+
 def test_requirement_key_reads_both_marker_spellings() -> None:
     """A marker quoted either way has to compare equal.
 
@@ -143,8 +166,8 @@ Metadata-Version: 2.4
 Name: toktier
 Version: 0.3.0
 Classifier: Programming Language :: Rust
-Requires-Dist: tokenizers==0.22.2
-Requires-Dist: transformers==4.57.6
+Requires-Dist: tokenizers>=0.22.2,<0.24
+Requires-Dist: transformers>=4.57.6,<6
 Requires-Dist: huggingface-hub>=0.30
 Requires-Dist: platformdirs>=3.0
 Requires-Dist: tomli>=2.0 ; python_full_version < '3.11'
@@ -206,8 +229,15 @@ def test_the_gate_accepts_a_real_wheels_metadata() -> None:
             "the fastokens extra does not require",
         ),
         (
-            (b"Requires-Dist: tokenizers==0.22.2\n", b""),
-            "does not pin tokenizers==0.22.2",
+            (b"Requires-Dist: tokenizers>=0.22.2,<0.24\n", b""),
+            "does not require tokenizers>=0.22.2,<0.24",
+        ),
+        (
+            (
+                b"Requires-Dist: transformers>=4.57.6,<6\n",
+                b"Requires-Dist: transformers==4.57.6\n",
+            ),
+            "does not require transformers>=4.57.6,<6",
         ),
         (
             (b"Provides-Extra: gpu-jit\n", b""),

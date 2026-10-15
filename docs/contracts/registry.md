@@ -113,25 +113,32 @@ whose sources do not verify, which falls back to HF under every policy but
 
 ### 1.2 The dependency graph the runtime build compiles (added in 0.2.6)
 
-Added in 0.2.4 and narrowed in 0.2.6; the frozen rule above is unchanged.
-A Rust API build is additionally required to compile the **certified
-core** of the judged dependency closure: this project's own crates, the
-packages they call directly from encode-path sources, and the
-text-semantics libraries beneath them. Each package of the shipped
-judged-closure record carries the tier and the rule that placed it
-there. Packages outside the core are compared and reported, and do not
-decide eligibility. A package of the core whose behaviour is defined by
-an evolving external standard is compared by the version of the tables
-it carries rather than by its package version; where that version cannot
-be read, the package version is compared against the package's **certified
-reference versions** -- the judged version and every later version a
-campaign certified with a lockfile that resolves it, listed in the shipped
-judged-closure record -- and a resolution outside that list holds the
-accelerated engines on the reference route with `uncertified_reference`
-reported (added in 0.3.0; the list holds the judged version alone in that
-release). Since 0.3.0 the implementation libraries the project's own crates
-call directly are taken on caret edges and are compared and reported
-rather than deciding eligibility.
+Added in 0.2.4, narrowed in 0.2.6 and narrowed again in 0.3.0; the frozen
+rule above is unchanged. A Rust API build is additionally required to
+compile this project's **own crates** as the judged copies, or not at all
+where an optional feature of the root (`sqlite`) is off; a build that
+resolves one of them from another copy or version reads
+`core_closure: mismatched` and is admitted on no accelerated route. Each
+package of the shipped judged-closure record carries the tier and the rule
+that placed it there, and an `optional` mark where only an optional
+feature compiles it. Every other package is compared and reported, and
+does not decide eligibility: the implementation libraries the project's
+own crates call directly, taken on caret edges since 0.3.0; the periphery;
+and the **reference libraries** -- the embedded reference engine and the
+text-semantics libraries beneath the engines. A reference library whose
+behaviour is defined by an evolving external standard is compared by the
+version of the tables it carries rather than by its package version; where
+that version cannot be read, the package version is compared against the
+package's **certified reference versions** -- the judged version and every
+later version a campaign certified with a lockfile that resolves it,
+listed in the shipped judged-closure record. A reference library outside
+that list, or one whose tables are another Unicode version, is reported
+as `uncertified_reference`: the accelerated engines run, the route is
+labelled `supported_untested` rather than `certified`, and the alignment
+command is printed (added in 0.3.0; each list holds the judged version
+alone in that release; the case in hand is `icu_properties` 2.3.0 with its
+Unicode 17.0 property data where the judged 2.0.2 carries 16.0, see
+`docs/rust-api.md`).
 
 ### 1.3 One Unicode version across the compared engines (added in 0.2.6)
 

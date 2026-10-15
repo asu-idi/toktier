@@ -15,12 +15,19 @@
 //! package versions moved -- and this module asks the linked libraries
 //! themselves.
 //!
-//! Fail-closed in every direction: a unit whose version cannot be read
-//! here falls back to the build script's exact package comparison; a
-//! record that names no unit at all leaves the whole core on that exact
-//! comparison; and a package that resolves from somewhere other than the
-//! judged one never reaches this module, because no probe of a library's
-//! version can speak for a copy that is not the judged one.
+//! Fail-closed in every direction of the *reading*: a unit whose version
+//! cannot be read here falls back to the build script's exact package
+//! comparison; a record that names no unit at all leaves the whole core
+//! on that exact comparison; and a package that resolves from somewhere
+//! other than the judged one never reaches this module, because no probe
+//! of a library's version can speak for a copy that is not the judged
+//! one. What the reading decides changed in 0.3.0 (user rule of
+//! 2026-10-14): a reference library that is not the judged one is a
+//! label -- `reference_certification_reason` reads
+//! `uncertified_reference`, the route is `supported_untested`, and the
+//! judged recipe (`certified`) is not claimed -- while the accelerated
+//! engines run. The reference route is for builds whose own sources do
+//! not verify.
 
 use std::sync::OnceLock;
 
@@ -146,24 +153,15 @@ const COMPARE_HINT: &str = "To compare the accelerated engine with this binary's
                             dependency alone brings no binary), or `toktier verify-local` \
                             with the same options from the Python package";
 
-/// What to offer where the certified core itself is mismatched.
-///
-/// Not the command above: that state holds the accelerated engines on
-/// the reference route, so this release admits no accelerated cpu route
-/// for `verify-local --engine cpu` to compare, and pointing at it would
-/// send the reader to an answer of "there is nothing here". What is
-/// actionable is putting the library back where the evidence was taken.
-/// The runnable command for that is not repeated here with placeholders:
-/// the `dependency_closure` line of the same report already carries a
-/// `cargo update --precise` command for each package it names, with the
-/// judged version filled in, so this points at that line.
-const AFFECTED_HINT: &str = "This build admits no accelerated cpu route while the core is \
-                             mismatched, so `verify-local --engine cpu` has nothing to \
-                             compare here; put the library back on the judged behaviour \
-                             version instead: the `dependency_closure` line of this same \
-                             report carries the `cargo update --precise` command for each \
-                             package it names, to run in the workspace that owns the \
-                             governing lockfile";
+/// What to offer where a reference library's tables are not the judged
+/// ones: the accelerated engines run, labelled, so the comparison above
+/// is available and worth making, and the `dependency_closure` line of
+/// the same report carries the `cargo update --precise` command that
+/// brings the library back onto the judged behaviour version.
+const ALIGN_HINT: &str = "the `dependency_closure` line of this same report carries the `cargo \
+                          update --precise` command for each package it names, to run in the \
+                          workspace that owns the governing lockfile, which brings the library \
+                          back onto the judged behaviour version";
 
 fn readings() -> &'static Vec<Reading> {
     static READINGS: OnceLock<Vec<Reading>> = OnceLock::new();
@@ -174,63 +172,78 @@ fn readings() -> &'static Vec<Reading> {
 /// `verified`, an `unlocated:` line, or a `mismatched:` line saying what
 /// differs and what aligns it.
 ///
-/// The build script answered for every core package whose version is the
-/// whole of its behaviour. What is left is the units this binary can ask
-/// directly, and they are asked once per process.
+/// Since 0.3.0 this is the build script's reading of the workspace
+/// members -- this crate and its siblings resolved as the judged copies,
+/// or not at all where an optional feature is off -- and of whether a
+/// comparison could be made. The reference libraries, probed here or
+/// read by crate version, are reported in `reference_versions`,
+/// `behavior_versions` and `reference_certification_reason` instead:
+/// they label the route, they do not decide it.
 pub(crate) fn core_closure() -> &'static str {
-    static CORE: OnceLock<String> = OnceLock::new();
-    CORE.get_or_init(|| {
-        decide(
-            env!("TOKTIER_RUST_API_CORE_CLOSURE_STATIC"),
-            readings(),
-            &drift_for,
-        )
-    })
-}
-
-/// The core answer, from the build script's half and this binary's half.
-///
-/// Taken apart from where the two halves come from so that each state
-/// can be exercised: the build script already refused; a unit whose
-/// tables moved; a unit that cannot be read while its packages moved;
-/// and everything agreeing.
-fn decide(
-    recorded: &str,
-    readings: &[Reading],
-    drift: &dyn Fn(&str) -> Option<&'static str>,
-) -> String {
-    if recorded != "verified" {
-        return recorded.to_owned();
-    }
-    for reading in readings {
-        match &reading.observed {
-            Some(observed) if observed != &reading.judged => {
-                return format!(
-                    "mismatched: the reference engine in this binary {} where the certified \
-                     evidence was taken on {}; some code points may tokenize differently; the \
-                     accelerated engines are held on the reference route. {AFFECTED_HINT}",
-                    carries(&reading.unit, observed),
-                    reading.judged
-                );
-            }
-            Some(_) => {}
-            None => {
-                if let Some(moved) = drift(&reading.unit) {
-                    return format!(
-                        "mismatched: the behaviour version of {} could not be read in this \
-                         binary, so the package versions are compared instead: {moved}. \
-                         {AFFECTED_HINT}",
-                        reading.unit
-                    );
-                }
-            }
-        }
-    }
-    "verified".to_owned()
+    env!("TOKTIER_RUST_API_CORE_CLOSURE_STATIC")
 }
 
 pub(crate) fn core_closure_verified() -> bool {
     core_closure() == "verified"
+}
+
+/// Whether the closure says this build's own sources are the judged ones
+/// as far as it can tell: verified, or no lockfile to compare against.
+/// This is what admits the fast CPU engine by source identity; a
+/// workspace member resolved from another copy or version is a source
+/// that does not verify, and so is a record this build cannot read.
+pub(crate) fn sources_closure_admits() -> bool {
+    let core = core_closure();
+    core == "verified" || core.starts_with("unlocated")
+}
+
+/// What the probed units say about the tables this binary carries, when
+/// they are not the judged ones: one sentence naming the unit, both
+/// versions and what follows, or `None` when every probed unit agrees.
+///
+/// Taken apart from where the readings come from so that each state can
+/// be exercised: a unit whose tables moved; a unit that cannot be read
+/// while its packages moved; and everything agreeing.
+fn probe_divergence(
+    readings: &[Reading],
+    drift: &dyn Fn(&str) -> Option<&'static str>,
+) -> Option<String> {
+    for reading in readings {
+        match &reading.observed {
+            Some(observed) if observed != &reading.judged => {
+                return Some(format!(
+                    "the reference engine in this binary {} where the certified evidence was \
+                     taken on {}; some code points may tokenize differently; the accelerated \
+                     engines run, the route is labelled supported_untested and \
+                     reference_certification_reason reads uncertified_reference. {ALIGN_HINT}. \
+                     {COMPARE_HINT}",
+                    carries(&reading.unit, observed),
+                    reading.judged
+                ));
+            }
+            Some(_) => {}
+            None => {
+                if let Some(moved) = drift(&reading.unit) {
+                    return Some(format!(
+                        "the behaviour version of {} could not be read in this binary, so the \
+                         package versions are compared instead: {moved}; the accelerated \
+                         engines run, the route is labelled supported_untested and \
+                         reference_certification_reason reads uncertified_reference. \
+                         {ALIGN_HINT}",
+                        reading.unit
+                    ));
+                }
+            }
+        }
+    }
+    None
+}
+
+fn probe_status() -> Option<&'static str> {
+    static STATUS: OnceLock<Option<String>> = OnceLock::new();
+    STATUS
+        .get_or_init(|| probe_divergence(readings(), &drift_for))
+        .as_deref()
 }
 
 /// What this build compiles that the judged build did not, where the
@@ -249,6 +262,9 @@ pub(crate) fn dependency_advisory() -> Option<&'static str> {
             let outside = env!("TOKTIER_RUST_API_DEPENDENCY_ADVISORY");
             if !outside.is_empty() {
                 parts.push(outside.to_owned());
+            }
+            if let Some(divergence) = probe_status() {
+                parts.push(divergence.to_owned());
             }
             for reading in readings() {
                 let Some(observed) = &reading.observed else {
@@ -318,13 +334,25 @@ pub(crate) fn reference_facts() -> Vec<ReferenceVersion> {
 /// Why the reference libraries of this build are not the certified ones,
 /// in the word the Python facade's `doctor` uses for the same state:
 /// `None` when every reference library resolves at a certified reference
-/// version, `uncertified_reference` otherwise -- a version outside the
-/// set, a copy from another source, or a build whose governing lockfile
-/// could not be located, which is answered fail-closed.
+/// version and every probed unit reads the judged behaviour version,
+/// `uncertified_reference` otherwise -- a version outside the set, a copy
+/// from another source, tables at another Unicode version, or a build
+/// whose governing lockfile could not be located, which is answered
+/// fail-closed. Since 0.3.0 this is a label on a running route, not a
+/// refusal.
 pub(crate) fn reference_certification_reason() -> Option<&'static str> {
-    reference_readings()
+    // Three readings, any one of which is enough: a crate-version unit
+    // outside its certified reference versions (or unlocated); a probed
+    // unit whose tables are not the judged ones; and a reference library
+    // the build script could not speak for at all -- a probed unit's
+    // package from another source, or a package of a unit the record
+    // disagrees about -- which has no record in the first two.
+    let unspoken_for = !env!("TOKTIER_RUST_API_REFERENCE_UNCERTIFIED").is_empty();
+    (reference_readings()
         .iter()
         .any(|reading| !reading.certified)
+        || probe_status().is_some()
+        || unspoken_for)
         .then_some("uncertified_reference")
 }
 
@@ -344,8 +372,8 @@ pub(crate) fn facts() -> Vec<BehaviorVersion> {
 #[cfg(test)]
 mod tests {
     use super::{
-        carries, decide, drift_for, observe, readings, unchanged, Reading, AGE_CANDIDATES,
-        FIELD_SEPARATOR, RECORD_SEPARATOR,
+        carries, drift_for, observe, probe_divergence, readings, unchanged, Reading,
+        AGE_CANDIDATES, FIELD_SEPARATOR, RECORD_SEPARATOR,
     };
 
     fn reading(unit: &str, judged: &str, observed: Option<&str>) -> Reading {
@@ -361,78 +389,65 @@ mod tests {
         None
     }
 
-    /// The four states of the core answer, each asked directly.
+    /// The three states of the probe reading, each asked directly. Since
+    /// 0.3.0 a divergence is a label: the sentence says the engines run and
+    /// what the label is, and carries the alignment and comparison hints.
     #[test]
-    fn the_core_answer_has_four_states() {
-        // The build script already refused: its words stand, whatever
-        // the probes say.
-        assert_eq!(
-            decide(
-                "mismatched: the judged build compiled memchr 2.8.3",
-                &[reading("regex", "16.0", Some("17.0"))],
-                &no_drift,
-            ),
-            "mismatched: the judged build compiled memchr 2.8.3"
-        );
+    fn the_probe_reading_has_three_states() {
         // Tables that moved: named, with both versions and what follows.
-        let moved = decide(
-            "verified",
-            &[reading("regex", "16.0", Some("17.0"))],
-            &no_drift,
+        let moved = probe_divergence(&[reading("regex", "16.0", Some("17.0"))], &no_drift)
+            .expect("a divergence");
+        assert!(
+            moved.starts_with(
+                "the reference engine in this binary carries Unicode 17.0 (regex tables) where \
+                 the certified evidence was taken on 16.0; some code points may tokenize \
+                 differently; the accelerated engines run, the route is labelled \
+                 supported_untested and reference_certification_reason reads \
+                 uncertified_reference. the `dependency_closure` line"
+            ),
+            "{moved}"
         );
+        assert!(moved.contains("verify-local --engine cpu"), "{moved}");
+        for word in ["held on the reference route", "admits no accelerated"] {
+            assert!(!moved.contains(word), "{moved}");
+        }
+        // A unit that cannot be read falls back to the package comparison
+        // the build script made, and only reports when that comparison
+        // found something.
         assert_eq!(
-            moved,
-            "mismatched: the reference engine in this binary carries Unicode 17.0 (regex \
-             tables) where the certified evidence was taken on 16.0; some code points may \
-             tokenize differently; the accelerated engines are held on the reference route. \
-             This build admits no accelerated cpu route while the core is mismatched, so \
-             `verify-local --engine cpu` has nothing to compare here; put the library back \
-             on the judged behaviour version instead: the `dependency_closure` line of this \
-             same report carries the `cargo update --precise` command for each package it \
-             names, to run in the workspace that owns the governing lockfile"
+            probe_divergence(&[reading("regex", "16.0", None)], &no_drift),
+            None
         );
-        // A unit that cannot be read falls back to the package
-        // comparison the build script made, and only refuses when that
-        // comparison found something.
-        assert_eq!(
-            decide("verified", &[reading("regex", "16.0", None)], &no_drift),
-            "verified"
-        );
-        assert_eq!(
-            decide("verified", &[reading("regex", "16.0", None)], &|unit| {
-                (unit == "regex").then_some("regex 1.13.1 -> 1.14.0")
-            }),
-            "mismatched: the behaviour version of regex could not be read in this binary, so \
-             the package versions are compared instead: regex 1.13.1 -> 1.14.0. This build \
-             admits no accelerated cpu route while the core is mismatched, so `verify-local \
-             --engine cpu` has nothing to compare here; put the library back on the judged \
-             behaviour version instead: the `dependency_closure` line of this same report \
-             carries the `cargo update --precise` command for each package it names, to run \
-             in the workspace that owns the governing lockfile"
+        let unread = probe_divergence(&[reading("regex", "16.0", None)], &|unit| {
+            (unit == "regex").then_some("regex 1.13.1 -> 1.14.0")
+        })
+        .expect("a divergence");
+        assert!(
+            unread.starts_with(
+                "the behaviour version of regex could not be read in this binary, so the \
+                 package versions are compared instead: regex 1.13.1 -> 1.14.0; the \
+                 accelerated engines run"
+            ),
+            "{unread}"
         );
         // Everything agreeing.
         assert_eq!(
-            decide(
-                "verified",
+            probe_divergence(
                 &[
                     reading("regex", "16.0", Some("16.0")),
                     reading("onig", "6.9.10", Some("6.9.10")),
                 ],
                 &no_drift,
             ),
-            "verified"
+            None
         );
     }
 
-    /// A record that names no unit at all leaves the answer where the
-    /// build script left it, which is the exact comparison.
+    /// A record that names no unit at all has nothing to probe, and the
+    /// closure answer is the build script's alone.
     #[test]
-    fn a_record_with_no_units_leaves_the_exact_answer_standing() {
-        assert_eq!(decide("verified", &[], &no_drift), "verified");
-        assert_eq!(
-            decide("unlocated: no lockfile", &[], &no_drift),
-            "unlocated: no lockfile"
-        );
+    fn a_record_with_no_units_has_nothing_to_report() {
+        assert_eq!(probe_divergence(&[], &no_drift), None);
     }
 
     /// Inside this workspace every reference library resolves at its

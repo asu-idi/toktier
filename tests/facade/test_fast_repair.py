@@ -1257,10 +1257,9 @@ def test_another_recipe_keeps_the_fast_engine_and_reports_it(
     tokenizer = rig.tokenizer(policy=policy)
     assert tokenizer.plan.backend == BACKEND_FAST_CPU
     report = tokenizer.explain()
-    assert not any(
-        reason["code"] == "R_ENGINE_BINDING_MISMATCH"
-        for reason in report["plan_reasons"]
-    )
+    reasons = report["plan_reasons"]
+    assert isinstance(reasons, list)
+    assert not any(reason["code"] == "R_ENGINE_BINDING_MISMATCH" for reason in reasons)
     untested = report["supported_untested"]
     assert isinstance(untested, list)
     axes = {

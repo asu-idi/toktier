@@ -191,13 +191,24 @@ version alone: `tokenizers` 0.22.2, `icu_properties` 2.0.2,
 `icu_properties_data` 2.0.1, `unicode-normalization-alignments` 0.1.12,
 `spm_precompiled` 0.1.4 and `unicode_categories` 0.1.1. A build that resolves
 a version inside the list is certified and, when it is not the judged one,
-the move is named in `dependency_advisory`; a build that resolves one outside
-it -- `icu_properties_data` 2.3.0 with its Unicode 17.0 tables, say -- reads
-`core_closure: mismatched`, reports
-`reference_certification_reason: "uncertified_reference"`, and holds the
-accelerated engines on the reference route. It is not refused: the ids come
-from the reference engine this build compiled, which is what the reading
-says. The same words name the same mechanism on the Python facade, where
+the move is named in `dependency_advisory`. A build that resolves one outside
+it keeps `core_closure: verified`, reports
+`reference_certification_reason: "uncertified_reference"` with the resolved,
+judged and certified versions beside it in `reference_versions`, and runs
+the accelerated engines labelled `supported_untested` rather than
+`certified`; `dependency_advisory` names the library and the `cargo update
+--precise` command that aligns it, and `toktier-rust verify-local --engine
+cpu` compares the two engines on your own text. The case this is written
+for is `icu_properties` 2.3.0, which a neighbour's dependency on
+`icu_normalizer ~2.3` forces into a consumer's lockfile and `cargo update
+--precise 2.0.2` cannot move: it carries Unicode 17.0 property data where
+the judged 2.0.2 carries Unicode 16.0, so the fast CPU pre-tokenizer reads
+character classes from tables one Unicode version newer than the ones the
+class-parity reading below was taken on. That is what the label says, no
+more: the engine is the judged one on the judged sources, and a code point
+Unicode 17.0 classifies differently from 16.0 is the one place its answer
+could differ from the reference engine's. The same words name the same
+mechanism on the Python facade, where
 `toktier doctor` judges the installed Python `tokenizers` release against
 the registry's certified reference versions (`docs/contracts/registry.md`
 Section 2); the two lists are kept apart because they are widened by
@@ -230,11 +241,18 @@ ICU property data. The two have to answer alike about every code point for
 that comparison to mean what it says. Since 0.2.6 the judged builds resolve
 the property data at the Unicode version Oniguruma carries and a gate
 compares the two exhaustively, over every scalar value and every class the
-shipped patterns name (`tools/check_class_parity.py`). A release that moves
-either side moves both, and since 0.3.0 a consumer build that resolves the
-property data at another version is held on the reference route by the
-certified reference versions above rather than run against the judged
-tables.
+shipped patterns name. That gate is `tools/check_class_parity.py`: it walks
+every scalar value, asks the ICU property data and Oniguruma's tables the
+same class questions the shipped pre-tokenizer patterns ask, and refuses
+on the first disagreement. It is run on the judged lockfile, so its answer
+covers the property-data versions the certified reference versions list
+and no other. A release that moves either side moves both. A consumer build
+that resolves the property data at another version -- `icu_properties`
+2.3.0 with Unicode 17.0 data, where the judged 2.0.2 carries 16.0 -- is
+admitted since 0.3.0 and labelled `uncertified_reference`: the parity
+reading was not taken on those tables, which is what the label says, and
+the engines run. Taking the reading on the newer tables and widening the
+certified reference versions is how a version loses the label.
 
 ### What the dependency judgement is, and is not
 
@@ -293,14 +311,16 @@ visible when something moves, so it is stated here instead:
 | Field | The question it answers | Gates `certified` |
 |---|---|---|
 | `dependency_closure` | Is every package this build compiled the judged one? | no |
-| `core_closure` | Is every package in the **certified core** the judged one? | **yes** |
-| `dependency_advisory` | Which packages **outside** the core differ, and the command that aligns each | no; `null` means nothing outside the core differs |
+| `core_closure` | Are this project's **own crates** in this build the judged copies, or absent because an optional feature is off? | **yes** |
+| `dependency_advisory` | Which other packages differ -- periphery, implementation libraries, reference libraries at certified or uncertified versions, packages an optional feature would bring in -- and the command that aligns each | no; `null` means nothing else differs |
+| `reference_certification_reason` | Is every **reference library** at a version the certificate speaks for, with the judged Unicode tables? | no; `uncertified_reference` labels the route `supported_untested` |
 
 So `dependency_closure: mismatched` beside `core_closure: verified` is
 the expected reading for a consumer who resolved the graph today, and the
 route is admitted; `core_closure: mismatched` is the one that withholds
-it. The advisory is never a refusal: it is the list the first row is
-summarising, restated where a reader can act on it.
+it, and since 0.3.0 it names only this project's own crates. The advisory
+is never a refusal: it is the list the first row is summarising, restated
+where a reader can act on it.
 
 **What each answer is worth.** `verified` says the third-party code linked
 into this build is the code the certification campaigns ran. `mismatched`
@@ -363,9 +383,17 @@ route is admitted, and `dependency_advisory` names the packages and prints
 the commands. When a reference library moved to another of its certified
 reference versions, the same holds and the advisory says which. When an R2
 unit moved to another Unicode version, or a reference library resolved a
-version outside its certified reference versions, `core_closure` reads
-`mismatched` and this build routes to the reference engine until its
-lockfile is aligned or a later release certifies the newer version.
+version outside its certified reference versions, `core_closure` still
+reads `verified`, the accelerated engines run, `certified` is `false`,
+`reference_certification_reason` reads `uncertified_reference`, and the
+route is labelled `supported_untested` until the lockfile is aligned, a
+later release certifies the newer version, or `verify-local --engine cpu`
+compares the two engines here. When one of this project's own crates
+resolves from another copy or version, `core_closure` reads `mismatched`
+and no accelerated route is admitted. A crate an optional feature brings in
+(`toktier-store-sqlite` under `sqlite`) is compared only when the feature
+is on; a build with `default-features = false` is not asked about packages
+it does not compile, and the advisory names them as absent.
 
 What still earns no certificate at all:
 
@@ -506,9 +534,12 @@ from rules instead, so a check needs no corpus and no network.
 is what the `behavior_versions` advisory points at when an R2 package
 moved while the tables it carries did not: the certificate holds there
 and the CPU route is admitted, so the command has something to compare.
-It is not what a `mismatched` core points at -- that state holds the
-accelerated engines on the reference route, so there is no accelerated
-CPU route to compare, and the line names the alignment command instead.
+It is also what an `uncertified_reference` label points at: the engines
+run there, so there is something to compare, and the same line carries the
+`cargo update --precise` command that aligns the library. It is not what a
+`mismatched` core points at -- one of this project's own crates from
+another copy admits no accelerated route, so there is nothing to compare,
+and the line names the alignment command alone.
 
 A record is written only when the route served every document. A run it
 served in part is reported and not recorded: those documents were

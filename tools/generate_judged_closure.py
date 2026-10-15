@@ -38,9 +38,16 @@ the split from this repository:
   version is compared by that version at run time; a unit read by crate
   version is compared against its **certified reference versions** --
   the judged version and any later version a campaign certified
-  (``CERTIFIED_REFERENCE_VERSIONS``) -- and a build that resolves a
-  version outside that set holds the accelerated engines on the
-  reference route and reports ``uncertified_reference``.
+  (``CERTIFIED_REFERENCE_VERSIONS``). Since 0.3.0 a build that resolves
+  a version outside that set, or another copy, or tables at another
+  Unicode version, reports ``uncertified_reference`` and runs the
+  accelerated engines labelled ``supported_untested``; only R0 decides
+  admission by closure.
+
+A package compiled by the judged selections only through an optional
+feature of the root (``toktier-store-sqlite`` under ``sqlite``) carries
+``"optional": true``: a build with that feature off never compiles it, so
+the build script does not compare it against that build's lockfile.
 
 The classification of R2 is data -- ``TEXT_SEMANTICS_TABLE`` -- and its
 completeness is a gate: any package in the closure whose name matches the
@@ -319,9 +326,11 @@ BEHAVIOUR_SOURCES: dict[str, str] = {
 #: gates, the Rust API matrix on every venue and the parity readings, the
 #: same evidence the judged version carries. The set is what lets a
 #: consumer resolve a later release of the embedded reference engine or
-#: of the Unicode data and keep the accelerated routes; a version outside
-#: it holds them on the reference route. Widening is a reviewed edit here
-#: followed by regeneration; the shipped record lists every member.
+#: of the Unicode data and keep the certified label; a version outside it
+#: is reported as ``uncertified_reference`` and the accelerated engines run
+#: labelled rather than certified (user rule of 2026-10-14). Widening is a
+#: reviewed edit here followed by regeneration; the shipped record lists
+#: every member.
 CERTIFIED_REFERENCE_VERSIONS: dict[str, tuple[str, ...]] = {
     "unicode_categories": (),
     "icu_properties_data": (),
@@ -351,8 +360,14 @@ TIER_STATEMENT = (
     "compared by that version, and its package versions are reported in the "
     "advisory; an R2 unit read by crate version is compared against its "
     "certified reference versions, the judged version and any later version a "
-    "campaign certified, and a version outside that set holds the accelerated "
-    "engines on the reference route."
+    "campaign certified. A reference library at a version or behaviour version "
+    "the certificate does not speak for is reported as uncertified_reference "
+    "and the route is labelled supported_untested rather than certified; the "
+    "accelerated engines run. Only the workspace members decide admission by "
+    "closure: one of them resolved from another copy or version refuses the "
+    "accelerated routes. A package marked optional is compiled by the judged "
+    "selections only through an optional feature of the root, and a build with "
+    "that feature off is not compared on it."
 )
 
 
@@ -413,6 +428,39 @@ def run_cargo(command: list[str]) -> str:
     if completed.returncode != 0:
         raise GenerationError(f"{' '.join(command)} failed: {completed.stderr.strip()}")
     return completed.stdout
+
+
+def always_compiled_packages(target: str) -> set[tuple[str, str]]:
+    """Every package Cargo compiles for the root with no feature on.
+
+    The complement of this set inside a judged selection is what an
+    optional feature brings in; a consumer that turns the feature off
+    never compiles those packages, so the build script does not compare
+    them against that consumer's lockfile.
+    """
+    command = [
+        "cargo",
+        "tree",
+        "--locked",
+        "--offline",
+        "--package",
+        ROOT_PACKAGE,
+        "--no-default-features",
+        "--edges",
+        "normal,build",
+        "--target",
+        target,
+        "--prefix",
+        "none",
+        "--format",
+        "{p}",
+    ]
+    packages: set[tuple[str, str]] = set()
+    for line in run_cargo(command).splitlines():
+        match = PACKAGE_LINE.match(line.strip())
+        if match is not None:
+            packages.add((match.group("name"), match.group("version")))
+    return packages
 
 
 def compiled_packages(selection: dict[str, str]) -> set[tuple[str, str]]:
@@ -875,11 +923,13 @@ def build_document() -> dict[str, object]:
     check_facade_source_classification()
     packages: set[tuple[str, str]] = set()
     graphs: list[Graph] = []
+    always: set[tuple[str, str]] = set()
     for selection in selections:
         # The union over the judged selections. Where they differ, judging
         # the union is the conservative direction: an extra package can
         # only add a refusal, never remove one.
         packages |= compiled_packages(selection)
+        always |= always_compiled_packages(selection["target"])
         graphs.append(Graph(resolve_graph(selection)))
     check_table_covers(packages)
     tiers, criteria = classify(packages, graphs)
@@ -906,6 +956,8 @@ def build_document() -> dict[str, object]:
                 entry["certified_versions"] = certified_reference_versions(
                     unit, version
                 )
+        if package not in always:
+            entry["optional"] = True
         entries.append(entry)
     return {
         "schema": SCHEMA,

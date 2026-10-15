@@ -83,6 +83,15 @@ fn read_judged_closure(path: &Path) -> Result<Vec<JudgedPackage>, String> {
                     "the judged compiled closure has an unreadable certified version".to_owned(),
                 ),
             }?;
+            let optional = match entry.get("optional") {
+                None => false,
+                Some(serde_json::Value::Bool(value)) => *value,
+                Some(_) => {
+                    return Err(
+                        "the judged compiled closure has an unreadable optional mark".to_owned(),
+                    )
+                }
+            };
             match (field("name"), field("version")) {
                 (Some(name), Some(version)) => Ok(JudgedPackage {
                     name,
@@ -92,6 +101,7 @@ fn read_judged_closure(path: &Path) -> Result<Vec<JudgedPackage>, String> {
                     behavior_version: field("behavior_version"),
                     behavior_source: field("behavior_source"),
                     certified_versions,
+                    optional,
                 }),
                 _ => Err("the judged compiled closure has an unreadable entry".to_owned()),
             }
@@ -214,6 +224,10 @@ fn main() {
     println!(
         "cargo:rustc-env=TOKTIER_RUST_API_REFERENCE_VERSIONS={}",
         statuses.reference_versions
+    );
+    println!(
+        "cargo:rustc-env=TOKTIER_RUST_API_REFERENCE_UNCERTIFIED={}",
+        statuses.reference_uncertified
     );
 
     println!("cargo:rerun-if-env-changed={IDENTITY_SENTINEL_ENV}");

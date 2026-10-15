@@ -292,6 +292,7 @@ def test_the_behaviour_units_of_the_shipped_record_agree_with_the_table() -> Non
             assert "certified_versions" not in entry
     # The embedded reference engine is a reference library since 0.3.0.
     assert probed["tokenizers"]["behavior_source"] == "crate-version"
+
     # One version per unit, whatever the package versions are.
     for unit in set(closure.BEHAVIOUR_UNITS.values()):
         versions = {
@@ -300,3 +301,19 @@ def test_the_behaviour_units_of_the_shipped_record_agree_with_the_table() -> Non
             if entry["behavior_unit"] == unit
         }
         assert len(versions) == 1
+
+
+def test_optional_packages_are_the_ones_a_feature_brings_in() -> None:
+    import json
+
+    document = json.loads(closure.OUTPUT.read_text(encoding="utf-8"))
+    optional = {
+        entry["name"] for entry in document["packages"] if entry.get("optional")
+    }
+    # The sqlite tier and the SQLite C sources arrive through `sqlite`.
+    assert {"toktier-store-sqlite", "rusqlite", "libsqlite3-sys"} <= optional
+    # The engines, the reference libraries and the facade itself do not.
+    for name in ("toktier", "toktier-routing-core", "tokenizers", "regex", "serde"):
+        assert name not in optional
+    for entry in document["packages"]:
+        assert entry.get("optional", False) in (False, True)

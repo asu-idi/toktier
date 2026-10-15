@@ -37,7 +37,9 @@ pub enum Policy {
 
 impl Policy {
     /// Whether this policy admits a device or toolchain no campaign has
-    /// judged, on a build whose own certified core is intact.
+    /// judged, on a build whose own certified core is intact. Only the
+    /// GPU routes ask; a CPU-only build compiles the method unused.
+    #[cfg_attr(not(any(feature = "prebuilt-gpu", feature = "jit")), allow(dead_code))]
     pub(crate) fn admits_unjudged_device(self) -> bool {
         matches!(self, Self::Supported | Self::RequireAccelerated)
     }
@@ -135,11 +137,13 @@ pub enum ReasonCode {
     /// labelled [`Certification::Supported`].
     CpuUncertified,
     /// This build's own source identity is not in the shipped
-    /// `runtime_builds` register, or its certified core does not verify,
-    /// so no accelerated route is admitted whatever the artifact is.
-    /// Since 0.3.0 the compiler and build flags are not part of this
-    /// reason under any policy: a build from judged sources on an
-    /// unjudged recipe admits the fast CPU route and labels it.
+    /// `runtime_builds` register, or one of this crate's own siblings
+    /// resolves from another copy or version than the judged one, so no
+    /// accelerated route is admitted whatever the artifact is. Since
+    /// 0.3.0 the compiler, the build flags and the versions of the
+    /// reference libraries are not part of this reason under any policy:
+    /// a build from judged sources admits the fast CPU route and labels
+    /// it.
     RuntimeBuildUncertified,
     /// [`Policy::Reference`] was asked for, so no accelerated option
     /// was considered.
@@ -308,14 +312,22 @@ pub struct RuntimeBuildFacts {
     /// versions.
     pub reference_versions: Vec<ReferenceVersion>,
     /// `None` when every reference library resolves at a certified
-    /// reference version; `"uncertified_reference"` otherwise, the word
-    /// the Python facade's `doctor` uses for the same state. A build in
-    /// that state holds the accelerated engines on the reference route
-    /// and is not refused.
+    /// reference version and every probed unit reads the judged behaviour
+    /// version; `"uncertified_reference"` otherwise, the word the Python
+    /// facade's `doctor` uses for the same state. A build in that state
+    /// runs the accelerated engines labelled `supported_untested` and is
+    /// not `certified`; the Unicode tables it reads may not be the judged
+    /// ones (`dependency_advisory` says which and what aligns them).
     pub reference_certification_reason: Option<String>,
-    /// The same comparison as `dependency_closure`, restricted to the
-    /// certified core. Anything other than `"verified"` here holds
-    /// `certified` at `false` and says what differs and what aligns it.
+    /// The same comparison as `dependency_closure`, restricted to what
+    /// decides admission by closure: this crate's own siblings, resolved
+    /// as the judged copies or not at all where an optional feature is
+    /// off. Anything other than `"verified"` here holds `certified` at
+    /// `false` and says what differs and what aligns it; a `mismatched`
+    /// line also closes the accelerated routes, an `unlocated` line does
+    /// not. Since 0.3.0 the reference libraries are reported in
+    /// `reference_versions`, `behavior_versions` and
+    /// `reference_certification_reason` rather than here.
     pub core_closure: String,
     /// What this build compiles that the judged build did not, where the
     /// difference is reported rather than gating: packages outside the

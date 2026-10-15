@@ -701,14 +701,16 @@ impl Registry {
     pub(crate) fn rust_api_build_certified(&self) -> bool {
         // The register binds compile-time facts about this crate's own
         // sources. Those sources are compiled together with whatever
-        // versions Cargo resolved for the transitive graph, so a build
-        // whose certified core is not the judged one is not the build
-        // the evidence was taken on, whatever its source digests say.
-        // The core is this crate's own crates and the reference
-        // libraries beneath them; the implementation libraries and
-        // everything else the build compiles are compared and reported
-        // rather than gating (`crate::DEPENDENCY_CLOSURE`).
-        if !crate::behavior_version::core_closure_verified() {
+        // versions Cargo resolved for the transitive graph, so the judged
+        // recipe is the judged sources, the judged toolchain and flags,
+        // the workspace members as the judged copies, and every reference
+        // library at a version the certificate speaks for. Anything less
+        // is a label, not a refusal (`rust_api_sources_judged`); the
+        // implementation libraries and everything else the build compiles
+        // are compared and reported (`crate::DEPENDENCY_CLOSURE`).
+        if !crate::behavior_version::core_closure_verified()
+            || crate::behavior_version::reference_certification_reason().is_some()
+        {
             return false;
         }
         let standing = self.rust_api_build_standing();
@@ -716,12 +718,15 @@ impl Registry {
     }
 
     /// Whether the fast CPU engine of this build is the judged one by
-    /// source identity, with the certified core verified: the premise
-    /// under which every policy but `Reference` admits it on a compiler
-    /// or recipe no campaign judged.
+    /// source identity: the three digests are those of a judged row, and
+    /// the closure says this crate's own siblings are the judged copies
+    /// (or could not be compared for want of a lockfile). This is what
+    /// admits the fast CPU route under every policy but `Reference`,
+    /// since 0.3.0 (user rule of 2026-10-14); the compiler, the flags and
+    /// the reference libraries are labels on it.
     pub(crate) fn rust_api_sources_judged(&self) -> bool {
-        crate::behavior_version::core_closure_verified()
-            && self.rust_api_build_standing().source_identity_judged
+        self.rust_api_build_standing().source_identity_judged
+            && crate::behavior_version::sources_closure_admits()
     }
 
     pub(crate) fn pclass(&self) -> Vec<u8> {

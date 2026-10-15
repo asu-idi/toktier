@@ -728,10 +728,18 @@ impl Runtime {
         let fast_toolchain = fast_support
             .and_then(|value| value.get("toolchain"))
             .and_then(serde_json::Value::as_str);
+        // The engine's source binding is the one premise
+        // `Policy::Experimental` waives, the way the Python facade's
+        // experimental policy waives `R_ENGINE_BINDING_MISMATCH`: a build
+        // whose engine sources the registry does not record may run the
+        // engine, and the route is labelled experimental. The status and
+        // the artifact bindings are not waived.
+        let source_bound = fast_source == Some(env!("TOKTIER_RUST_API_FAST_CPU_SOURCE_SHA256"))
+            || self.inner.config.policy == Policy::Experimental;
         if !matches!(fast_status, Some("certified") | Some("certified_source"))
             || support.artifact_sha256 != artifact.identity().tokenizer_sha256
             || repair.artifact_sha256 != artifact.identity().tokenizer_sha256
-            || fast_source != Some(env!("TOKTIER_RUST_API_FAST_CPU_SOURCE_SHA256"))
+            || !source_bound
         {
             reasons.push(ReasonCode::CpuUncertified);
             return Ok(None);

@@ -2,9 +2,9 @@
   "schema": "toktier.rust_api.matrix.v1",
   "requested_device": "cuda:0",
   "architecture": "sm_120",
-  "runtime_source_digest": "1e2283c261a9d3809eaf1cb59668df3e08589663a06bbb3a232a460a907f4ecf",
-  "fast_cpu_source_digest": "843bee0e5e4d73e96da7f74a3baa8b8e483bc735f453286871ff07d1748ea32a",
-  "native_host_source_digest": "ac4c649f2457a6a7686492f6e8929ee29f393a91eabe504147a2a71f4d36f6bc",
+  "runtime_source_digest": "ca80ac46737f5976a28a80402e1ffe599f14dc535d7c7789852d785cbfcd8f6a",
+  "fast_cpu_source_digest": "9594ff243421b89ff95137bda5a439a314343470951b6b7c0a98238bf51c4f41",
+  "native_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
   "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
   "build_flags": [
     "profile=release",

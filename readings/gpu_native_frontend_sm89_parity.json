@@ -4,7 +4,7 @@
   "architecture_digest": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
   "characters": 6104728470,
   "devices": [
-    "NVIDIA GeForce RTX 4090, 8.9, 580.173.02"
+    "NVIDIA GeForce RTX 4090, 8.9, 580.178.04"
   ],
   "documents": 1500000,
   "families": 15,
@@ -19,11 +19,15 @@
       "rustflags=",
       "pyo3=abi3-py310+extension-module"
     ],
-    "host_source_digest": "ac4c649f2457a6a7686492f6e8929ee29f393a91eabe504147a2a71f4d36f6bc",
-    "host_source_digest_v2": "cbfb24db0c61684a9dc5c48c60ac2c2b8c7d2d5913a807014af2ae56aafbf4a8",
+    "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+    "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5",
     "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
   },
   "one_python_to_rust_call_per_batch": true,
+  "oracle": {
+    "package": "tokenizers",
+    "version": "0.22.2"
+  },
   "rows": [
     {
       "all_ids_equal_hf": true,

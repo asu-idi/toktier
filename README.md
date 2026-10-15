@@ -45,6 +45,9 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
 
 ## News
 
+- **2026.10.14** 📄 Our paper [*Delta Tokenizer: Reference-Identical
+  Tokenization of Session Deltas and Segment-Parallelism for Long Prompts on
+  Multicore CPUs*](https://arxiv.org/abs/2610.19801) is available on arXiv.
 - **2026.08.31** 🚀 **toktier 0.2.9** released — both capability fingerprints
   are now computed on the loader face the pinned loader materializes rather
   than on the artifact file, so a capability id names the document the
@@ -926,6 +929,21 @@ If you use toktier in your research, please cite:
   primaryClass  = {cs.CL},
   doi           = {10.48550/arXiv.2607.29678},
   url           = {https://arxiv.org/abs/2607.29678}
+}
+```
+
+For the chunk-parallel CPU path and the serving adapter, cite:
+
+```bibtex
+@misc{zhang2026deltatokenizer,
+  title         = {Delta Tokenizer: Reference-Identical Tokenization of Session Deltas and Segment-Parallelism for Long Prompts on Multicore CPUs},
+  author        = {Zhenyu Zhang and Zhichao Cao},
+  year          = {2026},
+  eprint        = {2610.19801},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  doi           = {10.48550/arXiv.2610.19801},
+  url           = {https://arxiv.org/abs/2610.19801}
 }
 ```
 

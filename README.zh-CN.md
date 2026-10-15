@@ -41,6 +41,9 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 
 ## 最新动态
 
+- **2026.10.14** 📄 论文 [*Delta Tokenizer: Reference-Identical Tokenization
+  of Session Deltas and Segment-Parallelism for Long Prompts on Multicore
+  CPUs*](https://arxiv.org/abs/2610.19801) 上线 arXiv。
 - **2026.08.31** 🚀 **toktier 0.2.9** 发布——两个能力指纹现在都在钉住版 loader
   物化出的 loader 面上计算，而不再在 artifact 文件上计算，因此能力 id 指称的
   正是当初取认证读数的那份文档。随包注册表有六格因此移动：五个 `pipeline.*`
@@ -801,6 +804,21 @@ Serving*](https://arxiv.org/abs/2607.29678) ·
   primaryClass  = {cs.CL},
   doi           = {10.48550/arXiv.2607.29678},
   url           = {https://arxiv.org/abs/2607.29678}
+}
+```
+
+For the chunk-parallel CPU path and the serving adapter, cite:
+
+```bibtex
+@misc{zhang2026deltatokenizer,
+  title         = {Delta Tokenizer: Reference-Identical Tokenization of Session Deltas and Segment-Parallelism for Long Prompts on Multicore CPUs},
+  author        = {Zhenyu Zhang and Zhichao Cao},
+  year          = {2026},
+  eprint        = {2610.19801},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  doi           = {10.48550/arXiv.2610.19801},
+  url           = {https://arxiv.org/abs/2610.19801}
 }
 ```
 

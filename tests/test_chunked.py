@@ -1401,7 +1401,9 @@ def test_no_certified_cut_falls_back_to_serial(
     last = report["last"]
     assert isinstance(last, dict)
     # Judged key by key: the block may grow keys (the native path added
-    # ``native``), and each fact of this call is checked on its own.
+    # ``native``), and each fact of this call is checked on its own. On a
+    # certified row ``native=None`` takes the native encoder wherever it
+    # can run, so the call is native exactly when the route carries it.
     expected = {
         "chars": len(text),
         "tokens": len(encoded.ids),
@@ -1411,7 +1413,7 @@ def test_no_certified_cut_falls_back_to_serial(
         "cut_misses": 3,
         "literal_rejects": 0,
         "norm_rejects": 0,
-        "native": False,
+        "native": chunked.native_available(tokenizer),
     }
     for key, value in expected.items():
         assert key in last, key

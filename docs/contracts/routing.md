@@ -208,10 +208,10 @@ this, and it is append-only on the same terms as Section 5.4:
 | Variant | Recorded when |
 |---|---|
 | `ReferenceRequested` | `Policy::Reference` was asked for, so no accelerated option was considered. The nearest Python code is `R_POLICY_REFERENCE`. |
-| `RuntimeBuildUncertified` | This build's own identity is not in the shipped `runtime_builds` register, or its certified core does not verify, so no accelerated route is admitted whatever the artifact is. There is no Python code for it: the Python facade does not certify a Rust build. |
+| `RuntimeBuildUncertified` | This build's own source identity is not in the shipped `runtime_builds` register, or its certified core does not verify (a reference library outside its certified reference versions is one way), so no accelerated route is admitted whatever the artifact is. Under `Policy::Certified` a build from judged sources on a rustc or feature recipe no campaign judged is recorded here as well; `Policy::Supported` admits that build's fast CPU route as `Supported` instead (since 0.3.0). There is no Python code for it: the Python facade does not certify a Rust build. |
 | `GpuUnavailable` | A GPU route was wanted and the runtime could not offer one here: no `prebuilt-gpu` feature in this build, or the GPU runtime failed to open on this machine. The nearest Python codes are `R_BACKEND_UNAVAILABLE` and `R_GPU_DISABLED`. |
 | `GpuUncertified` | A GPU route was wanted, and either this build is not certified for one or the artifact has no eligible GPU identity. The nearest Python codes are `R_UNCERTIFIED_ARTIFACT` and `R_SM_UNCERTIFIED`. |
-| `CpuUncertified` | The fast CPU route was refused: the artifact has no certified repair row, or the engine's status, artifact, source or toolchain binding does not match the registry. The nearest Python code is `R_ENGINE_BINDING_MISMATCH`. |
+| `CpuUncertified` | The fast CPU route was refused: the artifact has no certified repair row, or the engine's status, artifact or source binding does not match the registry. Since 0.3.0 the compiler is not part of this refusal; a compiler no campaign used decides the route's label, not its admission. The nearest Python code is `R_ENGINE_BINDING_MISMATCH`. |
 
 One of the five has no Python counterpart at all, which is why the set is
 named here rather than folded into Section 5.1: a Rust build certifies

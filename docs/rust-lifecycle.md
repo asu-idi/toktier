@@ -245,10 +245,18 @@ handles never raises it implicitly.
 
 ## Distribution contract
 
-- MSRV: Rust 1.93.1, verified against the complete feature matrix. The bound
-  preserves the frozen corrected-CPU implementation, including its stable
-  AVX-512 intrinsics, rather than rewriting certified SIMD code solely to
-  claim an older compiler.
+- MSRV: Rust 1.89, measured on this release with rustc 1.89.0 and 1.92.0:
+  the default feature set, `--no-default-features --features serving` (the
+  CPU-only recipe a Rust front end takes), that recipe with `sqlite`, the
+  whole workspace, and the crate's test suites, all with `--locked`; CI
+  type-checks the two recipes with `cargo +1.89 check`. The floor is where
+  the corrected-CPU implementation's stable AVX-512 intrinsics became
+  available, so it is not measured lower. `rust-toolchain.toml` still names
+  1.93.1: that is the toolchain the judged builds are made with and the build
+  recipe of the certified artifacts, not the floor. Through 0.2.x the two
+  were the same version and the fast CPU route was admitted only on it;
+  since 0.3.0 a build on another rustc admits the fast CPU route as
+  `supported_untested` under `Policy::Supported` (`docs/rust-api.md`).
 - Supported release target: Linux x86-64, glibc 2.34 or newer. CPU-only feature
   builds do not require a CUDA installation; GPU features open `libcuda` at
   runtime.

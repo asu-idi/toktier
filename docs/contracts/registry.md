@@ -98,10 +98,17 @@ covered by certification claims (see `routing.md`).
 
 For the Rust API runtime, this section is necessary but not sufficient:
 certified acceleration additionally requires the executing build to match an
-eligible entry in the registry's `runtime_builds` block (exact facade source
-identity, features/profile, exact rustc, and the fast-CPU/native-host
-digests). An unregistered build falls back to HF under `CERTIFIED`, and an
-explicit CUDA request reports `UNCERTIFIED_RUNTIME` (see `docs/rust-api.md`).
+eligible entry in the registry's `runtime_builds` block -- the facade,
+fast-CPU and native-host source identities, the features/profile flags and
+the rustc that built it, which together are the judged recipe. Since 0.3.0
+the rule read against those entries is in two parts: the source identities
+admit the fast CPU engine, and the toolchain and flags decide its label. A
+build from the judged sources on a rustc or feature recipe no campaign used
+is `supported_untested` under `SUPPORTED` (Section 3.0) and falls back to
+HF under `CERTIFIED`; a build whose sources are not registered falls back
+to HF under both, and an explicit CUDA request on it reports
+`UNCERTIFIED_RUNTIME`. The GPU route keeps the judged-recipe requirement
+(see `docs/rust-api.md`).
 
 ### 1.2 The dependency graph the runtime build compiles (added in 0.2.6)
 
@@ -115,7 +122,15 @@ there. Packages outside the core are compared and reported, and do not
 decide eligibility. A package of the core whose behaviour is defined by
 an evolving external standard is compared by the version of the tables
 it carries rather than by its package version; where that version cannot
-be read, the package version is compared exactly.
+be read, the package version is compared against the package's **certified
+reference versions** -- the judged version and every later version a
+campaign certified with a lockfile that resolves it, listed in the shipped
+judged-closure record -- and a resolution outside that list holds the
+accelerated engines on the reference route with `uncertified_reference`
+reported (added in 0.3.0; the list holds the judged version alone in that
+release). Since 0.3.0 the implementation libraries the project's own crates
+call directly are taken on caret edges and are compared and reported
+rather than deciding eligibility.
 
 ### 1.3 One Unicode version across the compared engines (added in 0.2.6)
 
@@ -179,7 +194,7 @@ Each record carries per-backend entries with one of:
 | Status | Meaning |
 |---|---|
 | `certified` | The judged binary itself is bound: the record carries a binary digest, and the loader must match it before the backend opens under `CERTIFIED`. In this release, the prebuilt GPU delivery also binds the source/build identity of the Rust host paired with that binary; either mismatch closes the route. |
-| `certified_source` | The judged implementation is bound by source identity plus its reproducibility inputs instead of by one platform-specific output binary. Every backend must match its schema-defined source digest, build flags, and toolchain exactly. GPU JIT additionally binds the generated class table, selected NVCC, torch runtime CUDA, exact PyTorch version, and judged device architecture. The integrated CPU engine binds its Rust/Python source set, Cargo release profile, exact rustc, repair configuration, patch, oracle, and artifact. This status is eligible under `CERTIFIED` only when every applicable axis verifies and is reported distinctly from `certified` everywhere. |
+| `certified_source` | The judged implementation is bound by source identity plus its reproducibility inputs instead of by one platform-specific output binary. Every backend must match its schema-defined source digest exactly; the Python facade also requires the recorded build flags and toolchain exactly, while the Rust runtime since 0.3.0 reads the flags and toolchain for the route's label rather than for its admission (Section 1.1). GPU JIT additionally binds the generated class table, selected NVCC, torch runtime CUDA, exact PyTorch version, and judged device architecture. The integrated CPU engine binds its Rust/Python source set, Cargo release profile, exact rustc, repair configuration, patch, oracle, and artifact. This status is eligible under `CERTIFIED` only when every applicable axis verifies and is reported distinctly from `certified` everywhere. |
 | `experimental` | Present but not certified; reachable only under `EXPERIMENTAL` policy. |
 | `unsupported` | Known not to work; never planned. |
 

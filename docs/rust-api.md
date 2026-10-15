@@ -107,59 +107,103 @@ where the admitted engine is the repaired CPU one, and none on an
 uncertified build, where the admitted engine is the reference and
 re-encoding the window is what that engine does. The ids are the same on
 both.
-Accelerated admission also requires the exact Rust facade source, rustc,
-features, target, and profile facts to appear in the shipped
-`runtime_builds` registry, **and** the certified core of the compiled
-closure to be the judged one. The whole closure is still compared;
+Accelerated admission reads two things against the shipped `runtime_builds`
+register and the compiled closure. The three source identities of this
+build -- the facade, the fast CPU engine and the native host -- have to be
+those of a judged entry, and the certified core of the compiled closure has
+to be the judged one. A build that also carries that entry's rustc and build
+flags is the judged recipe: `runtime_build.certified` is `true` and the fast
+CPU route is labelled `CertifiedSource`. Since 0.3.0 a build from the judged
+sources on a compiler or feature recipe no campaign used is admitted to the
+fast CPU route under `Policy::Supported` and labelled
+`Certification::Supported` (`supported_untested`), the way an unjudged GPU
+architecture has been since 0.2.6; `Policy::Certified` routes it to the
+reference engine, and the GPU route keeps the judged-recipe requirement,
+because a prebuilt fatbin is paired with a judged host build.
+`runtime_build.source_identity_judged` and `runtime_build.recipe_judged`
+report the two axes, and `runtime_build.toolchain_divergence` names the
+compiler that built this binary beside the ones that built the judged
+builds when they differ. The whole closure is still compared;
 `runtime_build.dependency_closure` (`toktier::DEPENDENCY_CLOSURE`) reports
-that reading and `runtime_build.dependency_advisory` names packages outside
-the core that differ, with the command that aligns them. Neither of the two
-decides `certified`; `runtime_build.core_closure` does. Both answers take
-the same three shapes: `verified`, a line starting `unlocated:` when no
-governing lockfile could be named, or one starting `mismatched:` naming
-every package that differs. When the flags are what stands in the way,
-`runtime_build.build_flag_divergence` names which key differs and what to
-do about it.
+that reading and `runtime_build.dependency_advisory` names the packages
+outside the core, the implementation libraries and the reference libraries
+at certified versions that differ from the judged build, with the command
+that aligns each. Neither of the two decides `certified`;
+`runtime_build.core_closure` does. Both answers take the same three shapes:
+`verified`, a line starting `unlocated:` when no governing lockfile could be
+named, or one starting `mismatched:` naming every package that differs. When
+the flags are what stands in the way, `runtime_build.build_flag_divergence`
+names which key differs and what to do about it.
 
 ### What the certificate speaks for
 
-The **certified core** is TokTier's own crates, the packages they call
-directly, and the text-semantics libraries beneath them. Three mechanical
-rules draw it, and the record that travels with the crate carries both the
-rules and the answer, as `tier_rule` and a `tier` on every package in
-`data/build/judged_compiled_closure.json`:
+The **certified core** is TokTier's own crates and the reference libraries
+beneath them. Three mechanical rules draw the tiers, and the record that
+travels with the crate carries both the rules and the answer, as `tier_rule`
+and a `tier` on every package in `data/build/judged_compiled_closure.json`:
 
-- **R0** -- the six crates this repository publishes.
-- **R1** -- their non-development direct dependencies that an encode-path
-  source file names: `tokenizers`, `icu_properties`, `spm_precompiled`,
-  `unicode-normalization-alignments`, `memchr`, `aho-corasick`, `rayon`,
-  `sonic-rs`, `winnow`, `serde`, `sha2` and the rest of that list. Every
-  one of them is pinned exactly by at least one of our own edges, which a
-  generation gate requires, so **an R1 package cannot drift by version**:
-  a consumer resolving today gets the judged version or a refusal about a
-  copy that is not the judged package. `fs2` and `tar` are direct
-  dependencies that no encode-path file names -- they serve the artifact
-  cache and bundle import -- so they are outside the core.
-- **R2** -- the text-semantics libraries an engine crate reaches through
-  normal edges: `regex`, `regex-automata`, `regex-syntax`, `onig`,
-  `onig_sys`, `unicode-segmentation`, `unicode_categories` and
-  `icu_properties_data`. What these do is defined by an evolving external
-  standard -- a Unicode version, a regex dialect -- so a version of one of
-  them really can change ids by design rather than by fault. FINDING 041
-  and 043 in the research record are two measured cases of exactly that.
+- **R0** -- the six crates this repository publishes. Core; they pin each
+  other exactly.
+- **R1** -- the implementation libraries those crates call directly from an
+  encode-path source file and that carry no text semantics of their own:
+  `serde`, `serde_json`, `sonic-rs`, `rayon`, `aho-corasick`, `memchr`,
+  `rustc-hash`, `itertools`, `base64`, `sha2`, `blake2b_simd`, `eyre`,
+  `winnow`, `libc`, `flate2` and `rusqlite`. Since 0.3.0 they are taken on
+  caret edges rather than exact ones: `Cargo.lock` records the version every
+  judged build resolved, a consumer who resolves inside the range compiles,
+  and the version it resolves is **compared and reported** in
+  `dependency_advisory` rather than deciding the certificate. A generation
+  gate refuses an exact edge of ours on any third-party package. `fs2` and
+  `tar` are direct dependencies that no encode-path file names -- they
+  serve the artifact cache and bundle import -- so they are periphery.
+- **R2** -- the reference libraries an engine crate reaches through normal
+  edges: the embedded reference engine `tokenizers`, and the text-semantics
+  libraries `regex`, `regex-automata`, `regex-syntax`, `onig`, `onig_sys`,
+  `unicode-segmentation`, `unicode_categories`, `icu_properties`,
+  `icu_properties_data`, `unicode-normalization-alignments` and
+  `spm_precompiled`. What these do is the reference itself or is defined by
+  an evolving external standard -- a Unicode version, a regex dialect -- so
+  a version of one of them really can change ids by design rather than by
+  fault. FINDING 041 and 043 in the research record are two measured cases
+  of exactly that. Core.
 
-R2 is compared by **behaviour version** rather than by package version:
-the version of the tables, not of the crate that ships them.
-`Runtime::doctor()` reports each unit in `runtime_build.behavior_versions`,
-beside the value the evidence was taken on, and says where it is read:
-the newest `\p{Age=...}` the regex engine accepts, `onig::version()`, and
-`unicode_segmentation::UNICODE_VERSION`. A unit whose version cannot be
-read in a binary falls back to comparing its package versions exactly,
-which is the strict direction. So a build whose `regex` moved a patch
-version while its Unicode tables stayed put is still certified, and the
-move is named in `dependency_advisory`; **a build whose tables moved to
-another Unicode version is not certified** and routes to the reference
-engine.
+R2 is compared by **behaviour version** where a binary can read one: the
+version of the tables, not of the crate that ships them.
+`Runtime::doctor()` reports each such unit in
+`runtime_build.behavior_versions`, beside the value the evidence was taken
+on, and says where it is read: the newest `\p{Age=...}` the regex engine
+accepts, `onig::version()`, and `unicode_segmentation::UNICODE_VERSION`. So a
+build whose `regex` moved a patch version while its Unicode tables stayed put
+is still certified, and the move is named in `dependency_advisory`; **a build
+whose tables moved to another Unicode version is not certified** and routes
+to the reference engine.
+
+The R2 units a binary cannot ask -- the embedded reference engine
+`tokenizers`, `icu_properties` and its `icu_properties_data`,
+`unicode-normalization-alignments`, `spm_precompiled` and
+`unicode_categories` -- are compared by crate version against their
+**certified reference versions**: the version the judged build compiled and
+every later version a campaign certified with a lockfile that resolves it,
+listed per package in the shipped record (`certified_versions`) and reported
+by `Runtime::doctor()` in `runtime_build.reference_versions` beside the
+version this build resolved. In this release every list holds the judged
+version alone: `tokenizers` 0.22.2, `icu_properties` 2.0.2,
+`icu_properties_data` 2.0.1, `unicode-normalization-alignments` 0.1.12,
+`spm_precompiled` 0.1.4 and `unicode_categories` 0.1.1. A build that resolves
+a version inside the list is certified and, when it is not the judged one,
+the move is named in `dependency_advisory`; a build that resolves one outside
+it -- `icu_properties_data` 2.3.0 with its Unicode 17.0 tables, say -- reads
+`core_closure: mismatched`, reports
+`reference_certification_reason: "uncertified_reference"`, and holds the
+accelerated engines on the reference route. It is not refused: the ids come
+from the reference engine this build compiled, which is what the reading
+says. The same words name the same mechanism on the Python facade, where
+`toktier doctor` judges the installed Python `tokenizers` release against
+the registry's certified reference versions (`docs/contracts/registry.md`
+Section 2); the two lists are kept apart because they are widened by
+different evidence, a Python release by parity readings taken under it and
+a Rust crate version by the cargo gates and the Rust API matrix taken with
+a lockfile that resolves it.
 
 Which packages are text-semantics libraries is data, and its completeness
 is a gate: any package in the closure whose name matches
@@ -183,11 +227,14 @@ compares this crate's ids with the ids the reference engine produces, and
 that engine cuts text on Unicode character classes it reads from
 Oniguruma, while the fast CPU pre-tokenizer reads the same classes from
 ICU property data. The two have to answer alike about every code point for
-that comparison to mean what it says. Since 0.2.6 the property data is
-pinned to the Unicode version Oniguruma carries and a gate compares the
-two exhaustively, over every scalar value and every class the shipped
-patterns name (`tools/check_class_parity.py`). A release that moves either
-side moves both.
+that comparison to mean what it says. Since 0.2.6 the judged builds resolve
+the property data at the Unicode version Oniguruma carries and a gate
+compares the two exhaustively, over every scalar value and every class the
+shipped patterns name (`tools/check_class_parity.py`). A release that moves
+either side moves both, and since 0.3.0 a consumer build that resolves the
+property data at another version is held on the reference route by the
+certified reference versions above rather than run against the judged
+tables.
 
 ### What the dependency judgement is, and is not
 
@@ -303,28 +350,40 @@ the way to take the accelerated route knowingly anyway.
 ### What a fresh resolution answers, and how to align it
 
 A consumer who adds the crate today and lets Cargo resolve the graph should
-expect `dependency_closure: mismatched`, not `verified`. TokTier's own edges
-are pinned exactly, but the transitive versions underneath third-party
-dependencies are not, and they move as those crates publish. A resolution
-taken on a later day than the certification campaign is therefore the normal
-case.
+expect `dependency_closure: mismatched`, not `verified`. TokTier's own
+third-party edges are caret ranges since 0.3.0 and the transitive versions
+underneath them were never pinned, so both move as those crates publish. A
+resolution taken on a later day than the certification campaign is
+therefore the normal case.
 
 What that costs depends on where the packages that moved sit. When only the
-periphery moved, `core_closure` reads `verified`, `certified` is `true`, the
-accelerated route is admitted, and `dependency_advisory` names the packages
-and prints the commands. When an R2 unit moved to another Unicode version,
-`core_closure` reads `mismatched` and this build routes to the reference
-engine until its lockfile is aligned or the next release is judged against
-the newer tables.
+periphery or the implementation libraries moved, `core_closure` reads
+`verified`, `certified` is `true` on the judged recipe, the accelerated
+route is admitted, and `dependency_advisory` names the packages and prints
+the commands. When a reference library moved to another of its certified
+reference versions, the same holds and the advisory says which. When an R2
+unit moved to another Unicode version, or a reference library resolved a
+version outside its certified reference versions, `core_closure` reads
+`mismatched` and this build routes to the reference engine until its
+lockfile is aligned or a later release certifies the newer version.
 
 What still earns no certificate at all:
 
 - an `unlocated` build -- no governing lockfile could be named (see below);
-- a build whose flags are not the judged ones: `RUSTFLAGS`, a development
-  profile, or a feature list no judged recipe carries, `network` among them;
-- a build whose R0 or R1 packages resolve from somewhere other than the
-  judged package -- a `[patch]`, a fork, a mirror, a vendored copy;
-- a build whose R2 tables read another Unicode version, as above;
+- a build whose compiler or flags are not a judged recipe: another rustc,
+  `RUSTFLAGS`, a development profile, or a feature list no judged recipe
+  carries, `network` and a CPU-only build without `prebuilt-gpu` among them.
+  Since 0.3.0 such a build still admits the fast CPU route as
+  `supported_untested` under `Policy::Supported` when its sources and its
+  certified core are the judged ones; `Policy::Certified` keeps it on the
+  reference engine;
+- a build whose R0 or R2 packages resolve from somewhere other than the
+  judged package -- a `[patch]`, a fork, a mirror, a vendored copy. An
+  implementation library from another source is reported in the advisory
+  rather than withholding the route;
+- a build whose R2 tables read another Unicode version, or whose reference
+  libraries resolve a version outside their certified reference versions,
+  as above;
 - a dependency on this crate taken as a `git` dependency, even at the exact
   release commit and with byte-identical sources: Cargo records the origin
   as `git+...` rather than the registry, and this crate's own siblings then
@@ -391,7 +450,7 @@ are now separate:
 | Assurance | What it says | Reached under |
 |---|---|---|
 | `certified` | The exact configuration appears in the shipped registry and every constraint it binds verifies here. | every policy except `Reference` |
-| `supported_untested` | The engines and digests are the judged ones; the device architecture or the compiler triple is one no campaign ran on, and the kernel loads and runs here. | `Policy::Supported` (the default) |
+| `supported_untested` | The engines and digests are the judged ones; the device architecture, the NVCC triple or -- since 0.3.0, for the fast CPU route -- the Rust compiler or feature recipe is one no campaign ran on, and the engine loads and runs here. | `Policy::Supported` (the default) |
 | `locally_verified` | The same, plus a local check on this machine compared the route with this binary's reference engine and they agreed. | `Policy::Supported` |
 | refused | Something that was bound did not verify: a source digest, a host digest, build flags, the certified core of the closure, or a compiler component anyone can write to. | nothing but an explicit opt-in |
 
@@ -400,6 +459,19 @@ its frozen meaning exactly and is the strict switch: under it an
 unlisted device or an unjudged compiler triple routes to the reference
 engine as it always has. The last row does not move under either: a
 coverage gap is admitted, a verification failure is not.
+
+The fast CPU route joined this vocabulary in 0.3.0. A build from the judged
+engine sources whose rustc or build flags are not a judged recipe -- a host
+on rustc 1.92, a CPU-only build without `prebuilt-gpu` -- is
+`supported_untested` under `Policy::Supported`, `locally_verified` once
+`toktier-rust verify-local --engine cpu` compared it with this binary's
+reference engine on this machine (the record is filed under the compiler
+that built the binary, so another compiler's build is compared afresh), and
+routes to the reference engine under `Policy::Certified`.
+`runtime_build.toolchain_divergence` names both compilers, and
+`runtime_build.source_identity_judged` says that the sources, at least, are
+the judged ones; a build whose sources are not registered stays in the last
+row.
 
 The JIT path splits the same way. A source, host or flags mismatch still
 refuses, and so does a world-writable compiler component unless the
@@ -765,7 +837,11 @@ of this release is the one without `network`, and a build that enables it
 diverges from that recipe on the `features` key. The feature list is a
 build flag rather than a package, so the tier rules above do not reach it:
 a build that turns `network` on is not certified even though the two
-engines it compiles are byte for byte the judged ones.
+engines it compiles are byte for byte the judged ones. Since 0.3.0 such a
+build -- `network` on, or `prebuilt-gpu` off for a CPU-only host -- still
+admits the fast CPU route as `supported_untested` under `Policy::Supported`,
+because the engine it compiles is the judged one by source identity; what it
+does not earn is the `certified` label, which `Policy::Certified` requires.
 
 The normal dependency graph contains no PyO3, Python, PyTorch, or mandatory
 async executor. The prebuilt GPU host dynamically uses the CUDA Driver API and

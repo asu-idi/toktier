@@ -436,7 +436,14 @@ SGLang 0.5.19, 0.5.20 and 0.5.21 pin `transformers==5.12.1`,
 to `transformers==5.19.0` and `tokenizers==0.23.2`. Both pairs are inside
 toktier's ranges, so `pip check` has nothing to report about toktier in
 either environment.
-<!-- TODO(fill): state the pip check readings of the three environments (SGLang 0.5.21 venv, a venv built from SGLang main's pins, the 3.10 rehearsal) with their dates. -->
+With toktier 0.3.0, `pip check` reported "No broken requirements found."
+on 2026-10-14 in a new environment holding SGLang 0.5.21's two pins
+(`tokenizers==0.22.2`, `transformers==5.12.1`) and in one holding SGLang
+main's two pins (`tokenizers==0.23.2`, `transformers==5.19.0`), and on
+2026-10-15 in the Python 3.10 environment the release is rehearsed in. In
+an existing SGLang 0.5.21 environment, `pip install --dry-run
+toktier==0.3.0` lists toktier and no other package to install, since
+SGLang's own pins already satisfy toktier's requirements.
 Older toktier releases pinned `transformers==4.57.6` and had to be
 installed with `--no-deps` beside SGLang, together with `platformdirs`,
 the one dependency SGLang's own dependencies do not bring; that is no
@@ -460,7 +467,16 @@ parity readings taken under it ship with the registry
 that set runs on the reference route and is reported as such
 (`R_ORACLE_MISMATCH` in `explain()`, `uncertified_reference` in
 `toktier doctor`).
-<!-- TODO(fill): name the certified reference versions this release ships (the registry's certified_versions) and say which SGLang pins they cover. -->
+This release ships three certified reference versions: `tokenizers`
+0.22.2, 0.23.2 and 0.23.3. They cover both of SGLang's pins, 0.22.2 for
+SGLang 0.5.19 to 0.5.21 and 0.23.2 for SGLang's main branch. The two 0.23
+releases were certified on readings taken with each of them installed
+beside `transformers` 5.19.0: the fast CPU engine on 1,437,469 documents
+and the prebuilt GPU engine on sm_120 (16,540,125 documents) and on sm_89
+(1,500,000 documents), every id equal to the installed release's, and the
+chunk-parallel path's adversarial battery (460,000 strings over eleven
+artifacts), with no difference in any comparison. The parity readings
+ship in `readings/oracle_compat/`.
 For every packaged artifact
 except `qwen3_5_08b`, toktier executes the verified artifact file itself;
 `qwen3_5_08b` declares added tokens in its configuration file, so its
@@ -492,6 +508,10 @@ the row is certified, the face recorded in it refuses a different one
 (`loader_face_differs_from_chunked_evidence:<digest>`). The other ten
 families materialize the same face under both versions, and nothing
 about their `explain()` changes.
+Beside `transformers` 5.19.0, the loader SGLang's main branch pins,
+`qwen3_5_08b` materializes a third face (`4d765ac5...`), which the load
+check refuses in the same way, and the other ten families materialize
+their recorded faces.
 
 What it means for `toktier doctor`. Its `certified_cpu_profile_ready`
 field says whether the installed engine reported its facts and the

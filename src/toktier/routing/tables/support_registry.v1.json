@@ -6,13 +6,15 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:88d3f1109579c93dc16aaf6ba485ea1c125d84ebaf24330cd76adbc623015531",
+  "root_digest": "sha256:b6611138b680c91792702257779896c96867ef1ba6b49efae9b299c02310eadc",
   "oracles": [
     {
       "oracle_id": "tokenizers",
       "package": "tokenizers",
       "certified_versions": [
-        "0.22.2"
+        "0.22.2",
+        "0.23.2",
+        "0.23.3"
       ],
       "semantic_id": "tokenizers.0.22.2"
     }

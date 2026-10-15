@@ -359,7 +359,7 @@ mirrors, imports, exports, and runs from a verified cache.
 
 | Install | Delivery | Requirements |
 |---|---|---|
-| `toktier` | Corrected Gigatoken full CPU encode and session repair, HF fallback, persistent store, routing, and CLI | Linux x86_64 with glibc 2.34+, CPython 3.10+; installs `tokenizers==0.22.2` and `transformers==4.57.6` |
+| `toktier` | Corrected Gigatoken full CPU encode and session repair, HF fallback, persistent store, routing, and CLI | Linux x86_64 with glibc 2.34+, CPython 3.10+; requires `tokenizers>=0.22.2,<0.24` and `transformers>=4.57.6,<6` (the certified reference versions are the registry's; see [Correctness and evidence](#correctness-and-evidence)) |
 | `toktier[gpu]` | Strict superset of `toktier`; automatic 64 KiB crossover to the shipped multi-architecture CUDA fatbin | NVIDIA GPU, driver 580.65.06+, `torch`; no compiler or first-use build |
 | `toktier[gpu-jit]` | Same CPU/GPU routing as `toktier[gpu]`; compiles the certified kernel source locally | judged NVCC / torch-runtime CUDA / PyTorch triple, `torch`, `ninja`; first-use compilation |
 
@@ -549,12 +549,17 @@ under `CERTIFIED` the same machine reads `false` and `fast_cpu`. Either way it
 is the conclusion `toktier gpu compile` and the next request reach, before you
 run them.
 
-`certified_cpu_profile_ready` says whether the installed `tokenizers` and
-`transformers` are exactly the pair the loader-face readings were taken with
-(0.22.2 and 4.57.6), not whether a route is open. Beside SGLang, whose
-`transformers` pin differs, it reads `false` and the effective-backend fields
-built on it answer `hf` where they would otherwise answer `fast_cpu`, while a
-loaded tokenizer's `explain()` and `family.plan_reasons` show what actually runs
+`certified_cpu_profile_ready` says whether the installed engine reported its
+facts and the installed `tokenizers` is one of the certified reference
+versions, not whether a route is open. `certified_reference_versions` lists
+that set as the shipped registry records it, and
+`reference_certification_reason` is `null` when the installed release is in it
+and `uncertified_reference` when it is not; an installed release outside the
+set still runs, on the reference route, and `family.plan_reasons` names the
+same comparison as `R_ORACLE_MISMATCH`. The `transformers` release is not a
+premise of this key: the loader is admitted as a range and judged per artifact
+by the recorded loader-face digest when a tokenizer is loaded, which is what a
+loaded tokenizer's `explain()` shows
 ([Installing beside SGLang](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/integration/sglang.md#installing-beside-sglang)).
 
 ### Caches, state, and directory layout
@@ -641,9 +646,15 @@ adapter reports and what each one means.
 ## Correctness and evidence
 
 The certified reference is Hugging Face `tokenizers` 0.22.2 with default
-settings. Certification is bound to exact artifact bytes and that oracle
-version. If the installed HF version is outside the certified set, accelerated
-routing is disabled and the request remains on the installed reference path.
+settings: the reference engine compiled into the native extension is that
+release exactly, and every certification reading was judged against it.
+Certification is bound to exact artifact bytes and to the certified reference
+versions, the exact `tokenizers` releases the support registry's oracle record
+lists; a later release joins that set only on evidence that it agrees with the
+embedded reference on the certified surface, and the package metadata admits a
+range of releases so that it can be installed beside other pins. If the
+installed `tokenizers` is outside the certified set, accelerated routing is
+disabled and the request remains on the installed reference path.
 
 One related definition, settled in 0.2.8: the reference is the loader face.
 An artifact's identity key is its `tokenizer.json`, and the certified subject

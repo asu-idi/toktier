@@ -421,38 +421,47 @@ use the patch file written for that line.
 
 ## Installing beside SGLang
 
-toktier pins `transformers==4.57.6`, the loader companion its loader-face
-readings were taken with. SGLang 0.5.19, 0.5.20 and 0.5.21 all pin
-`transformers==5.12.1`, `tokenizers==0.22.2` and `torch==2.13.0`.
-A resolver cannot satisfy both in one environment, so install SGLang
-first and toktier after it without its dependencies, together with
-`platformdirs`:
+toktier admits `tokenizers>=0.22.2,<0.24` and `transformers>=4.57.6,<6`,
+so it installs beside SGLang with its dependencies resolved the ordinary
+way:
 
 ```
 pip install "sglang==<version>"
-pip install --no-deps toktier==0.3.0 "platformdirs>=3.0"
+pip install toktier==0.3.0
 pip check
 ```
 
-`platformdirs` is the one dependency of toktier that SGLang's own
-dependencies do not bring. Without it, `pip check` also lists it as
-missing; toktier still runs and falls back to the standard XDG
-directories, which is where `platformdirs` points on Linux. With it,
-`pip check` reports one line, toktier's `transformers` requirement
-(checked on 2026-10-13 in a new environment with SGLang 0.5.21). Any
-other line names a package toktier needs that SGLang did not bring;
-install it the same way. The `[fastokens]` extra is not
-installed by `--no-deps`. If you want toktier's pinned Fastokens adapter,
-install `toktier-fastokens==0.3.1.2` yourself, and keep in mind that it
-uses the import name `fastokens`, which is also the name of the package
-SGLang's own `fastokens` backend installs. Install one of the two, not
-both (`packaging/fastokens-pinned/README.md`).
+SGLang 0.5.19, 0.5.20 and 0.5.21 pin `transformers==5.12.1`,
+`tokenizers==0.22.2` and `torch==2.13.0`; SGLang's main branch has moved
+to `transformers==5.19.0` and `tokenizers==0.23.2`. Both pairs are inside
+toktier's ranges, so `pip check` has nothing to report about toktier in
+either environment.
+<!-- TODO(fill): state the pip check readings of the three environments (SGLang 0.5.21 venv, a venv built from SGLang main's pins, the 3.10 rehearsal) with their dates. -->
+Older toktier releases pinned `transformers==4.57.6` and had to be
+installed with `--no-deps` beside SGLang, together with `platformdirs`,
+the one dependency SGLang's own dependencies do not bring; that is no
+longer needed, and `pip install toktier` brings `platformdirs` itself.
+If you want toktier's pinned Fastokens adapter, install
+`toktier-fastokens==0.3.1.2` as well, and keep in mind that it uses the
+import name `fastokens`, which is also the name of the package SGLang's
+own `fastokens` backend installs. Install one of the two, not both
+(`packaging/fastokens-pinned/README.md`).
 
 What this means for toktier. Routing admission is bound to the artifact
-bytes, the engine identity and the `tokenizers` 0.22.2 oracle, and the
-`transformers` version is not part of it. SGLang's pin of `tokenizers` is
-the version toktier certifies against, so the certified routes are the
-same as in a toktier-only environment. For every packaged artifact
+bytes, the engine identity and the installed `tokenizers` being one of the
+certified reference versions the shipped registry lists; the
+`transformers` version is not part of it. The reference engine compiled
+into toktier is the `tokenizers` crate at exactly 0.22.2, the release
+SGLang 0.5.19 to 0.5.21 pin, so beside those releases the certified
+routes are the same as in a toktier-only environment. A later
+`tokenizers` release is a certified reference version only once the
+parity readings taken under it ship with the registry
+(`docs/contracts/registry.md` Section 2); an installed release outside
+that set runs on the reference route and is reported as such
+(`R_ORACLE_MISMATCH` in `explain()`, `uncertified_reference` in
+`toktier doctor`).
+<!-- TODO(fill): name the certified reference versions this release ships (the registry's certified_versions) and say which SGLang pins they cover. -->
+For every packaged artifact
 except `qwen3_5_08b`, toktier executes the verified artifact file itself;
 `qwen3_5_08b` declares added tokens in its configuration file, so its
 loader face is materialized by the installed `transformers`. Under
@@ -485,18 +494,19 @@ families materialize the same face under both versions, and nothing
 about their `explain()` changes.
 
 What it means for `toktier doctor`. Its `certified_cpu_profile_ready`
-field says whether the installed `tokenizers` and `transformers` are
-exactly the pair the loader-face readings were taken with, 0.22.2 and
-4.57.6. Beside SGLang it reads `false`: in our check on 2026-10-14,
-`doctor --json` reported `transformers_version` `"5.12.1"`,
-`tokenizers_version` `"0.22.2"` and `certified_cpu_profile_ready`
-`false` there, against `"4.57.6"`, `"0.22.2"` and `true` in a
-toktier-only environment, with the same engine digest in both. The
-fields built on it follow: `automatic_effective_backend` and, under
-`--family`, `automatic_effective_backend_below_gpu_threshold` answer
-`hf` where they would otherwise answer `fast_cpu`. That is a statement
-about the installation profile, not about routing. What a loaded
-tokenizer actually runs is in its `explain()`, and
+field says whether the installed engine reported its facts and the
+installed `tokenizers` is one of the certified reference versions;
+`certified_reference_versions` lists that set as the shipped registry
+records it, and `reference_certification_reason` reads `null` inside the
+set and `uncertified_reference` outside it. The `transformers` release is
+not a premise of the field, so beside SGLang `doctor` reads as it does in
+a toktier-only environment whenever the installed `tokenizers` is
+certified, and the fields built on it (`automatic_effective_backend` and,
+under `--family`, `automatic_effective_backend_below_gpu_threshold`)
+follow. Beside a `tokenizers` release outside the set they answer `hf`
+where they would otherwise answer `fast_cpu`, and the reason says why.
+That is a statement about the installation profile, not about routing.
+What a loaded tokenizer actually runs is in its `explain()`, and
 `doctor --family FAMILY` lists the planner's own reasons under
 `family.plan_reasons`. `doctor` does not materialize the loader face,
 so the face comparison is made only when a tokenizer is loaded and

@@ -315,7 +315,7 @@ Python 包不受 Rust crate feature 的影响，仍通过 `huggingface-hub`
 
 | 安装项 | 交付内容 | 要求 |
 |---|---|---|
-| `toktier` | 修正版 Gigatoken CPU 全量编码与会话 repair、HF fallback、持久化 store、路由和 CLI | Linux x86_64、glibc 2.34+、CPython 3.10+；固定安装 `tokenizers==0.22.2` 与 `transformers==4.57.6` |
+| `toktier` | 修正版 Gigatoken CPU 全量编码与会话 repair、HF fallback、持久化 store、路由和 CLI | Linux x86_64、glibc 2.34+、CPython 3.10+；要求 `tokenizers>=0.22.2,<0.24` 与 `transformers>=4.57.6,<6`（已认证的参考版本以注册表为准，见[正确性与证据](#正确性与证据)） |
 | `toktier[gpu]` | `toktier` 的严格超集；通过 64 KiB crossover 自动路由到随包的多架构 CUDA fatbin | NVIDIA GPU、驱动版本 580.65.06+、`torch`；无需编译器，首次使用不编译 |
 | `toktier[gpu-jit]` | CPU/GPU 路由与 `toktier[gpu]` 相同；在本机编译认证 kernel 源码 | 经评审的 NVCC / torch-runtime CUDA / PyTorch 三元组、`torch`、`ninja`；首次使用需要编译 |
 
@@ -482,12 +482,14 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 `fast_cpu`。两种情形下，这个结论都与 `toktier gpu compile` 以及下一次请求所走
 的路一致，而且无需先运行它们。
 
-`certified_cpu_profile_ready` 说的是本机装的 `tokenizers` 与 `transformers`
-是否恰好是取 loader 面读数时用的那一对（0.22.2 与 4.57.6），而不是某条路由
-是否开启。与 SGLang 装在一起时，因为 SGLang 钉的 `transformers` 版本不同，
-它会读到 `false`，建立在它之上的实际后端字段也会在本该写 `fast_cpu` 的地方
-写 `hf`；一个已加载的 tokenizer 实际走哪条路，以它的 `explain()` 和
-`family.plan_reasons` 为准（见
+`certified_cpu_profile_ready` 说的是本机引擎已报出自身事实、且本机装的
+`tokenizers` 属于已认证的参考版本集合，而不是某条路由是否开启。
+`certified_reference_versions` 列出随包注册表记录的这个集合；
+`reference_certification_reason` 在本机版本属于集合时为 `null`，否则为
+`uncertified_reference`——集合之外的版本照常运行，走参考路径，
+`family.plan_reasons` 里给出的是与 `R_ORACLE_MISMATCH` 同一比较。
+`transformers` 的版本不是这个键的前提：loader 按范围接受，加载 tokenizer 时
+按记录的 loader 面摘要逐工件判定，结果见已加载 tokenizer 的 `explain()`（见
 [Installing beside SGLang](docs/integration/sglang.md#installing-beside-sglang)，英文）。
 
 ### 缓存、状态与目录布局
@@ -560,9 +562,13 @@ pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
 
 ## 正确性与证据
 
-认证参考实现是默认配置下的 Hugging Face `tokenizers` 0.22.2。认证绑定
-精确的工件字节和参考版本。如果本机 HF 版本不在认证集合内，加速路由会被
-关闭，请求继续使用本机安装的参考路径。
+认证参考实现是默认配置下的 Hugging Face `tokenizers` 0.22.2：编进原生扩展的
+参考引擎正是这一版，所有认证读数都以它为判据。认证绑定精确的工件字节与
+已认证的参考版本集合，即随包注册表 oracle 记录列出的那些 `tokenizers` 版本；
+更新的版本只在有证据表明它在认证面上与内嵌参考一致时才进入这个集合，而包的
+依赖声明接受一个版本范围，以便与其他钉死版本的软件装在一起。如果本机
+`tokenizers` 版本不在认证集合内，加速路由会被关闭，请求继续使用本机安装的
+参考路径。
 
 这里还有一条定义（0.2.8 定案）：参考实现以 loader 面为准。工件的身份键
 仍是 `tokenizer.json`，而认证主语覆盖该文件加上 `tokenizer_config.json`

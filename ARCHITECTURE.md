@@ -140,11 +140,17 @@ frontend does not require a Python callback.
   reference version does not match, accelerated backends are switched off and
   the installed reference runs, with the state reported as `reference-only`. If
   the artifact is not certified, the reference runs and the result is marked as
-  uncertified. Package metadata pins the released oracle exactly
-  (`tokenizers==0.22.2`, with the Python loader at `transformers==4.57.6`);
-  the registry additionally records the certified version set, and the runtime
-  keeps the honest-labeling rule above for environments whose installed
-  reference nevertheless differs.
+  uncertified. Two things are kept apart here. The embedded reference is the
+  `tokenizers` crate compiled into the native extension, at exactly 0.22.2;
+  it is what the reference backend executes and what every certification
+  reading was judged against. The certified reference versions are the exact
+  Python `tokenizers` releases the registry's oracle record lists
+  (`certified_versions`): the embedded release, plus any later release judged
+  equivalent to it on the certified surface. Package metadata admits a range
+  (`tokenizers>=0.22.2,<0.24`, with the Python loader at
+  `transformers>=4.57.6,<6`) so that toktier installs beside other pins; the
+  registry's set is what the certificates speak for, and the runtime keeps the
+  honest-labeling rule above for an installed release outside it.
 
 ### 1.5 Session store
 

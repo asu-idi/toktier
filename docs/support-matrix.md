@@ -69,9 +69,12 @@ measured on that hardware, and no more.
 
 The default CPU full-encode and repair-window engine is the corrected
 Gigatoken `0.10.0+toktier.pinned.1` implementation compiled directly into the
-single private `toktier._native` extension in the core wheel. Its exact HF
-loader/oracle companions (`tokenizers==0.22.2`, `transformers==4.57.6`) are
-mandatory base dependencies of that wheel -- the shipped extras are
+single private `toktier._native` extension in the core wheel. Its HF
+loader/oracle companions are mandatory base dependencies of that wheel, as
+ranges (`tokenizers>=0.22.2,<0.24`, `transformers>=4.57.6,<6`); the embedded
+reference is the `tokenizers` crate at exactly 0.22.2, and the Python
+`tokenizers` releases the certificates speak for are the registry's certified
+reference versions -- the shipped extras are
 `fastokens`, `gpu`, and `gpu-jit` -- and there is no separately installed
 Gigatoken distribution or second native extension. Its route is
 certified for **11 unique

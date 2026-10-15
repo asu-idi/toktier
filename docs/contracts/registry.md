@@ -147,11 +147,16 @@ release that moves either side moves both and re-takes the readings.
     (`R_LOADER_FACE_MISMATCH`);
   - artifact not in the registry at all -> reference, reported
     uncertified (`R_UNCERTIFIED_ARTIFACT`).
-- Package metadata pins the released oracle exactly (`tokenizers==0.22.2`;
-  the Python package also pins its loader, `transformers==4.57.6`). The
-  registry still expresses the certified set independently, and the runtime
-  enforces honest labeling for environments whose installed oracle
-  nevertheless differs from the pin.
+- Package metadata admits a range of oracle releases
+  (`tokenizers>=0.22.2,<0.24`; the Python package also admits a range of
+  loaders, `transformers>=4.57.6,<6`). The range is what installs. The
+  certified set is the registry's: the oracle record's `certified_versions`
+  lists the embedded reference (the `tokenizers` crate compiled into the
+  native extension, exactly 0.22.2) and every later release judged
+  equivalent to it on the certified surface, and a release joins that list
+  only through `tools/update_oracle_certified_versions.py` on the
+  compatibility readings it requires. The runtime enforces honest labeling
+  for an installed oracle inside the range but outside the set.
 - Explicit-engine rule (same policy, below routing): the explicit GPU
   engine (`toktier.engine.gpu`) sits below the routing layer and
   constructs and runs regardless of the installed oracle version --

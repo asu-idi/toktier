@@ -748,6 +748,44 @@ class SGLangToktierTokenizer:
 
     # -- construction helpers ------------------------------------------
 
+    def _warm_chunk_encoder(self) -> None:
+        """Start the native chunk worker pool now, not on the first long request.
+
+        Only where the chunked route can run the native encoder: chunking
+        is configured (``chunked_min_chars`` > 0), the session mode has
+        stateless requests (``off`` or ``contextvar``), the wrapper serves
+        through toktier, and ``toktier.chunked`` would select the native
+        encoder for this tokenizer (``native_by_default``). The pool takes
+        the default worker count, the one ``chunked.encode`` uses. A warm
+        that raises is recorded in the timing log and never fails the wrap;
+        the pool is then forked on first use, as before.
+        """
+        if (
+            self._tok is None
+            or self._cfg.chunked_min_chars <= 0
+            or self._mode not in ("off", "contextvar")
+        ):
+            return
+        started = time.perf_counter()
+        try:
+            from toktier import chunked
+
+            if not chunked.admission(self._tok).get("native_by_default"):
+                return
+            size = chunked.warm(self._tok)
+        except Exception as ex:
+            self._record(
+                {"kind": "chunked_warm", "error": f"{type(ex).__name__}: {ex}"[:300]}
+            )
+            return
+        self._record(
+            {
+                "kind": "chunked_warm",
+                "workers": size,
+                "ms": round((time.perf_counter() - started) * 1000.0, 3),
+            }
+        )
+
     def _start_scheduler(self, config: SchedulerConfig) -> Scheduler | None:
         """Start the pool; on any failure keep the serial path and say why."""
         planner: Callable[[str, int], Sequence[tuple[int, int]]] | None = None
@@ -1468,7 +1506,9 @@ def wrap_tokenizer(
     cfg = config if config is not None else AdapterConfig.from_env()
     if kwargs:
         cfg = replace(cfg, **kwargs)
-    return SGLangToktierTokenizer(hf_tokenizer, cfg)
+    wrapper = SGLangToktierTokenizer(hf_tokenizer, cfg)
+    wrapper._warm_chunk_encoder()
+    return wrapper
 
 
 # -- form Z: attach without changing SGLang ---------------------------------

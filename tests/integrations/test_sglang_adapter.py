@@ -588,6 +588,41 @@ def test_chunked_serves_long_stateless_requests_only(
     assert seen == []
 
 
+def test_wrap_warms_the_chunk_encoder_once_when_chunking_is_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
+    monkeypatch.setattr(
+        "toktier.chunked.admission", lambda tok: {"native_by_default": True}
+    )
+    warmed: list[object] = []
+
+    def warm(
+        tok: object, *, workers: int | None = None, text: str | None = None
+    ) -> int:
+        warmed.append(tok)
+        return 2
+
+    monkeypatch.setattr("toktier.chunked.warm", warm)
+    wrap_tokenizer(_StubHf(), AdapterConfig(session_key="off", chunked_min_chars=10))
+    assert warmed == [fake]
+    # Chunking off: nothing is started at wrap time.
+    warmed.clear()
+    wrap_tokenizer(_StubHf(), AdapterConfig(session_key="off"))
+    assert warmed == []
+
+    # A warm that raises never fails the wrap; the wrapper serves as before.
+    def failing_warm(tok: object, **kwargs: object) -> int:
+        raise RuntimeError("no pool")
+
+    monkeypatch.setattr("toktier.chunked.warm", failing_warm)
+    w = wrap_tokenizer(
+        _StubHf(), AdapterConfig(session_key="off", chunked_min_chars=10)
+    )
+    assert w.encode("ab", add_special_tokens=False) == [97, 98]
+
+
 def test_explicit_long_request_encoder_takes_precedence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

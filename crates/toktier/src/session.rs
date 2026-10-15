@@ -8,9 +8,9 @@ use toktier_store_core::{ContentDigest, KeyId, SessionHandle, SessionStore, Stor
 #[cfg(feature = "sqlite")]
 use toktier_store_sqlite::{NamedSessionRef, RecoveredNamedSession, SingleEngine, StoreDb};
 
-use crate::manifest::LocalArtifact;
+use crate::manifest::{LocalArtifact, Registry};
 use crate::{
-    Backend, Certification, Encoding, Error, ErrorCode, ExecutionFacts, ReasonCode, Result,
+    Backend, Certification, Encoding, Error, ErrorCode, ExecutionFacts, Policy, ReasonCode, Result,
     RoutePlan, TokenBuffer, TokenPatch,
 };
 
@@ -20,6 +20,12 @@ pub(crate) struct TokenizerInner {
     pub(crate) reference: Arc<ReferenceEngine>,
     pub(crate) router: Arc<NativeRouter>,
     pub(crate) plan: RoutePlan,
+    /// The policy the plan was made under; the chunked path reads it
+    /// for its evidence gate.
+    pub(crate) policy: Policy,
+    pub(crate) registry: Arc<Registry>,
+    /// The chunk-parallel admission and counters, built on first use.
+    pub(crate) chunked: crate::chunked::State,
     pub(crate) store: std::sync::Mutex<SessionStoreState>,
     pub(crate) gpu_detail: Option<(String, i32)>,
     /// What a local verification of this route would be filed under,

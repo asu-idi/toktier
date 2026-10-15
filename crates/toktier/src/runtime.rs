@@ -687,6 +687,9 @@ impl Runtime {
                 reference,
                 router,
                 plan,
+                policy: self.inner.config.policy,
+                registry: Arc::clone(&self.inner.registry),
+                chunked: crate::chunked::State::default(),
                 store: std::sync::Mutex::new(store),
                 gpu_detail,
                 gpu_verification_key,
@@ -847,6 +850,13 @@ impl Tokenizer {
 
     pub fn plan(&self) -> &RoutePlan {
         &self.inner.plan
+    }
+
+    /// The chunk-parallel encode of one long request on this tokenizer's
+    /// CPU route: admission, cut plans, the encode itself, the worker
+    /// pool and the counters ([`crate::chunked`]).
+    pub fn chunked(&self) -> crate::chunked::Chunked<'_> {
+        crate::chunked::Chunked::new(&self.inner)
     }
 
     /// Snapshot native store counters without exposing implementation-crate

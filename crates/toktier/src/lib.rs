@@ -12,6 +12,7 @@ mod artifact;
 mod behavior_version;
 mod buffer;
 mod bundle;
+pub mod chunked;
 mod diagnostics;
 mod error;
 mod fsutil;

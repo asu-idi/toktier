@@ -121,6 +121,21 @@ pub enum ReasonCode {
     /// the frozen namespace since 0.2.7; before that it travelled as an
     /// `Other` string that was in neither vocabulary.
     InvalidPriorState,
+    /// `R_CHUNK_NO_CUT`: a chunk-parallel encode found no certified
+    /// stable boundary in the document, so it was encoded serially on
+    /// the same route. Added in 0.3.0.
+    ChunkNoCut,
+    /// `R_CHUNK_FAMILY_UNSUPPORTED`: chunk-parallel encode was asked for
+    /// a tokenizer it does not admit, and the document was encoded
+    /// serially on the plain route; `chunked::Admission::refusal` names
+    /// the reason. Added in 0.3.0.
+    ChunkFamilyUnsupported,
+    /// `R_CHUNK_ROUTE_NOT_FAST_CPU`: chunk-parallel encode was asked for
+    /// an input whose route does not start at the corrected CPU engine
+    /// (a GPU-headed plan at or above its crossover, or a route without
+    /// the engine), so it was encoded serially through the normal route.
+    /// Added in 0.3.0.
+    ChunkRouteNotFastCpu,
     /// A GPU route was wanted and this runtime could not offer one
     /// here: the build carries no `prebuilt-gpu` feature, or the GPU
     /// runtime failed to open on this machine.
@@ -176,6 +191,9 @@ impl ReasonCode {
             toktier_routing_core::R_INPUT_POSTPROCESS_ROUTED => Self::InputPostprocessRouted,
             R_SESSION_NO_SAFE_CUT => Self::SessionNoSafeCut,
             R_INVALID_PRIOR_STATE => Self::InvalidPriorState,
+            toktier_routing_core::R_CHUNK_NO_CUT => Self::ChunkNoCut,
+            toktier_routing_core::R_CHUNK_FAMILY_UNSUPPORTED => Self::ChunkFamilyUnsupported,
+            toktier_routing_core::R_CHUNK_ROUTE_NOT_FAST_CPU => Self::ChunkRouteNotFastCpu,
             other => Self::Other(other.to_owned()),
         }
     }
@@ -469,6 +487,15 @@ mod tests {
             (
                 toktier_routing_core::R_INPUT_POSTPROCESS_ROUTED,
                 ReasonCode::InputPostprocessRouted,
+            ),
+            (toktier_routing_core::R_CHUNK_NO_CUT, ReasonCode::ChunkNoCut),
+            (
+                toktier_routing_core::R_CHUNK_FAMILY_UNSUPPORTED,
+                ReasonCode::ChunkFamilyUnsupported,
+            ),
+            (
+                toktier_routing_core::R_CHUNK_ROUTE_NOT_FAST_CPU,
+                ReasonCode::ChunkRouteNotFastCpu,
             ),
         ] {
             assert_eq!(ReasonCode::from_ledger_code(code), expected, "for {code}");

@@ -647,3 +647,71 @@ fn a_local_check_refuses_arguments_it_cannot_act_on() {
         toktier::verify_local_command(&["--family".to_owned(), "qwen3_8b".to_owned()]).unwrap_err();
     assert!(refusal.message().contains("--synthetic"), "{refusal}");
 }
+
+/// The chunk-parallel surface added in 0.3.0 is nameable from the crate
+/// root, its answer types are shared across threads like the rest of the
+/// owners, its bounds are the Python module's, and the three `R_CHUNK_*`
+/// codes have named variants that a `match` with a catch-all arm reads.
+#[test]
+fn the_chunked_surface_is_nameable_from_the_crate_root() {
+    use toktier::chunked::{
+        default_chunks, Admission, AdmissionGate, ChunkOptions, ChunkPlan, ChunkedEncoding,
+        ChunkedStats, RowSources, DEFAULT_SCAN_BUDGET, MIN_BYTES_PER_WORKER, MIN_CHARS,
+    };
+    fn send_sync<T: Send + Sync>() {}
+    send_sync::<Admission>();
+    send_sync::<ChunkPlan>();
+    send_sync::<ChunkedEncoding>();
+    send_sync::<ChunkedStats>();
+    send_sync::<RowSources>();
+    send_sync::<ChunkOptions>();
+    assert_eq!(DEFAULT_SCAN_BUDGET, 4096);
+    assert_eq!(MIN_CHARS, 256_000);
+    assert_eq!(MIN_BYTES_PER_WORKER, 64 * 1024);
+    assert_eq!(default_chunks(MIN_CHARS - 1), 1);
+    assert_eq!(default_chunks(1_000_000), 16);
+    let options = ChunkOptions::default().k(8).min_chunk(100).scan_budget(40);
+    assert_eq!(
+        (options.k, options.min_chunk, options.scan_budget),
+        (Some(8), Some(100), 40)
+    );
+    assert_eq!(ChunkOptions::new(), ChunkOptions::default());
+    assert_ne!(
+        AdmissionGate::EvidenceTable,
+        AdmissionGate::LiftedByExperimentalPolicy
+    );
+    for code in [
+        ReasonCode::ChunkNoCut,
+        ReasonCode::ChunkFamilyUnsupported,
+        ReasonCode::ChunkRouteNotFastCpu,
+    ] {
+        let named = matches!(
+            &code,
+            ReasonCode::ChunkNoCut
+                | ReasonCode::ChunkFamilyUnsupported
+                | ReasonCode::ChunkRouteNotFastCpu
+        );
+        assert!(named, "{code:?}");
+        assert_ne!(code, ReasonCode::Other(format!("{code:?}")));
+    }
+    // A tokenizer handle offers the surface; nothing is built until it is
+    // used, so a host with no artifact still has the type.
+    let Some(root) = artifact_root() else {
+        return;
+    };
+    let runtime = Runtime::builder()
+        .artifact_cache(&root)
+        .device(Device::Cpu)
+        .build()
+        .unwrap();
+    let tokenizer = runtime.load("qwen3_8b").unwrap();
+    let admission = tokenizer.chunked().admission().unwrap();
+    assert_eq!(admission.family, "qwen3_8b");
+    assert_eq!(admission.normalizer.as_deref(), Some("nfc"));
+    assert_eq!(admission.admitted, admission.refusal.is_none());
+    assert_eq!(admission.gate, AdmissionGate::EvidenceTable);
+    let stats = tokenizer.chunked().stats();
+    assert_eq!((stats.calls, stats.applied, stats.serial), (0, 0, 0));
+    assert!(stats.fallback_counts.is_empty());
+    assert!(stats.default_workers >= 1);
+}

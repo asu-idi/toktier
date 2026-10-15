@@ -124,6 +124,9 @@ def test_native_admission_matches_the_python_planner(
     assert merged["admitted"] is True and merged["native_available"] is True
     assert merged["admission_gate"] == "lifted_for_evidence_collection"
     assert merged["native_by_default"] is True
+    assert merged["native_evidence_label"] == chunked._native_evidence_label(
+        tuple(TABLE_ROWS[family]["evidence"]["native"])
+    )
 
 
 @pytest.mark.parametrize("family", CANDIDATE_FAMILIES)
@@ -308,13 +311,16 @@ def test_native_pool_warm_and_ledger(loaded: dict[str, Tokenizer], family: str) 
 
 
 @pytest.mark.parametrize("family", CERTIFIED_FAMILIES)
-def test_native_demand_follows_the_table_when_the_gate_is_not_lifted(
+def test_native_encoder_is_the_default_on_a_certified_row_when_gated(
     tmp_path_factory: pytest.TempPathFactory, family: str
 ) -> None:
-    """On an ordinarily gated planner the table decides the native path:
-    a row without the native path makes ``native=True`` raise naming the
-    missing evidence and ``native=None`` take the Python path; a row with
-    it lets both run the native encoder."""
+    """On an ordinarily gated planner a certified row admits the native
+    encoder as well: ``native=None`` takes it wherever it can run and
+    ``native=True`` runs it without raising, whatever the row records for
+    the native path, which ``native_evidence_label`` names
+    (``native_evidence:adversarial_only`` while the corpus level of the
+    native path is not recorded). The ids are the reference's on every
+    path, and the native plan is the Python plan."""
     if not _artifact_source(family):
         pytest.skip(f"{family}: artifact not available under TOKTIER_TEST_ARTIFACTS")
     tokenizer = load_isolated(family, tmp_path_factory)
@@ -327,30 +333,31 @@ def test_native_demand_follows_the_table_when_the_gate_is_not_lifted(
         if not chunked.native_available(tokenizer):
             pytest.skip(f"{family}: no native chunk encoder on this route")
         row = TABLE_ROWS[family]
+        label = chunked._native_evidence_label(tuple(row["evidence"]["native"]))
         text = _generated_corpora(300_000)["prose(generated)"]
         expected = _reference(tokenizer)(text)
         facts = chunked.admission(tokenizer)
         assert facts["admission_gate"] == "evidence_table"
+        assert facts["admitted"] is True and facts["evidence_status"] == "certified"
         assert facts["native_available"] is True
-        if "native" in row["paths"]:
-            assert facts["native_by_default"] is True
-            encoded = chunked.encode(tokenizer, text, k=4, native=True)
-            assert encoded.native_facts is not None
-            auto = chunked.encode(tokenizer, text, k=4)
-            assert auto.native_facts is not None
-        else:
-            assert facts["native_by_default"] is False
-            with pytest.raises(RuntimeError, match="no evidence for the native"):
-                chunked.encode(tokenizer, text, k=4, native=True)
-            with pytest.raises(RuntimeError, match="no evidence for the native"):
-                chunked.plan(tokenizer, text, k=4, native=True)
-            auto = chunked.encode(tokenizer, text, k=4)
-            assert auto.native_facts is None
-            last = chunked.stats(tokenizer)["last"]
-            assert isinstance(last, dict) and last["native"] is False
+        assert facts["native_by_default"] is True
+        assert facts["native_evidence_label"] == label
+        auto = chunked.encode(tokenizer, text, k=4)
+        assert auto.native_facts is not None
+        last = chunked.stats(tokenizer)["last"]
+        assert isinstance(last, dict) and last["native"] is True
+        encoded = chunked.encode(tokenizer, text, k=4, native=True)
+        assert encoded.native_facts is not None
+        assert chunked.plan(tokenizer, text, k=4, native=True) == chunked.plan(
+            tokenizer, text, k=4
+        )
         assert list(auto.ids) == expected and auto.chunks >= 2
+        assert list(encoded.ids) == expected
         forced = chunked.encode(tokenizer, text, k=4, native=False)
         assert forced.native_facts is None and list(forced.ids) == expected
+        report = chunked.stats(tokenizer)
+        assert report["native_evidence_label"] == label
+        assert report["native_calls"] == 2
     finally:
         tokenizer.close()
 
@@ -364,9 +371,8 @@ def test_route_without_the_corrected_cpu_engine_is_serial_by_name(
     ``policy="reference"``), the native encoder encodes serially through
     the normal route and says so when it is demanded; the ids are the
     plain encode's. The default ``native=None`` does not take it there,
-    even with the native path recorded (the lifted gate stands for a row
-    that records it): the encoder cannot run on that route, so the
-    Python path cuts the document."""
+    although the row is admitted: the encoder cannot run on that route,
+    so the Python path cuts the document."""
     if not _artifact_source(family):
         pytest.skip(f"{family}: artifact not available under TOKTIER_TEST_ARTIFACTS")
     tokenizer = load_isolated(family, tmp_path_factory, policy="reference")
@@ -376,8 +382,8 @@ def test_route_without_the_corrected_cpu_engine_is_serial_by_name(
         runtime = tokenizer._native_request_runtime()
         if runtime is None or not callable(getattr(runtime, "chunked_encode", None)):
             pytest.skip(f"{family}: the reference route has no native runtime here")
-        planner = chunked._planner_for(tokenizer, evidence_gate=False)
-        assert planner.native_evidence is True
+        planner = chunked._planner_for(tokenizer)
+        assert planner.admitted is True, planner.refusal
         assert chunked.native_available(tokenizer) is False
         text = _generated_corpora(300_000)["prose(generated)"]
         expected = _reference(tokenizer)(text)

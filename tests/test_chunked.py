@@ -658,6 +658,7 @@ def test_native_demand_on_a_refused_tokenizer_raises(tmp_path: Path) -> None:
     assert facts["admitted"] is False
     assert facts["refusal"] == "artifact_not_in_certified_repair_roster"
     assert facts["evidence_id"] is None and facts["evidence_paths"] == []
+    assert facts["native_evidence_label"] == "native_evidence:none"
     assert facts["admission_gate"] == "evidence_table"
     # The tiny family's runtime carries the surface, but its route has no
     # corrected CPU engine: the native encoder cannot run there, so it is
@@ -776,6 +777,7 @@ def test_a_row_with_one_evidence_level_is_refused_by_name(
     assert planner.refusal == "chunked_evidence_incomplete:adversarial_only"
     assert planner.evidence_status == "adversarial_only"
     assert planner.evidence_id == "ev-chunked-cuts-v1" and planner.evidence_paths == ()
+    assert planner.native_evidence_label == "native_evidence:none"
     stand_in = _stand_in("qwen3_8b", digest, _NFC_FACE)
     lifted = chunked._Planner(stand_in, evidence_gate=False)
     assert lifted.admitted is True and lifted.evidence_status == "adversarial_only"
@@ -967,12 +969,12 @@ def test_roster_artifact_without_a_table_row_is_refused(
     assert planner.admitted is False
     assert planner.refusal == "artifact_without_chunked_evidence"
     assert planner.evidence_id is None and planner.evidence_paths == ()
-    assert planner.native_evidence is False
+    assert planner.native_evidence_label == "native_evidence:none"
     # Lifting the evidence gate admits the artifact for collecting that
     # evidence, and the report says so; the roster step is not lifted.
     stand_in = _stand_in("qwen3_8b", digest, _NFC_FACE)
     lifted = chunked._Planner(stand_in, evidence_gate=False)
-    assert lifted.admitted is True and lifted.native_evidence is True
+    assert lifted.admitted is True
     gate = lifted.admission_facts()["admission_gate"]
     assert gate == "lifted_for_evidence_collection"
     foreign = _stand_in("qwen3_8b", "0" * 64, _NFC_FACE)
@@ -980,11 +982,14 @@ def test_roster_artifact_without_a_table_row_is_refused(
         chunked._Planner(foreign, evidence_gate=False).refusal
         == "artifact_not_in_certified_repair_roster"
     )
-    # A row that records only the Python path leaves the native path out.
+    # The shipped row admits the artifact whatever it records for the
+    # native path; that record is carried as a label.
     admission_table(_bind_face)
     planner = chunked._Planner(_stand_in("qwen3_8b", digest, _NFC_FACE))
     assert planner.admitted is True
-    assert planner.native_evidence == ("native" in planner.evidence_paths)
+    assert planner.native_evidence_label == chunked._native_evidence_label(
+        TABLE_ROWS["qwen3_8b"]["evidence"]["native"]
+    )
 
 
 def test_tampered_admission_table_fails_closed(
@@ -1010,7 +1015,7 @@ def test_tampered_admission_table_fails_closed(
     # the file against tampering, not against regeneration).
     admission_table(grant_native)
     planner = chunked._Planner(_stand_in("qwen3_8b", digest, _NFC_FACE))
-    assert planner.native_evidence is True
+    assert planner.evidence_paths == ("python", "native")
 
 
 _NO_CPU_ENGINE = (
@@ -1104,7 +1109,7 @@ def test_native_by_default_needs_a_route_the_native_encoder_can_run_on(
 
     no_engine = _RoutedStandIn(_Runtime(cpu_engine=False))
     assert chunked.is_admitted(no_engine)  # type: ignore[arg-type]
-    assert chunked._planner_for(no_engine).native_evidence is True  # type: ignore[arg-type]
+    assert chunked._planner_for(no_engine).native_evidence_label is None  # type: ignore[arg-type]
     assert chunked.native_available(no_engine) is False  # type: ignore[arg-type]
     facts = chunked.admission(no_engine)  # type: ignore[arg-type]
     assert facts["native_available"] is False and facts["native_by_default"] is False
@@ -1134,6 +1139,98 @@ def test_native_by_default_needs_a_route_the_native_encoder_can_run_on(
     with pytest.raises(RuntimeError, match="no native chunked encoder"):
         chunked.encode(no_surface, text, k=4, native=True)  # type: ignore[arg-type]
     assert chunked.encode(no_surface, text, k=4).chunks > 1  # type: ignore[arg-type]
+
+
+def test_native_evidence_label_spells_the_levels_and_reads_the_shipped_rows(
+    stand_in_table: Callable[..., dict[str, Any]],
+) -> None:
+    """The label of a row's native-path evidence is a function of the
+    levels the row records alone: ``None`` with both levels,
+    ``native_evidence:<status>`` otherwise, the status spelled as the table
+    generator spells a row's. On the shipped table a certified row reads
+    ``None`` exactly when it lists the native path, and an admitted planner
+    on the shipped qwen3_8b row (bound to the stand-in face) carries the
+    row's label in its admission facts and in its report."""
+    label = chunked._native_evidence_label
+    assert label(("adversarial", "corpus")) is None
+    assert label(("corpus", "adversarial")) is None
+    assert label(("adversarial",)) == "native_evidence:adversarial_only"
+    assert label(("corpus",)) == "native_evidence:corpus_only"
+    assert label(()) == "native_evidence:none"
+    assert label(("later",)) == "native_evidence:none"
+    for family, row in TABLE_ROWS.items():
+        if row["status"] == "certified":
+            recorded = label(tuple(row["evidence"]["native"]))
+            assert (recorded is None) == ("native" in row["paths"]), family
+    expected = label(tuple(TABLE_ROWS["qwen3_8b"]["evidence"]["native"]))
+    planner = chunked._Planner(
+        _stand_in("qwen3_8b", _roster_digest("qwen3_8b"), _NFC_FACE)
+    )
+    assert planner.admitted is True and planner.evidence_status == "certified"
+    assert planner.native_evidence_label == expected
+    assert planner.admission_facts()["native_evidence_label"] == expected
+    assert planner.report()["native_evidence_label"] == expected
+
+
+def _adversarial_only_native(document: dict[str, Any]) -> None:
+    """The stand-in's certified row bound to the stand-in face, recording
+    the Python path with both levels and the native path with the
+    adversarial battery alone (the shape of the rows shipped in 0.3.0)."""
+    _bind_face(document)
+    for row in document["rows"]:
+        if row["family"] == "qwen3_8b":
+            row["status"] = "certified"
+            row["paths"] = ["python"]
+            row["evidence"] = {
+                "python": ["adversarial", "corpus"],
+                "native": ["adversarial"],
+            }
+
+
+@pytest.mark.parametrize("table", ["shipped", "adversarial_only_native"])
+def test_native_encoder_is_the_default_on_a_certified_row(
+    admission_table: Callable[..., dict[str, Any]], table: str
+) -> None:
+    """On a certified row the native encoder runs by default wherever it
+    can run, whatever the row records for the native path: with a runtime
+    whose route carries the corrected CPU engine, ``native=None`` takes
+    it, ``native=True`` runs it without raising, and
+    ``native_evidence_label`` names the record
+    (``native_evidence:adversarial_only`` for a row whose native path holds
+    the adversarial battery alone). ``native=False`` is the Python path;
+    the ids are the same on all three. Run on the shipped qwen3_8b row and
+    on a copy whose native record is explicitly adversarial-only."""
+    admission_table(_bind_face if table == "shipped" else _adversarial_only_native)
+    rows = chunked._admission_rows()
+    row = rows[("qwen3_8b", _roster_digest("qwen3_8b"))]
+    assert row["status"] == "certified"
+    evidence = row["evidence"]
+    assert isinstance(evidence, dict)
+    expected = chunked._native_evidence_label(tuple(evidence["native"]))
+    if table == "adversarial_only_native":
+        paths = row["paths"]
+        assert isinstance(paths, list) and "native" not in paths
+        assert expected == "native_evidence:adversarial_only"
+    text = "The quick brown fox, 42 times. " * 40
+    runtime = _Runtime(cpu_engine=True)
+    stand_in = _RoutedStandIn(runtime)
+    facts = chunked.admission(stand_in)  # type: ignore[arg-type]
+    assert facts["admitted"] is True and facts["refusal"] is None
+    assert facts["evidence_status"] == "certified"
+    assert facts["native_evidence_label"] == expected
+    assert facts["native_available"] is True and facts["native_by_default"] is True
+    auto = chunked.encode(stand_in, text, k=4)  # type: ignore[arg-type]
+    assert auto.native_facts is not None and runtime.encodes == 1
+    forced = chunked.encode(stand_in, text, k=4, native=True)  # type: ignore[arg-type]
+    assert forced.native_facts is not None and runtime.encodes == 2
+    python = chunked.encode(stand_in, text, k=4, native=False)  # type: ignore[arg-type]
+    assert python.native_facts is None and runtime.encodes == 2
+    assert python.chunks > 1
+    serial = [ord(char) for char in text]
+    assert list(auto.ids) == list(forced.ids) == list(python.ids) == serial
+    report = chunked.stats(stand_in)  # type: ignore[arg-type]
+    assert report["native_evidence_label"] == expected
+    assert report["native_calls"] == 2 and report["calls"] == 3
 
 
 # -- artifact tier: identity against the oracle -----------------------------
@@ -1179,9 +1276,10 @@ def test_parallel_keyword_follows_the_admission_table(
     loaded: dict[str, Tokenizer], family: str
 ) -> None:
     """``Tokenizer.encode(parallel=...)`` lets the module choose the path:
-    on a row that records only the Python path it runs the Python path
-    (and does not raise, whatever the runtime offers); on a row with the
-    native path it runs the native encoder when the runtime has it."""
+    on a certified row it runs the native encoder whenever the runtime can
+    run it here and the Python path otherwise, whatever the row records
+    for the native path; that record is reported as
+    ``native_evidence_label``, and the ids are the reference's either way."""
     tokenizer = _family(loaded, family)
     row = TABLE_ROWS[family]
     assert row["status"] == "certified"
@@ -1194,7 +1292,7 @@ def test_parallel_keyword_follows_the_admission_table(
     for encoded in (auto, fixed):
         assert list(encoded.ids) == expected
         assert encoded.serial_reason is None and encoded.chunks >= 2
-        if "native" in row["paths"] and chunked.native_available(tokenizer):
+        if chunked.native_available(tokenizer):
             assert encoded.native_facts is not None
         else:
             assert encoded.native_facts is None
@@ -1202,12 +1300,10 @@ def test_parallel_keyword_follows_the_admission_table(
     assert fixed.k_requested == 8
     facts = chunked.admission(tokenizer)
     assert facts["admitted"] is True and facts["evidence_status"] == "certified"
-    assert facts["native_by_default"] == (
-        "native" in row["paths"] and facts["native_available"]
+    assert facts["native_by_default"] == facts["native_available"]
+    assert facts["native_evidence_label"] == chunked._native_evidence_label(
+        tuple(row["evidence"]["native"])
     )
-    if "native" not in row["paths"] and facts["native_available"]:
-        with pytest.raises(RuntimeError, match="no evidence for the native"):
-            chunked.encode(tokenizer, text, k=4, native=True)
 
 
 @pytest.mark.parametrize("family", CANDIDATE_FAMILIES)
@@ -1360,6 +1456,9 @@ def test_explain_carries_the_chunked_block(
     assert block["evidence_id"] == "ev-chunked-cuts-v1"
     assert block["evidence_status"] == "certified"
     assert "python" in block["evidence_paths"]
+    assert block["native_evidence_label"] == chunked._native_evidence_label(
+        tuple(TABLE_ROWS[family]["evidence"]["native"])
+    )
     assert block["admission_gate"] == "evidence_table"
     assert block["applied"] >= 1 and block["chunks_total"] >= 2
     assert set(block) >= {
@@ -1471,6 +1570,10 @@ def test_roster_families_are_the_admitted_set(
             if chunked.is_admitted(tokenizer):
                 admitted.add(family)
             row = TABLE_ROWS.get(family)
+            levels = () if row is None else tuple(row["evidence"]["native"])
+            assert facts["native_evidence_label"] == (
+                chunked._native_evidence_label(levels)
+            ), family
             if row is None:
                 assert facts["refusal"] == "artifact_without_chunked_evidence", family
                 assert facts["evidence_status"] is None
@@ -1525,8 +1628,9 @@ def test_partial_row_is_encoded_serially_with_the_refusal_named(
     tmp_path_factory: pytest.TempPathFactory, family: str
 ) -> None:
     """A roster artifact whose row has one evidence level is a serial
-    tokenizer for this module: ids equal the plain encode, the fallback is
-    counted, and the report names the status."""
+    tokenizer for this module on both paths: ids equal the plain encode,
+    the fallback is counted, the report names the status and labels the
+    row's native record, and a demand for the native encoder raises."""
     if not _artifact_source(family):
         pytest.skip(f"{family}: artifact not available under TOKTIER_TEST_ARTIFACTS")
     tokenizer = load_isolated(family, tmp_path_factory)
@@ -1547,8 +1651,16 @@ def test_partial_row_is_encoded_serially_with_the_refusal_named(
             f"chunked_evidence_incomplete:{TABLE_ROWS[family]['status']}"
         )
         assert report["fallback_counts"] == {"R_CHUNK_FAMILY_UNSUPPORTED": 2}
+        assert report["native_evidence_label"] == chunked._native_evidence_label(
+            tuple(TABLE_ROWS[family]["evidence"]["native"])
+        )
         with pytest.raises(ValueError, match="no certified chunk-cut rule"):
             chunked.plan(tokenizer, text, k=8)
+        assert chunked.admission(tokenizer)["native_by_default"] is False
+        runtime = tokenizer._native_request_runtime()
+        if runtime is not None and callable(getattr(runtime, "chunked_encode", None)):
+            with pytest.raises(RuntimeError, match="not admitted"):
+                chunked.encode(tokenizer, text, k=8, native=True)
     finally:
         tokenizer.close()
 

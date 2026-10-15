@@ -98,14 +98,21 @@ counters, and the per-call facts, are read back from
 ``Tokenizer.explain()["chunked"]`` once this module has served the
 tokenizer, or from :func:`stats`.
 
-The table also says which paths were judged for a row. With
-``native=None`` (the default) the native encoder is used only when it can
-run for the tokenizer -- the loaded runtime carries it and the route
-carries the corrected CPU engine it is built on -- and the row records
-the ``native`` path; otherwise the Python path runs. ``native=True``
-demands the native encoder and raises when the runtime does not carry
-it, when the tokenizer is not admitted, or when the row lacks the native
-path; ``native=False`` is the Python path.
+The table also records the evidence of each path. With ``native=None``
+(the default) an admitted tokenizer runs on the native encoder whenever
+it can run here -- the loaded runtime carries it and the route carries
+the corrected CPU engine it is built on -- and on the Python path
+otherwise. The native path's own evidence level is reported, not
+required: both paths make the same cuts and return the serial ids by
+construction, and a document that cannot be cut is encoded serially.
+``native_evidence_label`` in :func:`admission` and :func:`stats` names
+what the row records for the native path:
+``native_evidence:adversarial_only`` while it holds the adversarial
+battery but not yet the corpus cut comparison (``corpus_only`` and
+``none`` likewise), and ``None`` once both levels are recorded, with no
+change of code. ``native=True`` demands the native encoder and raises
+when the runtime does not carry it or the tokenizer is not admitted;
+``native=False`` is the Python path.
 Collecting the evidence a row is made of needs the gate lifted for the
 tokenizer under judgement; the campaign tool does that through the
 private planner constructor, and ``explain()["chunked"]["admission_gate"]``
@@ -269,6 +276,33 @@ _ADMISSION_TABLE = CHUNKED_ADMISSION
 _ADMISSION_SCHEMA = "toktier.chunked_admission.v1"
 _ADMISSION_DOMAIN = b"toktier.chunked_admission.v1\0"
 _PATH_NATIVE = "native"
+
+#: The two levels of chunked-path evidence a row may record per path, and
+#: the prefix of the label that names an incomplete native record
+#: (``native_evidence:adversarial_only`` and the like; the chunked
+#: admission of the Rust crate spells its label the same way).
+_LEVEL_ADVERSARIAL = "adversarial"
+_LEVEL_CORPUS = "corpus"
+_NATIVE_LABEL = "native_evidence"
+
+
+def _native_evidence_label(levels: Sequence[str]) -> str | None:
+    """The label of a row's native-path evidence: ``None`` when both levels
+    are recorded, otherwise ``native_evidence:<status>`` with the status
+    spelled as the table generator spells a row's (``adversarial_only``,
+    ``corpus_only``), or ``none`` when no level is recorded or there is no
+    row. A level this release does not know counts as neither."""
+    adversarial = _LEVEL_ADVERSARIAL in levels
+    corpus = _LEVEL_CORPUS in levels
+    if adversarial and corpus:
+        return None
+    if adversarial:
+        status = f"{_LEVEL_ADVERSARIAL}_only"
+    elif corpus:
+        status = f"{_LEVEL_CORPUS}_only"
+    else:
+        status = "none"
+    return f"{_NATIVE_LABEL}:{status}"
 
 
 def _table_failure(message: str, **details: object) -> RegistryInvalid:
@@ -613,7 +647,8 @@ class _Planner:
     the live face the row's). ``evidence_gate=False`` leaves the last
     step out; it exists for the campaign that produces the table's rows
     and for the equivalence tests of the two planners, and the report
-    says when it was used.
+    says when it was used. What the row records for the native path is
+    kept as a label (``native_evidence_label``), not as a condition.
     """
 
     def __init__(self, tokenizer: Tokenizer, *, evidence_gate: bool = True) -> None:
@@ -625,6 +660,7 @@ class _Planner:
         self.evidence_id: str | None = None
         self.evidence_status: str | None = None
         self.evidence_paths: tuple[str, ...] = ()
+        self.native_levels: tuple[str, ...] = ()
         self.loader_face_sha256: str | None = None
         self._rule: _NfcRule | None = None
         digest = getattr(tokenizer, "_artifact_sha256", None)
@@ -656,6 +692,13 @@ class _Planner:
             self.evidence_status = str(row.get("status"))
             if isinstance(paths, list):
                 self.evidence_paths = tuple(str(path) for path in paths)
+            evidence = row.get("evidence")
+            levels = (
+                evidence.get(_PATH_NATIVE) if isinstance(evidence, Mapping) else None
+            )
+            if isinstance(levels, list):
+                self.native_levels = tuple(sorted(str(level) for level in levels))
+        self.native_evidence_label = _native_evidence_label(self.native_levels)
         if self.refusal is None and evidence_gate:
             recorded_face = None if row is None else row.get("loader_face_sha256")
             if row is None:
@@ -698,12 +741,6 @@ class _Planner:
     @property
     def admitted(self) -> bool:
         return self.refusal is None
-
-    @property
-    def native_evidence(self) -> bool:
-        """Whether the native path may run: its evidence is recorded, or
-        the gate is lifted for collecting it."""
-        return _PATH_NATIVE in self.evidence_paths or not self.evidence_gate
 
     def _scan(self, text: str, low: int, high: int, rejects: list[int]) -> int:
         """The highest certified cut in ``[low, high]``, or ``-1``."""
@@ -815,6 +852,7 @@ class _Planner:
             "evidence_id": self.evidence_id,
             "evidence_status": self.evidence_status,
             "evidence_paths": list(self.evidence_paths),
+            "native_evidence_label": self.native_evidence_label,
             "admission_gate": (
                 "evidence_table"
                 if self.evidence_gate
@@ -879,7 +917,8 @@ def is_admitted(tokenizer: Tokenizer) -> bool:
 
 
 def stats(tokenizer: Tokenizer) -> dict[str, object]:
-    """The counters this module keeps for ``tokenizer``."""
+    """The admission facts of ``tokenizer`` (``native_evidence_label``
+    among them) and the counters this module keeps for it."""
     return _planner_for(tokenizer).report()
 
 
@@ -970,8 +1009,9 @@ def native_available(tokenizer: Tokenizer) -> bool:
 def _require_native(tokenizer: Tokenizer, planner: _Planner) -> Any:
     """The native runtime when the native path may run for this tokenizer.
 
-    Raises ``RuntimeError`` naming what is missing: the runtime surface,
-    the admission itself, or the recorded evidence for the native path.
+    Raises ``RuntimeError`` naming what is missing: the runtime surface or
+    the admission itself. The native path's evidence level is a label
+    (``native_evidence_label``), not a condition.
     """
     runtime = _native_runtime(tokenizer)
     if not planner.admitted:
@@ -979,13 +1019,6 @@ def _require_native(tokenizer: Tokenizer, planner: _Planner) -> Any:
             f"{planner.family!r} is not admitted to the chunked path "
             f"({planner.refusal}), and the native chunk encoder was asked for "
             "explicitly"
-        )
-    if not planner.native_evidence:
-        raise RuntimeError(
-            f"{planner.family!r}: the admission table records no evidence for the "
-            f"native chunked path of this artifact (recorded paths: "
-            f"{list(planner.evidence_paths)}); pass native=None to let the module "
-            "choose, or native=False for the Python path"
         )
     return runtime
 
@@ -995,9 +1028,7 @@ def _select_native(
 ) -> bool:
     """Whether :func:`encode` runs the native path for this call."""
     if native is None:
-        return (
-            planner.admitted and planner.native_evidence and native_available(tokenizer)
-        )
+        return planner.admitted and native_available(tokenizer)
     if native:
         _require_native(tokenizer, planner)
         return True
@@ -1008,24 +1039,24 @@ def admission(tokenizer: Tokenizer) -> dict[str, object]:
     """The admission facts, merged.
 
     This module's decision and what it rests on (roster, loader face,
-    admission-table row and the paths it records), whether the native
-    encoder can run (``native_available``, as :func:`native_available`
-    decides it) and whether ``native=None`` would select it, and under
-    ``"native"`` the native planner's own admission facts when it can run
-    (``None`` otherwise, with ``"native_unavailable_reason"`` saying why:
-    no native surface, or a route without the corrected CPU engine the
-    native planner is built on). ``native_by_default`` is true only when
-    ``native_available`` is, so it is never reported beside an
-    unavailable reason.
+    admission-table row, the paths it records and
+    ``native_evidence_label``, the label of the row's native-path
+    evidence), whether the native encoder can run (``native_available``,
+    as :func:`native_available` decides it) and whether ``native=None``
+    would select it, and under ``"native"`` the native planner's own
+    admission facts when it can run (``None`` otherwise, with
+    ``"native_unavailable_reason"`` saying why: no native surface, or a
+    route without the corrected CPU engine the native planner is built
+    on). ``native_by_default`` is true exactly when the tokenizer is
+    admitted and ``native_available`` is true, so it is never reported
+    beside an unavailable reason.
     """
     planner = _planner_for(tokenizer)
     native_facts, unavailable = _native_state(tokenizer)
     available = unavailable is None
     facts: dict[str, object] = planner.admission_facts()
     facts["native_available"] = available
-    facts["native_by_default"] = (
-        planner.admitted and planner.native_evidence and available
-    )
+    facts["native_by_default"] = planner.admitted and available
     facts["native"] = native_facts
     facts["native_unavailable_reason"] = unavailable
     return facts
@@ -1092,15 +1123,17 @@ def encode(
 
     ``native`` selects the native chunk encoder, which runs the plan and
     the chunk encodes inside the native runtime. ``None`` (the default)
-    uses it when it can run for this tokenizer (:func:`native_available`:
-    the loaded runtime carries it and the route carries the corrected CPU
-    engine) and the admission table records the native path for this
-    artifact, and the Python path otherwise; ``True`` demands it and
-    raises ``RuntimeError`` when the runtime does not carry it, the
-    tokenizer is not admitted, or the native path has no recorded
-    evidence, and on an input whose route does not start at the corrected
-    CPU engine it encodes serially under ``R_CHUNK_ROUTE_NOT_FAST_CPU``;
-    ``False`` is the Python path.
+    uses it for an admitted tokenizer whenever it can run here
+    (:func:`native_available`: the loaded runtime carries it and the route
+    carries the corrected CPU engine), and the Python path otherwise. The
+    native path's evidence level does not decide this; it is reported as
+    ``native_evidence_label`` (``native_evidence:adversarial_only`` while
+    the row lacks the corpus level for the native path), and the ids are
+    the serial encode's on either path. ``True`` demands the native
+    encoder and raises ``RuntimeError`` when the runtime does not carry it
+    or the tokenizer is not admitted, and on an input whose route does
+    not start at the corrected CPU engine it encodes serially under
+    ``R_CHUNK_ROUTE_NOT_FAST_CPU``; ``False`` is the Python path.
     """
     if not isinstance(text, str):
         raise TypeError("text must be a str")

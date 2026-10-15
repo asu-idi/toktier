@@ -8,16 +8,22 @@ Rust surface decided, the plan it made and a digest of the ids it
 produced. The Python side loads the same artifact from the same directory
 and answers with ``toktier.chunked``; the two are compared key by key.
 
-Admission is compared under the default policy, where the Rust face reads
-the shipped admission table for the native path and the Python face reads
-it for its own. The refusal strings are one vocabulary: a roster artifact
-whose native-path evidence is incomplete reads
-``chunked_evidence_incomplete:<status>`` on the Rust face, which is the
-string the Python face gives when its own path is in that state, and the
-string ``chunked.encode(..., native=True)`` refuses with for the same
-artifact. Plans and ids are compared under ``Policy::Experimental``, which
-lifts the table step the way the Python planner's gate is lifted here,
-and admits the engine of an unregistered build.
+Admission is compared under the default policy, where both faces admit
+by the status of the artifact's row in the shipped admission table: the
+same artifacts are admitted and the same refusal strings name the rest
+(``chunked_evidence_incomplete:<status>`` for a row that holds one level
+of evidence). The Rust face runs the native chunk encoder, and the levels
+the row records for that path are reported beside the admission, not as
+a refusal: ``evidence_status`` and ``native_evidence`` spell them, and
+the label they give an admitted artifact reads
+``native_evidence:<status>`` until the row holds both. An admitted
+artifact is then encoded under the default policy on whichever branch the
+Rust route takes, chunked on the corrected CPU engine or serially under
+``R_CHUNK_ROUTE_NOT_FAST_CPU`` on a route without it, and its ids are
+compared with the Python chunked path and the reference. Plans and ids
+are also compared under ``Policy::Experimental``, which lifts the table
+step the way the Python planner's gate is lifted here, and admits the
+engine of an unregistered build.
 """
 
 from __future__ import annotations
@@ -117,12 +123,21 @@ def _native_status(levels: list[str]) -> str | None:
     return None
 
 
+def _native_label(levels: list[str]) -> str | None:
+    """The label the native path's levels give an admitted artifact."""
+    status = _native_status(levels)
+    if status == "certified":
+        return None
+    return f"native_evidence:{status or 'none'}"
+
+
 def _expected_rust_refusal(
     python_refusal: str | None, row: dict[str, Any] | None, artifact_sha256: str
 ) -> str | None:
     """What the documented rule gives the Rust face from the Python
     face's refusal and the row: the roster and structural refusals
-    verbatim, then the native path's evidence."""
+    verbatim, then the row's status (the one the Python face admits by),
+    then the loader face the row was taken on."""
     if python_refusal == _ROSTER_REFUSAL:
         return python_refusal
     if python_refusal is not None and (
@@ -131,11 +146,8 @@ def _expected_rust_refusal(
         return python_refusal
     if row is None:
         return "artifact_without_chunked_evidence"
-    status = _native_status(list(row["evidence"]["native"]))
-    if status is None:
-        return "artifact_without_chunked_evidence"
-    if status != "certified":
-        return f"chunked_evidence_incomplete:{status}"
+    if row["status"] != "certified":
+        return f"chunked_evidence_incomplete:{row['status']}"
     face = row.get("loader_face_sha256")
     if face is not None and face != artifact_sha256:
         return f"loader_face_differs_from_chunked_evidence:{artifact_sha256[:12]}"
@@ -201,27 +213,106 @@ def test_rust_admission_refusals_equal_the_python_ones(
             assert python_literals >= rust["literals"], family
         expected = _expected_rust_refusal(python_refusal, row, rust["artifact_sha256"])
         assert rust["refusal"] == expected, (family, rust, python)
-        # Where the Python face refuses on evidence its own path lacks and
-        # the native path lacks the same, the strings are identical; where
-        # the Python face admits its own path, the native path is judged
-        # apart, and native=True answers as the Rust face does.
-        if (
-            python_refusal is not None
-            and python_refusal.startswith("chunked_evidence_incomplete")
-            and row is not None
-            and sorted(row["evidence"]["python"]) == sorted(native_levels)
+        # One row, one decision: where the Python face admits, so does the
+        # Rust face, and where it refuses on the table, the strings are
+        # identical. (The installed-reference check of the Python face has
+        # no Rust counterpart; Section "Admission" of the module says why.)
+        if python_refusal is None or not python_refusal.startswith(
+            "oracle_differs_from_chunked_evidence"
+        ):
+            assert (rust["refusal"] is None) == (python_refusal is None), family
+        if python_refusal is not None and python_refusal.startswith(
+            ("chunked_evidence_incomplete", "artifact_without_chunked_evidence")
         ):
             assert rust["refusal"] == python_refusal, family
         if python_refusal is None:
+            # The native path is judged apart for the Python face's
+            # default path choice, and labelled on the Rust face.
             assert ("native" in python_paths) == (
                 _native_status(native_levels) == "certified"
             ), family
+        # The native path's levels label the row on the Rust face, admitted
+        # or not: the example prints the levels and the status they spell,
+        # and the label is a function of them alone.
+        label = _native_label(native_levels)
+        if native_levels == ["adversarial"]:
+            assert rust["evidence_status"] == "adversarial_only", family
+            assert label == "native_evidence:adversarial_only", family
+        print(f"{family}: rust refusal {rust['refusal']!r}, label {label!r}")
         if rust["refusal"] is not None:
             assert encode["serial_reason"] == "R_CHUNK_FAMILY_UNSUPPORTED", family
             assert report["plan"] is None
             assert rust["refusal"] in report["plan_error"], family
     if checked == 0:
         pytest.skip("no shipped artifact under TOKTIER_TEST_ARTIFACTS")
+
+
+def test_rust_default_policy_admits_the_certified_rows(
+    rust_example: Path, tmp_path_factory: pytest.TempPathFactory, tmp_path: Path
+) -> None:
+    """Under the default policy the Rust face admits every artifact whose
+    row the Python face is certified on, and encodes it on whichever
+    branch its route takes: cut into ``k`` chunks on the corrected CPU
+    engine, or serially under ``R_CHUNK_ROUTE_NOT_FAST_CPU`` on a route
+    without it. The ids equal the Python chunked path and the reference
+    on either branch."""
+    text = _generated_corpora(300_000)["transcript(generated)"]
+    path = tmp_path / "text.txt"
+    path.write_text(text, encoding="utf-8")
+    branches: dict[str, str] = {}
+    for family in sorted(ROSTER):
+        row = TABLE_ROWS.get(family)
+        if row is None or row["status"] != "certified" or not _artifact_source(family):
+            continue
+        report = _run(
+            rust_example,
+            family,
+            "--policy",
+            "supported",
+            "--k",
+            "8",
+            "--text",
+            str(path),
+        )
+        rust = report["admission"]
+        assert rust["gate"] == "EvidenceTable"
+        assert rust["admitted"] is True and rust["refusal"] is None, (family, rust)
+        native_levels = list(row["evidence"]["native"])
+        assert rust["native_evidence"] == native_levels, family
+        assert rust["evidence_status"] == _native_status(native_levels), family
+        encode = report["encode"]
+        assert encode["equal_to_serial"] is True, family
+        assert encode["k_requested"] == 8 and encode["below_threshold"] is False
+        tokenizer = load_isolated(family, tmp_path_factory)
+        try:
+            assert chunked.admission(tokenizer)["refusal"] is None, family
+            planner = chunked._planner_for(tokenizer, evidence_gate=False)
+            same_face = planner.loader_face_sha256 == rust["artifact_sha256"]
+            python = chunked.encode(tokenizer, text, k=8, native=False)
+            reference = _reference(tokenizer)(text)
+        finally:
+            tokenizer.close()
+        assert encode["ids_len"] == len(reference), family
+        assert encode["ids_sha256"] == _ids_sha256(reference), family
+        assert encode["ids_sha256"] == _ids_sha256(python.ids), family
+        if rust["cpu_route"]:
+            branches[family] = "chunked on the corrected CPU engine"
+            assert encode["serial_reason"] is None, family
+            assert encode["chunks"] == 8, family
+            assert report["stats"]["fallback_counts"] == {}, family
+            if same_face:
+                assert tuple(encode["cuts"]) == python.cuts, family
+        else:
+            branches[family] = "serial under R_CHUNK_ROUTE_NOT_FAST_CPU"
+            assert encode["serial_reason"] == "R_CHUNK_ROUTE_NOT_FAST_CPU", family
+            assert encode["chunks"] == 1 and encode["cuts"] == [], family
+            assert report["plan"] is None, family
+            assert report["stats"]["fallback_counts"] == {
+                "R_CHUNK_ROUTE_NOT_FAST_CPU": 1
+            }, family
+        print(f"{family}: default policy, {branches[family]}")
+    if not branches:
+        pytest.skip("no artifact with a certified row under TOKTIER_TEST_ARTIFACTS")
 
 
 def test_rust_plan_and_ids_equal_the_python_chunked_path(

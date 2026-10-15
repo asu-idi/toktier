@@ -36,22 +36,32 @@
 //!    `added_token_strip_or_single_word`). This is the native chunk
 //!    encoder's own structural rule, read from the same artifact bytes
 //!    this crate executes.
-//! 3. The chunked admission table that ships with the crate records both
-//!    levels of evidence, the adversarial battery and the corpus cut
-//!    comparison, for the **native** path on this artifact (refusals
-//!    `artifact_without_chunked_evidence` when it records none,
-//!    `chunked_evidence_incomplete:<status>` when it records one level,
-//!    `loader_face_differs_from_chunked_evidence:<digest>` when the row's
-//!    readings were taken on a loader face other than the artifact file
-//!    this crate executes).
+//! 3. The chunked admission table that ships with the crate has a
+//!    certified row for this artifact: the row's status, the one the
+//!    Python facade admits by, records both levels of evidence, the
+//!    adversarial battery and the corpus cut comparison (refusals
+//!    `artifact_without_chunked_evidence` when the table has no row,
+//!    `chunked_evidence_incomplete:<status>` when the row records one
+//!    level, `loader_face_differs_from_chunked_evidence:<digest>` when the
+//!    row's readings were taken on a loader face other than the artifact
+//!    file this crate executes).
 //! 4. The admitted route carries the corrected CPU engine
 //!    ([`Admission::cpu_route`]). Without it there is nothing to chunk on:
 //!    [`Chunked::encode`] encodes serially through the normal route and
 //!    says so with [`ReasonCode::ChunkRouteNotFastCpu`].
 //!
-//! The Python facade reads the same table for its own path, so the two
-//! faces answer alike about a roster artifact whose evidence is
-//! incomplete. One step has no Rust counterpart: the Python facade also
+//! The Python facade reads the same table and the same status, so the
+//! two faces admit and refuse the same roster artifacts with the same
+//! strings. The row also records which levels were taken on the native
+//! encoder this crate runs; they are a label, not a condition.
+//! [`Admission::evidence_label`] reads `native_evidence:<status>` while
+//! the native path holds fewer than both levels (for a refused tokenizer
+//! as well, since it describes the row), and the same label travels on
+//! [`ChunkedStats`] and on every result that was cut. A table
+//! whose row records both levels for the native path removes the label
+//! without a code change. The ids are the serial encode's either way.
+//!
+//! One step has no Rust counterpart: the Python facade also
 //! refuses when the installed reference release is outside the record's
 //! certified set. On this crate the embedded reference is judged at
 //! build time against its certified reference versions, and a build that
@@ -96,7 +106,10 @@
 //! let tokenizer = runtime.load("qwen3_8b")?;
 //! let text = "a long request ".repeat(100_000);
 //! let admission = tokenizer.chunked().admission()?;
-//! println!("admitted={} refusal={:?}", admission.admitted, admission.refusal);
+//! println!(
+//!     "admitted={} refusal={:?} evidence_label={:?}",
+//!     admission.admitted, admission.refusal, admission.evidence_label
+//! );
 //! let encoded = tokenizer.chunked().encode(&text, &ChunkOptions::default())?;
 //! assert_eq!(encoded.ids(), tokenizer.encode(&text)?.ids());
 //! println!("chunks={} serial_reason={:?}", encoded.chunks, encoded.serial_reason);
@@ -139,9 +152,14 @@ const CHUNK_TABLE: [(Option<usize>, usize); 4] = [
 ];
 
 /// The evidence levels a chunked admission row records per path, as
-/// `tools/update_chunked_admission.py` names them.
+/// `tools/update_chunked_admission.py` names them, and the status of a
+/// row that records both.
 const EVIDENCE_ADVERSARIAL: &str = "adversarial";
 const EVIDENCE_CORPUS: &str = "corpus";
+const STATUS_CERTIFIED: &str = "certified";
+
+/// The prefix of [`Admission::evidence_label`].
+const LABEL_NATIVE_EVIDENCE: &str = "native_evidence";
 
 /// The Python facade's refusal strings that this face answers with as
 /// well. The structural ones come from the native chunk encoder itself.
@@ -292,6 +310,11 @@ pub struct ChunkedEncoding {
     pub sources: RowSources,
     /// The label of the route the rows ran on.
     pub certification: Certification,
+    /// The evidence label of the cut rule behind this result,
+    /// [`Admission::evidence_label`], when the document was cut; `None`
+    /// for a serial or below-threshold result, whose ids are the plain
+    /// route's, and when the native path holds both evidence levels.
+    pub evidence_label: Option<String>,
     /// Time spent planning the cuts.
     pub plan_time: Duration,
     /// Time spent in the parallel section, or in the serial encode.
@@ -337,6 +360,7 @@ impl ChunkedEncoding {
             below_threshold: false,
             sources: RowSources::default(),
             certification,
+            evidence_label: None,
             plan_time: Duration::ZERO,
             encode_time,
             concat_time: Duration::ZERO,
@@ -344,7 +368,15 @@ impl ChunkedEncoding {
         }
     }
 
-    fn from_native(encoded: ChunkedIds, certification: Certification) -> Self {
+    fn from_native(
+        encoded: ChunkedIds,
+        certification: Certification,
+        evidence_label: Option<&str>,
+    ) -> Self {
+        // The label speaks for the cuts, so only a result that was cut
+        // carries it.
+        let cut = encoded.serial_reason.is_none() && !encoded.below_threshold;
+        let evidence_label = evidence_label.filter(|_| cut).map(str::to_owned);
         let mut sources = RowSources::default();
         for source in &encoded.sources {
             match source {
@@ -365,6 +397,7 @@ impl ChunkedEncoding {
             below_threshold: encoded.below_threshold,
             sources,
             certification,
+            evidence_label,
             plan_time: Duration::from_nanos(encoded.plan_ns),
             encode_time: Duration::from_nanos(encoded.encode_ns),
             concat_time: Duration::from_nanos(encoded.concat_ns),
@@ -377,12 +410,15 @@ impl ChunkedEncoding {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum AdmissionGate {
-    /// The shipped chunked admission table was read, and a roster
-    /// artifact without complete native-path evidence is refused.
+    /// The shipped chunked admission table was read: a roster artifact
+    /// is admitted when its row is certified, the status the Python
+    /// facade admits by, and the evidence recorded for the native path
+    /// is reported as [`Admission::evidence_label`].
     EvidenceTable,
     /// [`Policy::Experimental`] lifted the table step; the structural
-    /// rule and the roster still decide, and every result is labelled
-    /// experimental.
+    /// rule and the roster still decide, every result is labelled
+    /// experimental, and the evidence label is reported as under the
+    /// table.
     LiftedByExperimentalPolicy,
 }
 
@@ -416,13 +452,24 @@ pub struct Admission {
     /// The evidence id of the admission row, when the table has one for
     /// this artifact.
     pub evidence_id: Option<String>,
-    /// What the row records for the native path: `"certified"` when both
-    /// evidence levels are recorded, `"adversarial_only"` or
-    /// `"corpus_only"` when one is, `None` when the table has no row or
-    /// the row records nothing for this path.
+    /// What the row records for the native path this crate runs:
+    /// `"certified"` when both evidence levels are recorded,
+    /// `"adversarial_only"` or `"corpus_only"` when one is, `None` when
+    /// the table has no row or the row records nothing for this path.
+    /// Reported, not a condition of admission; [`Self::evidence_label`]
+    /// is what it means for the results.
     pub evidence_status: Option<String>,
     /// The evidence levels the row records for the native path.
     pub native_evidence: Vec<String>,
+    /// The label the row's native-path evidence gives this tokenizer's
+    /// chunked results: `None` when the row records both evidence levels
+    /// for the native path, `native_evidence:<status>` otherwise, with the
+    /// status [`Self::evidence_status`] spells (`native_evidence:none`
+    /// when the table has no row or the row records no level). It
+    /// describes the row, so a refused tokenizer reports it too. A table
+    /// whose row records both levels for the native path removes the
+    /// label without a code change.
+    pub evidence_label: Option<String>,
     /// Which gate decided the evidence step.
     pub gate: AdmissionGate,
 }
@@ -456,6 +503,11 @@ pub struct ChunkedStats {
     /// The worker count [`Chunked::warm`] forks when none is named: the
     /// Rayon thread count.
     pub default_workers: usize,
+    /// The admission's evidence label ([`Admission::evidence_label`]),
+    /// beside the counters it qualifies: `None` when the native path
+    /// holds both evidence levels, and when the admission could not be
+    /// decided (then [`Chunked::admission`] returns the error).
+    pub evidence_label: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -600,7 +652,11 @@ impl<'a> Chunked<'a> {
                 .router
                 .chunked_encode_ids(text, k, options.min_chunk, budget)
                 .map_err(|error| Error::new(ErrorCode::BackendExecutionFault, error.to_string()))?;
-            ChunkedEncoding::from_native(encoded, certification)
+            ChunkedEncoding::from_native(
+                encoded,
+                certification,
+                admission.evidence_label.as_deref(),
+            )
         } else {
             // The plain route, as the Python facade takes it for a
             // refused tokenizer: the same guarded serial encode the
@@ -643,8 +699,14 @@ impl<'a> Chunked<'a> {
             .map_err(|error| Error::new(ErrorCode::BackendExecutionFault, error.to_string()))
     }
 
-    /// The counters this surface keeps for the tokenizer.
+    /// The counters this surface keeps for the tokenizer, with the
+    /// admission's evidence label (deciding the admission if no call has
+    /// yet).
     pub fn stats(&self) -> ChunkedStats {
+        let evidence_label = self
+            .admission()
+            .ok()
+            .and_then(|admission| admission.evidence_label);
         let counters = self
             .inner
             .chunked
@@ -668,6 +730,7 @@ impl<'a> Chunked<'a> {
                 .map(ChunkEncoder::worker_count)
                 .unwrap_or(0),
             default_workers: default_chunk_workers(),
+            evidence_label,
         }
     }
 }
@@ -702,22 +765,38 @@ fn resolve(options: &ChunkOptions, text: &str) -> Result<(usize, usize)> {
     Ok((k, options.scan_budget))
 }
 
-/// The native-path status a row's evidence levels spell, as the table
-/// generator spells the Python path's: both levels, one, or none.
-fn native_status(levels: &[String]) -> Option<String> {
+/// The status one path's evidence levels spell, as the table generator
+/// spells a row's status from the Python path's levels: both levels,
+/// one, or none.
+pub(crate) fn levels_status(levels: &[String]) -> Option<String> {
     let adversarial = levels.iter().any(|level| level == EVIDENCE_ADVERSARIAL);
     let corpus = levels.iter().any(|level| level == EVIDENCE_CORPUS);
     match (adversarial, corpus) {
-        (true, true) => Some("certified".to_owned()),
+        (true, true) => Some(STATUS_CERTIFIED.to_owned()),
         (true, false) => Some(format!("{EVIDENCE_ADVERSARIAL}_only")),
         (false, true) => Some(format!("{EVIDENCE_CORPUS}_only")),
         (false, false) => None,
     }
 }
 
+/// The label the native path's evidence levels give a tokenizer's
+/// chunked results: none when both levels are recorded,
+/// `native_evidence:<status>` otherwise, `native_evidence:none` without
+/// a level. A function of the levels alone, so a row that records the
+/// corpus level for the native path removes the label without a code
+/// change.
+fn native_evidence_label(levels: &[String]) -> Option<String> {
+    match levels_status(levels).as_deref() {
+        Some(STATUS_CERTIFIED) => None,
+        Some(status) => Some(format!("{LABEL_NATIVE_EVIDENCE}:{status}")),
+        None => Some(format!("{LABEL_NATIVE_EVIDENCE}:none")),
+    }
+}
+
 /// The admission decision, in the order the Python planner makes it:
 /// the roster, the structural rule of the native encoder, the evidence
-/// table (unless lifted), with the route reported beside.
+/// table by the row's status (unless lifted), with the route and the
+/// native path's evidence label reported beside.
 fn decide(inner: &Arc<TokenizerInner>) -> Result<Admission> {
     let identity = inner.artifact.identity();
     let family = identity.family.clone();
@@ -768,14 +847,16 @@ fn decide(inner: &Arc<TokenizerInner>) -> Result<Admission> {
     let native_evidence = row
         .map(|row| row.evidence.native.clone())
         .unwrap_or_default();
-    let evidence_status = native_status(&native_evidence);
+    let evidence_status = levels_status(&native_evidence);
     if refusal.is_none() && gate == AdmissionGate::EvidenceTable {
-        match (row, evidence_status.as_deref()) {
-            (None, _) | (Some(_), None) => refusal = Some(REFUSAL_NO_EVIDENCE.to_owned()),
-            (Some(_), Some(status)) if status != "certified" => {
-                refusal = Some(format!("{REFUSAL_INCOMPLETE}:{status}"));
+        match row {
+            None => refusal = Some(REFUSAL_NO_EVIDENCE.to_owned()),
+            Some(row) if row.status != STATUS_CERTIFIED => {
+                // The row's own status, the string the Python facade
+                // refuses the same artifact with.
+                refusal = Some(format!("{REFUSAL_INCOMPLETE}:{}", row.status));
             }
-            (Some(row), Some(_)) => {
+            Some(row) => {
                 // The row's readings were taken on a loader face; this
                 // crate executes the artifact file, which is that face
                 // when the loader did not extend it.
@@ -793,6 +874,10 @@ fn decide(inner: &Arc<TokenizerInner>) -> Result<Admission> {
         }
     }
 
+    // The native path's evidence labels the row; it is not a condition
+    // of the admission.
+    let evidence_label = native_evidence_label(&native_evidence);
+
     Ok(Admission {
         admitted: refusal.is_none(),
         refusal,
@@ -804,6 +889,7 @@ fn decide(inner: &Arc<TokenizerInner>) -> Result<Admission> {
         evidence_id,
         evidence_status,
         native_evidence,
+        evidence_label,
         gate,
     })
 }
@@ -868,28 +954,111 @@ mod tests {
         assert_eq!(resolve(&ChunkOptions::default(), &long).unwrap().0, 4);
     }
 
+    fn levels(items: &[&str]) -> Vec<String> {
+        items.iter().map(|item| (*item).to_owned()).collect()
+    }
+
     #[test]
-    fn native_status_spells_the_levels_like_the_table_generator() {
-        let levels = |items: &[&str]| items.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
-        assert_eq!(native_status(&levels(&[])), None);
+    fn levels_status_spells_the_levels_like_the_table_generator() {
+        assert_eq!(levels_status(&levels(&[])), None);
         assert_eq!(
-            native_status(&levels(&["adversarial"])).as_deref(),
+            levels_status(&levels(&["adversarial"])).as_deref(),
             Some("adversarial_only")
         );
         assert_eq!(
-            native_status(&levels(&["corpus"])).as_deref(),
+            levels_status(&levels(&["corpus"])).as_deref(),
             Some("corpus_only")
         );
         assert_eq!(
-            native_status(&levels(&["adversarial", "corpus"])).as_deref(),
+            levels_status(&levels(&["adversarial", "corpus"])).as_deref(),
             Some("certified")
         );
         assert_eq!(
-            native_status(&levels(&["corpus", "adversarial"])).as_deref(),
+            levels_status(&levels(&["corpus", "adversarial"])).as_deref(),
             Some("certified")
         );
         // A level this release does not know is neither.
-        assert_eq!(native_status(&levels(&["later"])), None);
+        assert_eq!(levels_status(&levels(&["later"])), None);
+    }
+
+    #[test]
+    fn the_native_evidence_label_is_a_function_of_the_levels_alone() {
+        // The shipped table's native levels today: the battery alone.
+        assert_eq!(
+            native_evidence_label(&levels(&["adversarial"])).as_deref(),
+            Some("native_evidence:adversarial_only")
+        );
+        assert_eq!(
+            native_evidence_label(&levels(&["corpus"])).as_deref(),
+            Some("native_evidence:corpus_only")
+        );
+        assert_eq!(
+            native_evidence_label(&levels(&[])).as_deref(),
+            Some("native_evidence:none")
+        );
+        assert_eq!(
+            native_evidence_label(&levels(&["later"])).as_deref(),
+            Some("native_evidence:none")
+        );
+        // A row that records the corpus comparison for the native path as
+        // well carries no label, in either order.
+        assert_eq!(
+            native_evidence_label(&levels(&["adversarial", "corpus"])),
+            None
+        );
+        assert_eq!(
+            native_evidence_label(&levels(&["corpus", "adversarial"])),
+            None
+        );
+    }
+
+    #[test]
+    fn only_a_result_that_was_cut_carries_the_evidence_label() {
+        let native = |serial_reason: Option<&'static str>, below_threshold: bool| ChunkedIds {
+            ids: vec![1, 2, 3],
+            chunks: if serial_reason.is_none() && !below_threshold {
+                2
+            } else {
+                1
+            },
+            k_requested: 2,
+            cuts: Vec::new(),
+            cut_misses: 0,
+            literal_rejects: 0,
+            norm_rejects: 0,
+            serial_reason,
+            below_threshold,
+            sources: Vec::new(),
+            row_bytes: Vec::new(),
+            plan_ns: 0,
+            encode_ns: 0,
+            concat_ns: 0,
+            worker_ns_max: 0,
+            worker_ns_min: 0,
+            cold_forks: 0,
+        };
+        let label = Some("native_evidence:adversarial_only");
+        let cut =
+            ChunkedEncoding::from_native(native(None, false), Certification::Supported, label);
+        assert_eq!(cut.evidence_label.as_deref(), label);
+        let fully_evidenced =
+            ChunkedEncoding::from_native(native(None, false), Certification::Supported, None);
+        assert_eq!(fully_evidenced.evidence_label, None);
+        for (reason, below) in [
+            (None, true),
+            (Some(toktier_routing_core::R_CHUNK_NO_CUT), false),
+            (
+                Some(toktier_routing_core::R_CHUNK_ROUTE_NOT_FAST_CPU),
+                false,
+            ),
+        ] {
+            let serial = ChunkedEncoding::from_native(
+                native(reason, below),
+                Certification::Supported,
+                label,
+            );
+            assert_eq!(serial.evidence_label, None, "{reason:?} {below}");
+        }
     }
 
     #[test]
@@ -907,6 +1076,7 @@ mod tests {
             below_threshold: false,
             sources: RowSources::default(),
             certification: Certification::Reference,
+            evidence_label: None,
             plan_time: Duration::ZERO,
             encode_time: Duration::ZERO,
             concat_time: Duration::ZERO,

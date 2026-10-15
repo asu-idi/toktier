@@ -680,6 +680,21 @@ fn the_chunked_surface_is_nameable_from_the_crate_root() {
         AdmissionGate::EvidenceTable,
         AdmissionGate::LiftedByExperimentalPolicy
     );
+    // The evidence label is a field of the admission, of every result and
+    // of the counters.
+    fn labels(
+        admission: &Admission,
+        encoded: &ChunkedEncoding,
+        stats: &ChunkedStats,
+    ) -> [Option<String>; 3] {
+        [
+            admission.evidence_label.clone(),
+            encoded.evidence_label.clone(),
+            stats.evidence_label.clone(),
+        ]
+    }
+    let _ = labels;
+    assert_eq!(ChunkedStats::default().evidence_label, None);
     for code in [
         ReasonCode::ChunkNoCut,
         ReasonCode::ChunkFamilyUnsupported,
@@ -710,8 +725,22 @@ fn the_chunked_surface_is_nameable_from_the_crate_root() {
     assert_eq!(admission.normalizer.as_deref(), Some("nfc"));
     assert_eq!(admission.admitted, admission.refusal.is_none());
     assert_eq!(admission.gate, AdmissionGate::EvidenceTable);
+    // The row's native-path evidence is a label: present while the
+    // native path lacks a level, gone with both.
+    match admission.evidence_status.as_deref() {
+        Some("certified") => assert_eq!(admission.evidence_label, None),
+        Some(status) => assert_eq!(
+            admission.evidence_label,
+            Some(format!("native_evidence:{status}"))
+        ),
+        None => assert_eq!(
+            admission.evidence_label.as_deref(),
+            Some("native_evidence:none")
+        ),
+    }
     let stats = tokenizer.chunked().stats();
     assert_eq!((stats.calls, stats.applied, stats.serial), (0, 0, 0));
     assert!(stats.fallback_counts.is_empty());
     assert!(stats.default_workers >= 1);
+    assert_eq!(stats.evidence_label, admission.evidence_label);
 }

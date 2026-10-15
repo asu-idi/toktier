@@ -792,33 +792,48 @@ strip or single-word flag (`normalizer_not_supported[:<type>]`,
 `nfc_with_normalized_added_tokens`, `added_token_strip_or_single_word`);
 the chunked admission table that ships with the crate
 (`data/src/toktier/routing/tables/chunked_admission.v1.json`, the same
-file the Python package ships, read for the **native** path:
-`artifact_without_chunked_evidence`, `chunked_evidence_incomplete:<status>`
-with the status the row's native levels spell,
+file the Python package ships), read by the row's status, which is the
+status the Python facade admits by: `artifact_without_chunked_evidence`
+when the table has no row, `chunked_evidence_incomplete:<status>` when
+the row holds one of the two levels of evidence,
 `loader_face_differs_from_chunked_evidence:<digest>` when the row's
-readings were taken on a loader face other than the artifact file); and
+readings were taken on a loader face other than the artifact file; and
 whether the admitted route carries the corrected CPU engine
-(`cpu_route`), reported beside the refusal rather than as one. A refused
-tokenizer is encoded serially on the plain route under
-`ChunkFamilyUnsupported`, and `plan()` says why with
-`UNCERTIFIED_TOKENIZER`; a route without the engine encodes serially
-under `ChunkRouteNotFastCpu`. The one step of the Python face with no
-counterpart here is the installed-reference check: on this crate the
-embedded reference is judged at build time against its certified
-reference versions, and a build that resolves another version has no
-corrected CPU route at all.
+(`cpu_route`), reported beside the refusal rather than as one. The two
+faces therefore admit and refuse the same artifacts with the same
+strings. A refused tokenizer is encoded serially on the plain route
+under `ChunkFamilyUnsupported`, and `plan()` says why with
+`UNCERTIFIED_TOKENIZER`; an admitted tokenizer whose route does not
+start at the corrected CPU engine, a route without the engine included,
+encodes serially under `ChunkRouteNotFastCpu`. The one step of the
+Python face with no counterpart here is the installed-reference check:
+on this crate the embedded reference is judged at build time against
+its certified reference versions, and a build that resolves another
+version has no corrected CPU route at all.
 
-In this release the shipped table records the adversarial battery alone
-for the native path on every roster artifact, so under the default
-policy every family answers `chunked_evidence_incomplete:adversarial_only`
-and is encoded serially, which is the answer
-`toktier.chunked.encode(..., native=True)` gives for the same artifacts;
-the corpus cut comparison for the native path is registered with the
-campaign that produces it, and a table that records it opens this
-surface without a code change. `Policy::Experimental` lifts the table
-step, the way the campaign tool lifts it to collect the evidence a row
-is made of; `admission().gate` says when that happened and every result
-is labelled `Certification::Experimental` like the rest of the route.
+**Evidence label.** The row also records which levels of evidence were
+taken on the native chunk encoder this crate runs (`native_evidence`,
+spelled as a status in `evidence_status`). They label the results
+rather than decide the admission: `Admission::evidence_label` reads
+`native_evidence:<status>` while the native path holds fewer than both
+levels (`native_evidence:none` without a row or a level) and `None`
+once it holds both, and the same label is carried by
+`ChunkedStats::evidence_label` and by every `ChunkedEncoding` that was
+cut (a serial result's ids are the plain route's, and it carries none).
+The label is a function of the row alone, for a refused tokenizer as
+well. In this release four of the eleven roster artifacts
+have certified rows (qwen3_8b, llama_3_1_8b, deepseek_v3 and
+gpt_oss_120b) and are admitted under the default policy with the label
+`native_evidence:adversarial_only`, since the native path holds the
+adversarial battery and not yet the corpus cut comparison; the other
+seven answer `chunked_evidence_incomplete:adversarial_only`, as they do
+on the Python face. A table whose rows record the corpus level for the
+native path removes the label without a code change. Either way the ids
+equal the serial encode. `Policy::Experimental` lifts the table step,
+the way the campaign tool lifts it to collect the evidence a row is
+made of; `admission().gate` says when that happened, every result is
+labelled `Certification::Experimental` like the rest of the route, and
+the evidence label is reported as under the table.
 
 **Threads and workers.** The chunks are encoded by corrected-CPU workers
 forked from the engine on first use and kept on a free list;
@@ -836,7 +851,8 @@ another and stay exact.
 
 **Counters.** `stats()` keeps what `toktier.chunked.stats(tokenizer)`
 keeps: calls, applied, serial and below-threshold calls, rows run, the
-three reject totals, and `fallback_counts` by `R_*` code. They are this
+three reject totals, and `fallback_counts` by `R_*` code, with the
+evidence label beside them. They are this
 surface's own; the per-row executions are counted in the router's
 ledger as on the Python native path.
 

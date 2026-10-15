@@ -235,20 +235,24 @@ fn execution_facts_report_the_routing_decision_or_nothing() {
     }
 
     // A session append reports through the same field, and what it has to
-    // report depends on which engine the build is allowed to run. A build
-    // this workspace's registry does not certify is admitted to the
-    // reference engine, whose append re-encodes the whole transcript by
-    // construction: that is the admitted route doing its ordinary work and
-    // has nothing to explain. A certified build is admitted to the
-    // corrected CPU engine, whose bounded repair window here covers the
-    // whole prior text, so the append leaves the admitted route and says
-    // so. Both are the same rule; the assertion follows the build.
+    // report depends on which engine the build is allowed to run. Since
+    // 0.3.0 the corrected CPU engine is admitted by source identity under
+    // the default policy: a build whose sources a judged row records, with
+    // the core closure verified, runs it whatever compiler and flags built
+    // it (a debug build included; the recipe is a label). Its bounded
+    // repair window here covers the whole prior text, so the append leaves
+    // the admitted route and says so. A build whose sources the registry
+    // does not record is admitted to the reference engine, whose append
+    // re-encodes the whole transcript by construction: that is the
+    // admitted route doing its ordinary work and has nothing to explain.
+    // Both are the same rule; the assertion follows the build.
     let mut session = tokenizer.open_session("wp7-reason").unwrap();
     session.seed("user: reason field check\n").unwrap();
     let patch = session.append("assistant: acknowledged\n").unwrap();
     let appended = patch.execution();
     assert!(!appended.path.is_empty());
-    if runtime.doctor().runtime_build.certified {
+    let build = runtime.doctor().runtime_build;
+    if build.source_identity_judged && build.core_closure == "verified" {
         assert_eq!(appended.path, "hf_full_window_covers_all");
         assert_eq!(appended.reason, Some(ReasonCode::SessionNoSafeCut));
     } else {

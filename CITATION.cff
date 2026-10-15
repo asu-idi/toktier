@@ -19,7 +19,7 @@ authors:
     given-names: Zhichao
 
 version: "0.3.0"
-date-released: "2026-08-31"
+date-released: "2026-10-15"
 
 keywords:
   - tokenization

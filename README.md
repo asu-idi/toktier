@@ -48,6 +48,90 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
 
 ## News
 
+- **2026.10.15** 🚀 **toktier 0.3.0** released — one long request can now use
+  more than one core on the CPU route without leaving the exact-ID contract.
+  `toktier.chunked.encode` cuts the input at certified stable boundaries,
+  encodes the chunks in parallel and concatenates the ids, which is the serial
+  encoding by construction; it runs as a Python helper over the batch path or
+  inside a native chunk encoder, and the Rust crate reaches the same encoder
+  through `Tokenizer::chunked()`. Which artifacts may be chunked is read from a
+  table that ships with the package and is generated from evidence on the
+  chunked path itself, and three levels of evidence are kept apart: the
+  corrected CPU engine's whole-document campaign (41,800,181,401 checks, zero
+  divergence) is about the engine that encodes each chunk and never cut a
+  document, so it is not chunked-path evidence; the chunked path holds an
+  adversarial battery (460,000 strings over the eleven roster artifacts, both
+  paths, 2026-10-15) and a web-corpus cut comparison (102,400,000 documents
+  each for four artifacts, Python path, 2026-09-17), neither with a difference
+  from the reference. The four artifacts that hold both levels, qwen3_8b,
+  llama_3_1_8b, deepseek_v3 and gpt_oss_120b, are admitted, and on them the
+  native encoder runs by default on both faces, labelled
+  `native_evidence:adversarial_only` until the corpus comparison covers the
+  native path too. The other seven roster artifacts hold the battery only and
+  are encoded serially until the corpus campaign covers them
+  (`R_CHUNK_FAMILY_UNSUPPORTED`, refusal
+  `chunked_evidence_incomplete:adversarial_only`): a measurement not yet
+  taken, not a measured problem, and their whole-document fast CPU routes are
+  unchanged. An added token with an `lstrip`, `rstrip` or `single_word` flag
+  is not admitted (`added_token_strip_or_single_word`), and an installed
+  `tokenizers` outside the certified set keeps the call serial
+  (`oracle_differs_from_chunked_evidence:<version>`). In cold readings on one
+  16-core desktop (2026-10-15) the native encoder ran 1.35 to 5.25 times as
+  fast as the serial encode with `lookup="off"` on four to eight cores, for
+  texts of 262,144 to 4,194,304 characters, least on English text for
+  Llama-3.1-8B. The release also adds `Session.append_patch`, which returns
+  the splice without a copy of the stream, and an SGLang adapter
+  (`toktier.integrations.sglang`) that serves SGLang's encode calls on the
+  certified CPU route once it has checked that the tokenizer it wraps is the
+  one toktier loaded (`TOKTIER_SGLANG_IDENTITY` accepts only `require`), with
+  an optional pool of tokenizer worker processes, chunked dispatch for long
+  stateless requests and a chunk-encoder warm-up when it wraps an admitted
+  tokenizer; the `TOKTIER_SGLANG_*` settings are read by the adapter alone.
+  It was checked on SGLang 0.5.19, 0.5.20 and 0.5.21 on 2026-10-13, and on
+  2026-10-15 against a real SGLang 0.5.21 model server, where the ids of all
+  138 requests equaled the Hugging Face ids. The exact `tokenizers` and
+  `transformers` pins become ranges (`tokenizers>=0.22.2,<0.24`,
+  `transformers>=4.57.6,<6`), so `pip install toktier` beside SGLang resolves
+  the ordinary way (a new environment also gets `platformdirs`), and `pip
+  check` reported no broken requirements beside SGLang 0.5.21 and beside
+  SGLang main's pins (checked on 2026-10-14 and 2026-10-15). The certificates
+  speak for the certified reference versions `tokenizers` 0.22.2, 0.23.2 and
+  0.23.3, the two 0.23 releases install beside a `transformers` loader of the
+  5.19 line, and an installed `tokenizers` outside that set runs on the
+  reference route. On the Rust crate every third-party dependency takes a
+  caret edge (most were exact before; `Cargo.lock` is unchanged); the fast CPU
+  engine is admitted by its source identity under every policy but
+  `Reference`, so a build on another rustc or feature recipe runs it labelled
+  `supported_untested`, with `rust-version` at 1.89 and the judged toolchain
+  still 1.93.1, and the Python facade follows the same rule; a reference
+  library outside its certified versions is a label on the CPU route, while
+  the GPU route keeps its certified-build requirement; and
+  `Runtime::family_for_sha256` names the shipped family of a `tokenizer.json`
+  digest. The prebuilt GPU delivery is certified on `sm_80`, `sm_89` and
+  `sm_120`; `sm_90` is not certified in this release (the fatbin keeps its
+  image as experimental, and certification is planned for 0.3.1). Because the
+  native chunk encoder is compiled into the corrected CPU engine, all three
+  source identities move, exact and version-normalized alike, and the roster
+  is recertified against them; artifacts and capability ids do not move. A
+  persistent session store written by 0.2.9 is refused at open with
+  `SESSION_STATE_MISMATCH`, and 0.2.9 refuses one 0.3.0 wrote: point `store=`
+  at a new directory and replay the transcript. The store format and the
+  artifact fetch manifest do not change, so a 0.2.9 artifact cache serves
+  0.3.0, offline included. With the same `tokenizers` and `transformers`
+  installed, served ids are unchanged on every packaged artifact
+  (`qwen3_5_08b` beside a `transformers` 5.x loader follows that loader and
+  reports `R_LOADER_FACE_MISMATCH`). `doctor --json` gains three top-level
+  keys and one `family` key, the reason-code namespace gains `R_CHUNK_NO_CUT`,
+  `R_CHUNK_FAMILY_UNSUPPORTED`, `R_CHUNK_ROUTE_NOT_FAST_CPU` and
+  `R_LOADER_FACE_MISMATCH`, and `explain()` gains a `chunked` block and the
+  loader-face digest. Same-host A/B runs against 0.2.9 kept the encode,
+  session, serving and GPU timings of both faces within a few percent, so the
+  paths this release did not add are not faster; `Runtime::doctor()` takes
+  about 0.6 to 0.8 microseconds more to report its new facts. The
+  chunk-parallel path, the CPU pool and the SGLang adapter are described in
+  the Delta Tokenizer paper (arXiv:2610.19801); TokTier (arXiv:2607.29678)
+  remains the citation for the system. See the
+  [v0.3.0 release notes](docs/releases/v0.3.0.md).
 - **2026.10.14** 📄 Our paper [*Delta Tokenizer: Reference-Identical
   Tokenization of Session Deltas and Segment-Parallelism for Long Prompts on
   Multicore CPUs*](https://arxiv.org/abs/2610.19801) is available on arXiv.

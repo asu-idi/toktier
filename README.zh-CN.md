@@ -42,6 +42,67 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 
 ## 最新动态
 
+- **2026.10.15** 🚀 **toktier 0.3.0** 发布——单个长请求现在可以在 CPU 路由上用到
+  多个核，且不离开精确 ID 契约。`toktier.chunked.encode` 在认证过的稳定边界处
+  切开输入，并行编码各块再拼接 id，按构造即等于串行编码；它既可以作为批路径之上
+  的 Python 辅助层运行，也可以在原生分块编码器内运行，Rust crate 则通过
+  `Tokenizer::chunked()` 使用同一个编码器。哪些工件可以分块，由随包发布、并由
+  分块路径自身的证据生成的一张准入表决定，三级证据分开写：修正版 CPU 引擎的整篇
+  文档对拍（41,800,181,401 次比对，零分歧）针对的是编码每一块的引擎，从未切过
+  文档，因此不是分块路径的证据；分块路径的证据是对抗电池（roster 全部 11 个工件
+  共 460,000 条字符串，两条路径，2026-10-15）与网页语料切点对拍（4 个工件各
+  102,400,000 篇文档，Python 路径，2026-09-17），两者都没有发现与参考实现的任何
+  差异。两级证据齐全的四个工件 qwen3_8b、llama_3_1_8b、deepseek_v3 与
+  gpt_oss_120b 获准分块，两侧接口在它们上面默认都走原生编码器，并标注
+  `native_evidence:adversarial_only`，直到语料对拍也覆盖原生路径为止。roster 中
+  其余七个工件目前只有对抗电池证据，在语料验证活动覆盖它们之前按串行编码
+  （`R_CHUNK_FAMILY_UNSUPPORTED`，拒绝理由
+  `chunked_evidence_incomplete:adversarial_only`）：这是尚未完成的测量，而不是
+  测出了问题，它们的整篇快速 CPU 路由也没有变化。带 `lstrip`、`rstrip` 或
+  `single_word` 旗标的 added token 不予准入（`added_token_strip_or_single_word`），
+  本机安装的 `tokenizers` 不在认证集合内时，调用保持串行
+  （`oracle_differs_from_chunked_evidence:<version>`）。在一台 16 核台式机上的
+  冷读数（2026-10-15）中，对 262,144 到 4,194,304 字符的文本，原生编码器在 4 到
+  8 个核上比 `lookup="off"` 的串行编码快 1.35 到 5.25 倍，Llama-3.1-8B 的英文
+  文本提升最小。本版还新增 `Session.append_patch`，它只返回拼接补丁，不复制整条
+  流；以及 SGLang 适配器（`toktier.integrations.sglang`）：它先确认所包装的
+  tokenizer 就是 toktier 加载的那一个（`TOKTIER_SGLANG_IDENTITY` 只接受
+  `require`），再把 SGLang 的编码调用放到认证过的 CPU 路由上，可选配一个
+  tokenizer 工作进程池，对长的无状态请求做分块派发，并在包装已准入的 tokenizer
+  时预热分块编码器；`TOKTIER_SGLANG_*` 设置只由适配器读取。适配器于 2026-10-13
+  在 SGLang 0.5.19、0.5.20 与 0.5.21 上做过检查，并于 2026-10-15 在真实的
+  SGLang 0.5.21 模型服务上复核，全部 138 个请求的 id 都与 Hugging Face 的 id
+  相同。`tokenizers` 与 `transformers` 的精确钉版改为范围
+  （`tokenizers>=0.22.2,<0.24`、`transformers>=4.57.6,<6`），因此在 SGLang 旁边
+  `pip install toktier` 按常规方式解析即可（新环境会多装 `platformdirs`），在
+  SGLang 0.5.21 旁边和 SGLang main 的版本组合旁边，`pip check` 都报告没有依赖
+  问题（2026-10-14 与 2026-10-15 核对）。认证只对已认证的参考版本 `tokenizers`
+  0.22.2、0.23.2 与 0.23.3 成立，两个 0.23 版本需要与 5.19 一系的 `transformers`
+  加载器同装，本机安装的 `tokenizers` 不在该集合内时走参考路由。Rust crate 方面，
+  所有第三方依赖改为 caret 边（此前多数为精确钉版；`Cargo.lock` 不变）；快速 CPU
+  引擎按源码身份准入，除 `Reference` 外的所有策略都放行，因此用别的 rustc 或
+  feature 配方构建的版本也会运行它，并标为 `supported_untested`；`rust-version`
+  降到 1.89，评审用的工具链仍是 1.93.1；Python 门面遵循同一规则；参考库版本不在
+  认证集合内时，CPU 路由上只加标签，GPU 路由则保持要求认证构建；
+  `Runtime::family_for_sha256` 可根据 `tokenizer.json` 的摘要给出随包的 family。
+  预编译 GPU 交付在 `sm_80`、`sm_89` 与 `sm_120` 上认证；本版不认证 `sm_90`
+  （fatbin 仍带它的镜像并标为 experimental，计划在 0.3.1 认证）。由于原生分块
+  编码器编进了修正版 CPU 引擎，三个源码身份（精确形式与版本规范化形式）全部
+  移动，roster 已按新身份重新认证；工件与能力 id 不变。0.2.9 写下的持久 session
+  store 在 0.3.0 打开时会被拒绝并报 `SESSION_STATE_MISMATCH`，0.2.9 同样拒绝
+  0.3.0 写的 store：请将 `store=` 指向新目录并重放 transcript。store 格式与工件
+  取件清单不变，所以 0.2.9 的工件缓存可以直接给 0.3.0 用，离线也一样。在安装的
+  `tokenizers` 与 `transformers` 版本相同时，所有随包工件上返回的 id 都不变
+  （`qwen3_5_08b` 搭配 `transformers` 5.x 加载器时跟随该加载器，并报
+  `R_LOADER_FACE_MISMATCH`）。`doctor --json` 新增三个顶层键和一个 `family`
+  键，原因码命名空间新增 `R_CHUNK_NO_CUT`、`R_CHUNK_FAMILY_UNSUPPORTED`、
+  `R_CHUNK_ROUTE_NOT_FAST_CPU` 与 `R_LOADER_FACE_MISMATCH`，`explain()` 新增
+  `chunked` 块和 loader 面摘要。与 0.2.9 在同一台机器上的 A/B 对比中，两侧接口的
+  编码、会话、服务与 GPU 计时都在几个百分点以内，即本版没有新增的路径并没有变快；
+  `Runtime::doctor()` 为报告新事实多花约 0.6 到 0.8 微秒。分块并行路径、CPU 进程
+  池与 SGLang 适配器见 Delta Tokenizer 论文（arXiv:2610.19801）；系统本身仍引用
+  TokTier（arXiv:2607.29678）。详见
+  [v0.3.0 发布说明](docs/releases/v0.3.0.md)（英文）。
 - **2026.10.14** 📄 论文 [*Delta Tokenizer: Reference-Identical Tokenization
   of Session Deltas and Segment-Parallelism for Long Prompts on Multicore
   CPUs*](https://arxiv.org/abs/2610.19801) 上线 arXiv。

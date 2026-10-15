@@ -125,6 +125,10 @@ pub(crate) const FILES: &[(&str, &[u8])] = &[
         packaged!("src/toktier/repair/tables/repair_pclass.v1.zlib"),
     ),
     (
+        "src/toktier/routing/tables/chunked_admission.v1.json",
+        packaged!("src/toktier/routing/tables/chunked_admission.v1.json"),
+    ),
+    (
         "src/toktier/routing/tables/support_registry.v1.json",
         packaged!("src/toktier/routing/tables/support_registry.v1.json"),
     ),

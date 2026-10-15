@@ -52,6 +52,7 @@ FILES = (
     "src/toktier/kernels/tables/pretok_classes_o200k.v4.npy",
     "src/toktier/repair/tables/fast_repair_families.v1.json",
     "src/toktier/repair/tables/repair_pclass.v1.zlib",
+    "src/toktier/routing/tables/chunked_admission.v1.json",
     "src/toktier/routing/tables/support_registry.v1.json",
 )
 #: Sources copied under a different packaged name. The lockfile is the

@@ -247,6 +247,19 @@ fn main() {
     let support_sha256 = hex(&Sha256::digest(
         fs::read(&support_registry).expect("read shipped support registry"),
     ));
+    // The chunked admission table is regenerated whenever the native
+    // engine's identity moves, so its digest is read here rather than
+    // written by hand beside the payload, the way the support registry's
+    // is.
+    let chunked_admission = if workspace_mode {
+        root.join("src/toktier/routing/tables/chunked_admission.v1.json")
+    } else {
+        manifest.join("data/src/toktier/routing/tables/chunked_admission.v1.json")
+    };
+    println!("cargo:rerun-if-changed={}", chunked_admission.display());
+    let chunked_admission_sha256 = hex(&Sha256::digest(
+        fs::read(&chunked_admission).expect("read shipped chunked admission table"),
+    ));
 
     let rustc = env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
     let rustc_version = Command::new(rustc)
@@ -310,4 +323,5 @@ fn main() {
         native_host_source
     );
     println!("cargo:rustc-env=TOKTIER_SUPPORT_REGISTRY_SHA256={support_sha256}");
+    println!("cargo:rustc-env=TOKTIER_CHUNKED_ADMISSION_SHA256={chunked_admission_sha256}");
 }

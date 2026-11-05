@@ -20,6 +20,7 @@ audit records behind this document and does not ship inside the package.
 |---|---|
 | `certified` | Evidence on file for this artifact and this backend, with the backend identified by a binary digest. The prebuilt GPU kernel delivery in this release is in this state on its judged architectures (sm_80, sm_89 and sm_120); sm_90 is not certified in this release. |
 | `certified_source` | Evidence binds source identity rather than one platform-specific binary, and records the build flags and toolchain it was taken with. The integrated corrected-Gigatoken CPU engine and the locally compiled GPU JIT use this state; each also binds its backend-specific inputs. Since 0.3.0 the CPU engine's flags and toolchain are reported, not required: a build from the bound sources with another compiler runs and is labelled `supported_untested`. |
+| `examined` | Runnable, not certified. The artifact's pipeline capability is the one a certified family holds and its added-token table no campaign has judged, so no reading covers it. It has a family id and is fetchable like the others; the fast CPU engine runs it under the default `SUPPORTED` policy, labelled `supported_untested` with the reason `R_UNCERTIFIED_ARTIFACT` (cause `examined_not_certified`) in `explain()["supported_untested"]`, and `CERTIFIED` refuses it with that reason. No GPU route is offered. The one examined artifact in this package is described [below](#runnable-not-certified-the-deepseek-v41-flash-tokenizer). |
 | `reference-only` | No accelerated route is offered. The reference implementation runs and the reason is reported by `explain()`. This is also the state when the installed reference version differs from the certified one. |
 | `experimental` | Available only by explicit opt-in; no certified exact-ID claim attaches to the admission itself. Fastokens is exposed only in this state; what is known about the installed Fastokens engine is reported separately as `engine_assurance` (see [Pinned Fastokens distribution](#pinned-fastokens-distribution-toktier-fastokens)). |
 | `unsupported` | The named engine is known not to load or represent this artifact and is never planned. |
@@ -29,7 +30,7 @@ Statuses are recorded per artifact **and** per backend: a family can be
 registry keeps both.
 
 Two axes meet in this table and are easy to read as one. `certified`,
-`certified_source` and `reference-only` say **what evidence exists** for a
+`certified_source`, `examined` and `reference-only` say **what evidence exists** for a
 route. `experimental` says **what a policy may admit without it**: it is not
 a fourth evidence grade but the label an explicitly opted-in route carries,
 and every result taken that way is labelled too. `unsupported` is the
@@ -320,10 +321,14 @@ added-token block is contiguous and complete.
 ## Availability in this package
 
 Recorded differential evidence and package availability are separate facts,
-and for three rows the two currently differ. The artifact manifest shipped inside the package is
+and for four rows the two currently differ. The artifact manifest shipped inside the package is
 generated from the differential-campaign registry
-(`tables/support_registry.json`) and therefore carries exactly its 15
-families. The three WordPiece families have
+(`tables/support_registry.json`) and carries its 15
+families, plus one examined family that the registry does not certify,
+`deepseek_v4_1_flash`, listed in the examined-artifact table
+(`src/toktier/routing/tables/examined_artifacts.v1.json`) and described
+[below](#runnable-not-certified-the-deepseek-v41-flash-tokenizer): 16 packaged
+artifacts, 15 of them certified. The three WordPiece families have
 boundary-predicate evidence, a second evidence family that has not been wired into
 the shipped registry yet, so no packaged artifact identity exists for them:
 `toktier artifacts fetch` and `toktier.load()` report `ARTIFACT_NOT_FOUND`
@@ -659,10 +664,11 @@ snapshot](#repositories-admitted-after-the-snapshot).
 | `deepseek-ai/DeepSeek-V4-Pro-DSpark` | `7c09739fd136` | `8f9f37ca37fd` | identical |
 | `deepseek-ai/DeepSeek-V4-Pro-0813` &dagger; | `72e1d3230f6c` | `8f9f37ca37fd` | identical |
 
-`deepseek-ai/DeepSeek-V4.1-Flash` and
-`deepseek-ai/DeepSeek-V4-Flash-Vision-Exp` are not among these seven.
-They ship a different tokenizer file, recorded under
-[Examined and not certified: the DeepSeek-V4.1-Flash tokenizer](#examined-and-not-certified-the-deepseek-v41-flash-tokenizer).
+`deepseek-ai/DeepSeek-V4.1-Flash`,
+`deepseek-ai/DeepSeek-V4-Flash-Vision-Exp` and
+`deepseek-ai/DeepSeek-V4.1-Flash-1017` are not among these seven.
+They ship a different tokenizer file, which runs but is not certified, recorded under
+[Runnable, not certified: the DeepSeek-V4.1-Flash tokenizer](#runnable-not-certified-the-deepseek-v41-flash-tokenizer).
 
 #### `gpt_oss_120b` (3 repositories)
 
@@ -982,15 +988,65 @@ declares no added tokens of its own, so the boundary recorded under
 [Configuration-only added tokens](#configuration-only-added-tokens) does not
 arise for this artifact.
 
-### Examined and not certified: the DeepSeek-V4.1-Flash tokenizer
+### Runnable, not certified: the DeepSeek-V4.1-Flash tokenizer
 
 | Repository | Revision | `tokenizer.json` sha256 | Size | Nearest certified family | Basis | Examined on |
 |---|---|---|---|---|---|---|
 | `deepseek-ai/DeepSeek-V4.1-Flash` | `dba1be0a40aa` | `c90dfa01249d` | 6,367,257 | `deepseek_v4_flash` | same pipeline, different added-token table | 2026-09-20 |
 | `deepseek-ai/DeepSeek-V4-Flash-Vision-Exp` | `6821d6ad3681` | `c90dfa01249d` | 6,367,257 | `deepseek_v4_flash` | identical to the row above | 2026-09-20 |
+| `deepseek-ai/DeepSeek-V4.1-Flash-1017` | `1bae0e108899` | `c90dfa01249d` | 6,367,257 | `deepseek_v4_flash` | identical to the rows above | 2026-11-04 |
 
-The two repositories ship the same tokenizer file, so one examination
-covers both, and so does everything below.
+The three repositories ship the same tokenizer file, and their
+`tokenizer_config.json` files are byte-identical too, so one examination
+covers all three, and so does everything below. `DeepSeek-V4.1-Flash`
+carried the same bytes at `5254448103b6` and at `314113f8a7da` as well.
+
+How it runs. The artifact has the family id `deepseek_v4_1_flash` and
+status `examined`. The package pins it at
+`deepseek-ai/DeepSeek-V4.1-Flash-1017@1bae0e1088993b9b82de08f59de5be5a34e42170`
+(`config.json`, `tokenizer.json`, `tokenizer_config.json`), so
+`toktier.load("deepseek_v4_1_flash")` and
+`from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash-1017")` fetch and verify
+those bytes. `from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash")` and
+`from_pretrained("deepseek-ai/DeepSeek-V4-Flash-Vision-Exp")` read the
+repository's `tokenizer.json` at `main`, find the pinned digest, and resolve
+by content to the same family (`model_resolution.basis` reads
+`exact_anchor`); a revision whose bytes differ matches nothing and stays on
+the reference route. On the Rust face, `Runtime::load("deepseek_v4_1_flash")`
+and `Runtime::from_pretrained` on the `-1017` repository at the pinned commit
+reach it; the other two repositories have no row in the verified-sibling
+table, which records siblings of certified anchors only, so a Rust caller
+names the family.
+
+Under the default `SUPPORTED` policy the corrected CPU engine runs it, for
+full encodes and for session repair, with the repair parameters the
+maintainer exporter derives for this artifact (margin 36, effective maximum
+token length 128, normalizer present). `explain()` reports
+`certification.state: supported_untested`, `identity: examined`, no
+evidence id and no certified family, and names under
+`certification.examined` the certified families whose pipeline it shares,
+the examination readings, and the evidence certification still needs; the
+coverage note in `explain()["supported_untested"]` is
+`R_UNCERTIFIED_ARTIFACT` with cause `examined_not_certified`. Every binding
+the route depends on still verifies as it does for a certified artifact:
+the engine's source identity and repair configuration against the fast CPU
+entry of the certified `deepseek_v3` and `deepseek_v4_flash` records, the
+installed `tokenizers` against the certified reference versions, and the
+materialized loader face against this artifact's own. `policy="certified"`
+refuses the route with `R_UNCERTIFIED_ARTIFACT` and runs the reference
+engine. No GPU route is offered for it, under any policy short of
+`experimental`. `toktier.chunked` encodes it serially: it has no row in the
+chunked admission table. `toktier doctor --family deepseek_v4_1_flash` and
+`toktier inspect deepseek_v4_1_flash` name the status too.
+
+The repair parameters are not part of the fast CPU engine's bound source
+set: they live in the examined-artifact table rather than in the certified
+repair roster, which keeps its eleven rows and its digest. So the three
+source identities of the Python wheel, the corrected engine's included, are
+the ones the certified routes were judged on, and adding this artifact did
+not move them. The Rust crate embeds the table and pins its digest, so its
+own source identity does move; see `docs/rust-api.md` for what that means
+for a build from the repository.
 
 What was established. The file carries the vocabulary (128,000 entries),
 the merge table (127,741 rows) and the normalizer, pre-tokenizer,
@@ -1001,34 +1057,28 @@ and nine of them carry different literals. One placeholder becomes
 and six table-markup literals and `<｜image｜>` become placeholder names;
 the first of the nine also changes its `special` and `normalized` flags.
 The `tokenizer_config.json` is byte-identical to the anchor's and
-declares no added tokens of its own, so the loader face carries
-exactly the file's added tokens. On 100,000 documents of web text, multilingual paragraphs and
+declares no added tokens of its own, so the loader face is the file
+itself. On 100,000 documents of web text, multilingual paragraphs and
 code (218,539,216 characters), toktier's reference route over this file,
 the reference engine over its loader face and the reference engine over
 the certified `deepseek_v4_flash` face returned the same ids on every
 document, and none of the 18 literals that differ between the two
-added-token tables occurs in them.
-
-What follows from that. The pipeline sections are equal, so the two
-artifacts hold the same pipeline capability,
-`pipeline.9f6d5117c3680d0e`. The added-token tables differ, so the
+added-token tables occurs in them. The pipeline sections are equal, so
+the two artifacts hold the same pipeline capability,
+`pipeline.9f6d5117c3680d0e`; the added-token tables differ, so the
 added-token capability is a new one, `added-frontend.b5b5d7ad62c0371f`,
-and no reading in this release covers it. The tokenizer loads and runs
-through the reference engine under any policy that permits it, and an
-accelerated route is refused with `R_UNCERTIFIED_ARTIFACT` wherever an
-accelerated backend is installed to be assessed. `toktier.chunked` does
-not admit it either: it has no repair-roster entry, so a chunked encode
-runs serially under `R_CHUNK_FAMILY_UNSUPPORTED`. There is no family id
-for it in this release; `from_pretrained` reaches it by content.
+and no reading in this release covers it.
 
-Why it is not certified yet. The evidence is close: same pipeline, a
-small and enumerable set of differing literals, and a clean differential
-on the sample above. Two pieces are missing. The registry can record a
-carry-over within one artifact but not yet from one artifact to
+Why it is not certified yet. Two pieces are missing, and the
+examined-artifact table names both (`missing_evidence`). The registry can
+record a carry-over within one artifact but not yet from one artifact to
 another, the two optional fields for that shape having been removed in
-0.2.9 because no registry carried them. And the 18 literals have not yet
-been scanned for over the full certification corpus the carried readings
-were taken on. Both are registered for a later release.
+0.2.9 because no registry carried them (`cross_artifact_carryover_record`).
+And no absence certificate for the 18 literals over the full certification
+corpus the carried readings were taken on is on record
+(`corpus_absence_certificate`). Both are registered for a later release;
+when they land, the artifact joins the support registry and leaves the
+examined table, and its label becomes the certified one.
 
 The repository also ships `encoding/encoding.py`. It is a prompt-format
 reference written against the Python standard library alone: it builds
@@ -1114,6 +1164,12 @@ registry.
 A new family needs a certification campaign: splitter pattern table, boundary
 predicate check, differential fuzzing, replay campaigns, and — where the
 pre-tokenizer structure matches an existing kernel group — GPU kernel support.
+An artifact whose pipeline capability is already certified and whose
+added-token table is not can be made runnable before that campaign, as an
+`examined` artifact (Status vocabulary above): it gets a family id, a pinned
+manifest entry and its own repair parameters, runs on the fast CPU engine
+labelled `supported_untested`, and is certified only when its own evidence
+lands.
 Families under reconnaissance are listed in [`../ROADMAP.md`](../ROADMAP.md).
 
 <!--

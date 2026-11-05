@@ -416,6 +416,78 @@ data, and every fallback counter.
 
 ## Rust serving API
 
+### DeepSeek-V4.1-Flash-1017 from `main`: the shortest path
+
+`deepseek-ai/DeepSeek-V4.1-Flash-1017` (and `DeepSeek-V4.1-Flash` and
+`DeepSeek-V4-Flash-Vision-Exp`, which ship the same `tokenizer.json`) runs on
+`main` as the family `deepseek_v4_1_flash`. It is **examined, not
+certified**: its pipeline is the certified `deepseek_v4_flash` one and its
+added-token table is not one a campaign has judged
+([support matrix](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/support-matrix.md#runnable-not-certified-the-deepseek-v41-flash-tokenizer)).
+No crates.io release carries it yet, so take the crate from GitHub `main`;
+once a release carries the family, switch the line back to a version number.
+
+```toml
+[dependencies]
+toktier = { git = "https://github.com/asu-idi/toktier", branch = "main", features = ["network"] }
+```
+
+```rust
+use toktier::{Device, Policy, Revision, Runtime};
+
+fn main() -> toktier::Result<()> {
+    // A git dependency is not a judged build, so the fast CPU route is
+    // admitted under Policy::Experimental; the artifact is examined, not
+    // certified, either way.
+    let runtime = Runtime::builder()
+        .device(Device::Cpu)
+        .policy(Policy::Experimental)
+        .build()?;
+
+    // Pinned in the shipped manifest: deepseek-ai/DeepSeek-V4.1-Flash-1017
+    // @ 1bae0e1088993b9b82de08f59de5be5a34e42170, tokenizer.json sha256
+    // c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b.
+    // `runtime.load("deepseek_v4_1_flash")` reaches the same bytes.
+    let tokenizer = runtime.from_pretrained(
+        "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+        Revision::commit("1bae0e1088993b9b82de08f59de5be5a34e42170")?,
+    )?;
+
+    // The label and the reason, read from the route plan.
+    let plan = tokenizer.plan();
+    println!("{:?} {:?} {:?}", plan.backends, plan.certification, plan.reasons);
+    // [FastCpu, HuggingFace] Experimental [ExaminedArtifact]
+
+    let turn = "<｜User｜>Summarize the design of a tokenizer cache.<｜Assistant｜>\
+                A tokenizer cache keeps the token ids of the conversation so far. ";
+    let history = format!("<｜begin▁of▁sentence｜>You are a helpful assistant.{}", turn.repeat(40));
+    let delta = "<｜User｜>And what does it store per session?<｜Assistant｜>";
+
+    let mut session = tokenizer.open_session("agent-42")?;
+    let mut ids: Vec<u32> = session.seed(&history)?.ids().to_vec(); // your own ID buffer
+    let patch = session.append(delta)?; // repairs the tail only
+    ids.truncate(patch.keep_tokens() as usize);
+    ids.extend_from_slice(patch.replacement_ids());
+    println!("kept {} ids, appended {}", patch.keep_tokens(), patch.replacement_ids().len());
+    Ok(())
+}
+```
+
+The `network` feature fetches the pinned files over TLS; for a mirror or an
+offline cache, see [`docs/rust-lifecycle.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/rust-lifecycle.md).
+`append` returns a `TokenPatch` and does not materialize the complete
+history: `keep_tokens()` is where the downstream buffer is cut,
+`replacement_ids()` is the exact repaired suffix. The label is read from
+`plan()`: `certification` reads `Experimental` for a `git` dependency, which
+is not a judged build, and `Supported` on a judged build, and
+`reasons` carries `ExaminedArtifact` on either; `Policy::Certified` refuses
+the fast route for this family. Its certification is registered for a later
+release. The Python facade is not the serving path:
+`toktier.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash-1017")` loads the
+same artifact on the same CPU route for evaluation.
+
+### The serving facade
+
 The workspace includes a Python-free Rust serving facade for frontends that
 retain token state directly. It exposes:
 
@@ -801,7 +873,8 @@ records the one artifact whose two faces differ as documents and the
 carry-over evidence.
 
 Four different counts appear in this document, and each answers a different
-question: **15 packaged artifacts** (what `toktier inspect` lists), **15+3
+question: **16 packaged artifacts** (what `toktier inspect` lists: the 15
+certified ones and one examined, not certified, `deepseek_v4_1_flash`), **15+3
 model families** (byte-level BPE plus WordPiece, since families can share an
 artifact), **11 artifacts with a certified CPU fast path** (12 families by
 exact-artifact inheritance), and **215 registry rows** (214 audited sibling

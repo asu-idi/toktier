@@ -345,6 +345,76 @@ fallback 的计数。
 
 ## Rust serving API
 
+### 从 `main` 跑 DeepSeek-V4.1-Flash-1017：最短路径
+
+`deepseek-ai/DeepSeek-V4.1-Flash-1017`（以及 `DeepSeek-V4.1-Flash`、
+`DeepSeek-V4-Flash-Vision-Exp`，三者的 `tokenizer.json` 逐字节相同）在 `main`
+上以 family `deepseek_v4_1_flash` 运行。它的状态是**已检视、未认证**
+（`examined`）：pipeline 与已认证的 `deepseek_v4_flash` 相同，added-token 表
+尚未经过任何认证 campaign 的判定
+（[支持矩阵](docs/support-matrix.md#runnable-not-certified-the-deepseek-v41-flash-tokenizer)）。
+crates.io 上的发布版还没有这个 family，所以请从 GitHub `main` 取 crate；
+等发布版收录后，把这一行改回版本号即可。
+
+```toml
+[dependencies]
+toktier = { git = "https://github.com/asu-idi/toktier", branch = "main", features = ["network"] }
+```
+
+```rust
+use toktier::{Device, Policy, Revision, Runtime};
+
+fn main() -> toktier::Result<()> {
+    // A git dependency is not a judged build, so the fast CPU route is
+    // admitted under Policy::Experimental; the artifact is examined, not
+    // certified, either way.
+    let runtime = Runtime::builder()
+        .device(Device::Cpu)
+        .policy(Policy::Experimental)
+        .build()?;
+
+    // Pinned in the shipped manifest: deepseek-ai/DeepSeek-V4.1-Flash-1017
+    // @ 1bae0e1088993b9b82de08f59de5be5a34e42170, tokenizer.json sha256
+    // c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b.
+    // `runtime.load("deepseek_v4_1_flash")` reaches the same bytes.
+    let tokenizer = runtime.from_pretrained(
+        "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+        Revision::commit("1bae0e1088993b9b82de08f59de5be5a34e42170")?,
+    )?;
+
+    // The label and the reason, read from the route plan.
+    let plan = tokenizer.plan();
+    println!("{:?} {:?} {:?}", plan.backends, plan.certification, plan.reasons);
+    // [FastCpu, HuggingFace] Experimental [ExaminedArtifact]
+
+    let turn = "<｜User｜>Summarize the design of a tokenizer cache.<｜Assistant｜>\
+                A tokenizer cache keeps the token ids of the conversation so far. ";
+    let history = format!("<｜begin▁of▁sentence｜>You are a helpful assistant.{}", turn.repeat(40));
+    let delta = "<｜User｜>And what does it store per session?<｜Assistant｜>";
+
+    let mut session = tokenizer.open_session("agent-42")?;
+    let mut ids: Vec<u32> = session.seed(&history)?.ids().to_vec(); // your own ID buffer
+    let patch = session.append(delta)?; // repairs the tail only
+    ids.truncate(patch.keep_tokens() as usize);
+    ids.extend_from_slice(patch.replacement_ids());
+    println!("kept {} ids, appended {}", patch.keep_tokens(), patch.replacement_ids().len());
+    Ok(())
+}
+```
+
+`network` feature 通过 TLS 获取钉住的文件；镜像或离线缓存的取法见
+[`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)。`append` 返回
+`TokenPatch`，不会物化完整历史：`keep_tokens()` 是下游缓冲区的截断位置，
+`replacement_ids()` 是 repair 后的精确后缀。标签从 `plan()` 读取：
+`git` 依赖不是经过判定的构建，`certification` 读作 `Experimental`，在经过判定的
+构建上读作 `Supported`；两种情况下 `reasons` 里都有 `ExaminedArtifact`。
+`Policy::Certified` 对这个 family 拒绝快路径。它的认证登记安排在后续版本。
+Python 门面不是服务路径：
+`toktier.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash-1017")` 以同一条 CPU
+路径加载同一个工件，用于评估。
+
+### serving facade
+
 工作区（Cargo workspace）提供无需 Python 的 Rust serving facade，供需要直接
 保留 token 状态的前端使用。它提供：
 
@@ -673,8 +743,9 @@ pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
 唯一工件与延续证据记录在
 [`docs/support-matrix.md`](docs/support-matrix.md#configuration-only-added-tokens)。
 
-本文档中出现了四类计数，各自回答不同的问题：**15 个随包工件**（`toktier
-inspect` 列出的那些）、**15+3 个 model family**（byte-level BPE 加
+本文档中出现了四类计数，各自回答不同的问题：**16 个随包工件**（`toktier
+inspect` 列出的那些：15 个已认证工件，加 1 个已检视、未认证的
+`deepseek_v4_1_flash`）、**15+3 个 model family**（byte-level BPE 加
 WordPiece；不同 family 可以共用同一工件）、**11 个具备 CPU 快路径认证的
 工件**（按精确工件继承覆盖 12 个 family），以及**注册表 215 条**（214 个
 已审计 sibling 仓库加 1 个 canonical 自指条目）。如果某个数字看起来与另一个

@@ -623,6 +623,24 @@ label it would have had if nobody had run one -- running the tool never
 makes a configuration more restricted than not running it, and nothing
 is changed on the caller's behalf.
 
+### Examined artifacts
+
+An examined artifact (`docs/support-matrix.md`, Status vocabulary) is
+pinned in the shipped artifact manifest and listed in the embedded
+examined-artifact table, never in the support registry. `Runtime::load`
+fetches and verifies it like any other family. Its plan always records
+`ReasonCode::ExaminedArtifact`. The fast CPU route is admitted against the
+engine binding of a certified support row holding the same pipeline
+capability, with the artifact's own repair parameters, and is labelled
+`Certification::Supported` on any build, judged or not, since no reading
+covers the artifact; `Policy::Certified` refuses it (`CpuUncertified`
+beside `ExaminedArtifact`), and no GPU route is offered. On a build whose
+own sources are not in the `runtime_builds` register -- a `git` or path
+dependency on `main` is one -- every accelerated route already needs
+`Policy::Experimental`, and the plan's label is then `Experimental`. The
+crate embeds the table and pins its digest, so adding or removing a row
+moves this crate's own source identity, and only that one.
+
 ### `RoutePlan` on the Rust surface
 
 `Tokenizer::plan()` returns the immutable route the tokenizer was

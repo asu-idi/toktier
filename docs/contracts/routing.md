@@ -133,7 +133,7 @@ that may accompany them is not a machine interface.
 | Code | Meaning |
 |---|---|
 | `R_POLICY_REFERENCE` | Policy is `REFERENCE`; accelerated options were not considered. |
-| `R_UNCERTIFIED_ARTIFACT` | The artifact has no eligible registry identity (exact or capability composition) for this backend. |
+| `R_UNCERTIFIED_ARTIFACT` | The artifact has no eligible registry identity (exact or capability composition) for this backend. For an examined artifact (`docs/support-matrix.md`, Status vocabulary) the detail's `cause` is `examined_not_certified`: under `CERTIFIED` it is a refusal, and under `SUPPORTED` the same entry is the coverage note the admitted fast CPU route carries in `explain()["supported_untested"]`. |
 | `R_ORACLE_MISMATCH` | Installed oracle version is outside the certified set for this record; acceleration is off, the installed reference still runs (reference-only state). |
 | `R_BACKEND_UNAVAILABLE` | Required backend package/extra is not importable (for example the GPU extra without torch). |
 | `R_GPU_DISABLED` | GPU use disabled by configuration (`TOKTIER_DISABLE_GPU` or config field). |
@@ -214,12 +214,13 @@ this, and it is append-only on the same terms as Section 5.4:
 | `RuntimeBuildUncertified` | This build's own source identity is not in the shipped `runtime_builds` register, or one of this project's own crates resolves from another copy or version than the judged one (`core_closure: mismatched`), so no accelerated route is admitted whatever the artifact is. Since 0.3.0 neither a rustc or feature recipe no campaign judged nor a reference library outside its certified reference versions is recorded here under any policy: a build from judged sources admits the fast CPU route and labels it `Supported`, with `reference_certification_reason: uncertified_reference` in `doctor` for the second case. There is no Python code for it: the Python facade does not certify a Rust build. |
 | `GpuUnavailable` | A GPU route was wanted and the runtime could not offer one here: no `prebuilt-gpu` feature in this build, or the GPU runtime failed to open on this machine. The nearest Python codes are `R_BACKEND_UNAVAILABLE` and `R_GPU_DISABLED`. |
 | `GpuUncertified` | A GPU route was wanted, and either this build is not certified for one or the artifact has no eligible GPU identity. The nearest Python codes are `R_UNCERTIFIED_ARTIFACT` and `R_SM_UNCERTIFIED`. |
+| `ExaminedArtifact` | The artifact is an examined one rather than a certified one: its pipeline capability is the one a certified family holds and its added-token table no campaign has judged (`docs/support-matrix.md`, Status vocabulary). Recorded whenever such an artifact is planned. Where the fast CPU route is admitted it runs with the artifact's own repair parameters and is labelled `Supported` (or `Experimental` under that policy); under `Policy::Certified` it stands beside `CpuUncertified`. The nearest Python code is `R_UNCERTIFIED_ARTIFACT` with cause `examined_not_certified`. Added after 0.3.0. |
 | `CpuUncertified` | The fast CPU route was refused: the artifact has no certified repair row, or the engine's status, artifact or source binding does not match the registry. Since 0.3.0 the compiler is not part of this refusal; a compiler no campaign used decides the route's label, not its admission. Under `Policy::Experimental` the source binding is not part of it either (since 0.3.0), as the Python facade's experimental policy waives `R_ENGINE_BINDING_MISMATCH`, and the route is labelled experimental. The nearest Python code is `R_ENGINE_BINDING_MISMATCH`. |
 
-One of the five has no Python counterpart at all, which is why the set is
+One of the six has no Python counterpart at all, which is why the set is
 named here rather than folded into Section 5.1: a Rust build certifies
 its own compiled closure, and the Python facade has no such premise, so
-`RuntimeBuildUncertified` has nothing to point at. The other four are
+`RuntimeBuildUncertified` has nothing to point at. The other five are
 named here as well because they are recorded through a different surface
 -- `RoutePlan::reasons` rather than an `R_*` string -- not because the
 condition itself is unknown on the Python side. A

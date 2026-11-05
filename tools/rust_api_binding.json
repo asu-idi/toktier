@@ -1,7 +1,7 @@
 {
   "runtime": "rust_api",
-  "source_digest": "ca80ac46737f5976a28a80402e1ffe599f14dc535d7c7789852d785cbfcd8f6a",
-  "source_digest_v2": "aca573e37ea56e79ea299142159c41d158b67b7728eff710f3640ab3429be5f8",
+  "source_digest": "474f91cf321b988ed76b42cb422c901140e69b96bf34ebffd71cea0e66cd2e34",
+  "source_digest_v2": "a9427145ca0e61c61444777ee559cd5b871f944c1154d1942ac49516328435fb",
   "build_flags": [
     "profile=release",
     "opt-level=3",

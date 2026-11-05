@@ -46,6 +46,14 @@ MATRIX_READINGS = {
 #: Families every venue matrix has to cover, and the documents that follows
 #: from the seven fixed cases each family is asked. A matrix that answers for
 #: fewer families is a hole, not a smaller campaign.
+#:
+#: The roster is the certified artifact records of the support registry,
+#: one row per family (see :func:`certified_roster`). The matrix is the
+#: evidence that records a Rust build in ``runtime_builds``, so it speaks
+#: only for artifacts some campaign has judged: an examined artifact
+#: (``src/toktier/routing/tables/examined_artifacts.v1.json``) is never in
+#: the registry and is therefore not a row of the matrix, and a reading that
+#: carries one does not match the roster.
 MATRIX_FAMILIES = 15
 MATRIX_DOCUMENTS = MATRIX_FAMILIES * 7
 
@@ -160,7 +168,28 @@ def verify_shared_evidence(binding: dict[str, Any]) -> None:
             raise GenerationError(f"{architecture} native-host v2 identity drifted")
 
 
-def verify_public_matrix(binding: dict[str, Any], *, bootstrap: bool) -> None:
+def certified_roster(registry: dict[str, Any]) -> set[str]:
+    """The families of the registry's certified artifact records.
+
+    Examined artifacts live in their own table and never in the registry
+    (``docs/contracts/registry.md`` Section 3.0), so this set leaves them
+    out by construction.
+    """
+    return {
+        str(raw["family"])
+        for raw in registry.get("artifacts", [])
+        if isinstance(raw, dict) and "family" in raw
+    }
+
+
+def verify_public_matrix(
+    binding: dict[str, Any], *, bootstrap: bool, roster: set[str]
+) -> None:
+    if len(roster) != MATRIX_FAMILIES:
+        raise GenerationError(
+            f"support registry certifies {len(roster)} artifacts; the Rust API "
+            f"matrix roster is {MATRIX_FAMILIES}"
+        )
     for target, path in MATRIX_READINGS.items():
         reading = _mapping(load_json(path), label=f"Rust API {target} matrix")
         if (
@@ -185,6 +214,15 @@ def verify_public_matrix(binding: dict[str, Any], *, bootstrap: bool) -> None:
         if not isinstance(rows, list) or len(rows) != MATRIX_FAMILIES:
             raise GenerationError(
                 f"Rust API {target} matrix has an incomplete family roster"
+            )
+        families = [str(row.get("family")) for row in rows if isinstance(row, dict)]
+        if len(families) != len(rows) or set(families) != roster or len(
+            set(families)
+        ) != len(families):
+            raise GenerationError(
+                f"Rust API {target} matrix roster is not the certified artifact "
+                f"roster (outside it: {sorted(set(families) - roster)}, "
+                f"missing: {sorted(roster - set(families))})"
             )
         backend_counts: dict[str, int] = {}
         for row in rows:
@@ -263,7 +301,9 @@ def augmented_document(
         include_v2 = _records_v2(registry)
     verify_binding(binding)
     verify_shared_evidence(binding)
-    verify_public_matrix(binding, bootstrap=bootstrap)
+    verify_public_matrix(
+        binding, bootstrap=bootstrap, roster=certified_roster(registry)
+    )
     verify_additional_builds(binding, bootstrap=bootstrap)
     completed = copy.deepcopy(registry)
     common = {

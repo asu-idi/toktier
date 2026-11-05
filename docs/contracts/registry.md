@@ -111,6 +111,17 @@ whose sources do not verify, which falls back to HF under every policy but
 `UNCERTIFIED_RUNTIME`. The GPU route keeps the judged-recipe requirement
 (see `docs/rust-api.md`).
 
+The evidence that enters a build into `runtime_builds` is the Rust API
+matrix (`tools/update_rust_api_registry.py`): the public facade, built with
+the recorded flags and toolchain, encodes a fixed case set for every family
+at each venue (CPU, `sm_89`, `sm_120`) and compares the IDs with the
+reference engine. Its roster is the certified artifact records of this
+registry, one row per family. An examined artifact (Section 3.0) is not a
+row: the matrix speaks for the artifacts a campaign has judged, and a
+reading that names any other family, or leaves a certified one out, does not
+admit the build. Any change to the Rust API source set moves its identity,
+and the binding is re-recorded on a new matrix taken from that tree.
+
 ### 1.2 The dependency graph the runtime build compiles (added in 0.2.6)
 
 Added in 0.2.4, narrowed in 0.2.6 and narrowed again in 0.3.0; the frozen
@@ -287,7 +298,8 @@ admits the route labelled `supported_untested`, `CERTIFIED` refuses it
 with `R_UNCERTIFIED_ARTIFACT` (cause `examined_not_certified`), and no
 GPU route is offered. The table's repair parameters sit outside the fast
 CPU engine's bound source set, and adding a row moves none of the three
-source identities but the Rust API's, which embeds the table. A row leaves
+source identities but the Rust API's, which embeds the table; the Rust API
+binding is then re-recorded (Section 1.1). A row leaves
 the table when its artifact is certified and joins this registry.
 
 Driver and CUDA runtime versions are environment facts rather than

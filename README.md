@@ -9,6 +9,20 @@ per-session token state, repairs appended text with a certified CPU path, and
 offers a certified GPU path for fresh or large requests. Both fast paths return token IDs
 **bit-identical to a full Hugging Face (HF) `tokenizers` encode from scratch**.
 
+> **Serve through the Rust API.** The recommended integration is the Rust
+> serving facade ([`toktier` crate](https://crates.io/crates/toktier)):
+> `Session::append` returns a `TokenPatch`, only the repaired suffix, so the
+> cost of a session turn stays flat as the context grows. The Python facade
+> materializes the complete historical ID sequence on every call, and that
+> Python-side work grows with the context and absorbs most of the gain on long
+> sessions. Use Python for evaluation, tooling, and the certification record;
+> put the Rust path on the serving hot path. The same applies to the
+> `fastokens` repair backend (`repair_backend="fastokens"`, experimental
+> policy only): it re-encodes the whole session tail and rebuilds token spans
+> in Python on every append, so it is a comparison and provenance route, not
+> a serving path. See [Rust serving API](#rust-serving-api) and
+> [`docs/rust-api.md`](docs/rust-api.md).
+
 - **Exact, at scale.** The release campaign records **57.0 billion checks**
   across 15 tokenizer artifacts and 3.8 billion real documents
   (12.33 trillion characters), with zero observed divergence.

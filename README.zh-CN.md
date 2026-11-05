@@ -9,6 +9,16 @@ TokTier 是面向智能体 LLM 服务的有状态分词系统。它保留每个�
 认证 GPU 路径。两条快速路径返回的 token ID 序列都与 Hugging Face（HF）
 `tokenizers` 从头完整编码得到的 token ID 序列**完全一致（bit-identical）**。
 
+> **推荐走 Rust 接口接入服务。** 推荐的集成路径是 Rust serving 门面
+> （[`toktier` crate](https://crates.io/crates/toktier)）：`Session::append`
+> 只返回 `TokenPatch`，即修复后的 token 后缀，因此一轮会话的开销不随上下文
+> 增长。Python 门面每次调用都会物化完整的历史 token ID 序列，这部分 Python
+> 侧开销随上下文线性增长，长会话上会吃掉大部分收益。Python 适合评测、工具
+> 与认证记录；服务热路径请用 Rust。`repair_backend="fastokens"`（仅实验策略下
+> 可选）同理：它每次追加都整段重编会话尾部并在 Python 里重建 token 区间，是
+> 对照与溯源路线，不是服务路径。见 [Rust serving API](#rust-serving-api)
+> 与 [`docs/rust-api.md`](docs/rust-api.md)。
+
 - **大规模精确验证。** 发布验证覆盖 15 个 tokenizer 工件、38 亿篇真实文档，
   共记录 **570 亿次检查**（12.33 万亿字符），未观察到任何不一致。
 - **CPU 与 GPU 均有快速路径。** 在已记录的整套基准测试中，GPU 路径处理一个

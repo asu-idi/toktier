@@ -1045,8 +1045,8 @@ repair roster, which keeps its eleven rows and its digest. So the three
 source identities of the Python wheel, the corrected engine's included, are
 the ones the certified routes were judged on, and adding this artifact did
 not move them. The Rust crate embeds the table and pins its digest, so its
-own source identity does move; see `docs/rust-api.md` for what that means
-for a build from the repository.
+own source identity does move, and the binding is re-recorded with each
+change; see `docs/rust-api.md` for a build from the repository.
 
 What was established. The file carries the vocabulary (128,000 entries),
 the merge table (127,741 rows) and the normalizer, pre-tokenizer,

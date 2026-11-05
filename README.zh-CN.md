@@ -365,12 +365,11 @@ toktier = { git = "https://github.com/asu-idi/toktier", branch = "main", feature
 use toktier::{Device, Policy, Revision, Runtime};
 
 fn main() -> toktier::Result<()> {
-    // A git dependency is not a judged build, so the fast CPU route is
-    // admitted under Policy::Experimental; the artifact is examined, not
-    // certified, either way.
+    // Policy::Supported is the default, written out here: the fast CPU
+    // route runs, and the label says the artifact is examined, not certified.
     let runtime = Runtime::builder()
         .device(Device::Cpu)
-        .policy(Policy::Experimental)
+        .policy(Policy::Supported)
         .build()?;
 
     // Pinned in the shipped manifest: deepseek-ai/DeepSeek-V4.1-Flash-1017
@@ -385,7 +384,7 @@ fn main() -> toktier::Result<()> {
     // The label and the reason, read from the route plan.
     let plan = tokenizer.plan();
     println!("{:?} {:?} {:?}", plan.backends, plan.certification, plan.reasons);
-    // [FastCpu, HuggingFace] Experimental [ExaminedArtifact]
+    // [FastCpu, HuggingFace] Supported [ExaminedArtifact]
 
     let turn = "<｜User｜>Summarize the design of a tokenizer cache.<｜Assistant｜>\
                 A tokenizer cache keeps the token ids of the conversation so far. ";
@@ -406,8 +405,7 @@ fn main() -> toktier::Result<()> {
 [`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)。`append` 返回
 `TokenPatch`，不会物化完整历史：`keep_tokens()` 是下游缓冲区的截断位置，
 `replacement_ids()` 是 repair 后的精确后缀。标签从 `plan()` 读取：
-`git` 依赖不是经过判定的构建，`certification` 读作 `Experimental`，在经过判定的
-构建上读作 `Supported`；两种情况下 `reasons` 里都有 `ExaminedArtifact`。
+`certification` 读作 `Supported`，`reasons` 里有 `ExaminedArtifact`。
 `Policy::Certified` 对这个 family 拒绝快路径。它的认证登记安排在后续版本。
 Python 门面不是服务路径：
 `toktier.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash-1017")` 以同一条 CPU

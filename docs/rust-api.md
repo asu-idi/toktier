@@ -634,12 +634,14 @@ engine binding of a certified support row holding the same pipeline
 capability, with the artifact's own repair parameters, and is labelled
 `Certification::Supported` on any build, judged or not, since no reading
 covers the artifact; `Policy::Certified` refuses it (`CpuUncertified`
-beside `ExaminedArtifact`), and no GPU route is offered. On a build whose
-own sources are not in the `runtime_builds` register -- a `git` or path
-dependency on `main` is one -- every accelerated route already needs
-`Policy::Experimental`, and the plan's label is then `Experimental`. The
-crate embeds the table and pins its digest, so adding or removing a row
-moves this crate's own source identity, and only that one.
+beside `ExaminedArtifact`), and no GPU route is offered. A `git` or path
+dependency on `main` plans this route under the default `Policy::Supported`:
+the crate embeds the table and pins its digest, so adding or removing a row
+moves this crate's own source identity, and only that one, and the binding
+in the `runtime_builds` register is re-recorded with each change. On a
+build whose own sources the register does not record, every accelerated
+route needs `Policy::Experimental`, and the plan's label is then
+`Experimental`.
 
 ### `RoutePlan` on the Rust surface
 

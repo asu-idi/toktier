@@ -441,12 +441,11 @@ toktier = { git = "https://github.com/asu-idi/toktier", branch = "main", feature
 use toktier::{Device, Policy, Revision, Runtime};
 
 fn main() -> toktier::Result<()> {
-    // A git dependency is not a judged build, so the fast CPU route is
-    // admitted under Policy::Experimental; the artifact is examined, not
-    // certified, either way.
+    // Policy::Supported is the default, written out here: the fast CPU
+    // route runs, and the label says the artifact is examined, not certified.
     let runtime = Runtime::builder()
         .device(Device::Cpu)
-        .policy(Policy::Experimental)
+        .policy(Policy::Supported)
         .build()?;
 
     // Pinned in the shipped manifest: deepseek-ai/DeepSeek-V4.1-Flash-1017
@@ -461,7 +460,7 @@ fn main() -> toktier::Result<()> {
     // The label and the reason, read from the route plan.
     let plan = tokenizer.plan();
     println!("{:?} {:?} {:?}", plan.backends, plan.certification, plan.reasons);
-    // [FastCpu, HuggingFace] Experimental [ExaminedArtifact]
+    // [FastCpu, HuggingFace] Supported [ExaminedArtifact]
 
     let turn = "<｜User｜>Summarize the design of a tokenizer cache.<｜Assistant｜>\
                 A tokenizer cache keeps the token ids of the conversation so far. ";
@@ -483,10 +482,9 @@ offline cache, see [`docs/rust-lifecycle.md`](docs/rust-lifecycle.md).
 `append` returns a `TokenPatch` and does not materialize the complete
 history: `keep_tokens()` is where the downstream buffer is cut,
 `replacement_ids()` is the exact repaired suffix. The label is read from
-`plan()`: `certification` reads `Experimental` for a `git` dependency, which
-is not a judged build, and `Supported` on a judged build, and
-`reasons` carries `ExaminedArtifact` on either; `Policy::Certified` refuses
-the fast route for this family. Its certification is registered for a later
+`plan()`: `certification` reads `Supported` and `reasons` carries
+`ExaminedArtifact`; `Policy::Certified` refuses the fast route for this
+family. Its certification is registered for a later
 release. The Python facade is not the serving path:
 `toktier.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash-1017")` loads the
 same artifact on the same CPU route for evaluation.

@@ -331,6 +331,7 @@ def _family_report(
         None,
     )
     match = shipped_registry().certification(artifact_sha256=artifact_sha256)
+    examined = match is not None and match.identity == "examined"
     certified = {STATUS_CERTIFIED, STATUS_CERTIFIED_SOURCE}
     fast_cpu_status: str | None = None
     gpu_status: str | None = None
@@ -395,6 +396,10 @@ def _family_report(
         and fast_cpu_status in certified
         and fast_cpu is not None
         and not fast_cpu_binding_mismatches(fast_cpu, engine_facts)
+        # An examined artifact's route is a coverage admission (plan check
+        # 5a): the policies that admit coverage gaps run it, CERTIFIED
+        # does not.
+        and (not examined or _policy_admits_coverage_gaps(config.routing_policy))
     )
     # The recipe axes the engine reports beside the ones the record
     # bound: reported, never a reason the plan refuses (since 0.3.0).
@@ -411,8 +416,24 @@ def _family_report(
         "family": entry.family,
         "artifact_sha256": artifact_sha256,
         "certification_identity": None if match is None else match.identity,
-        "evidence_id": None if match is None else match.record.evidence_id,
-        "fast_cpu_status": fast_cpu_status,
+        "evidence_id": (
+            None if match is None or examined else match.record.evidence_id
+        ),
+        # The status the shipped tables give this artifact's CPU entry:
+        # ``examined`` for an examined artifact, whose planning view carries
+        # a certified peer's engine binding but no reading of its own.
+        "fast_cpu_status": "examined" if examined else fast_cpu_status,
+        "examined": (
+            None
+            if not examined or match is None or match.examined is None
+            else {
+                "pipeline_id": match.record.pipeline_id,
+                "added_frontend_id": match.record.added_frontend_id,
+                "pipeline_peers": list(match.pipeline_peers),
+                "missing_evidence": list(match.examined.missing_evidence),
+                "label_when_admitted": "supported_untested",
+            }
+        ),
         "fast_cpu_recipe_divergences": fast_cpu_recipe,
         "gpu_status": gpu_status,
         "gpu_delivery_certification": architecture_certification,
@@ -1157,8 +1178,24 @@ def _artifacts_import(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _examined_status(entry: ArtifactEntry) -> str | None:
+    """``"examined"`` when the entry is an examined, not certified, artifact.
+
+    Read from the shipped registry view, the one the planner reads: an
+    examined artifact is pinned and fetchable like the others, and it is
+    named for what it is wherever its identity is printed.
+    """
+    from .routing.registry_load import shipped_registry
+
+    digest = next(
+        (item.sha256 for item in entry.files if item.name == "tokenizer.json"),
+        None,
+    )
+    return "examined" if shipped_registry().examined(digest) is not None else None
+
+
 def _inspect_entry(entry: ArtifactEntry) -> dict[str, object]:
-    return {
+    block: dict[str, object] = {
         "family": entry.family,
         "repo_id": entry.repo_id,
         "revision": entry.revision,
@@ -1167,6 +1204,13 @@ def _inspect_entry(entry: ArtifactEntry) -> dict[str, object]:
             for item in entry.files
         },
     }
+    status = _examined_status(entry)
+    if status is not None:
+        # Only examined entries carry the key: every other pinned family is
+        # one the support registry certifies, which ``doctor --family``
+        # reports in full.
+        block["status"] = status
+    return block
 
 
 def _inspect(arguments: argparse.Namespace) -> int:
@@ -1195,6 +1239,8 @@ def _inspect(arguments: argparse.Namespace) -> int:
             print(f"family: {entry.family}")
             print(f"repo_id: {entry.repo_id}")
             print(f"revision: {entry.revision}")
+            if _examined_status(entry) is not None:
+                print("status: examined (runnable, not certified)")
             for item in entry.files:
                 print(f"{item.name}: sha256 {item.sha256} ({item.size} bytes)")
         else:

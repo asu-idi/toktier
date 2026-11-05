@@ -151,6 +151,14 @@ pub enum ReasonCode {
     /// are admitted under every policy but [`Policy::Reference`] and
     /// labelled [`Certification::Supported`].
     CpuUncertified,
+    /// The artifact is an examined one, not a certified one: its pipeline
+    /// capability is the one a certified family holds and its added-token
+    /// table no campaign has judged (`docs/support-matrix.md`, Status
+    /// vocabulary). The fast CPU engine runs it with its own repair
+    /// parameters and the route is labelled [`Certification::Supported`];
+    /// under [`Policy::Certified`] the route is refused and this reason
+    /// stands beside [`ReasonCode::CpuUncertified`]. Added after 0.3.0.
+    ExaminedArtifact,
     /// This build's own source identity is not in the shipped
     /// `runtime_builds` register, or one of this crate's own siblings
     /// resolves from another copy or version than the judged one, so no
@@ -214,7 +222,10 @@ pub enum Certification {
     /// An unjudged device is admitted under [`Policy::Supported`] and
     /// routed to the reference engine under `Policy::Certified`; an
     /// unjudged compiler or recipe for the fast CPU route is admitted
-    /// under every policy but `Policy::Reference`.
+    /// under every policy but `Policy::Reference`. The fast CPU route of
+    /// an examined artifact carries this label too, on every build: the
+    /// engine is the judged one and the artifact's added-token table is
+    /// not one a campaign has judged ([`ReasonCode::ExaminedArtifact`]).
     Supported,
     /// A `Supported` route that a local check has compared against this
     /// binary's reference engine on this machine. The record is not a

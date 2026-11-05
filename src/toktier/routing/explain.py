@@ -38,6 +38,7 @@ from .registry_view import (
     STATUS_CERTIFIED_SOURCE,
     ArtifactRecord,
     BackendEntry,
+    CertificationMatch,
 )
 
 __all__ = ["build_explanation", "reason_to_dict"]
@@ -169,6 +170,8 @@ def _certification_state(
         if state == "reference"
         else "unverified"
     )
+    if match.identity == "examined":
+        return _examined_state(match, state, effective_verdict, statuses)
     return {
         "state": state,
         "effective_verdict": effective_verdict,
@@ -305,6 +308,50 @@ def _executed_backend(last_execution: Mapping[str, object] | None) -> str | None
         return None
     value = last_execution.get("executed_backend")
     return value if isinstance(value, str) and value else None
+
+
+def _examined_state(
+    match: CertificationMatch,
+    state: str,
+    effective_verdict: str,
+    statuses: Mapping[str, str],
+) -> dict[str, object]:
+    """The certification block of an examined artifact.
+
+    Nothing in it names the artifact certified. ``evidence_id``,
+    ``certified_family`` and ``readings`` are ``None``: no campaign reading
+    covers this artifact. The backend statuses read ``examined``. What was
+    measured is under ``examined`` -- the examination readings as recorded,
+    the certified families whose pipeline capability it shares, and the
+    evidence certification would still need.
+    """
+    examined = match.examined
+    return {
+        "state": state,
+        "effective_verdict": effective_verdict,
+        "identity": match.identity,
+        "evidence_id": None,
+        "suite_version": None,
+        "certified_family": None,
+        "readings": None,
+        "config_added_tokens": None,
+        "carryover": None,
+        "backend_status": {backend: "examined" for backend in statuses},
+        "gpu_delivery": None,
+        "deliveries": {},
+        "examined": {
+            "family": match.record.family,
+            "pipeline_id": match.record.pipeline_id,
+            "added_frontend_id": match.record.added_frontend_id,
+            "pipeline_peers": list(match.pipeline_peers),
+            "examination": (
+                dict(examined.examination) if examined is not None else {}
+            ),
+            "missing_evidence": (
+                list(examined.missing_evidence) if examined is not None else []
+            ),
+        },
+    }
 
 
 def build_explanation(

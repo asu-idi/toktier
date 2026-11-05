@@ -18,6 +18,8 @@ Check order (stable, and the order the reason codes are assigned in):
    enumeration never performed              -> ``R_ACCELERATOR_NOT_ADOPTED``
    probe ran, no usable device              -> ``R_NO_GPU_DETECTED``
 5. no eligible registry identity/status     -> ``R_UNCERTIFIED_ARTIFACT``
+   (an examined artifact is the one coverage case of this check: its
+   pipeline is certified and its added-token table is not, see 5a)
 6. certificate premises lost in-process     -> ``R_UNCERTIFIED_ARTIFACT``
 7. oracle version outside certified set     -> ``R_ORACLE_MISMATCH``
 8. materialized loader face not the judged  -> ``R_LOADER_FACE_MISMATCH``
@@ -47,6 +49,9 @@ device architecture of check 10, and the compiler/runtime pair of check
 14. In both the bound identity verifies and no campaign has measured the
 combination. ``SUPPORTED`` proceeds past those two and records each as a
 supported-untested note; ``CERTIFIED`` refuses them as it always has.
+The examined artifact of check 5a is the third: the fast CPU engine
+binding verifies and no campaign has judged the artifact's added-token
+table, and the two policies treat it the same way.
 """
 
 from __future__ import annotations
@@ -533,6 +538,35 @@ def _assess(
                 status=entry.status,
             ),
             waivable=entry.status == STATUS_EXPERIMENTAL,
+        )
+
+    elif match.identity == "examined":
+        # 5a. An examined artifact: its pipeline capability is a certified
+        #     one and its added-token capability no campaign has judged, so
+        #     no reading covers it. The entry is the fast CPU engine binding
+        #     of a certified record holding the same pipeline, and every
+        #     check below still verifies against it -- the oracle set, the
+        #     artifact's own loader face, the engine binding. What is
+        #     missing is coverage rather than a binding that failed to
+        #     verify, so SUPPORTED admits it and labels it
+        #     ``supported_untested``; CERTIFIED refuses it, as it refuses
+        #     any artifact without a reading.
+        examined = match.examined
+        refuse(
+            _reason(
+                ReasonCode.R_UNCERTIFIED_ARTIFACT,
+                backend,
+                cause="examined_not_certified",
+                artifact_sha256=snapshot.artifact_sha256,
+                family=snapshot.family,
+                pipeline_id=match.record.pipeline_id,
+                added_frontend_id=match.record.added_frontend_id,
+                missing_evidence=(
+                    list(examined.missing_evidence) if examined is not None else []
+                ),
+            ),
+            waivable=True,
+            coverage=True,
         )
 
     if match is None or entry is None:

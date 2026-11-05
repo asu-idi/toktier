@@ -2555,3 +2555,21 @@ def test_a_failed_conversion_gate_reports_a_code(
     assert payload["error"]["code"] == "ARTIFACT_HASH_MISMATCH"
     assert payload["error"]["details"]["failures"] == ["identity_matches"]
     assert payload["error"]["details"]["expected_sha256"] == "b" * 64
+
+
+def test_inspect_names_an_examined_family_for_what_it_is(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The examined family is pinned like the others and labelled."""
+    exit_code = cli.main(["inspect", "deepseek_v4_1_flash"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "status: examined (runnable, not certified)\n" in captured.out
+    exit_code = cli.main(["inspect", "--json"])
+    report = json.loads(capsys.readouterr().out)
+    assert report["deepseek_v4_1_flash"]["status"] == "examined"
+    assert all(
+        "status" not in block
+        for family, block in report.items()
+        if family != "deepseek_v4_1_flash"
+    )

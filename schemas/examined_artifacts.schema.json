@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toktier:schema:examined-artifacts:1",
+  "title": "TokTier examined (not certified) tokenizer artifacts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_by",
+    "root_digest",
+    "status",
+    "statement",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "generated_by": { "$ref": "#/$defs/generated_by" },
+    "root_digest": { "$ref": "#/$defs/sha256_prefixed" },
+    "status": { "const": "examined" },
+    "statement": { "type": "string", "minLength": 1 },
+    "artifacts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/artifact" }
+    }
+  },
+  "$defs": {
+    "sha256_hex": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "sha256_prefixed": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "family": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$",
+      "maxLength": 128
+    },
+    "generated_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "tool_version", "source_commit", "generated_at"],
+      "properties": {
+        "tool": { "type": "string", "minLength": 1 },
+        "tool_version": { "type": "string", "minLength": 1 },
+        "source_commit": { "type": "string", "minLength": 1 },
+        "generated_at": { "type": "string", "minLength": 1 }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "artifact_sha256",
+        "loader_face_sha256",
+        "pipeline_id",
+        "added_frontend_id",
+        "oracle_id",
+        "repair",
+        "examination",
+        "missing_evidence"
+      ],
+      "properties": {
+        "family": { "$ref": "#/$defs/family" },
+        "artifact_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "loader_face_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "pipeline_id": { "type": "string", "pattern": "^pipeline\\.[0-9a-f]{16}$" },
+        "added_frontend_id": {
+          "type": "string",
+          "pattern": "^added-frontend\\.[0-9a-f]{16}$"
+        },
+        "oracle_id": { "type": "string", "minLength": 1 },
+        "repair": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "margin",
+            "effective_l_max",
+            "has_normalizer",
+            "source_table_sha256"
+          ],
+          "properties": {
+            "margin": { "type": "integer", "minimum": 1 },
+            "effective_l_max": { "type": "integer", "minimum": 1 },
+            "has_normalizer": { "type": "boolean" },
+            "source_table_sha256": { "$ref": "#/$defs/sha256_hex" }
+          }
+        },
+        "examination": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "examined_on",
+            "documents",
+            "characters",
+            "mismatches",
+            "divergent_literals",
+            "divergent_literal_occurrences",
+            "note"
+          ],
+          "properties": {
+            "examined_on": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            },
+            "documents": { "type": "integer", "minimum": 0 },
+            "characters": { "type": "integer", "minimum": 0 },
+            "mismatches": { "type": "integer", "minimum": 0 },
+            "divergent_literals": { "type": "integer", "minimum": 0 },
+            "divergent_literal_occurrences": { "type": "integer", "minimum": 0 },
+            "note": { "type": "string", "minLength": 1 }
+          }
+        },
+        "missing_evidence": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "corpus_absence_certificate",
+              "cross_artifact_carryover_record"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -121,12 +121,49 @@ def families() -> tuple[RepairFamily, ...]:
     return parsed
 
 
+@lru_cache(maxsize=1)
+def examined_families() -> tuple[RepairFamily, ...]:
+    """Repair parameters of the examined (not certified) artifacts.
+
+    Read from the shipped examined-artifact table, digest-verified, and
+    kept apart from :func:`families`: the certified roster stays exactly
+    the eleven artifacts its readings cover, and its file stays inside the
+    fast CPU engine's bound source set unchanged. Whether an examined
+    artifact's route may run, and under which label, is the planner's
+    decision (``routing/plan.py`` check 5), never this table's.
+    """
+    from ..routing.registry_load import load_examined_artifacts
+    from ..routing.tables import EXAMINED_ARTIFACTS
+
+    try:
+        return tuple(
+            RepairFamily(
+                family=record.family,
+                artifact_sha256=record.artifact_sha256,
+                margin=int(str(record.repair["margin"])),
+                effective_l_max=int(str(record.repair["effective_l_max"])),
+                has_normalizer=record.repair["has_normalizer"] is True,
+                source_table_sha256=str(record.repair["source_table_sha256"]),
+            )
+            for record in load_examined_artifacts(EXAMINED_ARTIFACTS)
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise _failure("an examined repair row is malformed") from exc
+
+
 def family_spec(family: str, artifact_sha256: str) -> RepairFamily | None:
-    """Exact family-and-artifact match, or ``None`` when not certified."""
+    """Exact family-and-artifact repair parameters, or ``None``.
+
+    The certified roster is consulted first, then the examined artifacts.
+    A row from the second answers "with which parameters would the engine
+    run this artifact", not "is it certified": the plan refuses an
+    examined artifact under ``CERTIFIED`` and labels it
+    ``supported_untested`` under ``SUPPORTED``.
+    """
     return next(
         (
             item
-            for item in families()
+            for item in (*families(), *examined_families())
             if item.family == family and item.artifact_sha256 == artifact_sha256
         ),
         None,

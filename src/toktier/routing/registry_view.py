@@ -35,6 +35,7 @@ __all__ = [
     "ArtifactRecord",
     "BackendEntry",
     "CertificationMatch",
+    "ExaminedRecord",
     "OracleRecord",
     "RegistryView",
     "ValidatedRegistryDocument",
@@ -279,6 +280,53 @@ class ArtifactRecord:
 
 
 @dataclass(frozen=True)
+class ExaminedRecord:
+    """One examined artifact: runnable, not certified.
+
+    An examined artifact holds the pipeline capability of a certified
+    family and an added-token capability no campaign has judged. The
+    support registry carries no reading for it. ``repair`` holds the
+    fast CPU engine's repair parameters for this exact artifact,
+    ``examination`` the examination readings as recorded, and
+    ``missing_evidence`` names what certification would still need.
+    """
+
+    family: str
+    artifact_sha256: str
+    loader_face_sha256: str
+    pipeline_id: str
+    added_frontend_id: str
+    oracle_id: str
+    repair: Mapping[str, object]
+    examination: Mapping[str, object]
+    missing_evidence: tuple[str, ...]
+
+    @classmethod
+    def from_mapping(cls, raw: Mapping[str, object]) -> ExaminedRecord:
+        """Build a record from one row of the examined-artifact table."""
+        repair = raw["repair"]
+        examination = raw["examination"]
+        missing = raw["missing_evidence"]
+        if not isinstance(repair, Mapping):
+            raise KeyError("repair")
+        if not isinstance(examination, Mapping):
+            raise KeyError("examination")
+        if not isinstance(missing, Sequence) or isinstance(missing, str):
+            raise KeyError("missing_evidence")
+        return cls(
+            family=str(raw["family"]),
+            artifact_sha256=str(raw["artifact_sha256"]),
+            loader_face_sha256=str(raw["loader_face_sha256"]),
+            pipeline_id=str(raw["pipeline_id"]),
+            added_frontend_id=str(raw["added_frontend_id"]),
+            oracle_id=str(raw["oracle_id"]),
+            repair=dict(repair),
+            examination=dict(examination),
+            missing_evidence=tuple(str(item) for item in missing),
+        )
+
+
+@dataclass(frozen=True)
 class CertificationMatch:
     """How an artifact obtained a certification identity.
 
@@ -286,10 +334,24 @@ class CertificationMatch:
     record, and ``"composition"`` when eligibility came from a certified
     pipeline capability plus a certified added-frontend capability with
     an explicit composition grant (registry.md Section 1.1).
+
+    ``"examined"`` is not a certification identity, and the planner never
+    treats it as one: the artifact is an examined one
+    (:class:`ExaminedRecord`), and ``record`` is a view built for planning
+    that carries the artifact's own identity and loader face beside the
+    fast CPU engine binding of a certified record holding the same
+    pipeline capability. Under ``CERTIFIED`` the planner refuses it with
+    ``R_UNCERTIFIED_ARTIFACT``; under ``SUPPORTED`` it admits the fast CPU
+    route and labels it ``supported_untested``. ``examined`` is the row
+    itself, and ``pipeline_peers`` the certified families holding the same
+    pipeline capability; the view carries the fast CPU engine binding of
+    the first of them, which every one of them binds alike.
     """
 
     record: ArtifactRecord
     identity: str
+    examined: ExaminedRecord | None = None
+    pipeline_peers: tuple[str, ...] = ()
 
 
 def _backend_entry(
@@ -345,8 +407,18 @@ class RegistryView:
         pipelines: Mapping[str, str] | None = None,
         added_frontends: Mapping[str, str] | None = None,
         compositions: Sequence[tuple[str, str]] = (),
+        examined: Sequence[ExaminedRecord] = (),
     ) -> None:
         self._by_sha = {record.artifact_sha256: record for record in artifacts}
+        # Examined artifacts are kept apart from the certified records:
+        # they are never part of ``_by_sha``, so nothing that reads the
+        # certified records (doctor's installation-level answers, the
+        # delivery status maps) can count one of them.
+        self._examined = {
+            record.artifact_sha256: record
+            for record in examined
+            if record.artifact_sha256 not in self._by_sha
+        }
         self._oracles = {record.oracle_id: record for record in oracles}
         # fingerprint -> id
         self._pipelines = dict(pipelines or {})
@@ -361,7 +433,11 @@ class RegistryView:
 
     @classmethod
     def from_document(
-        cls, document: ValidatedRegistryDocument, *, path: str = ""
+        cls,
+        document: ValidatedRegistryDocument,
+        *,
+        path: str = "",
+        examined: Sequence[ExaminedRecord] = (),
     ) -> RegistryView:
         """Build a view from a validated registry document (schema v1).
 
@@ -434,6 +510,7 @@ class RegistryView:
             pipelines=pipelines,
             added_frontends=added_frontends,
             compositions=compositions,
+            examined=examined,
         )
 
     # -- lookups ---------------------------------------------------------
@@ -475,6 +552,55 @@ class RegistryView:
         """Whether an explicit composition grant covers this pair."""
         return (pipeline_id, added_frontend_id) in self._compositions
 
+    def examined(self, artifact_sha256: str | None) -> ExaminedRecord | None:
+        """The examined-artifact row for this digest, when there is one."""
+        if artifact_sha256 is None:
+            return None
+        return self._examined.get(artifact_sha256)
+
+    def _examined_match(self, examined: ExaminedRecord) -> CertificationMatch | None:
+        """The planning view of an examined artifact, or ``None``.
+
+        The view carries the examined artifact's own identity, oracle and
+        loader face, and exactly one backend entry: the fast CPU entry of a
+        certified record that holds the same pipeline capability, which is
+        the engine binding the route has to verify against. Every such
+        entry binds the same integrated engine, so the first in family
+        order is taken. No GPU entry is carried: no kernel reading covers
+        this artifact. Without a certified peer there is no binding to
+        verify, and the artifact has no planning view at all.
+        """
+        peers = sorted(
+            (
+                record
+                for record in self._by_sha.values()
+                if record.pipeline_id == examined.pipeline_id
+                and (entry := record.backends.get("fast_cpu")) is not None
+                and entry.status in ELIGIBLE_STATUSES
+            ),
+            key=lambda record: record.family,
+        )
+        if not peers:
+            return None
+        peer = peers[0]
+        view = ArtifactRecord(
+            artifact_sha256=examined.artifact_sha256,
+            family=examined.family,
+            pipeline_id=examined.pipeline_id,
+            added_frontend_id=examined.added_frontend_id,
+            oracle_id=examined.oracle_id,
+            suite_version="examined",
+            evidence_id="",
+            backends={"fast_cpu": peer.backends["fast_cpu"]},
+            loader_face_sha256=examined.loader_face_sha256,
+        )
+        return CertificationMatch(
+            record=view,
+            identity="examined",
+            examined=examined,
+            pipeline_peers=tuple(record.family for record in peers),
+        )
+
     def certification(
         self,
         *,
@@ -488,11 +614,19 @@ class RegistryView:
         identity first, then a capability composition -- and only when
         an explicit composition entry grants that pair. Absent both, the
         artifact has no certification identity and runs as reference.
+
+        An examined artifact (:meth:`examined`) is answered between the
+        two with its planning view, whose identity reads ``"examined"``;
+        it is not a certification, and the planner refuses it under
+        ``CERTIFIED`` (routing/plan.py, check 5).
         """
         if artifact_sha256 is not None:
             exact = self._by_sha.get(artifact_sha256)
             if exact is not None:
                 return CertificationMatch(record=exact, identity="exact")
+            examined = self._examined.get(artifact_sha256)
+            if examined is not None:
+                return self._examined_match(examined)
         pipeline_id = self.pipeline_id(pipeline_fingerprint)
         added_id = self.added_frontend_id(added_frontend_fingerprint)
         if pipeline_id is None or added_id is None:

@@ -41,6 +41,10 @@ pub(crate) const FILES: &[(&str, &[u8])] = &[
         packaged!("schemas/evidence_manifest.schema.json"),
     ),
     (
+        "schemas/examined_artifacts.schema.json",
+        packaged!("schemas/examined_artifacts.schema.json"),
+    ),
+    (
         "schemas/sibling_alias_source.schema.json",
         packaged!("schemas/sibling_alias_source.schema.json"),
     ),
@@ -127,6 +131,10 @@ pub(crate) const FILES: &[(&str, &[u8])] = &[
     (
         "src/toktier/routing/tables/chunked_admission.v1.json",
         packaged!("src/toktier/routing/tables/chunked_admission.v1.json"),
+    ),
+    (
+        "src/toktier/routing/tables/examined_artifacts.v1.json",
+        packaged!("src/toktier/routing/tables/examined_artifacts.v1.json"),
     ),
     (
         "src/toktier/routing/tables/support_registry.v1.json",

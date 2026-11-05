@@ -30,6 +30,7 @@ FILES = (
     "packaging/fast_cpu/THIRD_PARTY_LICENSES-gigatoken.txt",
     "packaging/fast_cpu/gigatoken-toktier-pinned-1.patch",
     "schemas/evidence_manifest.schema.json",
+    "schemas/examined_artifacts.schema.json",
     "schemas/sibling_alias_source.schema.json",
     "schemas/sibling_aliases.schema.json",
     "schemas/support_registry.schema.json",
@@ -53,6 +54,7 @@ FILES = (
     "src/toktier/repair/tables/fast_repair_families.v1.json",
     "src/toktier/repair/tables/repair_pclass.v1.zlib",
     "src/toktier/routing/tables/chunked_admission.v1.json",
+    "src/toktier/routing/tables/examined_artifacts.v1.json",
     "src/toktier/routing/tables/support_registry.v1.json",
 )
 #: Sources copied under a different packaged name. The lockfile is the

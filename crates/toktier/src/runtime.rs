@@ -706,6 +706,9 @@ impl Runtime {
         reasons: &mut Vec<ReasonCode>,
     ) -> Result<Option<FastCpuRoute>> {
         let family = &artifact.identity().family;
+        if let Some(examined) = self.inner.registry.examined(family) {
+            return self.build_examined_fast_cpu(artifact, reference, reasons, examined);
+        }
         let Some(repair) = self.inner.registry.repair(family) else {
             reasons.push(ReasonCode::CpuUncertified);
             return Ok(None);
@@ -770,6 +773,80 @@ impl Runtime {
         Ok(Some(FastCpuRoute {
             engine: Arc::new(engine),
             toolchain_judged,
+        }))
+    }
+}
+
+impl Runtime {
+    /// The fast CPU route of an examined (not certified) artifact.
+    ///
+    /// The engine binding it is admitted against is the fast CPU entry of
+    /// a certified support row holding the same pipeline capability: the
+    /// entry's status and source digest have to verify exactly as they do
+    /// for that family. What no campaign has judged is this artifact's
+    /// added-token table, so the route is labelled
+    /// [`Certification::Supported`] whatever the build, and
+    /// `Policy::Certified` refuses it.
+    fn build_examined_fast_cpu(
+        &self,
+        artifact: &LocalArtifact,
+        reference: Arc<ReferenceEngine>,
+        reasons: &mut Vec<ReasonCode>,
+        examined: &crate::manifest::ExaminedRow,
+    ) -> Result<Option<FastCpuRoute>> {
+        let family = &artifact.identity().family;
+        reasons.push(ReasonCode::ExaminedArtifact);
+        if self.inner.config.policy == Policy::Certified
+            || examined.artifact_sha256 != artifact.identity().tokenizer_sha256
+        {
+            reasons.push(ReasonCode::CpuUncertified);
+            return Ok(None);
+        }
+        let bound = self
+            .inner
+            .registry
+            .pipeline_peers(&examined.pipeline_id)
+            .into_iter()
+            .any(|peer| {
+                let fast = peer.backends.get("fast_cpu");
+                let status = fast
+                    .and_then(|value| value.get("status"))
+                    .and_then(serde_json::Value::as_str);
+                let source = fast
+                    .and_then(|value| value.get("source_digest"))
+                    .and_then(serde_json::Value::as_str);
+                matches!(status, Some("certified") | Some("certified_source"))
+                    && (source == Some(env!("TOKTIER_RUST_API_FAST_CPU_SOURCE_SHA256"))
+                        || self.inner.config.policy == Policy::Experimental)
+            });
+        if !bound {
+            reasons.push(ReasonCode::CpuUncertified);
+            return Ok(None);
+        }
+        let spec = FastRepairSpec::new(
+            family.clone(),
+            examined.artifact_sha256.clone(),
+            examined.repair.margin,
+            examined.repair.effective_l_max,
+            examined.repair.has_normalizer,
+        );
+        let engine = FastCpuEngine::from_reference(
+            &artifact.bytes(),
+            reference,
+            spec,
+            self.inner.registry.pclass(),
+        )
+        .map_err(|error| {
+            Error::new(
+                ErrorCode::BackendExecutionFault,
+                format!("corrected-CPU construction failed for an examined artifact: {error}"),
+            )
+        })?;
+        Ok(Some(FastCpuRoute {
+            engine: Arc::new(engine),
+            // Never certified by source: no reading covers this artifact,
+            // so the label stays `Supported` even on the judged compiler.
+            toolchain_judged: false,
         }))
     }
 }

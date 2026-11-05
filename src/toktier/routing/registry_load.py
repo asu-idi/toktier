@@ -31,23 +31,26 @@ from typing import cast
 
 from .._jcs import CanonicalizationError, canonical_json
 from ..errors import RegistryInvalid
-from .registry_view import RegistryView, ValidatedRegistryDocument
-from .tables import SUPPORT_REGISTRY
+from .registry_view import ExaminedRecord, RegistryView, ValidatedRegistryDocument
+from .tables import EXAMINED_ARTIFACTS, SUPPORT_REGISTRY
 
-__all__ = ["load_registry", "load_registry_document", "shipped_registry"]
+__all__ = [
+    "load_examined_artifacts",
+    "load_registry",
+    "load_registry_document",
+    "shipped_registry",
+]
 
 #: Domain tag of the registry root digest (registry.md Section 6).
 _REGISTRY_DOMAIN_TAG = b"toktier.registry.v1\x00"
 
+#: Domain tag of the examined-artifact table's root digest
+#: (``tools/generate_examined_artifacts.py`` writes it with the same tag).
+_EXAMINED_DOMAIN_TAG = b"toktier.examined_artifacts.v1\x00"
 
-def load_registry_document(path: Path) -> ValidatedRegistryDocument:
-    """Read one registry document and verify its root digest.
 
-    The digest is recomputed after *deleting* the ``root_digest`` member
-    (never blanking it), exactly as registry.md Section 6 instructs
-    verifiers. A missing file, unparseable JSON, or a digest that does
-    not match raises ``RegistryInvalid``.
-    """
+def _read_digested(path: Path, domain_tag: bytes) -> dict[str, object]:
+    """Read one generated table and verify its root digest."""
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except OSError as error:
@@ -79,9 +82,7 @@ def load_registry_document(path: Path) -> ValidatedRegistryDocument:
             "registry document cannot be canonicalized",
             details={"path": str(path), "failure": str(error)},
         ) from error
-    recomputed = "sha256:" + hashlib.sha256(
-        _REGISTRY_DOMAIN_TAG + payload
-    ).hexdigest()
+    recomputed = "sha256:" + hashlib.sha256(domain_tag + payload).hexdigest()
     if recomputed != recorded:
         raise RegistryInvalid(
             "registry root digest does not match the document",
@@ -90,7 +91,43 @@ def load_registry_document(path: Path) -> ValidatedRegistryDocument:
                 "failure": f"recorded {recorded}, recomputed {recomputed}",
             },
         )
-    return cast("ValidatedRegistryDocument", raw)
+    return raw
+
+
+def load_examined_artifacts(path: Path) -> tuple[ExaminedRecord, ...]:
+    """Digest-verified examined-artifact rows of one table file.
+
+    A missing or tampered file raises ``RegistryInvalid``, like the
+    registry itself: a row of this table admits a route, so an unverified
+    one is never read.
+    """
+    raw = _read_digested(path, _EXAMINED_DOMAIN_TAG)
+    rows = raw.get("artifacts")
+    if raw.get("status") != "examined" or not isinstance(rows, list):
+        raise RegistryInvalid(
+            "the examined-artifact table has an unexpected shape",
+            details={"path": str(path), "failure": "status or artifacts"},
+        )
+    try:
+        return tuple(ExaminedRecord.from_mapping(row) for row in rows)
+    except (KeyError, TypeError) as error:
+        raise RegistryInvalid(
+            "an examined-artifact row is malformed",
+            details={"path": str(path), "failure": str(error)},
+        ) from error
+
+
+def load_registry_document(path: Path) -> ValidatedRegistryDocument:
+    """Read one registry document and verify its root digest.
+
+    The digest is recomputed after *deleting* the ``root_digest`` member
+    (never blanking it), exactly as registry.md Section 6 instructs
+    verifiers. A missing file, unparseable JSON, or a digest that does
+    not match raises ``RegistryInvalid``.
+    """
+    return cast(
+        "ValidatedRegistryDocument", _read_digested(path, _REGISTRY_DOMAIN_TAG)
+    )
 
 
 def load_registry(path: Path) -> RegistryView:
@@ -106,6 +143,13 @@ def shipped_registry() -> RegistryView:
     Cached per process: the packaged file is installation data and does
     not change while the process runs. A missing or tampered file raises
     ``RegistryInvalid`` on first use -- a broken installation is stated,
-    never silently treated as an empty registry.
+    never silently treated as an empty registry. The examined-artifact
+    table is read beside it and kept apart inside the view: its rows are
+    not certification records (:meth:`RegistryView.examined`).
     """
-    return load_registry(SUPPORT_REGISTRY)
+    document = load_registry_document(SUPPORT_REGISTRY)
+    return RegistryView.from_document(
+        document,
+        path=str(SUPPORT_REGISTRY),
+        examined=load_examined_artifacts(EXAMINED_ARTIFACTS),
+    )

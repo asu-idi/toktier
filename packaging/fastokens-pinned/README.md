@@ -1,8 +1,8 @@
 # Pinned Fastokens provenance
 
 TokTier's explicit experimental session adapter can run on
-[Fastokens](https://github.com/Atero-ai/fastokens) (earlier published under
-`crusoecloud/fastokens`, the same project). From 0.2.7 the `toktier[fastokens]`
+[Fastokens](https://github.com/crusoecloud/fastokens) (earlier published under
+`Atero-ai/fastokens`, the same project). From 0.2.7 the `toktier[fastokens]`
 extra installs **toktier-fastokens**, a pinned build of fastokens 0.3.1 with
 the toktier patch series applied, published by the toktier project on PyPI as
 its own distribution. It is not bundled in the toktier wheel, keeps the

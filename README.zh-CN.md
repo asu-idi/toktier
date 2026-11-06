@@ -944,7 +944,7 @@ span，涵盖 normalization、pre-tokenization、merge 和 added-token 处理；
 
 TokTier 的 CPU Fast Pass 和 Fast Repair 建立在
 [Gigatoken](https://github.com/marcelroed/gigatoken) 与
-[Fastokens](https://github.com/Atero-ai/fastokens) 两项优秀的开源工作之上。感谢
+[Fastokens](https://github.com/crusoecloud/fastokens) 两项优秀的开源工作之上。感谢
 两项工作的作者和贡献者将这些成果开源。
 
 修正版 Gigatoken 是 11 个唯一 tokenizer 工件的默认认证 repair 窗口引擎；

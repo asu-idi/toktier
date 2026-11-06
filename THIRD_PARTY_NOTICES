@@ -98,8 +98,8 @@ adapter, and reports what it knows about whichever Fastokens build is
 installed.
 
   toktier-fastokens 0.3.1.2 (a pinned build of Fastokens 0.3.1, modified)
-    Upstream: https://github.com/Atero-ai/fastokens
-      (earlier published as https://github.com/crusoecloud/fastokens; the
+    Upstream: https://github.com/crusoecloud/fastokens
+      (earlier published as https://github.com/Atero-ai/fastokens; the
       same project under its previous name)
     Revision: fe854299553524f2156a22036a2cb4d1f2ef4d97 (tag v0.3.1)
     License: Apache-2.0

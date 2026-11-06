@@ -1101,7 +1101,7 @@ layers together.
 
 TokTier's CPU Fast Pass and Fast Repair build on the excellent
 [Gigatoken](https://github.com/marcelroed/gigatoken) and
-[Fastokens](https://github.com/Atero-ai/fastokens) projects. We thank their
+[Fastokens](https://github.com/crusoecloud/fastokens) projects. We thank their
 authors and contributors for making this work openly available.
 
 Corrected Gigatoken is the default certified repair-window engine for 11

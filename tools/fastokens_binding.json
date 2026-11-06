@@ -18,8 +18,8 @@
     "project": "fastokens",
     "distribution": "fastokens",
     "version": "0.3.1",
-    "repository": "https://github.com/Atero-ai/fastokens",
-    "previous_repository": "https://github.com/crusoecloud/fastokens",
+    "repository": "https://github.com/crusoecloud/fastokens",
+    "previous_repository": "https://github.com/Atero-ai/fastokens",
     "tag": "v0.3.1",
     "commit": "fe854299553524f2156a22036a2cb4d1f2ef4d97",
     "license": "Apache-2.0"

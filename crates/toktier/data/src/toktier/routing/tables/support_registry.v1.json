@@ -6,7 +6,7 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:ce89d3ca72d7aa628c21282b5e7611f93ca9961d01285f3a02e6a7c8deab64f4",
+  "root_digest": "sha256:962ead0a95f39ffd054c011ece95668ef89b635dd1095191a16c0b7fd19aa428",
   "oracles": [
     {
       "oracle_id": "tokenizers",
@@ -2178,8 +2178,8 @@
         "project": "fastokens",
         "distribution": "fastokens",
         "version": "0.3.1",
-        "repository": "https://github.com/Atero-ai/fastokens",
-        "previous_repository": "https://github.com/crusoecloud/fastokens",
+        "repository": "https://github.com/crusoecloud/fastokens",
+        "previous_repository": "https://github.com/Atero-ai/fastokens",
         "tag": "v0.3.1",
         "commit": "fe854299553524f2156a22036a2cb4d1f2ef4d97",
         "license": "Apache-2.0"

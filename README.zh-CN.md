@@ -19,8 +19,8 @@ TokTier 是面向智能体 LLM 服务的有状态分词系统。它保留每个�
 > 对照与溯源路线，不是服务路径。见 [Rust serving API](#rust-serving-api)
 > 与 [`docs/rust-api.md`](docs/rust-api.md)。
 
-- **大规模精确验证。** 发布验证覆盖 15 个 tokenizer 工件、38 亿篇真实文档，
-  共记录 **570 亿次检查**（12.33 万亿字符），未观察到任何不一致。
+- **大规模精确验证。** 认证验证覆盖 18 个 tokenizer 工件、38 亿篇真实文档，
+  共记录 **684 亿次检查**（12.33 万亿字符），未观察到任何不一致。
 - **CPU 与 GPU 均有快速路径。** 在已记录的整套基准测试中，GPU 路径处理一个
   全新的 400 万字符请求（约 78.6 万 token）用时 **3.88 ms**；对 419 万字符
   会话追加 256 个字符时，有界 CPU repair 为 **1.68 ms**。
@@ -757,9 +757,9 @@ pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
 唯一工件与延续证据记录在
 [`docs/support-matrix.md`](docs/support-matrix.md#configuration-only-added-tokens)。
 
-本文档中出现了四类计数，各自回答不同的问题：**16 个随包工件**（`toktier
-inspect` 列出的那些：15 个已认证工件，加 1 个已检视、未认证的
-`deepseek_v4_1_flash`）、**15+3 个 model family**（byte-level BPE 加
+本文档中出现了四类计数，各自回答不同的问题：**19 个随包工件**（`toktier
+inspect` 列出的那些：18 个已认证工件，加 1 个已检视、未认证的
+`deepseek_v4_1_flash`）、**18+3 个 model family**（byte-level BPE 加
 WordPiece；不同 family 可以共用同一工件）、**11 个具备 CPU 快路径认证的
 工件**（按精确工件继承覆盖 12 个 family），以及**注册表 223 条**（222 个
 已审计 sibling 仓库加 1 个 canonical 自指条目）。如果某个数字看起来与另一个
@@ -767,7 +767,7 @@ WordPiece；不同 family 可以共用同一工件）、**11 个具备 CPU 快�
 
 | 验证活动 | 规模 | 观测到的不一致 |
 |---|---:|---:|
-| 全语料差分验证 | 15 个工件 × 3,800,016,491 篇文档 = **57,000,247,365 次检查** | 0 |
+| 全语料差分验证 | 18 个工件 × 3,800,016,491 篇文档 = **68,400,296,838 次检查** | 0 |
 | 语料体量 | 12,328,592,579,973 个 Unicode 码点 | — |
 | 发布代码一致性验证 | 15,960,166 篇文档 | 0 |
 | 修正版 Gigatoken CPU repair | 11 个唯一工件 × 3,800,016,491 篇文档 = **41,800,181,401 次检查**（通过精确工件继承覆盖 12 个 family） | 0 |
@@ -775,9 +775,10 @@ WordPiece；不同 family 可以共用同一工件）、**11 个具备 CPU 快�
 机器可读记录位于
 [`evidence/evidence_manifest.json`](evidence/evidence_manifest.json)、
 [`evidence/evidence_manifest_added_families.json`](evidence/evidence_manifest_added_families.json)、
-[`evidence/evidence_manifest_kimi_band.json`](evidence/evidence_manifest_kimi_band.json)
+[`evidence/evidence_manifest_kimi_band.json`](evidence/evidence_manifest_kimi_band.json)、
+[`evidence/evidence_manifest_roster_2026_10.json`](evidence/evidence_manifest_roster_2026_10.json)
 和 [`tables/support_registry.json`](tables/support_registry.json)。随版本提供的
-逐工件测量记录覆盖 53,720,215,504 次检查；早期归档阶段覆盖其余
+逐工件测量记录覆盖 65,120,264,977 次检查；早期归档阶段覆盖其余
 3,280,031,861 次，两者相加得到上面的总数。经由既有的公开会话 API 做的
 一次针对性端到端复验，记录在
 [`readings/fast_cpu_focused_parity.json`](readings/fast_cpu_focused_parity.json)；
@@ -886,7 +887,7 @@ kernel 的批量吞吐，与上表的端到端数据回答的是不同问题，�
 | 类别 | family 数量 | 覆盖情况 |
 |---|---:|---|
 | 认证 CPU 快速 repair | 12 个 family / 11 个唯一 tokenizer 工件 | 修正版 Gigatoken，12.33 万亿字符，未观察到 ID 不一致 |
-| Byte-level BPE | 15 | CPU 证据；逐工件记录 GPU 状态 |
+| Byte-level BPE | 18 | CPU 证据；逐工件记录 GPU 状态 |
 | WordPiece | 3 | CPU 证据 |
 | 结构性排除 | 2 | 记录具体原因 |
 

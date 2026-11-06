@@ -23,8 +23,8 @@ offers a certified GPU path for fresh or large requests. Both fast paths return 
 > a serving path. See [Rust serving API](#rust-serving-api) and
 > [`docs/rust-api.md`](docs/rust-api.md).
 
-- **Exact, at scale.** The release campaign records **57.0 billion checks**
-  across 15 tokenizer artifacts and 3.8 billion real documents
+- **Exact, at scale.** The certification campaigns record **68.4 billion checks**
+  across 18 tokenizer artifacts and 3.8 billion real documents
   (12.33 trillion characters), with zero observed divergence.
 - **Fast on both paths.** On the recorded benchmark battery, the GPU path
   encodes a fresh 4-million-character request (~786K tokens) in **3.88 ms**,
@@ -894,8 +894,8 @@ records the one artifact whose two faces differ as documents and the
 carry-over evidence.
 
 Four different counts appear in this document, and each answers a different
-question: **16 packaged artifacts** (what `toktier inspect` lists: the 15
-certified ones and one examined, not certified, `deepseek_v4_1_flash`), **15+3
+question: **19 packaged artifacts** (what `toktier inspect` lists: the 18
+certified ones and one examined, not certified, `deepseek_v4_1_flash`), **18+3
 model families** (byte-level BPE plus WordPiece, since families can share an
 artifact), **11 artifacts with a certified CPU fast path** (12 families by
 exact-artifact inheritance), and **223 registry rows** (222 audited sibling
@@ -904,7 +904,7 @@ usually belong to different axes.
 
 | Campaign | Scale | Recorded divergence |
 |---|---:|---:|
-| Full-corpus differential | 15 artifacts × 3,800,016,491 documents = **57,000,247,365 checks** | 0 |
+| Full-corpus differential | 18 artifacts × 3,800,016,491 documents = **68,400,296,838 checks** | 0 |
 | Corpus volume | 12,328,592,579,973 Unicode code points | — |
 | Released-code parity | 15,960,166 documents | 0 |
 | Corrected Gigatoken CPU repair | 11 unique artifacts × 3,800,016,491 documents = **41,800,181,401 checks** (12 model families by exact-artifact inheritance) | 0 |
@@ -913,8 +913,9 @@ The machine-readable records are
 [`evidence/evidence_manifest.json`](evidence/evidence_manifest.json),
 [`evidence/evidence_manifest_added_families.json`](evidence/evidence_manifest_added_families.json),
 [`evidence/evidence_manifest_kimi_band.json`](evidence/evidence_manifest_kimi_band.json),
+[`evidence/evidence_manifest_roster_2026_10.json`](evidence/evidence_manifest_roster_2026_10.json),
 and [`tables/support_registry.json`](tables/support_registry.json). Shipped
-per-artifact readings account for 53,720,215,504 checks; an archived earlier
+per-artifact readings account for 65,120,264,977 checks; an archived earlier
 phase accounts for the remaining 3,280,031,861. Together they produce the
 headline total above. What ships is that per-artifact summary: the
 document-by-document ledger the campaigns were reduced from lives in the
@@ -1043,7 +1044,7 @@ document also shows the regimes where direct use of another engine is faster.
 | Track | Families | Coverage |
 |---|---:|---|
 | Certified CPU fast repair | 12 model families / 11 unique tokenizer artifacts | corrected Gigatoken, 12.33T characters, zero observed ID divergence |
-| Byte-level BPE | 15 | CPU evidence; GPU status recorded per artifact |
+| Byte-level BPE | 18 | CPU evidence; GPU status recorded per artifact |
 | WordPiece | 3 | CPU evidence |
 | Structural exclusions | 2 | reason recorded |
 

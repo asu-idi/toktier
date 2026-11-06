@@ -54,7 +54,7 @@
     "note": "The full differential-campaign corpus (2,481 files). The anchor's registry readings (evidence ev-main-corpus-v1) were taken on a subset of these documents; a literal absent from a document is absent from every part of it, so absence here implies absence over those readings, length-truncated texts included."
   },
   "scan": {
-    "method": "exact substring count (pyarrow count_substring) of every divergence-set literal over the raw text column, in the same corpus pass that produced the plan193 digest containers; RE2 prefilter per batch with an exact full-count cross-check on the first batch of every unit",
+    "method": "exact substring count (pyarrow count_substring) of every divergence-set literal over the raw text column, in the same corpus pass that produced the digest containers of the 2026-10 roster census over the full corpus; RE2 prefilter per batch with an exact full-count cross-check on the first batch of every unit",
     "units_complete": 15205,
     "units_expected": 15205,
     "coverage_closed": true,

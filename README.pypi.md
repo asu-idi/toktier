@@ -424,13 +424,24 @@ data, and every fallback counter.
 certified**: its pipeline is the certified `deepseek_v4_flash` one and its
 added-token table is not one a campaign has judged
 ([support matrix](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/support-matrix.md#runnable-not-certified-the-deepseek-v41-flash-tokenizer)).
-No crates.io release carries it yet, so take the crate from GitHub `main`;
-once a release carries the family, switch the line back to a version number.
+No crates.io release carries it yet, so clone `main` next to your project
+and depend on the crate by path; once a release carries the family, switch
+the line back to a version number.
+
+```sh
+git clone https://github.com/asu-idi/toktier
+cargo new v41-example && cd v41-example
+```
 
 ```toml
 [dependencies]
-toktier = { git = "https://github.com/asu-idi/toktier", branch = "main", features = ["network"] }
+toktier = { path = "../toktier/crates/toktier", features = ["network"] }
 ```
+
+Take the crate by path rather than as a `git` dependency: Cargo records a
+`git` source for this crate's own siblings, the certified-core check then reads
+`mismatched`, and the plan is the reference route
+([`docs/rust-api.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/rust-api.md)).
 
 ```rust
 use toktier::{Device, Policy, Revision, Runtime};
@@ -470,6 +481,13 @@ fn main() -> toktier::Result<()> {
     println!("kept {} ids, appended {}", patch.keep_tokens(), patch.replacement_ids().len());
     Ok(())
 }
+```
+
+`cargo run --release` prints:
+
+```text
+[FastCpu, HuggingFace] Supported [ExaminedArtifact]
+kept 1087 ids, appended 10
 ```
 
 The `network` feature fetches the pinned files over TLS; for a mirror or an

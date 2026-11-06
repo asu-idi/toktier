@@ -353,13 +353,22 @@ fallback 的计数。
 （`examined`）：pipeline 与已认证的 `deepseek_v4_flash` 相同，added-token 表
 尚未经过任何认证 campaign 的判定
 （[支持矩阵](docs/support-matrix.md#runnable-not-certified-the-deepseek-v41-flash-tokenizer)）。
-crates.io 上的发布版还没有这个 family，所以请从 GitHub `main` 取 crate；
-等发布版收录后，把这一行改回版本号即可。
+crates.io 上的发布版还没有这个 family，所以请把 `main` 克隆到项目旁边，
+按路径依赖这个 crate；等发布版收录后，把这一行改回版本号即可。
+
+```sh
+git clone https://github.com/asu-idi/toktier
+cargo new v41-example && cd v41-example
+```
 
 ```toml
 [dependencies]
-toktier = { git = "https://github.com/asu-idi/toktier", branch = "main", features = ["network"] }
+toktier = { path = "../toktier/crates/toktier", features = ["network"] }
 ```
+
+请用路径依赖，而不是 `git` 依赖：Cargo 会把这个 crate 的同仓 crate 记为
+`git` 来源，认证核心的检查随之读作 `mismatched`，计划走参考路由
+（[`docs/rust-api.md`](docs/rust-api.md)）。
 
 ```rust
 use toktier::{Device, Policy, Revision, Runtime};
@@ -399,6 +408,13 @@ fn main() -> toktier::Result<()> {
     println!("kept {} ids, appended {}", patch.keep_tokens(), patch.replacement_ids().len());
     Ok(())
 }
+```
+
+`cargo run --release` 输出：
+
+```text
+[FastCpu, HuggingFace] Supported [ExaminedArtifact]
+kept 1087 ids, appended 10
 ```
 
 `network` feature 通过 TLS 获取钉住的文件；镜像或离线缓存的取法见

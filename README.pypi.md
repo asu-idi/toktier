@@ -1093,7 +1093,7 @@ layers together.
 
 ## Documentation
 
-- [`docs/releases/v0.3.0.md`](https://github.com/asu-idi/toktier/blob/v0.3.1/docs/releases/v0.3.0.md) — release notes for this version.
+- [`docs/releases/v0.3.1.md`](https://github.com/asu-idi/toktier/blob/v0.3.1/docs/releases/v0.3.1.md) — release notes for this version.
 - [`ARCHITECTURE.md`](https://github.com/asu-idi/toktier/blob/v0.3.1/ARCHITECTURE.md) — layers, routing, and store format.
 - [`docs/serving.md`](https://github.com/asu-idi/toktier/blob/v0.3.1/docs/serving.md) — which encode call for which request shape, patch-only appends, and chunk-parallel encode for long requests.
 - [`docs/integration/sglang.md`](https://github.com/asu-idi/toktier/blob/v0.3.1/docs/integration/sglang.md) — using toktier as an SGLang tokenizer backend.

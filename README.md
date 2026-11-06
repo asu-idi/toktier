@@ -1098,7 +1098,7 @@ layers together.
 
 ## Documentation
 
-- [`docs/releases/v0.3.0.md`](docs/releases/v0.3.0.md) — release notes for this version.
+- [`docs/releases/v0.3.1.md`](docs/releases/v0.3.1.md) — release notes for this version.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — layers, routing, and store format.
 - [`docs/serving.md`](docs/serving.md) — which encode call for which request shape, patch-only appends, and chunk-parallel encode for long requests.
 - [`docs/integration/sglang.md`](docs/integration/sglang.md) — using toktier as an SGLang tokenizer backend.

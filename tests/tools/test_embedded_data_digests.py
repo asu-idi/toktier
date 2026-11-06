@@ -42,7 +42,7 @@ def test_a_build_script_value_is_not_counted_as_hand_pinned() -> None:
 def test_a_stale_constant_is_reported() -> None:
     """The blind spot itself: the payload moved, the constant did not."""
     stale = MANIFEST.replace(
-        '"2f6524884f84c87bb6a8ac1a85e81ef4ab151e5cec076bebfb8d8aec1a9a760f"',
+        '"14b759aa09086744ff5f3c60c0df5206eb1b48c67fb7b7c2358bbee740d0bd85"',
         f'"{"0" * 64}"',
         1,
     )
@@ -65,7 +65,7 @@ def test_a_constant_with_no_payload_beside_it_is_reported() -> None:
 
 def test_a_value_that_is_neither_hex_nor_a_build_script_value_is_reported() -> None:
     malformed = MANIFEST.replace(
-        '"2f6524884f84c87bb6a8ac1a85e81ef4ab151e5cec076bebfb8d8aec1a9a760f"',
+        '"14b759aa09086744ff5f3c60c0df5206eb1b48c67fb7b7c2358bbee740d0bd85"',
         '"not a digest"',
         1,
     )

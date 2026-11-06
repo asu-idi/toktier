@@ -3,25 +3,25 @@
   "generated_by": {
     "tool": "tools/generate_sibling_aliases.py",
     "tool_version": "1.0.0",
-    "source_commit": "257d925533280e1f9f529f1afe8c8c3fb3c5f92a",
-    "generated_at": "2026-08-31T02:43:16Z"
+    "source_commit": "e055507094fe9afacabfa075f5b9f9e8e0aaa8ea",
+    "generated_at": "2026-11-06T13:08:12Z"
   },
-  "root_digest": "sha256:1b5e08f6d176e356c787133b18c77ceb08ef49842ca96a13c654bb97c26869af",
+  "root_digest": "sha256:ee7fb05a0846e7795b2971096078703b477450c1322c55063a8c509ea3a0722c",
   "provenance": {
     "audit_date": "2026-08-04",
     "audit_rows": 470,
     "audit_sha256": "f3cc273898e7604a7d3b947be95bbf24dc6fa1df082aa55cf777c0c83d6a3fd2",
     "support_matrix_sha256": "c17c3091b3c0ced929383b7d4c5507a09ed5dee3fde690496aa85da39a25cb9a",
-    "selection": "as recorded at the 2026-08-04 admission audit: the verified repositories docs/support-matrix.md enumerated then, plus the canonical repository of each family whose upstream source file is not tokenizer.json, plus repositories published after that snapshot whose upstream file was compared byte for byte against the shipped anchor on the date recorded beside them in docs/support-matrix.md. This whole block is a snapshot of that audit and is deliberately not refreshed against the current tree: audit_date, audit_rows and audit_sha256 are what was observed then, and support_matrix_sha256 is the digest docs/support-matrix.md carried at the admission commit, not the digest it carries today. Nothing checks it, because there is nothing for it to agree with; rewriting it to the current digest would make the record describe an audit that did not happen. Rows whose basis is equivalent_loader_face were admitted since 0.2.9: their audited tokenizer file group materializes, under the pinned loader, a loader face byte-identical to the certified family anchor face, re-established by the maintainer materialization check on the date recorded beside them in docs/support-matrix.md."
+    "selection": "as recorded at the 2026-08-04 admission audit: the verified repositories docs/support-matrix.md enumerated then, plus the canonical repository of each family whose upstream source file is not tokenizer.json, plus repositories published after that snapshot whose upstream file was compared byte for byte against the shipped anchor on the date recorded beside them in docs/support-matrix.md. This whole block is a snapshot of that audit and is deliberately not refreshed against the current tree: audit_date, audit_rows and audit_sha256 are what was observed then, and support_matrix_sha256 is the digest docs/support-matrix.md carried at the admission commit, not the digest it carries today. Nothing checks it, because there is nothing for it to agree with; rewriting it to the current digest would make the record describe an audit that did not happen. Rows whose basis is equivalent_loader_face were admitted since 0.2.9: their audited tokenizer file group materializes, under the pinned loader, a loader face byte-identical to the certified family anchor face, re-established by the maintainer materialization check on the date recorded beside them in docs/support-matrix.md. Post-snapshot rows on the equivalent_canonicalisation basis were compared byte for byte after line-ending normalization, and differ from the anchor only in CRLF line endings. Post-snapshot rows on the identical_source basis compared the upstream tiktoken.model byte for byte against the pinned conversion source of the certified artifact; the row resolves to the artifact derived from the canonical repository's pinned conversion inputs, so the repository's own copies of the other conversion inputs are not part of the comparison and the conversion table is unchanged."
   },
   "counts": {
-    "identical": 152,
-    "identical_source": 13,
-    "equivalent_canonicalisation": 10,
+    "identical": 158,
+    "identical_source": 14,
+    "equivalent_canonicalisation": 11,
     "equivalent_serialisation": 38,
     "equivalent_loader_face": 2,
-    "total": 215,
-    "packaged": 208,
+    "total": 223,
+    "packaged": 216,
     "reference_only": 7
   },
   "aliases": [
@@ -389,6 +389,17 @@
       "canonical_packaged": true
     },
     {
+      "repo_id": "MiniMaxAI/MiniMax-M3.1-Flash",
+      "revision": "ce7f4df87d2e05262f5775f373dac4772f134041",
+      "source_file": "tokenizer.json",
+      "source_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
+      "source_size": 9731500,
+      "canonical_family": "minimax_m3",
+      "canonical_anchor_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
+      "basis": "identical",
+      "canonical_packaged": true
+    },
+    {
       "repo_id": "mistralai/Ministral-3-14B-Instruct-2512-BF16",
       "revision": "3cea74c1ebaf5ce5f5a2553de470e2ceab825142",
       "source_file": "tokenizer.json",
@@ -490,6 +501,17 @@
     {
       "repo_id": "moonshotai/Kimi-K3",
       "revision": "9f62e4e9fffbd0a83ddd60e1c209d828994b3569",
+      "source_file": "tiktoken.model",
+      "source_sha256": "b6c497a7469b33ced9c38afb1ad6e47f03f5e5dc05f15930799210ec050c5103",
+      "source_size": 2795286,
+      "canonical_family": "kimi_k3",
+      "canonical_anchor_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
+      "basis": "identical_source",
+      "canonical_packaged": true
+    },
+    {
+      "repo_id": "moonshotai/Kimi-K3.1-Pro",
+      "revision": "6d0a0202956796543364d666ab19c6ad1a494ee1",
       "source_file": "tiktoken.model",
       "source_sha256": "b6c497a7469b33ced9c38afb1ad6e47f03f5e5dc05f15930799210ec050c5103",
       "source_size": 2795286,
@@ -787,6 +809,28 @@
     {
       "repo_id": "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4",
       "revision": "183968f87ae4cedce3039313cac1fd43d112c578",
+      "source_file": "tokenizer.json",
+      "source_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+      "source_size": 17077484,
+      "canonical_family": "nemotron_3_nano_4b",
+      "canonical_anchor_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+      "basis": "identical",
+      "canonical_packaged": true
+    },
+    {
+      "repo_id": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
+      "revision": "a9904d24bcc1d289a1950fa9d2b978c47cf903b9",
+      "source_file": "tokenizer.json",
+      "source_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+      "source_size": 17077484,
+      "canonical_family": "nemotron_3_nano_4b",
+      "canonical_anchor_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+      "basis": "identical",
+      "canonical_packaged": true
+    },
+    {
+      "repo_id": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4",
+      "revision": "bee7596271d1495f6992ae224aefde4410e816b8",
       "source_file": "tokenizer.json",
       "source_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
       "source_size": 17077484,
@@ -2314,6 +2358,28 @@
       "canonical_packaged": true
     },
     {
+      "repo_id": "XiaomiMiMo/MiMo-V2-Flash",
+      "revision": "1afd314a2406c282e0956375c34a676501c78649",
+      "source_file": "tokenizer.json",
+      "source_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "source_size": 11422654,
+      "canonical_family": "qwen3_8b",
+      "canonical_anchor_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "basis": "identical",
+      "canonical_packaged": true
+    },
+    {
+      "repo_id": "XiaomiMiMo/MiMo-V2.5-Pro",
+      "revision": "21d1ecfecd7bd70f31be25ca49d7edd21f003659",
+      "source_file": "tokenizer.json",
+      "source_sha256": "cdd40b08814d626d2ab1eb36c7ca66521a96bce4d478cf1375a4d45fe03e1cf9",
+      "source_size": 12180133,
+      "canonical_family": "qwen3_8b",
+      "canonical_anchor_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "basis": "equivalent_canonicalisation",
+      "canonical_packaged": true
+    },
+    {
       "repo_id": "zai-org/GLM-4.7-Flash",
       "revision": "7dd20894a642a0aa287e9827cb1a1f7f91386b67",
       "source_file": "tokenizer.json",
@@ -2371,6 +2437,28 @@
     {
       "repo_id": "zai-org/GLM-5.2-FP8",
       "revision": "ba978f7d347eaf65d22f1a86833408afdb953541",
+      "source_file": "tokenizer.json",
+      "source_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+      "source_size": 20217442,
+      "canonical_family": "glm_5_2",
+      "canonical_anchor_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+      "basis": "identical",
+      "canonical_packaged": true
+    },
+    {
+      "repo_id": "zai-org/GLM-5.3",
+      "revision": "ba32f8c19c8738e2c57c71798c601d477a7bf844",
+      "source_file": "tokenizer.json",
+      "source_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+      "source_size": 20217442,
+      "canonical_family": "glm_5_2",
+      "canonical_anchor_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+      "basis": "identical",
+      "canonical_packaged": true
+    },
+    {
+      "repo_id": "zai-org/GLM-5.3-BF16",
+      "revision": "abf42e6c0e53bc29a875511301e7b7fcd220315b",
       "source_file": "tokenizer.json",
       "source_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
       "source_size": 20217442,

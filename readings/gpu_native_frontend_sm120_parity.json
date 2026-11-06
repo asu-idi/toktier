@@ -2,12 +2,12 @@
   "all_ids_equal_hf": true,
   "architecture": "sm_120",
   "architecture_digest": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
-  "characters": 70264293120,
+  "characters": 73777507776,
   "devices": [
     "NVIDIA RTX PRO 6000 Blackwell Server Edition, 12.0, 595.71.05"
   ],
-  "documents": 22053500,
-  "families": 20,
+  "documents": 23156175,
+  "families": 21,
   "fatbin_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
   "gil_released": true,
   "mismatches": 0,
@@ -185,6 +185,16 @@
       "characters": 3513214656,
       "documents": 1102675,
       "family": "nemotron_3_nano_4b",
+      "gil_released": true,
+      "mismatches": 0,
+      "one_python_to_rust_call_per_batch": true
+    },
+    {
+      "all_ids_equal_hf": true,
+      "artifact_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
+      "characters": 3513214656,
+      "documents": 1102675,
+      "family": "nemotron_super_vl",
       "gil_released": true,
       "mismatches": 0,
       "one_python_to_rust_call_per_batch": true

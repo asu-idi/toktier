@@ -11,8 +11,8 @@
     "counts": { "$ref": "#/$defs/counts" },
     "aliases": {
       "type": "array",
-      "minItems": 223,
-      "maxItems": 223,
+      "minItems": 237,
+      "maxItems": 237,
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/source_alias" }
     }
@@ -71,12 +71,12 @@
         "total"
       ],
       "properties": {
-        "identical": { "const": 158 },
+        "identical": { "const": 171 },
         "identical_source": { "const": 14 },
         "equivalent_canonicalisation": { "const": 11 },
-        "equivalent_serialisation": { "const": 38 },
+        "equivalent_serialisation": { "const": 39 },
         "equivalent_loader_face": { "const": 2 },
-        "total": { "const": 223 }
+        "total": { "const": 237 }
       }
     },
     "source_alias": {

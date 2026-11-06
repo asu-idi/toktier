@@ -67,8 +67,8 @@ aliases = shipped_sibling_aliases()
 # Counted rows, kept in step with the shipped table by
 # tests/packaging/test_release_tools.py so a table that grows cannot leave
 # this release-path assertion behind.
-assert len(aliases.records) == 223
-assert sum(record.canonical_packaged for record in aliases.records) == 216
+assert len(aliases.records) == 237
+assert sum(record.canonical_packaged for record in aliases.records) == 230
 
 facts = fast_cpu_engine_facts()
 binding = json.loads(

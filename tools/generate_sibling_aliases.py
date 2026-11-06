@@ -167,9 +167,9 @@ def build_document(
     equivalent_packaged = sum(
         bool(row["canonical_packaged"]) for row in equivalent
     )
-    if len(equivalent) != 51 or equivalent_packaged != 49:
+    if len(equivalent) != 52 or equivalent_packaged != 50:
         raise GenerationError(
-            "equivalent sibling coverage drifted: expected 51 total / 49 "
+            "equivalent sibling coverage drifted: expected 52 total / 50 "
             f"packaged, got {len(equivalent)} / {equivalent_packaged}"
         )
     counts = {

@@ -5,15 +5,15 @@
     "audit_rows": 470,
     "audit_sha256": "f3cc273898e7604a7d3b947be95bbf24dc6fa1df082aa55cf777c0c83d6a3fd2",
     "support_matrix_sha256": "c17c3091b3c0ced929383b7d4c5507a09ed5dee3fde690496aa85da39a25cb9a",
-    "selection": "as recorded at the 2026-08-04 admission audit: the verified repositories docs/support-matrix.md enumerated then, plus the canonical repository of each family whose upstream source file is not tokenizer.json, plus repositories published after that snapshot whose upstream file was compared byte for byte against the shipped anchor on the date recorded beside them in docs/support-matrix.md. This whole block is a snapshot of that audit and is deliberately not refreshed against the current tree: audit_date, audit_rows and audit_sha256 are what was observed then, and support_matrix_sha256 is the digest docs/support-matrix.md carried at the admission commit, not the digest it carries today. Nothing checks it, because there is nothing for it to agree with; rewriting it to the current digest would make the record describe an audit that did not happen. Rows whose basis is equivalent_loader_face were admitted since 0.2.9: their audited tokenizer file group materializes, under the pinned loader, a loader face byte-identical to the certified family anchor face, re-established by the maintainer materialization check on the date recorded beside them in docs/support-matrix.md. Post-snapshot rows on the equivalent_canonicalisation basis were compared byte for byte after line-ending normalization, and differ from the anchor only in CRLF line endings. Post-snapshot rows on the identical_source basis compared the upstream tiktoken.model byte for byte against the pinned conversion source of the certified artifact; the row resolves to the artifact derived from the canonical repository's pinned conversion inputs, so the repository's own copies of the other conversion inputs are not part of the comparison and the conversion table is unchanged."
+    "selection": "as recorded at the 2026-08-04 admission audit: the verified repositories docs/support-matrix.md enumerated then, plus the canonical repository of each family whose upstream source file is not tokenizer.json, plus repositories published after that snapshot whose upstream file was compared byte for byte against the shipped anchor on the date recorded beside them in docs/support-matrix.md. This whole block is a snapshot of that audit and is deliberately not refreshed against the current tree: audit_date, audit_rows and audit_sha256 are what was observed then, and support_matrix_sha256 is the digest docs/support-matrix.md carried at the admission commit, not the digest it carries today. Nothing checks it, because there is nothing for it to agree with; rewriting it to the current digest would make the record describe an audit that did not happen. Rows whose basis is equivalent_loader_face were admitted since 0.2.9: their audited tokenizer file group materializes, under the pinned loader, a loader face byte-identical to the certified family anchor face, re-established by the maintainer materialization check on the date recorded beside them in docs/support-matrix.md. Post-snapshot rows on the equivalent_canonicalisation basis were compared byte for byte after line-ending normalization, and differ from the anchor only in CRLF line endings. Post-snapshot rows on the identical_source basis compared the upstream tiktoken.model byte for byte against the pinned conversion source of the certified artifact; the row resolves to the artifact derived from the canonical repository's pinned conversion inputs, so the repository's own copies of the other conversion inputs are not part of the comparison and the conversion table is unchanged. Post-snapshot rows on the equivalent_serialisation basis differ from the anchor only in the form the merge table is written in and in an omitted model field that takes its default; the pinned tokenizers library loads both files to the same document, and the pinned loader materializes a loader face byte-identical to the anchor's."
   },
   "counts": {
-    "identical": 158,
+    "identical": 171,
     "identical_source": 14,
     "equivalent_canonicalisation": 11,
-    "equivalent_serialisation": 38,
+    "equivalent_serialisation": 39,
     "equivalent_loader_face": 2,
-    "total": 223
+    "total": 237
   },
   "aliases": [
     {
@@ -107,6 +107,16 @@
       "basis": "identical"
     },
     {
+      "repo_id": "amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4",
+      "revision": "246e4af1142acf52c86b2b6c4f909209a48da282",
+      "source_file": "tokenizer.json",
+      "source_sha256": "ac2f41ef2444dec82fdc90e334f80543f298535005fe78aec7e8311ef86f84d0",
+      "source_size": 28085854,
+      "canonical_family": "muse_spark",
+      "canonical_anchor_sha256": "ac2f41ef2444dec82fdc90e334f80543f298535005fe78aec7e8311ef86f84d0",
+      "basis": "identical"
+    },
+    {
       "repo_id": "deepseek-ai/DeepSeek-V3-0324",
       "revision": "e9b33add76883f293d6bf61f6bd89b497e80e335",
       "source_file": "tokenizer.json",
@@ -157,6 +167,16 @@
       "basis": "identical"
     },
     {
+      "repo_id": "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
+      "revision": "6821d6ad3681a4b137b066b76094fa82ebd0a380",
+      "source_file": "tokenizer.json",
+      "source_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+      "source_size": 6367257,
+      "canonical_family": "deepseek_v4_1_flash",
+      "canonical_anchor_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+      "basis": "identical"
+    },
+    {
       "repo_id": "deepseek-ai/DeepSeek-V4-Pro",
       "revision": "b5968e9190ef611bbf34a7229255be88a0e937c1",
       "source_file": "tokenizer.json",
@@ -194,6 +214,16 @@
       "source_size": 6367146,
       "canonical_family": "deepseek_v4_flash",
       "canonical_anchor_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+      "basis": "identical"
+    },
+    {
+      "repo_id": "deepseek-ai/DeepSeek-V4.1-Flash",
+      "revision": "314113f8a7dadb388215396ba5fbee2c610a04d6",
+      "source_file": "tokenizer.json",
+      "source_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+      "source_size": 6367257,
+      "canonical_family": "deepseek_v4_1_flash",
+      "canonical_anchor_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
       "basis": "identical"
     },
     {
@@ -267,6 +297,16 @@
       "basis": "identical"
     },
     {
+      "repo_id": "intel-ai/Muse-Spark-Open-816B-A42B-INT4",
+      "revision": "57ab64762b09fa89a1985348af5394e94aff01ad",
+      "source_file": "tokenizer.json",
+      "source_sha256": "ac2f41ef2444dec82fdc90e334f80543f298535005fe78aec7e8311ef86f84d0",
+      "source_size": 28085854,
+      "canonical_family": "muse_spark",
+      "canonical_anchor_sha256": "ac2f41ef2444dec82fdc90e334f80543f298535005fe78aec7e8311ef86f84d0",
+      "basis": "identical"
+    },
+    {
       "repo_id": "meta-llama/Llama-3.1-405B",
       "revision": "b906e4dc842aa489c962f9db26554dcfdde901fe",
       "source_file": "tokenizer.json",
@@ -335,6 +375,16 @@
       "canonical_family": "llama_3_1_8b",
       "canonical_anchor_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
       "basis": "equivalent_canonicalisation"
+    },
+    {
+      "repo_id": "meta-models/Muse-Spark-Open-816B-A42B-NVFP4",
+      "revision": "4239e4db19376904f2e82c167e78f70abb5455fe",
+      "source_file": "tokenizer.json",
+      "source_sha256": "ac2f41ef2444dec82fdc90e334f80543f298535005fe78aec7e8311ef86f84d0",
+      "source_size": 28085854,
+      "canonical_family": "muse_spark",
+      "canonical_anchor_sha256": "ac2f41ef2444dec82fdc90e334f80543f298535005fe78aec7e8311ef86f84d0",
+      "basis": "identical"
     },
     {
       "repo_id": "MiniMaxAI/MiniMax-M3-MXFP8",
@@ -2127,6 +2177,46 @@
       "basis": "equivalent_loader_face"
     },
     {
+      "repo_id": "stepfun-ai/Step-3.5-Flash",
+      "revision": "ab446a3de5e171ea341227e24bb1f090e1b771f7",
+      "source_file": "tokenizer.json",
+      "source_sha256": "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0",
+      "source_size": 9976972,
+      "canonical_family": "step5_preview",
+      "canonical_anchor_sha256": "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0",
+      "basis": "identical"
+    },
+    {
+      "repo_id": "stepfun-ai/Step-3.7-Flash",
+      "revision": "5f6244077ac62e04eec3f320501ff8c2b293373a",
+      "source_file": "tokenizer.json",
+      "source_sha256": "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0",
+      "source_size": 9976972,
+      "canonical_family": "step5_preview",
+      "canonical_anchor_sha256": "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0",
+      "basis": "identical"
+    },
+    {
+      "repo_id": "stepfun-ai/Step-5-Preview-BF16",
+      "revision": "7734b7ffac118d70d8398bfa3eb0fab007eb45b1",
+      "source_file": "tokenizer.json",
+      "source_sha256": "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0",
+      "source_size": 9976972,
+      "canonical_family": "step5_preview",
+      "canonical_anchor_sha256": "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0",
+      "basis": "identical"
+    },
+    {
+      "repo_id": "stepfun-ai/Step-5-Preview-NVFP4",
+      "revision": "bc246cc2848e17b37f377eda8fd825c5b3018d1f",
+      "source_file": "tokenizer.json",
+      "source_sha256": "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0",
+      "source_size": 9976972,
+      "canonical_family": "step5_preview",
+      "canonical_anchor_sha256": "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0",
+      "basis": "identical"
+    },
+    {
       "repo_id": "tencent/Hy3-FP8",
       "revision": "ecc1d8e194e093f33177f2f0ef7ce8f397b2d68b",
       "source_file": "tokenizer.json",
@@ -2134,6 +2224,16 @@
       "source_size": 9527406,
       "canonical_family": "hy3",
       "canonical_anchor_sha256": "446e0b59cd941637c0ddfd84e12ee1f49480fd12097f86a9d2fec8ebd0c7ff6c",
+      "basis": "identical"
+    },
+    {
+      "repo_id": "tencent/Hy4-preview-FP8",
+      "revision": "4215ec29de873a998e849cee902654490c7ff4d1",
+      "source_file": "tokenizer.json",
+      "source_sha256": "ff67615de6e6ee073a20bd1fe3a776053e821573f4ae566aeb8e9d43de801201",
+      "source_size": 9358955,
+      "canonical_family": "hy4",
+      "canonical_anchor_sha256": "ff67615de6e6ee073a20bd1fe3a776053e821573f4ae566aeb8e9d43de801201",
       "basis": "identical"
     },
     {
@@ -2147,6 +2247,16 @@
       "basis": "identical"
     },
     {
+      "repo_id": "XiaomiMiMo/MiMo-V2.5",
+      "revision": "63651580ca774f8504f676040460aed3e1244ac1",
+      "source_file": "tokenizer.json",
+      "source_sha256": "633518aad78f9f61bae2ae420d621215754a4424c918b052cd8c22a3b59e99d2",
+      "source_size": 7033572,
+      "canonical_family": "mimo_v2_6",
+      "canonical_anchor_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+      "basis": "equivalent_serialisation"
+    },
+    {
       "repo_id": "XiaomiMiMo/MiMo-V2.5-Pro",
       "revision": "21d1ecfecd7bd70f31be25ca49d7edd21f003659",
       "source_file": "tokenizer.json",
@@ -2155,6 +2265,36 @@
       "canonical_family": "qwen3_8b",
       "canonical_anchor_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
       "basis": "equivalent_canonicalisation"
+    },
+    {
+      "repo_id": "XiaomiMiMo/MiMo-V2.6-Flash-MOPD",
+      "revision": "5220c3f513065a0426be5e094571cbed0983386e",
+      "source_file": "tokenizer.json",
+      "source_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+      "source_size": 11423823,
+      "canonical_family": "mimo_v2_6",
+      "canonical_anchor_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+      "basis": "identical"
+    },
+    {
+      "repo_id": "XiaomiMiMo/MiMo-V2.6-Pro-MOPD",
+      "revision": "da71ee15e76a8849bd1a9610195c452007a79678",
+      "source_file": "tokenizer.json",
+      "source_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+      "source_size": 11423823,
+      "canonical_family": "mimo_v2_6",
+      "canonical_anchor_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+      "basis": "identical"
+    },
+    {
+      "repo_id": "XiaomiMiMo/MiMo-V2.6-Pro-RL",
+      "revision": "a066ba0057192126bd5d255f37138265fc1a435e",
+      "source_file": "tokenizer.json",
+      "source_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+      "source_size": 11423823,
+      "canonical_family": "mimo_v2_6",
+      "canonical_anchor_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+      "basis": "identical"
     },
     {
       "repo_id": "zai-org/GLM-4.7-Flash",

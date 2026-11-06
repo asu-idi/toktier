@@ -287,6 +287,20 @@
       }
     }
   },
+  "nemotron_super_vl": {
+    "repo_id": "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16",
+    "revision": "fb0ee0bc6b3f70342afd8d84cb80dbadbaa8a1fe",
+    "files": {
+      "tokenizer.json": {
+        "sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
+        "size": 17077366
+      },
+      "tokenizer_config.json": {
+        "sha256": "89fa70d31734c0c75ffdcee4114449f8cf8abd64bc233d420b58e25763f91aba",
+        "size": 619
+      }
+    }
+  },
   "olmo_3_7b": {
     "repo_id": "allenai/Olmo-3-1025-7B",
     "revision": "a81bae42db3975be1671e27b9c9a56da1a9f980f",

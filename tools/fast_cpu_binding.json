@@ -86,7 +86,8 @@
     "laguna_s_2_1": "engine: unsupported multi-Split chain shape",
     "hy4": "not judged: the repair roster has no row for this artifact, so the engine has no differential reading on it",
     "step5_preview": "not judged: the repair roster has no row for this artifact, so the engine has no differential reading on it",
-    "muse_spark": "not judged: the repair roster has no row for this artifact, so the engine has no differential reading on it"
+    "muse_spark": "not judged: the repair roster has no row for this artifact, so the engine has no differential reading on it",
+    "nemotron_super_vl": "not judged: the repair roster has no row for this artifact, so the engine has no differential reading on it"
   },
   "carried_families": {
     "deepseek_v4_1_flash": "deepseek_v4_flash",

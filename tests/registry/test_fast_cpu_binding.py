@@ -70,6 +70,7 @@ def test_fast_cpu_registry_counts_unique_artifacts_without_inflation() -> None:
         "laguna_s_2_1",
         "ling_3_0_flash",
         "muse_spark",
+        "nemotron_super_vl",
         "step5_preview",
     }
 

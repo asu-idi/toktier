@@ -421,7 +421,7 @@ data, and every fallback counter.
 
 ## Rust serving API
 
-### DeepSeek-V4.1-Flash-1017 on the Rust serving API
+### DeepSeek-V4.1-Flash-1017 from `main`: the shortest path
 
 `deepseek-ai/DeepSeek-V4.1-Flash-1017` (and `DeepSeek-V4.1-Flash` and
 `DeepSeek-V4-Flash-Vision-Exp`, which ship the same `tokenizer.json`) is the
@@ -432,20 +432,33 @@ family's readings through the cross-artifact carry-over
 ([support matrix](docs/support-matrix.md#certified-by-cross-artifact-carry-over-deepseek-v41-flash-and-mimo-v26)).
 The same holds for `XiaomiMiMo/MiMo-V2.6-Flash-RL` as `mimo_v2_6`, carried
 from `qwen3_8b`.
+No crates.io release carries it yet, so clone `main` next to your project
+and depend on the crate by path; once a release carries the family, switch
+the line back to a version number.
 
-```bash
-cargo add toktier
+```sh
+git clone https://github.com/asu-idi/toktier
+cargo new v41-example && cd v41-example
 ```
+
+```toml
+[dependencies]
+toktier = { path = "../toktier/crates/toktier", features = ["network"] }
+```
+
+Take the crate by path rather than as a `git` dependency: Cargo records a
+`git` source for this crate's own siblings, the certified-core check then reads
+`mismatched`, and the plan is the reference route
+([`docs/rust-api.md`](docs/rust-api.md)).
 
 ```rust
 use toktier::{Device, Policy, Revision, Runtime};
 
 fn main() -> toktier::Result<()> {
-    // Policy::Certified admits only certified routes; this family's fast
-    // CPU route is one of them.
+    // Policy::Supported is the default, written out here.
     let runtime = Runtime::builder()
         .device(Device::Cpu)
-        .policy(Policy::Certified)
+        .policy(Policy::Supported)
         .build()?;
 
     // Pinned in the shipped manifest: deepseek-ai/DeepSeek-V4.1-Flash-1017
@@ -460,7 +473,7 @@ fn main() -> toktier::Result<()> {
     // The label and the reason, read from the route plan.
     let plan = tokenizer.plan();
     println!("{:?} {:?} {:?}", plan.backends, plan.certification, plan.reasons);
-    // [FastCpu, HuggingFace] CertifiedSource []
+    // [FastCpu, HuggingFace] Supported []
 
     let turn = "<｜User｜>Summarize the design of a tokenizer cache.<｜Assistant｜>\
                 A tokenizer cache keeps the token ids of the conversation so far. ";
@@ -477,18 +490,24 @@ fn main() -> toktier::Result<()> {
 }
 ```
 
-The example reads the pinned files from a verified artifact cache (fill it
-once with `toktier-rust artifacts fetch deepseek_v4_1_flash` from a build
-with `network`, or import a bundle; see
-[`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)). Built with `--release`
-and the default features of the published crate, which is the judged build
-recipe, `plan()` reads `CertifiedSource` (the certified label of a
-source-bound route) with no reason; a build that turns
-`network` on runs the same route labelled `Supported`, because the feature
-list is part of that recipe (`docs/rust-api.md`). `append` returns a
-`TokenPatch` and does not materialize the complete history:
-`keep_tokens()` is where the downstream buffer is cut, `replacement_ids()`
-is the exact repaired suffix. The Python facade is not the serving path:
+`cargo run --release` prints:
+
+```text
+[FastCpu, HuggingFace] Supported []
+kept 1087 ids, appended 10
+```
+
+The `network` feature fetches the pinned files over TLS; for a mirror or an
+offline cache, see [`docs/rust-lifecycle.md`](docs/rust-lifecycle.md).
+`append` returns a `TokenPatch` and does not materialize the complete
+history: `keep_tokens()` is where the downstream buffer is cut,
+`replacement_ids()` is the exact repaired suffix. The label is read from
+`plan()`: with this dependency `certification` reads `Supported` with no
+reason, and `Policy::Certified` plans the same route with the same label.
+The build is not the judged recipe (`network` is on, and a path dependency
+resolves against your project's own lockfile), so the route carries the
+supported label rather than a certified one; [`docs/rust-api.md`](docs/rust-api.md)
+describes the build that reads `CertifiedSource`. The Python facade is not the serving path:
 `toktier.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash-1017")` loads the
 same artifact on the same CPU route for evaluation.
 

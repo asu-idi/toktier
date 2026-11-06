@@ -345,7 +345,7 @@ fallback 的计数。
 
 ## Rust serving API
 
-### 在 Rust serving API 上运行 DeepSeek-V4.1-Flash-1017
+### 从 `main` 跑 DeepSeek-V4.1-Flash-1017：最短路径
 
 `deepseek-ai/DeepSeek-V4.1-Flash-1017`（以及 `DeepSeek-V4.1-Flash`、
 `DeepSeek-V4-Flash-Vision-Exp`，三者的 `tokenizer.json` 逐字节相同）是已认证的
@@ -354,20 +354,31 @@ family `deepseek_v4_1_flash`。它的 pipeline 与已认证的 `deepseek_v4_flas
 因此通过跨工件 carry-over 沿用该 family 的读数
 （[支持矩阵](docs/support-matrix.md#certified-by-cross-artifact-carry-over-deepseek-v41-flash-and-mimo-v26)）。
 `XiaomiMiMo/MiMo-V2.6-Flash-RL` 以 `mimo_v2_6` 同样从 `qwen3_8b` 沿用。
+crates.io 上的发布版还没有这个 family，所以请把 `main` 克隆到项目旁边，
+按路径依赖这个 crate；等发布版收录后，把这一行改回版本号即可。
 
-```bash
-cargo add toktier
+```sh
+git clone https://github.com/asu-idi/toktier
+cargo new v41-example && cd v41-example
 ```
+
+```toml
+[dependencies]
+toktier = { path = "../toktier/crates/toktier", features = ["network"] }
+```
+
+请用路径依赖，而不是 `git` 依赖：Cargo 会把这个 crate 的同仓 crate 记为
+`git` 来源，认证核心的检查随之读作 `mismatched`，计划走参考路由
+（[`docs/rust-api.md`](docs/rust-api.md)）。
 
 ```rust
 use toktier::{Device, Policy, Revision, Runtime};
 
 fn main() -> toktier::Result<()> {
-    // Policy::Certified admits only certified routes; this family's fast
-    // CPU route is one of them.
+    // Policy::Supported is the default, written out here.
     let runtime = Runtime::builder()
         .device(Device::Cpu)
-        .policy(Policy::Certified)
+        .policy(Policy::Supported)
         .build()?;
 
     // Pinned in the shipped manifest: deepseek-ai/DeepSeek-V4.1-Flash-1017
@@ -382,7 +393,7 @@ fn main() -> toktier::Result<()> {
     // The label and the reason, read from the route plan.
     let plan = tokenizer.plan();
     println!("{:?} {:?} {:?}", plan.backends, plan.certification, plan.reasons);
-    // [FastCpu, HuggingFace] CertifiedSource []
+    // [FastCpu, HuggingFace] Supported []
 
     let turn = "<｜User｜>Summarize the design of a tokenizer cache.<｜Assistant｜>\
                 A tokenizer cache keeps the token ids of the conversation so far. ";
@@ -399,14 +410,22 @@ fn main() -> toktier::Result<()> {
 }
 ```
 
-示例从已校验的工件缓存读取钉住的文件（用开启 `network` 的构建执行一次
-`toktier-rust artifacts fetch deepseek_v4_1_flash` 填充，或导入 bundle；见
-[`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)）。以 `--release` 和已发布
-crate 的默认 feature 构建（即经过判定的构建配方）时，`plan()` 读作
-`CertifiedSource`（源身份绑定路径的认证标签），没有 reason；开启 `network` 的构建走同一条路径，标签为
-`Supported`，因为 feature 列表属于该配方（`docs/rust-api.md`）。`append`
-返回 `TokenPatch`，不会物化完整历史：`keep_tokens()` 是下游缓冲区的截断
-位置，`replacement_ids()` 是 repair 后的精确后缀。Python 门面不是服务路径：
+`cargo run --release` 输出：
+
+```text
+[FastCpu, HuggingFace] Supported []
+kept 1087 ids, appended 10
+```
+
+`network` feature 通过 TLS 获取钉住的文件；镜像或离线缓存的取法见
+[`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)。`append` 返回
+`TokenPatch`，不会物化完整历史：`keep_tokens()` 是下游缓冲区的截断位置，
+`replacement_ids()` 是 repair 后的精确后缀。标签从 `plan()` 读取：
+用这种依赖方式时 `certification` 读作 `Supported`，没有 reason；
+`Policy::Certified` 规划出同一条路径、同一个标签。这个构建不是经过判定的配方
+（开启了 `network`，且路径依赖按你项目自己的 lockfile 解析），所以路径带的是
+supported 标签而不是认证标签；读作 `CertifiedSource` 的构建方式见
+[`docs/rust-api.md`](docs/rust-api.md)。Python 门面不是服务路径：
 `toktier.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash-1017")` 以同一条 CPU
 路径加载同一个工件，用于评估。
 

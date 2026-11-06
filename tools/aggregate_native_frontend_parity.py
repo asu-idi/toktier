@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 #: same number stated where the reading is built rather than only where it is
 #: consumed: an aggregation over a short roster would otherwise produce a
 #: well-formed document that only fails much later.
-GPU_FAMILIES = 18
+GPU_FAMILIES = 20
 
 
 def _rows(directory: Path, backend: str) -> list[dict[str, Any]]:

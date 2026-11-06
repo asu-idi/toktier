@@ -37,7 +37,7 @@ FLAGS = [
 
 #: Families the direct-JIT matrix has to cover, and the documents that
 #: follows from the seven fixed cases each family is asked.
-DIRECT_JIT_FAMILIES = 18
+DIRECT_JIT_FAMILIES = 20
 DIRECT_JIT_DOCUMENTS = DIRECT_JIT_FAMILIES * 7
 
 

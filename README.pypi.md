@@ -322,7 +322,7 @@ tok = toktier.from_pretrained("Qwen/Qwen3-0.6B")
 
 `from_pretrained()` downloads the audited immutable revision for a recorded
 sibling or canonical repository, hashes the exact file, and consults the
-sibling registry, which contains 236 audited repositories plus one canonical
+sibling registry, which contains 240 audited repositories plus one canonical
 self-row and is itself covered by a root digest.
 For an unknown repository, `from_pretrained()` resolves `main` unless
 `revision=` is passed.
@@ -893,13 +893,13 @@ records the one artifact whose two faces differ as documents and the
 carry-over evidence.
 
 Four different counts appear in this document, and each answers a different
-question: **20 packaged artifacts** (what `toktier inspect` lists, all
+question: **21 packaged artifacts** (what `toktier inspect` lists, all
 certified; `deepseek_v4_1_flash` and `mimo_v2_6` through the cross-artifact
-carry-over), **20+3
+carry-over), **21+3
 model families** (byte-level BPE plus WordPiece, since families can share an
 artifact), **13 artifacts with a certified CPU fast path** (the 11 the CPU
 campaign judged, covering 12 families by exact-artifact inheritance, and the
-two certified through the cross-artifact carry-over), and **237 registry rows** (236 audited sibling
+two certified through the cross-artifact carry-over), and **241 registry rows** (240 audited sibling
 repositories plus one canonical self-row). Numbers that appear inconsistent
 usually belong to different axes.
 
@@ -1045,12 +1045,12 @@ document also shows the regimes where direct use of another engine is faster.
 | Track | Families | Coverage |
 |---|---:|---|
 | Certified CPU fast repair | 14 model families / 13 unique tokenizer artifacts | corrected Gigatoken; 11 artifacts judged over 12.33T characters with zero observed ID divergence, 2 by cross-artifact carry-over |
-| Byte-level BPE | 20 | CPU evidence; GPU status recorded per artifact |
+| Byte-level BPE | 21 | CPU evidence; GPU status recorded per artifact |
 | WordPiece | 3 | CPU evidence |
 | Structural exclusions | 2 | reason recorded |
 
 [`docs/support-matrix.md`](https://github.com/asu-idi/toktier/blob/v0.3.0/docs/support-matrix.md) lists every anchor artifact,
-SHA-256, backend status, and **236 verified model repositories** whose
+SHA-256, backend status, and **240 verified model repositories** whose
 tokenizer is byte-identical to a certified one, identical at the upstream
 source file it is converted from, or equivalent after canonicalization, in
 serialization form, or on the loader face. Coverage follows tokenizer
@@ -1058,13 +1058,13 @@ content, not repository naming. `toktier.from_pretrained(repo_id)` enforces
 that rule at runtime: it hashes the resolved file, maps registered content to
 the canonical artifact, and otherwise remains on HF.
 
-The shipped registry holds 237 rows: those 236 siblings plus
+The shipped registry holds 241 rows: those 240 siblings plus
 `moonshotai/Kimi-K3` itself, so resolving the canonical repository by name
 reports itself as the evidence repository rather than a byte-identical
-sibling. 230 of the rows map to canonical artifacts present in this wheel.
+sibling. 234 of the rows map to canonical artifacts present in this wheel.
 The other 7 are WordPiece rows, whose canonical artifacts are not packaged and
 which therefore run through HF. The 14 source-level `kimi_k3` rows are among
-the 230: their canonical artifact is derived on your machine from pinned
+the 234: their canonical artifact is derived on your machine from pinned
 upstream bytes, so the comparison stays at `tiktoken.model` level while the
 loaded object is the certified conversion. `toktier inspect` is the
 authoritative packaged-family list.

@@ -261,7 +261,7 @@ tok = toktier.from_pretrained("Qwen/Qwen3-0.6B")
 
 对于已登记的 sibling 或 canonical 仓库，`from_pretrained()` 会下载经审计的
 不可变 revision，对解析出的文件计算 SHA-256，再查询由根摘要校验的
-sibling 注册表（236 个已审计仓库，另加 1 个 canonical 自指条目）。对于未登记的仓库，`from_pretrained()`
+sibling 注册表（240 个已审计仓库，另加 1 个 canonical 自指条目）。对于未登记的仓库，`from_pretrained()`
 在未显式传入 `revision=` 时解析 `main`。字节完全相同、源码级相同、经
 canonicalization 后等价、序列化等价或 loader 面等价的记录，会通过同一套
 CPU/GPU 路由使用已经认证的 canonical 工件。已知仓库的字节内容一旦变化，或遇到任何未登记
@@ -759,12 +759,12 @@ pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
 唯一工件与延续证据记录在
 [`docs/support-matrix.md`](docs/support-matrix.md#configuration-only-added-tokens)。
 
-本文档中出现了四类计数，各自回答不同的问题：**20 个随包工件**（`toktier
+本文档中出现了四类计数，各自回答不同的问题：**21 个随包工件**（`toktier
 inspect` 列出的那些，全部已认证，其中 `deepseek_v4_1_flash` 与 `mimo_v2_6`
-通过跨工件 carry-over 认证）、**20+3 个 model family**（byte-level BPE 加
+通过跨工件 carry-over 认证）、**21+3 个 model family**（byte-level BPE 加
 WordPiece；不同 family 可以共用同一工件）、**13 个具备 CPU 快路径认证的
 工件**（CPU 战役判定的 11 个，按精确工件继承覆盖 12 个 family；另有 2 个通过跨工件
-carry-over 认证），以及**注册表 237 条**（236 个
+carry-over 认证），以及**注册表 241 条**（240 个
 已审计 sibling 仓库加 1 个 canonical 自指条目）。如果某个数字看起来与另一个
 不一致，通常是因为它们属于不同的计数轴。
 
@@ -890,22 +890,22 @@ kernel 的批量吞吐，与上表的端到端数据回答的是不同问题，�
 | 类别 | family 数量 | 覆盖情况 |
 |---|---:|---|
 | 认证 CPU 快速 repair | 14 个 family / 13 个唯一 tokenizer 工件 | 修正版 Gigatoken；11 个工件在 12.33 万亿字符上判定，未观察到 ID 不一致，2 个经跨工件 carry-over |
-| Byte-level BPE | 20 | CPU 证据；逐工件记录 GPU 状态 |
+| Byte-level BPE | 21 | CPU 证据；逐工件记录 GPU 状态 |
 | WordPiece | 3 | CPU 证据 |
 | 结构性排除 | 2 | 记录具体原因 |
 
 [`docs/support-matrix.md`](docs/support-matrix.md) 列出了每个锚点工件、
-SHA-256、后端状态，以及 **236 个已验证模型仓库**；这些仓库的 tokenizer 与
+SHA-256、后端状态，以及 **240 个已验证模型仓库**；这些仓库的 tokenizer 与
 已认证工件字节完全相同、源码级相同，或在 canonicalization 后、序列化形式上、
 loader 面上等价。覆盖关系由 tokenizer 内容决定，而不是仓库名。
 `toktier.from_pretrained(repo_id)` 会在运行时落实这条规则：对解析到的文件
 计算哈希，将登记内容映射到 canonical 工件，其他内容继续使用 HF。
 
-随包注册表共 237 条：上述 236 个 sibling，外加 `moonshotai/Kimi-K3`
+随包注册表共 241 条：上述 240 个 sibling，外加 `moonshotai/Kimi-K3`
 自身——这样按名解析 canonical 仓库时，报告的 evidence 仓库就是它自己，
-而不是某个字节完全相同的 sibling。其中 230 条会映射到当前 wheel 随附的
+而不是某个字节完全相同的 sibling。其中 234 条会映射到当前 wheel 随附的
 canonical 工件。其余 7 个是 WordPiece 条目，对应 canonical 工件尚未打包，
-因而使用 HF。14 个源码级 `kimi_k3` 条目已在这 230 个之内：其 canonical
+因而使用 HF。14 个源码级 `kimi_k3` 条目已在这 234 个之内：其 canonical
 工件由固定的上游字节在本机推导得到，因此比对仍在 `tiktoken.model` 层面
 进行，而载入的对象是那份已认证的转换件。`toktier inspect` 仍是随包 family
 列表的权威来源。

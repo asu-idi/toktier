@@ -481,15 +481,15 @@ everything below rests on it:
 
 | Basis | What was compared | Rows |
 |---|---|---|
-| identical | `tokenizer.json` sha256 equal to the certified artifact | 171 |
+| identical | `tokenizer.json` sha256 equal to the certified artifact | 175 |
 | identical (source file) | `kimi_k3` lineage: upstream `tiktoken.model` sha256 equal to the conversion source of the certified artifact | 13 |
 | equivalent (canonicalisation) | JSON content equal after canonicalisation; byte difference is formatting only | 11 |
 | equivalent (serialisation) | loads to the same tokenizer; byte difference is legacy serialisation form | 39 |
 | equivalent (loader face) | the audited file group materializes, under the pinned loader, a loader face byte-identical to the certified artifact's | 2 |
 
-**236 repositories** are verified on these bases, spread over 20 of the 23
-artifacts in the family matrix. Twenty-six of them were published after the
-audit snapshot and were admitted one at a time -- twenty-one byte-identical
+**240 repositories** are verified on these bases, spread over 21 of the 24
+artifacts in the family matrix. Thirty of them were published after the
+audit snapshot and were admitted one at a time -- twenty-five byte-identical
 files on the identical basis, the two Qwen3.8 repositories on the loader-face
 basis (since 0.2.9), one file that differs from its anchor only in line
 endings on the canonicalisation basis, one file that differs only in
@@ -501,8 +501,8 @@ at the end of the page counts the 210 that were in the snapshot. The shipped
 registry carries one further row that is not a sibling:
 `moonshotai/Kimi-K3`, the canonical repository of the `kimi_k3` family
 itself, so that resolving it by name reports itself as the evidence
-repository instead of a byte-identical sibling. The file therefore holds 237
-rows; every count in this section counts the 236 siblings. Nine of them are
+repository instead of a byte-identical sibling. The file therefore holds 241
+rows; every count in this section counts the 240 siblings. Nine of them are
 cross-vendor: three
 `nvidia/Nemotron-Terminal-*` repositories ship the `qwen3_8b` artifact
 verbatim, and six `nvidia/Llama-3.x-Nemotron-*` repositories carry the
@@ -513,12 +513,12 @@ which is the same rule the loader applies.
 The shipped file's own `counts` object counts rows, not siblings, so it
 reads one higher on two of them and is not a second opinion about the
 table above: `identical_source` is **14** there against 13 here, and
-`total` is 237 against 236, both because the canonical `kimi_k3` row is
+`total` is 241 against 240, both because the canonical `kimi_k3` row is
 an `identical_source` row that is not a sibling. The per-artifact table
-further down totals `identical` at **184** rather than 171 for a
+further down totals `identical` at **188** rather than 175 for a
 different reason: it folds the 13 `identical (source file)` rows into
 that column, as its footnote says. The three numbers are consistent --
-171 + 13 = 184 siblings compared on a hash, plus the one canonical row
+175 + 13 = 188 siblings compared on a hash, plus the one canonical row
 the shipped counts also carry.
 
 The executable counterpart is `toktier.from_pretrained(repo_id)`. It resolves
@@ -555,12 +555,13 @@ counted.
 | `hy4` | 1 | 1 | 0 | 0 | 0 | -- &dagger; |
 | `step5_preview` | 4 | 4 | 0 | 0 | 0 | -- &dagger; |
 | `muse_spark` | 3 | 3 | 0 | 0 | 0 | -- &dagger; |
+| `nemotron_super_vl` | 4 | 4 | 0 | 0 | 0 | -- &dagger; |
 | `deepseek_v4_1_flash` | 2 | 2 | 0 | 0 | 0 | -- &dagger; |
 | `mimo_v2_6` | 4 | 3 | 0 | 1 | 0 | -- &dagger; |
 | `bert_cased` | 4 | 2 | 2 | 0 | 0 | 0 |
 | `bert_uncased` | 3 | 3 | 0 | 0 | 0 | 0 |
 | `bert_multilingual_cased` | 0 | 0 | 0 | 0 | 0 | 0 |
-| **total** | **236** | 184 | 11 | 39 | 2 | 77 |
+| **total** | **240** | 188 | 11 | 39 | 2 | 77 |
 
 `*` `kimi_k3` rows are compared at `tiktoken.model` level, for the reason given
 under the family matrix above.
@@ -896,6 +897,15 @@ the first two are listed under that family below.
 | `intel-ai/Muse-Spark-Open-816B-A42B-INT4` &dagger; | `57ab64762b09` | `ac2f41ef2444` | identical |
 | `meta-models/Muse-Spark-Open-816B-A42B-NVFP4` &dagger; | `4239e4db1937` | `ac2f41ef2444` | identical |
 
+#### `nemotron_super_vl` (4 repositories)
+
+| Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
+|---|---|---|---|
+| `nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB` &dagger; | `cf2effc5c4b7` | `d0432ad8b1c2` | identical |
+| `nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-BF16` &dagger; | `e09a4cedb178` | `d0432ad8b1c2` | identical |
+| `nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-Base-BF16` &dagger; | `5d80455a9bf1` | `d0432ad8b1c2` | identical |
+| `nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4` &dagger; | `da5b2650a835` | `d0432ad8b1c2` | identical |
+
 #### `deepseek_v4_1_flash` (2 repositories)
 
 | Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
@@ -954,11 +964,11 @@ relationship to `llama_3_1_8b` is plausible and unmeasured; the comparison is
 pending access and no claim is made in the meantime. Re-running the sweep with
 access resolves these thirteen rows and nothing else.
 
-Seven artifacts in the family matrix above, `ling_3_0_flash`,
-`laguna_s_2_1`, `hy4`, `step5_preview`, `muse_spark`, `deepseek_v4_1_flash`
-and `mimo_v2_6`, were admitted after this snapshot and were therefore not
-part of the sweep, so no core-equal count exists for them. The
-sub-versions listed for the last five were compared one at a time on a later
+Eight artifacts in the family matrix above, `ling_3_0_flash`,
+`laguna_s_2_1`, `hy4`, `step5_preview`, `muse_spark`, `deepseek_v4_1_flash`,
+`mimo_v2_6` and `nemotron_super_vl`, were admitted after this snapshot and
+were therefore not part of the sweep, so no core-equal count exists for
+them. The sub-versions listed for the last six were compared one at a time on a later
 date, under [Repositories admitted after the
 snapshot](#repositories-admitted-after-the-snapshot). The reconnaissance that
 preceded the admission of the first two did note byte-identical quantised
@@ -974,9 +984,9 @@ a benchmark reference rather than a certified family.
 The accounting closes on the snapshot total: 470 repositories examined = 16
 anchors + 210 verified sub-versions + 77 core-equal + 83 different + 32 without
 a comparable file + 13 gated + 39 out of scope. This equation is about the
-snapshot and stays fixed: the 26 repositories admitted afterwards were not
+snapshot and stays fixed: the 30 repositories admitted afterwards were not
 among the 470 examined on that date, which is why the verified total elsewhere
-on this page reads 236 while this line reads 210.
+on this page reads 240 while this line reads 210.
 
 ### What the snapshot is and is not
 
@@ -1019,8 +1029,12 @@ repository on a later date.
 | `meta-models/Muse-Spark-Open-816B-A42B-NVFP4` | `4239e4db1937` | `ac2f41ef2444` | 28,085,854 | `muse_spark` | identical | 2026-11-06 |
 | `MiniMaxAI/MiniMax-M3.1-Flash` | `ce7f4df87d2e` | `bb1f1626cf01` | 9,731,500 | `minimax_m3` | identical | 2026-11-06 |
 | `moonshotai/Kimi-K3.1-Pro` | `6d0a02029567` | `b6c497a7469b` (`tiktoken.model`) | 2,795,286 | `kimi_k3` | identical (source file) | 2026-11-06 |
+| `nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB` | `cf2effc5c4b7` | `d0432ad8b1c2` | 17,077,366 | `nemotron_super_vl` | identical | 2026-11-06 |
+| `nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-BF16` | `e09a4cedb178` | `d0432ad8b1c2` | 17,077,366 | `nemotron_super_vl` | identical | 2026-11-06 |
 | `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16` | `a9904d24bcc1` | `623c34567aeb` | 17,077,484 | `nemotron_3_nano_4b` | identical | 2026-11-06 |
 | `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4` | `bee7596271d1` | `623c34567aeb` | 17,077,484 | `nemotron_3_nano_4b` | identical | 2026-11-06 |
+| `nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-Base-BF16` | `5d80455a9bf1` | `d0432ad8b1c2` | 17,077,366 | `nemotron_super_vl` | identical | 2026-11-06 |
+| `nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4` | `da5b2650a835` | `d0432ad8b1c2` | 17,077,366 | `nemotron_super_vl` | identical | 2026-11-06 |
 | `stepfun-ai/Step-3.5-Flash` | `ab446a3de5e1` | `b564c620eb77` | 9,976,972 | `step5_preview` | identical | 2026-11-06 |
 | `stepfun-ai/Step-3.7-Flash` | `5f6244077ac6` | `b564c620eb77` | 9,976,972 | `step5_preview` | identical | 2026-11-06 |
 | `stepfun-ai/Step-5-Preview-BF16` | `7734b7ffac11` | `b564c620eb77` | 9,976,972 | `step5_preview` | identical | 2026-11-06 |
@@ -1121,14 +1135,35 @@ the anchor's. It is admitted on the `equivalent (serialisation)` basis. Its
 `tokenizer_config.json` differs from the anchor's in the chat template and
 `model_max_length`.
 
+Four more repositories compared on 2026-11-06 ship the `tokenizer.json` of
+`nemotron_super_vl`, the artifact certified in this release whose vocabulary
+renames twelve special slots of `nemotron_3_nano_4b` (see [Renamed special
+slots inside the vocabulary](#renamed-special-slots-inside-the-vocabulary)).
+They were fetched at the pinned commit, hashed, and compared byte for byte
+against the frozen anchor file and against an earlier download of the same
+commit. `nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4` carries the
+anchor's `tokenizer_config.json` byte for byte as well.
+`nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-Base-BF16`,
+`nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-BF16` and
+`nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB` carry a
+`tokenizer_config.json` that differs from the anchor's only in
+`model_max_length` (262,144 against 1,048,576) and, for the two Bolt
+repositories, in `is_local`. Neither field is read into the loader face:
+under the pinned loader pair all four materialize a loader face
+byte-identical to the anchor's, which was checked before the rows were
+written, so all four are admitted on the `identical` basis.
+`nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4-LiLiCorr`, a further
+repository of the same line, ships no tokenizer file at its pinned commit and
+is not listed.
+
 These rows are in the shipped registry, so the packaged counts include them:
-`identical` reads 171, `identical_source` 14, `equivalent_canonicalisation` 11,
-`equivalent_serialisation` 39 and `total` 237 there, with 230 rows pointing at
-a packaged family. Counted as siblings, the verified total is 236; `glm_5_2`
+`identical` reads 175, `identical_source` 14, `equivalent_canonicalisation` 11,
+`equivalent_serialisation` 39 and `total` 241 there, with 234 rows pointing at
+a packaged family. Counted as siblings, the verified total is 240; `glm_5_2`
 holds nine sub-versions, `deepseek_v4_flash` seven, `qwen3_5_08b` 21,
 `qwen3_8b` 112, `nemotron_3_nano_4b` 21, `minimax_m3` two, `kimi_k3` 13,
 `hy4` one, `step5_preview` four, `muse_spark` three, `deepseek_v4_1_flash`
-two and `mimo_v2_6` four.
+two, `mimo_v2_6` four and `nemotron_super_vl` four.
 
 A repository listed here is subject to the same caveat as every other row: it
 records a comparison made on a date, not a promise about the repository's
@@ -1384,6 +1419,9 @@ exactly that pattern, with the same behaviour (`Isolated`, not inverted), so
 the flag is a no-op for this face whichever loader applies it. The readings
 were taken under the pinned loader pair, `transformers` 4.57.6 and
 `tokenizers` 0.22.2.
+
+Four more repositories ship this `tokenizer.json` byte for byte; they are
+listed under [`nemotron_super_vl`](#nemotron_super_vl-4-repositories) above.
 
 ## Documented exclusions
 

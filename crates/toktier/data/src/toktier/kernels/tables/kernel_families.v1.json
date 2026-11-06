@@ -179,6 +179,22 @@
       "contractions": false,
       "note": "Byte alphabet is not fully covered and the artifact has no unknown token; the kernel reproduces the reference behaviour of dropping unmapped initial symbols before merging."
     },
+    "hy4": {
+      "band": "deepseek",
+      "ruleset": "deepseek",
+      "digits_max": null,
+      "class_table": "deepseek_v1",
+      "contractions": false,
+      "note": "The four splitter sections (normalizer, pre-tokenizer, decoder, post-processor) are identical to those of hy3; the vocabulary and merges are retrained, and the byte alphabet is fully covered (256 of 256)."
+    },
+    "step5_preview": {
+      "band": "deepseek",
+      "ruleset": "deepseek",
+      "digits_max": null,
+      "class_table": "deepseek_v1",
+      "contractions": false,
+      "note": "The post-processor is a TemplateProcessing that prepends the beginning-of-sentence token; the certified readings are taken with add_special_tokens=False, so they cover the text encoding without that token."
+    },
     "gpt_oss_120b": {
       "band": "o200k",
       "ruleset": "o200k",
@@ -206,6 +222,14 @@
       "digits_max": 1,
       "class_table": "o200k_v4",
       "contractions": false
+    },
+    "muse_spark": {
+      "band": "o200k",
+      "ruleset": "o200k",
+      "digits_max": 3,
+      "class_table": "o200k_v4",
+      "contractions": true,
+      "note": "Split pattern byte-identical to gpt_oss_120b; vocabulary and merges are its own. The model sets ignore_merges, as gpt_oss_120b does: a piece that is itself a vocabulary entry is emitted whole without applying merges."
     },
     "kimi_k3": {
       "band": "kimi",

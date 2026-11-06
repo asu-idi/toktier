@@ -1,0 +1,168 @@
+{
+  "schema": "toktier.corpus_absence_certificate.v1",
+  "subject": {
+    "family": "deepseek_v4_1_flash",
+    "artifact_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+    "loader_face_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+    "from_family": "deepseek_v4_flash",
+    "from_artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+    "from_loader_face_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+    "pipeline_id": "pipeline.9f6d5117c3680d0e",
+    "tokenizer_config_sha256": "6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547",
+    "divergence_set": [
+      {
+        "id": 128799,
+        "side": "from",
+        "content": "<\uff5cplace\u2581holder\u2581no\u2581799\uff5c>"
+      },
+      {
+        "id": 128799,
+        "side": "to",
+        "content": "<\uff5cSystem\uff5c>"
+      },
+      {
+        "id": 129264,
+        "side": "from",
+        "content": "<\uff5cimage2\uff5c>"
+      },
+      {
+        "id": 129264,
+        "side": "to",
+        "content": "<\uff5cdeepseek_image\uff5c>"
+      },
+      {
+        "id": 129265,
+        "side": "from",
+        "content": "<\uff5c/table>\uff5c"
+      },
+      {
+        "id": 129265,
+        "side": "to",
+        "content": "<|place_holder_mm_span_0436|>"
+      },
+      {
+        "id": 129266,
+        "side": "from",
+        "content": "<\uff5ctable\uff5c>"
+      },
+      {
+        "id": 129266,
+        "side": "to",
+        "content": "<|place_holder_mm_span_0437|>"
+      },
+      {
+        "id": 129267,
+        "side": "from",
+        "content": "<\uff5c/td\uff5c>"
+      },
+      {
+        "id": 129267,
+        "side": "to",
+        "content": "<|place_holder_mm_span_0438|>"
+      },
+      {
+        "id": 129268,
+        "side": "from",
+        "content": "<\uff5ctd\uff5c>"
+      },
+      {
+        "id": 129268,
+        "side": "to",
+        "content": "<|place_holder_mm_span_0439|>"
+      },
+      {
+        "id": 129269,
+        "side": "from",
+        "content": "<\uff5c/tr\uff5c>"
+      },
+      {
+        "id": 129269,
+        "side": "to",
+        "content": "<|place_holder_mm_span_0440|>"
+      },
+      {
+        "id": 129270,
+        "side": "from",
+        "content": "<\uff5ctr\uff5c>"
+      },
+      {
+        "id": 129270,
+        "side": "to",
+        "content": "<|place_holder_mm_span_0441|>"
+      },
+      {
+        "id": 129279,
+        "side": "from",
+        "content": "<\uff5cimage\uff5c>"
+      },
+      {
+        "id": 129279,
+        "side": "to",
+        "content": "<|place_holder_mm_span_0442|>"
+      }
+    ],
+    "divergence_set_sha256": "9ba4a0369a4e681216c7efadbe408e47dafa9ed19b523e820a85927e45dd4713",
+    "divergence_note": "Added-token rows that differ between the anchor's loader face and this artifact's loader face, in content or in any matching flag, recomputed from the two artifact directories under tokenizers 0.22.2 / transformers 4.57.6. Each differing id is listed once per side that holds it: side 'from' is the anchor's row, side 'to' this artifact's row. The two loader faces are equal as documents outside added_tokens, no listed literal is a vocabulary string, and the shared normalizer is empty, so a row matched on normalized text is matched on raw text."
+  },
+  "corpus": {
+    "evidence_id": "ev-main-corpus-v1",
+    "corpus_id": "nvidia/Nemotron-CC-v2.1",
+    "revision": "ba6f2aaef7ada865bb08fc08640ca292150097db",
+    "docs": 3800016491,
+    "chars": 12334132100653,
+    "units": 15205,
+    "note": "The full differential-campaign corpus (2,481 files). The anchor's registry readings (evidence ev-main-corpus-v1) were taken on a subset of these documents; a literal absent from a document is absent from every part of it, so absence here implies absence over those readings, length-truncated texts included."
+  },
+  "scan": {
+    "method": "exact substring count (pyarrow count_substring) of every divergence-set literal over the raw text column, in the same corpus pass that produced the plan193 digest containers; RE2 prefilter per batch with an exact full-count cross-check on the first batch of every unit",
+    "units_complete": 15205,
+    "units_expected": 15205,
+    "coverage_closed": true,
+    "docs_with_any_target": 0,
+    "occurrences": {
+      "<\uff5cplace\u2581holder\u2581no\u2581799\uff5c>": 0,
+      "<\uff5cSystem\uff5c>": 0,
+      "<\uff5cimage2\uff5c>": 0,
+      "<\uff5cdeepseek_image\uff5c>": 0,
+      "<\uff5c/table>\uff5c": 0,
+      "<|place_holder_mm_span_0436|>": 0,
+      "<\uff5ctable\uff5c>": 0,
+      "<|place_holder_mm_span_0437|>": 0,
+      "<\uff5c/td\uff5c>": 0,
+      "<|place_holder_mm_span_0438|>": 0,
+      "<\uff5ctd\uff5c>": 0,
+      "<|place_holder_mm_span_0439|>": 0,
+      "<\uff5c/tr\uff5c>": 0,
+      "<|place_holder_mm_span_0440|>": 0,
+      "<\uff5ctr\uff5c>": 0,
+      "<|place_holder_mm_span_0441|>": 0,
+      "<\uff5cimage\uff5c>": 0,
+      "<|place_holder_mm_span_0442|>": 0
+    },
+    "controls": {
+      "the": 119980222468,
+      "<|endoftext|>": 1571,
+      "https://": 3575046,
+      "<|im_start|>": 2082
+    },
+    "control_failed_units": 0,
+    "control_note": "'the' is nonzero in every unit (every unit read text); the same-shaped <|...|> controls were counted by the same scanner in the same pass.",
+    "verdict": "ABSENT"
+  },
+  "provenance": {
+    "generated_at": "2026-10-16T13:15:24Z",
+    "recorded_on": "2026-11-06",
+    "source_reading_sha256": "0802348a77bf42ee6c534b59f8531ab3509b3206e1f3dd798ebd1a39d5afd433",
+    "literal_set_sha256": "a9fef82fb506c314622f78e45b9474e54d27b59797ca0fc921b98b7dd610dd22",
+    "frozen_source": {
+      "repo_id": "deepseek-ai/DeepSeek-V4.1-Flash",
+      "revision": "5254448103b6254fc646dacbca1cbbf20e9216c1"
+    },
+    "live_serialization_sha256": {
+      "to": "c15fcd4dd6ff6762efb4797e632e531e608b43b2e7b026410de182786847a8af",
+      "from": "0e546c51529290ed4b18dc8b3e481a9ea39a2df2175b65ecb281af6bac79af73"
+    },
+    "live_serialization_note": "Digests of the pinned loader's serialization of the two live loader objects. The registry's loader_face_sha256 is the file text when the configuration sidecar adds no added-token row, which holds for both faces here, so the subject carries the file digests.",
+    "character_total_note": "This scan counted 12,334,132,100,653 characters on the raw text; the finalize caliber (text truncated at 1,000,000 characters) is 12,328,592,579,973. Same document count and file set."
+  }
+}

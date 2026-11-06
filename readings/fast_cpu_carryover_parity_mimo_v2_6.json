@@ -1,0 +1,229 @@
+{
+  "schema": "toktier.fast_cpu.carryover_parity.v1",
+  "subject": {
+    "family": "mimo_v2_6",
+    "artifact_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+    "from_family": "qwen3_8b",
+    "from_artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+  },
+  "engine": {
+    "backend": "fast_cpu",
+    "source_digest": "9594ff243421b89ff95137bda5a439a314343470951b6b7c0a98238bf51c4f41",
+    "toktier_version": "0.3.0"
+  },
+  "oracle": {
+    "package": "tokenizers",
+    "version": "0.22.2",
+    "face": "tokenizers.Tokenizer.from_file over this artifact's tokenizer.json (its loader face)"
+  },
+  "specimen": {
+    "sources": [
+      {
+        "label": "nemotron:High-Quality",
+        "file_sha256": "cdbeba39e23690938771c294b784badea2ad9ce692c15a6ae6fa3a1e6e4d7162",
+        "documents": 2500,
+        "selection": "first 2,500 documents of one shard (part_000000)"
+      },
+      {
+        "label": "nemotron:Medium-Quality",
+        "file_sha256": "58ee353de61bad42265022e3f38a22a61843939b4ab11a87d8aca17a10ab15c1",
+        "documents": 2500,
+        "selection": "first 2,500 documents of one shard (part_000003)"
+      },
+      {
+        "label": "nemotron:High-Quality-Translated-To-English",
+        "file_sha256": "04a6499f3a816d24bec5f6e63512970109138cd10602a103e8720f34606d3c77",
+        "documents": 2500,
+        "selection": "first 2,500 documents of one shard (part_000005)"
+      },
+      {
+        "label": "texts",
+        "documents": 800,
+        "selection": "first 800 files (sorted names) of the multilingual paragraph and code text set",
+        "concatenation_sha256": "8f3448e6d53a79fef0076d6231bc08c44fd7570b891dfd57ea4f3f6a2d753e3c"
+      },
+      {
+        "label": "probe",
+        "documents": 380,
+        "selection": "every divergence literal in 10 contexts (bare, in prose, doubled, glued, line-wrapped, CJK, truncated head and tail, prefixed, inside code) plus seeded random concatenations (seed 20261105)"
+      }
+    ],
+    "divergence_literals": 6,
+    "corpus_id": "nvidia/Nemotron-CC-v2.1@ba6f2aaef7ada865bb08fc08640ca292150097db"
+  },
+  "documents": 8680,
+  "characters": 123747435,
+  "mismatches": 0,
+  "comparisons": {
+    "public_encode": {
+      "documents": 8680,
+      "equal": 8680,
+      "by_source": {
+        "nemotron:High-Quality": {
+          "docs": 2500,
+          "equal": 2500
+        },
+        "nemotron:Medium-Quality": {
+          "docs": 2500,
+          "equal": 2500
+        },
+        "nemotron:High-Quality-Translated-To-English": {
+          "docs": 2500,
+          "equal": 2500
+        },
+        "texts": {
+          "docs": 800,
+          "equal": 800
+        },
+        "probe": {
+          "docs": 380,
+          "equal": 380
+        }
+      },
+      "routed_to_reference_on_added_token_input": 250
+    },
+    "fast_engine_direct": {
+      "documents": 8680,
+      "equal": 8680,
+      "raised": 0,
+      "note": "the engine called directly on the core stream (add_special_tokens=False), every document including the literal-bearing probes"
+    },
+    "session_ids": {
+      "sessions": 780,
+      "appends": 5451,
+      "equal": 780
+    },
+    "session_final_ids": {
+      "sessions": 780,
+      "equal": 780
+    }
+  },
+  "provenance": {
+    "measured_on": "2026-11-06",
+    "tree": "taken on the implementation branch (fast CPU engine source identity recorded above), repair parameters 20/128/true for this artifact, CPU, one process, memory bound to nodes 0-1",
+    "script_sha256": "47f96ca9772c619cfe8cc2b56e262c9b4a769e2223ec0d536c4fa76bc0a1aad2",
+    "raw_reading_sha256": "a4c5621444d670524a6875463f46c7c56bcad82f69e05feabe860cfafc2d96c3",
+    "note": "Smoke-scale engine parity of the carried artifact (evidence-carryover.md Section 3.1, C7). The raw reading is kept verbatim below.",
+    "raw_reading": {
+      "tokenizers": "0.22.2",
+      "toktier": "0.3.0",
+      "artifact_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+      "documents": 8680,
+      "characters": 123747435,
+      "by_source": {
+        "nemotron:High-Quality": {
+          "docs": 2500,
+          "equal": 2500
+        },
+        "nemotron:Medium-Quality": {
+          "docs": 2500,
+          "equal": 2500
+        },
+        "nemotron:High-Quality-Translated-To-English": {
+          "docs": 2500,
+          "equal": 2500
+        },
+        "texts": {
+          "docs": 800,
+          "equal": 800
+        },
+        "probe": {
+          "docs": 380,
+          "equal": 380
+        }
+      },
+      "public_encode_mismatches": [],
+      "public_encode_mismatch_count": 0,
+      "fast_engine_direct": {
+        "docs": 8680,
+        "equal": 8680,
+        "raised": 0
+      },
+      "session": {
+        "sessions": 780,
+        "equal": 780,
+        "appends": 5451,
+        "final_equal": 780,
+        "repair_guard": null,
+        "native_session_encoder": "CallbackEncoder"
+      },
+      "session_mismatches": [],
+      "explain_planned_backend": "fast_cpu",
+      "explain_certification": {
+        "state": "certified_source",
+        "effective_verdict": "certified",
+        "identity": "exact",
+        "evidence_id": "ev-main-corpus-v1",
+        "suite_version": "gpu-e2e-differential-v1",
+        "certified_family": "mimo_v2_6",
+        "readings": {
+          "docs": 3638742395,
+          "bytes": 11728655929847,
+          "mismatches": 0
+        },
+        "config_added_tokens": null,
+        "carryover": {
+          "mechanism": "corpus_equivalence",
+          "from_subject": "qwen3_8b loader face (tokenizer.json aeb13307a71a)",
+          "to_subject": "mimo_v2_6 loader face (tokenizer.json ff15eb925890)",
+          "divergence_set": [
+            "<|audio_pad|>",
+            "<|mimo_video_start|>",
+            "<|mimo_video_end|>",
+            "<|mimo_audio_eod|>",
+            "<|mimo_audio_start|>",
+            "<|mimo_audio_end|>"
+          ],
+          "certificate": {
+            "path": "readings/corpus_absence_mimo_v2_6.json",
+            "sha256": "fb6aad908665fc14a3cfe47acb13f7bc29345d7b01c6087ddd87119b1a856e8a",
+            "docs": 3800016491,
+            "chars": 12334132100653,
+            "occurrences": 0
+          },
+          "from_family": "qwen3_8b",
+          "from_artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+          "note": "Cross-artifact carry-over from qwen3_8b: this loader face adds 6 added-token ids (6 literals) to the anchor's table, none of which occurs in the judged corpus."
+        },
+        "backend_status": {
+          "gpu": "certified",
+          "fast_cpu": "certified_source"
+        },
+        "gpu_delivery": "prebuilt",
+        "deliveries": {
+          "gpu": {
+            "jit": {
+              "status": "certified_source",
+              "architectures": {
+                "sm_89": "certified_source",
+                "sm_120": "certified_source"
+              }
+            },
+            "prebuilt": {
+              "status": "certified",
+              "architectures": {
+                "sm_120": "certified",
+                "sm_80": "certified",
+                "sm_89": "certified",
+                "sm_100": "experimental",
+                "sm_75": "experimental",
+                "sm_86": "experimental",
+                "sm_90": "experimental"
+              }
+            }
+          }
+        }
+      },
+      "fallback_counts_after_encode": {
+        "R_INPUT_ADDED_TOKEN": 250,
+        "R_INPUT_GUARD_ROUTED": 7
+      },
+      "fallback_counts_after_sessions": {
+        "R_INPUT_ADDED_TOKEN": 268,
+        "R_INPUT_GUARD_ROUTED": 7,
+        "R_INPUT_POSTPROCESS_ROUTED": 780
+      },
+      "seconds": 141.5
+    }
+  }
+}

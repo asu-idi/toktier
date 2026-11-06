@@ -1,0 +1,96 @@
+{
+  "schema": "toktier.corpus_absence_certificate.v1",
+  "subject": {
+    "family": "mimo_v2_6",
+    "artifact_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+    "loader_face_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+    "from_family": "qwen3_8b",
+    "from_artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+    "from_loader_face_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+    "pipeline_id": "pipeline.7d75b953f0224ebd",
+    "tokenizer_config_sha256": "413a7845f52943ccf4de0e5c838414507d16c44dbf573da9e20bc8902b384d06",
+    "divergence_set": [
+      {
+        "id": 151669,
+        "side": "to",
+        "content": "<|audio_pad|>"
+      },
+      {
+        "id": 151670,
+        "side": "to",
+        "content": "<|mimo_video_start|>"
+      },
+      {
+        "id": 151671,
+        "side": "to",
+        "content": "<|mimo_video_end|>"
+      },
+      {
+        "id": 151672,
+        "side": "to",
+        "content": "<|mimo_audio_eod|>"
+      },
+      {
+        "id": 151673,
+        "side": "to",
+        "content": "<|mimo_audio_start|>"
+      },
+      {
+        "id": 151674,
+        "side": "to",
+        "content": "<|mimo_audio_end|>"
+      }
+    ],
+    "divergence_set_sha256": "b3456f1ebe8df9e4c91713556a17276d4ac47293ab27a7104e0758502d919512",
+    "divergence_note": "Added-token rows that differ between the anchor's loader face and this artifact's loader face, in content or in any matching flag, recomputed from the two artifact directories under tokenizers 0.22.2 / transformers 4.57.6. Each differing id is listed once per side that holds it: side 'from' is the anchor's row, side 'to' this artifact's row. The two loader faces are equal as documents outside added_tokens, no listed literal is a vocabulary string, and every listed row is matched on raw text (normalized: false)."
+  },
+  "corpus": {
+    "evidence_id": "ev-main-corpus-v1",
+    "corpus_id": "nvidia/Nemotron-CC-v2.1",
+    "revision": "ba6f2aaef7ada865bb08fc08640ca292150097db",
+    "docs": 3800016491,
+    "chars": 12334132100653,
+    "units": 15205,
+    "note": "The full differential-campaign corpus (2,481 files). The anchor's registry readings (evidence ev-main-corpus-v1) were taken on a subset of these documents; a literal absent from a document is absent from every part of it, so absence here implies absence over those readings, length-truncated texts included."
+  },
+  "scan": {
+    "method": "exact substring count (pyarrow count_substring) of every divergence-set literal over the raw text column, in the same corpus pass that produced the plan193 digest containers; RE2 prefilter per batch with an exact full-count cross-check on the first batch of every unit",
+    "units_complete": 15205,
+    "units_expected": 15205,
+    "coverage_closed": true,
+    "docs_with_any_target": 0,
+    "occurrences": {
+      "<|audio_pad|>": 0,
+      "<|mimo_video_start|>": 0,
+      "<|mimo_video_end|>": 0,
+      "<|mimo_audio_eod|>": 0,
+      "<|mimo_audio_start|>": 0,
+      "<|mimo_audio_end|>": 0
+    },
+    "controls": {
+      "the": 119980222468,
+      "<|endoftext|>": 1571,
+      "https://": 3575046,
+      "<|im_start|>": 2082
+    },
+    "control_failed_units": 0,
+    "control_note": "'the' is nonzero in every unit (every unit read text); the same-shaped <|...|> controls were counted by the same scanner in the same pass.",
+    "verdict": "ABSENT"
+  },
+  "provenance": {
+    "generated_at": "2026-10-16T13:15:24Z",
+    "recorded_on": "2026-11-06",
+    "source_reading_sha256": "0802348a77bf42ee6c534b59f8531ab3509b3206e1f3dd798ebd1a39d5afd433",
+    "literal_set_sha256": "a9fef82fb506c314622f78e45b9474e54d27b59797ca0fc921b98b7dd610dd22",
+    "frozen_source": {
+      "repo_id": "XiaomiMiMo/MiMo-V2.6-Flash-RL",
+      "revision": "dcd3fd83fb181622fbc606fbb1709901982a62c2"
+    },
+    "live_serialization_sha256": {
+      "to": "4bcd0e969ce1c519c3763bc8b55785db5a4f71da923468459638bd4eec9d12f5",
+      "from": "a63080b4b30dc861fe1b0e420c53a241304dc81aff3d9bb315e6e33e2a1ab794"
+    },
+    "live_serialization_note": "Digests of the pinned loader's serialization of the two live loader objects. The registry's loader_face_sha256 is the file text when the configuration sidecar adds no added-token row, which holds for both faces here, so the subject carries the file digests.",
+    "character_total_note": "This scan counted 12,334,132,100,653 characters on the raw text; the finalize caliber (text truncated at 1,000,000 characters) is 12,328,592,579,973. Same document count and file set."
+  }
+}

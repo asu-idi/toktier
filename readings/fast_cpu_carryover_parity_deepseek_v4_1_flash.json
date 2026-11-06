@@ -1,0 +1,200 @@
+{
+  "schema": "toktier.fast_cpu.carryover_parity.v1",
+  "subject": {
+    "family": "deepseek_v4_1_flash",
+    "artifact_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+    "from_family": "deepseek_v4_flash",
+    "from_artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf"
+  },
+  "engine": {
+    "backend": "fast_cpu",
+    "source_digest": "9594ff243421b89ff95137bda5a439a314343470951b6b7c0a98238bf51c4f41",
+    "toktier_version": "0.3.0"
+  },
+  "oracle": {
+    "package": "tokenizers",
+    "version": "0.22.2",
+    "face": "tokenizers.Tokenizer.from_file over this artifact's tokenizer.json (its loader face)"
+  },
+  "specimen": {
+    "sources": [
+      {
+        "label": "nemotron:High-Quality",
+        "file_sha256": "cdbeba39e23690938771c294b784badea2ad9ce692c15a6ae6fa3a1e6e4d7162",
+        "documents": 2500,
+        "selection": "first 2,500 documents of one shard (part_000000)"
+      },
+      {
+        "label": "nemotron:Medium-Quality",
+        "file_sha256": "58ee353de61bad42265022e3f38a22a61843939b4ab11a87d8aca17a10ab15c1",
+        "documents": 2500,
+        "selection": "first 2,500 documents of one shard (part_000003)"
+      },
+      {
+        "label": "nemotron:High-Quality-Translated-To-English",
+        "file_sha256": "04a6499f3a816d24bec5f6e63512970109138cd10602a103e8720f34606d3c77",
+        "documents": 2500,
+        "selection": "first 2,500 documents of one shard (part_000005)"
+      },
+      {
+        "label": "texts",
+        "documents": 800,
+        "selection": "first 800 files (sorted names) of the multilingual paragraph and code text set",
+        "concatenation_sha256": "8f3448e6d53a79fef0076d6231bc08c44fd7570b891dfd57ea4f3f6a2d753e3c"
+      },
+      {
+        "label": "probe",
+        "documents": 380,
+        "selection": "every divergence literal in 10 contexts (bare, in prose, doubled, glued, line-wrapped, CJK, truncated head and tail, prefixed, inside code) plus seeded random concatenations (seed 20261105)"
+      }
+    ],
+    "divergence_literals": 18,
+    "corpus_id": "nvidia/Nemotron-CC-v2.1@ba6f2aaef7ada865bb08fc08640ca292150097db"
+  },
+  "documents": 8680,
+  "characters": 123745406,
+  "mismatches": 0,
+  "comparisons": {
+    "public_encode": {
+      "documents": 8680,
+      "equal": 8680,
+      "by_source": {
+        "nemotron:High-Quality": {
+          "docs": 2500,
+          "equal": 2500
+        },
+        "nemotron:Medium-Quality": {
+          "docs": 2500,
+          "equal": 2500
+        },
+        "nemotron:High-Quality-Translated-To-English": {
+          "docs": 2500,
+          "equal": 2500
+        },
+        "texts": {
+          "docs": 800,
+          "equal": 800
+        },
+        "probe": {
+          "docs": 380,
+          "equal": 380
+        }
+      },
+      "routed_to_reference_on_added_token_input": 157
+    },
+    "fast_engine_direct": {
+      "documents": 8680,
+      "equal": 8680,
+      "raised": 0,
+      "note": "the engine called directly on the core stream (add_special_tokens=False), every document including the literal-bearing probes"
+    },
+    "session_ids": {
+      "sessions": 780,
+      "appends": 5439,
+      "equal": 780
+    },
+    "session_final_ids": {
+      "sessions": 780,
+      "equal": 780
+    }
+  },
+  "provenance": {
+    "measured_on": "2026-11-04",
+    "tree": "taken on a tree whose fast CPU engine source identity is the one recorded above, with repair parameters 36/128/true for this artifact",
+    "script_sha256": "ce71793038f86e3c604a4420448a00d2835a49bb13f2d9d50d401ad9c1cfb2e1",
+    "raw_reading_sha256": "2c895e6f375042708df9b3410f8fd0d68e58163c3f6ae11d254e8d1222024278",
+    "note": "Smoke-scale engine parity of the carried artifact (evidence-carryover.md Section 3.1, C7). The raw reading is kept verbatim below.",
+    "raw_reading": {
+      "tokenizers": "0.22.2",
+      "toktier": "0.3.0",
+      "artifact_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+      "documents": 8680,
+      "characters": 123745406,
+      "by_source": {
+        "nemotron:High-Quality": {
+          "docs": 2500,
+          "equal": 2500
+        },
+        "nemotron:Medium-Quality": {
+          "docs": 2500,
+          "equal": 2500
+        },
+        "nemotron:High-Quality-Translated-To-English": {
+          "docs": 2500,
+          "equal": 2500
+        },
+        "texts": {
+          "docs": 800,
+          "equal": 800
+        },
+        "probe": {
+          "docs": 380,
+          "equal": 380
+        }
+      },
+      "public_encode_mismatches": [],
+      "public_encode_mismatch_count": 0,
+      "fast_engine_direct": {
+        "docs": 8680,
+        "equal": 8680,
+        "raised": 0
+      },
+      "session": {
+        "sessions": 780,
+        "equal": 780,
+        "appends": 5439,
+        "final_equal": 780,
+        "repair_guard": null,
+        "native_session_encoder": "CallbackEncoder"
+      },
+      "session_mismatches": [],
+      "explain_planned_backend": "fast_cpu",
+      "explain_certification": {
+        "state": "supported_untested",
+        "effective_verdict": "supported",
+        "identity": "examined",
+        "evidence_id": null,
+        "suite_version": null,
+        "certified_family": null,
+        "readings": null,
+        "config_added_tokens": null,
+        "carryover": null,
+        "backend_status": {
+          "fast_cpu": "examined"
+        },
+        "gpu_delivery": null,
+        "deliveries": {},
+        "examined": {
+          "family": "deepseek_v4_1_flash",
+          "pipeline_id": "pipeline.9f6d5117c3680d0e",
+          "added_frontend_id": "added-frontend.b5b5d7ad62c0371f",
+          "pipeline_peers": [
+            "deepseek_v3",
+            "deepseek_v4_flash"
+          ],
+          "examination": {
+            "examined_on": "2026-09-20",
+            "documents": 100000,
+            "characters": 218539216,
+            "mismatches": 0,
+            "divergent_literals": 18,
+            "divergent_literal_occurrences": 0,
+            "note": "Reference route over this file, the reference engine over its loader face and the reference engine over the certified deepseek_v4_flash face returned the same ids on every document of web text, multilingual paragraphs and code; none of the 18 literals that differ between the two added-token tables occurs in the sample."
+          },
+          "missing_evidence": [
+            "corpus_absence_certificate",
+            "cross_artifact_carryover_record"
+          ]
+        }
+      },
+      "fallback_counts_after_encode": {
+        "R_INPUT_ADDED_TOKEN": 157
+      },
+      "fallback_counts_after_sessions": {
+        "R_INPUT_ADDED_TOKEN": 162,
+        "R_INPUT_POSTPROCESS_ROUTED": 780
+      },
+      "seconds": 98.7
+    }
+  }
+}

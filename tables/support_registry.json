@@ -6,7 +6,7 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:d6f23c2a691a35c38a22e368e6aa27a893d6d32c873330d62b2d1450f62e4256",
+  "root_digest": "sha256:020b3a394d2ce4c07a545a4f68db8dc8aab783eaed7f3b02e762e63740340254",
   "oracles": [
     {
       "oracle_id": "tokenizers",
@@ -2487,7 +2487,7 @@
           "chars": 12334132100653,
           "occurrences": 0
         },
-        "note": "0.2.8 oracle redefinition (decision B, loader face authoritative). The in-archive readings were judged with an artifact-face oracle; on the certification corpus the two faces are provably the same function because every divergence-set literal occurs zero times there (PLAN/180 P3 absence scan, SLURM job 62244420). Sources: results/explore/plan180_families/REPORT.md section B.5.1; FINDING/025 evidence-append; known_issues_027.md section 7.0."
+        "note": "Since 0.2.8 the loader face is the authoritative oracle subject for this artifact. The archived readings were judged with an artifact-face oracle; on the certification corpus the two faces are provably the same function because every divergence-set literal occurs zero times there, as the absence certificate named in this record shows (3,800,016,491 documents, 12,334,132,100,653 characters, zero occurrences); the certificate also records the batch job of the full-corpus scan that produced it."
       },
       "loader_face_sha256": "a57b5c62cd5f242a06c632b82cc0b4f8239d08cc80fd9347fc1f629be977c6ca"
     },

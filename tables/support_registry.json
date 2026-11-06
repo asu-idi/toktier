@@ -6,7 +6,7 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:ec5166187f2d11e2637867814f8cd49d55a11c836ce0c05367c154c3fa74a355",
+  "root_digest": "sha256:99842536c3d17c8f80e38eb9592c988e765975ad39e48ccd2bafd63e80258ee9",
   "oracles": [
     {
       "oracle_id": "tokenizers",
@@ -215,7 +215,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -228,7 +228,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -340,7 +340,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -353,7 +353,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -465,7 +465,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -478,7 +478,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -590,7 +590,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -603,7 +603,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -715,7 +715,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -728,7 +728,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -828,7 +828,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -841,7 +841,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -941,7 +941,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -954,7 +954,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -1054,7 +1054,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -1067,7 +1067,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -1167,7 +1167,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -1180,7 +1180,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -1280,7 +1280,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -1293,7 +1293,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -1405,7 +1405,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -1418,7 +1418,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -1530,7 +1530,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -1543,7 +1543,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -1655,7 +1655,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -1668,7 +1668,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -1768,7 +1768,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -1781,7 +1781,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -1893,7 +1893,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -1906,7 +1906,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -2018,7 +2018,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -2031,7 +2031,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -2170,7 +2170,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -2183,7 +2183,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"
@@ -2295,7 +2295,7 @@
             "-O3"
           ],
           "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-          "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+          "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
           "devices": [
             "sm_89",
             "sm_120"
@@ -2308,7 +2308,7 @@
                 "-O3"
               ],
               "toolchain": "judged with NVCC 12.8 / torch CUDA 12.8 / torch 2.11.0+cu128; NVCC 13.0 / torch CUDA 13.0 / torch 2.13.0+cu130",
-              "class_table_digest": "1f6d64a9e7dcc36d76f2a97da8ccece2778e3e92fcdc0603884a4c44344474d0",
+              "class_table_digest": "5382b7d6797f7bb4d5031f25ae668c3eae4dd67f96b2b95c1aa487b3d60271f7",
               "devices": [
                 "sm_89",
                 "sm_120"

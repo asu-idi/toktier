@@ -76,7 +76,9 @@
  "families": [
   "deepseek_v3",
   "deepseek_v4_flash",
-  "hy3"
+  "hy3",
+  "hy4",
+  "step5_preview"
  ],
  "patterns": [
   "\\p{N}{1,3}",

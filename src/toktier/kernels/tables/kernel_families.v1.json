@@ -32,7 +32,7 @@
       "generator": "class_tables:deepseek",
       "note": "Seven-class table for the three-splitter ruleset; carries a metadata sidecar cross-checked against the kernel inline constants.",
       "meta_file": "pretok_classes_deepseek.v1.meta.json",
-      "meta_sha256": "sha256:ef0f9b7f19bbe3e89d44c0eadf622e7e5b455148c20fde574d50803524a66c66"
+      "meta_sha256": "sha256:214e563fab35d93e824ce29e7515249142d9160925e3c102aeec38be33d375e5"
     },
     "o200k_v4": {
       "file": "pretok_classes_o200k.v4.npy",

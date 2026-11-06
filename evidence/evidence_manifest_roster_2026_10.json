@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "evidence_id": "ev-roster-2026-10-v1",
+  "generated_by": {
+    "tool": "tools/generate_evidence.py",
+    "tool_version": "1.1.0",
+    "source_commit": "e055507094fe9afacabfa075f5b9f9e8e0aaa8ea",
+    "generated_at": "2026-11-06T13:17:02Z"
+  },
+  "root_digest": "sha256:d247447e40d947dc7c6a25de81a796e41ccbcf6900f8535a564c5dc6d543710d",
+  "run": {
+    "run_id": "roster-2026-10-differential-campaign",
+    "date": "2026-10-16",
+    "suite_version": "gpu-e2e-differential-v1"
+  },
+  "oracle": {
+    "package": "tokenizers",
+    "version": "0.22.2"
+  },
+  "artifacts": [
+    {
+      "artifact_sha256": "ff67615de6e6ee073a20bd1fe3a776053e821573f4ae566aeb8e9d43de801201",
+      "family": "hy4"
+    },
+    {
+      "artifact_sha256": "ac2f41ef2444dec82fdc90e334f80543f298535005fe78aec7e8311ef86f84d0",
+      "family": "muse_spark"
+    },
+    {
+      "artifact_sha256": "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0",
+      "family": "step5_preview"
+    }
+  ],
+  "corpora": [
+    {
+      "corpus_id": "nvidia/Nemotron-CC-v2.1@ba6f2aaef7ada865bb08fc08640ca292150097db",
+      "docs": 3800016491,
+      "bytes": 12328592579973
+    }
+  ],
+  "totals": {
+    "docs": 3800016491,
+    "bytes": 12328592579973,
+    "mismatches": 0,
+    "routed": 14197
+  },
+  "environment": {
+    "os": "Linux 6.17.0-35-generic x86_64 (Ubuntu)",
+    "python": "3.12.3",
+    "gpus": [
+      "NVIDIA GeForce RTX 5090",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition"
+    ],
+    "dependencies_digest": "0de04510b4dcac41b8a8d88037e507214b32b1cf69af99cfe4b047a75b1af4d5"
+  }
+}

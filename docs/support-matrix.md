@@ -466,26 +466,28 @@ everything below rests on it:
 
 | Basis | What was compared | Rows |
 |---|---|---|
-| identical | `tokenizer.json` sha256 equal to the certified artifact | 158 |
+| identical | `tokenizer.json` sha256 equal to the certified artifact | 171 |
 | identical (source file) | `kimi_k3` lineage: upstream `tiktoken.model` sha256 equal to the conversion source of the certified artifact | 13 |
 | equivalent (canonicalisation) | JSON content equal after canonicalisation; byte difference is formatting only | 11 |
-| equivalent (serialisation) | loads to the same tokenizer; byte difference is legacy serialisation form | 38 |
+| equivalent (serialisation) | loads to the same tokenizer; byte difference is legacy serialisation form | 39 |
 | equivalent (loader face) | the audited file group materializes, under the pinned loader, a loader face byte-identical to the certified artifact's | 2 |
 
-**222 repositories** are verified on these bases, spread over 15 of the 23
-artifacts in the family matrix. Twelve of them were published after the audit
-snapshot and were admitted one at a time -- eight byte-identical files on the
-identical basis, the two Qwen3.8 repositories on the loader-face basis (since
-0.2.9), one file that differs from its anchor only in line endings on the
-canonicalisation basis, and one `kimi_k3` repository on the source-file basis;
+**236 repositories** are verified on these bases, spread over 20 of the 23
+artifacts in the family matrix. Twenty-six of them were published after the
+audit snapshot and were admitted one at a time -- twenty-one byte-identical
+files on the identical basis, the two Qwen3.8 repositories on the loader-face
+basis (since 0.2.9), one file that differs from its anchor only in line
+endings on the canonicalisation basis, one file that differs only in
+serialisation form on the serialisation basis, and one `kimi_k3` repository
+on the source-file basis;
 they are listed under [Repositories admitted after the
 snapshot](#repositories-admitted-after-the-snapshot), and the audit accounting
 at the end of the page counts the 210 that were in the snapshot. The shipped
 registry carries one further row that is not a sibling:
 `moonshotai/Kimi-K3`, the canonical repository of the `kimi_k3` family
 itself, so that resolving it by name reports itself as the evidence
-repository instead of a byte-identical sibling. The file therefore holds 223
-rows; every count in this section counts the 222 siblings. Nine of them are
+repository instead of a byte-identical sibling. The file therefore holds 237
+rows; every count in this section counts the 236 siblings. Nine of them are
 cross-vendor: three
 `nvidia/Nemotron-Terminal-*` repositories ship the `qwen3_8b` artifact
 verbatim, and six `nvidia/Llama-3.x-Nemotron-*` repositories carry the
@@ -496,12 +498,12 @@ which is the same rule the loader applies.
 The shipped file's own `counts` object counts rows, not siblings, so it
 reads one higher on two of them and is not a second opinion about the
 table above: `identical_source` is **14** there against 13 here, and
-`total` is 223 against 222, both because the canonical `kimi_k3` row is
+`total` is 237 against 236, both because the canonical `kimi_k3` row is
 an `identical_source` row that is not a sibling. The per-artifact table
-further down totals `identical` at **171** rather than 158 for a
+further down totals `identical` at **184** rather than 171 for a
 different reason: it folds the 13 `identical (source file)` rows into
 that column, as its footnote says. The three numbers are consistent --
-158 + 13 = 171 siblings compared on a hash, plus the one canonical row
+171 + 13 = 184 siblings compared on a hash, plus the one canonical row
 the shipped counts also carry.
 
 The executable counterpart is `toktier.from_pretrained(repo_id)`. It resolves
@@ -535,15 +537,15 @@ counted.
 | `olmo_3_7b` | 9 | 7 | 0 | 2 | 0 | 0 |
 | `hy3` | 1 | 1 | 0 | 0 | 0 | 21 |
 | `kimi_k3` | 13 | 13 * | 0 | 0 | 0 | 0 |
-| `hy4` | 0 | 0 | 0 | 0 | 0 | -- &dagger; |
-| `step5_preview` | 0 | 0 | 0 | 0 | 0 | -- &dagger; |
-| `muse_spark` | 0 | 0 | 0 | 0 | 0 | -- &dagger; |
-| `deepseek_v4_1_flash` | 0 | 0 | 0 | 0 | 0 | -- &dagger; |
-| `mimo_v2_6` | 0 | 0 | 0 | 0 | 0 | -- &dagger; |
+| `hy4` | 1 | 1 | 0 | 0 | 0 | -- &dagger; |
+| `step5_preview` | 4 | 4 | 0 | 0 | 0 | -- &dagger; |
+| `muse_spark` | 3 | 3 | 0 | 0 | 0 | -- &dagger; |
+| `deepseek_v4_1_flash` | 2 | 2 | 0 | 0 | 0 | -- &dagger; |
+| `mimo_v2_6` | 4 | 3 | 0 | 1 | 0 | -- &dagger; |
 | `bert_cased` | 4 | 2 | 2 | 0 | 0 | 0 |
 | `bert_uncased` | 3 | 3 | 0 | 0 | 0 | 0 |
 | `bert_multilingual_cased` | 0 | 0 | 0 | 0 | 0 | 0 |
-| **total** | **222** | 171 | 11 | 38 | 2 | 77 |
+| **total** | **236** | 184 | 11 | 39 | 2 | 77 |
 
 `*` `kimi_k3` rows are compared at `tiktoken.model` level, for the reason given
 under the family matrix above.
@@ -753,7 +755,8 @@ snapshot](#repositories-admitted-after-the-snapshot).
 `deepseek-ai/DeepSeek-V4.1-Flash-1017` are not among these seven.
 They ship a different tokenizer file, certified as the family
 `deepseek_v4_1_flash` under
-[Certified by cross-artifact carry-over](#certified-by-cross-artifact-carry-over-deepseek-v41-flash-and-mimo-v26).
+[Certified by cross-artifact carry-over](#certified-by-cross-artifact-carry-over-deepseek-v41-flash-and-mimo-v26);
+the first two are listed under that family below.
 
 #### `gpt_oss_120b` (3 repositories)
 
@@ -855,6 +858,45 @@ They ship a different tokenizer file, certified as the family
 | `moonshotai/Kimi-VL-A3B-Thinking` | `7d99e220af61` | `b6c497a7469b` | identical (source file) |
 | `moonshotai/Kimi-VL-A3B-Thinking-2506` | `aa1730989e75` | `b6c497a7469b` | identical (source file) |
 
+#### `hy4` (1 repositories)
+
+| Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
+|---|---|---|---|
+| `tencent/Hy4-preview-FP8` &dagger; | `4215ec29de87` | `ff67615de6e6` | identical |
+
+#### `step5_preview` (4 repositories)
+
+| Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
+|---|---|---|---|
+| `stepfun-ai/Step-3.5-Flash` &dagger; | `ab446a3de5e1` | `b564c620eb77` | identical |
+| `stepfun-ai/Step-3.7-Flash` &dagger; | `5f6244077ac6` | `b564c620eb77` | identical |
+| `stepfun-ai/Step-5-Preview-BF16` &dagger; | `7734b7ffac11` | `b564c620eb77` | identical |
+| `stepfun-ai/Step-5-Preview-NVFP4` &dagger; | `bc246cc2848e` | `b564c620eb77` | identical |
+
+#### `muse_spark` (3 repositories)
+
+| Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
+|---|---|---|---|
+| `amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4` &dagger; | `246e4af1142a` | `ac2f41ef2444` | identical |
+| `intel-ai/Muse-Spark-Open-816B-A42B-INT4` &dagger; | `57ab64762b09` | `ac2f41ef2444` | identical |
+| `meta-models/Muse-Spark-Open-816B-A42B-NVFP4` &dagger; | `4239e4db1937` | `ac2f41ef2444` | identical |
+
+#### `deepseek_v4_1_flash` (2 repositories)
+
+| Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
+|---|---|---|---|
+| `deepseek-ai/DeepSeek-V4-Flash-Vision-Exp` &dagger; | `6821d6ad3681` | `c90dfa01249d` | identical |
+| `deepseek-ai/DeepSeek-V4.1-Flash` &dagger; | `314113f8a7da` | `c90dfa01249d` | identical |
+
+#### `mimo_v2_6` (4 repositories)
+
+| Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
+|---|---|---|---|
+| `XiaomiMiMo/MiMo-V2.5` &dagger; | `63651580ca77` | `633518aad78f` | equivalent (serialisation) |
+| `XiaomiMiMo/MiMo-V2.6-Flash-MOPD` &dagger; | `5220c3f51306` | `ff15eb925890` | identical |
+| `XiaomiMiMo/MiMo-V2.6-Pro-MOPD` &dagger; | `da71ee15e76a` | `ff15eb925890` | identical |
+| `XiaomiMiMo/MiMo-V2.6-Pro-RL` &dagger; | `a066ba005719` | `ff15eb925890` | identical |
+
 #### `bert_cased` (4 repositories)
 
 | Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
@@ -900,11 +942,14 @@ access resolves these thirteen rows and nothing else.
 Seven artifacts in the family matrix above, `ling_3_0_flash`,
 `laguna_s_2_1`, `hy4`, `step5_preview`, `muse_spark`, `deepseek_v4_1_flash`
 and `mimo_v2_6`, were admitted after this snapshot and were therefore not
-part of the sweep. No sub-versions are
-listed for them. The reconnaissance that preceded the admission of the first
-two did note byte-identical quantised twins for both, but that observation was
-not carried through the revision-and-digest bookkeeping this section reports,
-so nothing is listed and nothing is counted.
+part of the sweep, so no core-equal count exists for them. The
+sub-versions listed for the last five were compared one at a time on a later
+date, under [Repositories admitted after the
+snapshot](#repositories-admitted-after-the-snapshot). The reconnaissance that
+preceded the admission of the first two did note byte-identical quantised
+twins for both, but that observation was not carried through the
+revision-and-digest bookkeeping this section reports, so nothing is listed and
+nothing is counted for them.
 
 A further 39 repositories were examined and fall outside the certified set by
 design: the `google/gemma-4-*` line and `FacebookAI/xlm-roberta-*` are the
@@ -914,9 +959,9 @@ a benchmark reference rather than a certified family.
 The accounting closes on the snapshot total: 470 repositories examined = 16
 anchors + 210 verified sub-versions + 77 core-equal + 83 different + 32 without
 a comparable file + 13 gated + 39 out of scope. This equation is about the
-snapshot and stays fixed: the twelve repositories admitted afterwards were not
+snapshot and stays fixed: the 26 repositories admitted afterwards were not
 among the 470 examined on that date, which is why the verified total elsewhere
-on this page reads 222 while this line reads 210.
+on this page reads 236 while this line reads 210.
 
 ### What the snapshot is and is not
 
@@ -952,12 +997,26 @@ repository on a later date.
 | `zai-org/GLM-5.3-Flash` | `3f1971b7b5f7` | `19e773648cb4` | 20,217,442 | `glm_5_2` | identical | 2026-08-27 |
 | `Qwen/Qwen3.8-27B` | `1d4bf0f2ff60` | `0997f410c57a` | 12,809,320 | `qwen3_5_08b` | equivalent (loader face) | 2026-08-27 |
 | `Qwen/Qwen3.8-Flash-Next` | `de4b8e4d43b9` | `0997f410c57a` | 12,809,320 | `qwen3_5_08b` | equivalent (loader face) | 2026-08-27 |
+| `amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4` | `246e4af1142a` | `ac2f41ef2444` | 28,085,854 | `muse_spark` | identical | 2026-11-06 |
+| `deepseek-ai/DeepSeek-V4-Flash-Vision-Exp` | `6821d6ad3681` | `c90dfa01249d` | 6,367,257 | `deepseek_v4_1_flash` | identical | 2026-11-06 |
+| `deepseek-ai/DeepSeek-V4.1-Flash` | `314113f8a7da` | `c90dfa01249d` | 6,367,257 | `deepseek_v4_1_flash` | identical | 2026-11-06 |
+| `intel-ai/Muse-Spark-Open-816B-A42B-INT4` | `57ab64762b09` | `ac2f41ef2444` | 28,085,854 | `muse_spark` | identical | 2026-11-06 |
+| `meta-models/Muse-Spark-Open-816B-A42B-NVFP4` | `4239e4db1937` | `ac2f41ef2444` | 28,085,854 | `muse_spark` | identical | 2026-11-06 |
 | `MiniMaxAI/MiniMax-M3.1-Flash` | `ce7f4df87d2e` | `bb1f1626cf01` | 9,731,500 | `minimax_m3` | identical | 2026-11-06 |
 | `moonshotai/Kimi-K3.1-Pro` | `6d0a02029567` | `b6c497a7469b` (`tiktoken.model`) | 2,795,286 | `kimi_k3` | identical (source file) | 2026-11-06 |
 | `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16` | `a9904d24bcc1` | `623c34567aeb` | 17,077,484 | `nemotron_3_nano_4b` | identical | 2026-11-06 |
 | `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4` | `bee7596271d1` | `623c34567aeb` | 17,077,484 | `nemotron_3_nano_4b` | identical | 2026-11-06 |
+| `stepfun-ai/Step-3.5-Flash` | `ab446a3de5e1` | `b564c620eb77` | 9,976,972 | `step5_preview` | identical | 2026-11-06 |
+| `stepfun-ai/Step-3.7-Flash` | `5f6244077ac6` | `b564c620eb77` | 9,976,972 | `step5_preview` | identical | 2026-11-06 |
+| `stepfun-ai/Step-5-Preview-BF16` | `7734b7ffac11` | `b564c620eb77` | 9,976,972 | `step5_preview` | identical | 2026-11-06 |
+| `stepfun-ai/Step-5-Preview-NVFP4` | `bc246cc2848e` | `b564c620eb77` | 9,976,972 | `step5_preview` | identical | 2026-11-06 |
+| `tencent/Hy4-preview-FP8` | `4215ec29de87` | `ff67615de6e6` | 9,358,955 | `hy4` | identical | 2026-11-06 |
 | `XiaomiMiMo/MiMo-V2-Flash` | `1afd314a2406` | `aeb13307a71a` | 11,422,654 | `qwen3_8b` | identical | 2026-11-06 |
+| `XiaomiMiMo/MiMo-V2.5` | `63651580ca77` | `633518aad78f` | 7,033,572 | `mimo_v2_6` | equivalent (serialisation) | 2026-11-06 |
 | `XiaomiMiMo/MiMo-V2.5-Pro` | `21d1ecfecd7b` | `cdd40b08814d` | 12,180,133 | `qwen3_8b` | equivalent (canonicalisation) | 2026-11-06 |
+| `XiaomiMiMo/MiMo-V2.6-Flash-MOPD` | `5220c3f51306` | `ff15eb925890` | 11,423,823 | `mimo_v2_6` | identical | 2026-11-06 |
+| `XiaomiMiMo/MiMo-V2.6-Pro-MOPD` | `da71ee15e76a` | `ff15eb925890` | 11,423,823 | `mimo_v2_6` | identical | 2026-11-06 |
+| `XiaomiMiMo/MiMo-V2.6-Pro-RL` | `a066ba005719` | `ff15eb925890` | 11,423,823 | `mimo_v2_6` | identical | 2026-11-06 |
 | `zai-org/GLM-5.3` | `ba32f8c19c87` | `19e773648cb4` | 20,217,442 | `glm_5_2` | identical | 2026-11-06 |
 | `zai-org/GLM-5.3-BF16` | `abf42e6c0e53` | `19e773648cb4` | 20,217,442 | `glm_5_2` | identical | 2026-11-06 |
 
@@ -976,7 +1035,8 @@ re-establishes from the frozen directories before such a row is written
 [The Qwen3.8 tokenizer](#the-qwen38-tokenizer-two-more-spellings-of-a-certified-object)
 records what was measured and what follows.
 
-The eight repositories compared on 2026-11-06 were fetched at the pinned
+Eight of the repositories compared on 2026-11-06 share an artifact that
+was certified in an earlier release. They were fetched at the pinned
 commit and hashed, and each file was compared byte for byte against the frozen
 anchor file and against an earlier download of the same commit. Six of them
 ship a `tokenizer.json` byte-identical to the anchor of a certified family:
@@ -999,7 +1059,7 @@ and with the carriage returns removed the file is the anchor byte for byte
 basis, the basis the three `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-*` rows
 already use for the same kind of difference. The row covers these bytes only;
 the separate `XiaomiMiMo/MiMo-V2.5` repository ships a different tokenizer
-and is not covered by it.
+and is listed under `mimo_v2_6`, as the next paragraphs describe.
 
 `moonshotai/Kimi-K3.1-Pro` is admitted on the `identical (source file)` basis,
 like the twelve `kimi_k3` rows of the snapshot: its `tiktoken.model` is
@@ -1012,12 +1072,48 @@ object. The row resolves to the artifact derived from the canonical
 repository's pinned conversion inputs, so the executed tokenizer is that
 certified conversion, and the conversion table is unchanged.
 
+The other fourteen repositories compared on 2026-11-06 share one of the
+five artifacts certified in this release. Each file group was fetched at the
+pinned commit and hashed, and each file was compared byte for byte against the
+frozen anchor file and, where an earlier download of the same commit exists,
+against that download. Thirteen ship a `tokenizer.json` and a
+`tokenizer_config.json` byte-identical to the anchor's: `tencent/Hy4-preview-FP8`
+(`hy4`); `stepfun-ai/Step-3.5-Flash`, `stepfun-ai/Step-3.7-Flash`,
+`stepfun-ai/Step-5-Preview-BF16` and `stepfun-ai/Step-5-Preview-NVFP4`
+(`step5_preview`); `meta-models/Muse-Spark-Open-816B-A42B-NVFP4`,
+`amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4` and
+`intel-ai/Muse-Spark-Open-816B-A42B-INT4` (`muse_spark`);
+`deepseek-ai/DeepSeek-V4.1-Flash` and
+`deepseek-ai/DeepSeek-V4-Flash-Vision-Exp` (`deepseek_v4_1_flash`); and
+`XiaomiMiMo/MiMo-V2.6-Pro-RL`, `XiaomiMiMo/MiMo-V2.6-Flash-MOPD` and
+`XiaomiMiMo/MiMo-V2.6-Pro-MOPD` (`mimo_v2_6`). Their `config.json` and chat
+template files differ from the anchor's in several cases (for the Step
+repositories the `config.json` model type, which a `transformers` 5.x loader
+reads, as the `step5_preview` note above describes); under the pinned loader
+pair every one of the thirteen materializes a loader face byte-identical to
+the anchor's, which was checked before the rows were written. The
+`amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4` row is pinned at its current
+commit; the earlier commit the `muse_spark` campaign read carries the same
+tokenizer files.
+
+`XiaomiMiMo/MiMo-V2.5` ships the `mimo_v2_6` tokenizer in another
+serialisation: its merge table is written in the legacy string form and its
+`model` section omits `ignore_merges`, which then takes its default. The
+vocabulary, the merges themselves, the added-token table and every other
+section are equal; the pinned `tokenizers` library loads both files to the same
+document, and the pinned loader materializes a loader face byte-identical to
+the anchor's. It is admitted on the `equivalent (serialisation)` basis. Its
+`tokenizer_config.json` differs from the anchor's in the chat template and
+`model_max_length`.
+
 These rows are in the shipped registry, so the packaged counts include them:
-`identical` reads 158, `identical_source` 14, `equivalent_canonicalisation` 11
-and `total` 223 there, with 216 rows pointing at a packaged family. Counted as
-siblings, the verified total is 222; `glm_5_2` holds nine sub-versions,
-`deepseek_v4_flash` seven, `qwen3_5_08b` 21, `qwen3_8b` 112,
-`nemotron_3_nano_4b` 21, `minimax_m3` two and `kimi_k3` 13.
+`identical` reads 171, `identical_source` 14, `equivalent_canonicalisation` 11,
+`equivalent_serialisation` 39 and `total` 237 there, with 230 rows pointing at
+a packaged family. Counted as siblings, the verified total is 236; `glm_5_2`
+holds nine sub-versions, `deepseek_v4_flash` seven, `qwen3_5_08b` 21,
+`qwen3_8b` 112, `nemotron_3_nano_4b` 21, `minimax_m3` two, `kimi_k3` 13,
+`hy4` one, `step5_preview` four, `muse_spark` three, `deepseek_v4_1_flash`
+two and `mimo_v2_6` four.
 
 A repository listed here is subject to the same caveat as every other row: it
 records a comparison made on a date, not a promise about the repository's
@@ -1081,7 +1177,7 @@ carried different ids and no accelerated route was eligible for either.)
 | Repository | Revision | `tokenizer.json` sha256 | Size | Family | Anchor | Divergence |
 |---|---|---|---|---|---|---|
 | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | `1bae0e108899` | `c90dfa01249d` | 6,367,257 | `deepseek_v4_1_flash` | `deepseek_v4_flash` | 9 ids, 18 literals |
-| `deepseek-ai/DeepSeek-V4.1-Flash` | `dba1be0a40aa` | `c90dfa01249d` | 6,367,257 | `deepseek_v4_1_flash` | identical to the row above | |
+| `deepseek-ai/DeepSeek-V4.1-Flash` | `314113f8a7da` | `c90dfa01249d` | 6,367,257 | `deepseek_v4_1_flash` | identical to the row above | |
 | `deepseek-ai/DeepSeek-V4-Flash-Vision-Exp` | `6821d6ad3681` | `c90dfa01249d` | 6,367,257 | `deepseek_v4_1_flash` | identical to the rows above | |
 | `XiaomiMiMo/MiMo-V2.6-Flash-RL` | `dcd3fd83fb18` | `ff15eb925890` | 11,423,823 | `mimo_v2_6` | `qwen3_8b` | 6 ids, 6 literals |
 

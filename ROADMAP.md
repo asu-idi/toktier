@@ -336,7 +336,6 @@ is certified, as an `examined` artifact.
 
 | Family | Upstream repository | Note |
 |---|---|---|
-| Step 3.7 Flash | `stepfun-ai/Step-3.7-Flash` | pre-tokenizer, normalizer and decoder segments match an already certified splitter group; new vocabulary, merges and added-token table |
 | LongCat 2.0 | `meituan-longcat/LongCat-2.0` | script-partitioned pre-splits; each stage is a plain character-class run, so an existing construction applies, but it is a new kernel group |
 
 Requests for additional families are welcome as issues; what determines the

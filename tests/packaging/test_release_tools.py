@@ -40,7 +40,7 @@ def _wheel_with_payload(path: Path, payload: bytes) -> Path:
 
 def test_release_identity_is_v026() -> None:
     subprocess.run(
-        [sys.executable, str(VERIFY_IDENTITY), "--tag", "v0.3.0"],
+        [sys.executable, str(VERIFY_IDENTITY), "--tag", "v0.3.1"],
         check=True,
     )
 
@@ -53,13 +53,13 @@ def test_release_identity_rejects_another_tag() -> None:
         text=True,
     )
     assert completed.returncode != 0
-    assert "must be 'v0.3.0'" in completed.stderr
+    assert "must be 'v0.3.1'" in completed.stderr
 
 
 def test_release_artifact_set_is_one_abi3_linux_wheel() -> None:
     source = VERIFY_ARTIFACTS.read_text(encoding="utf-8")
     assert (
-        'EXPECTED_WHEEL = "toktier-0.3.0-cp310-abi3-manylinux_2_34_x86_64.whl"'
+        'EXPECTED_WHEEL = "toktier-0.3.1-cp310-abi3-manylinux_2_34_x86_64.whl"'
         in source
     )
 

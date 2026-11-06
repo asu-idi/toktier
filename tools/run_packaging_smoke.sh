@@ -41,7 +41,7 @@ from toktier.backends.fast_cpu import (
 repository = Path(os.environ["TOKTIER_REPOSITORY_ROOT"]).resolve()
 installed = Path(toktier.__file__).resolve()
 assert repository not in installed.parents, installed
-assert toktier.__version__ == "0.3.0"
+assert toktier.__version__ == "0.3.1"
 
 
 def release(version):

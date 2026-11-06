@@ -38,7 +38,29 @@ def test_fast_cpu_registry_counts_unique_artifacts_without_inflation() -> None:
         for row in artifacts
         if isinstance(row, dict) and "fast_cpu" in row["backends"]
     }
-    assert sum(status == "certified_source" for status in states.values()) == 11
+    entries = {
+        row["family"]: row["backends"]["fast_cpu"]
+        for row in artifacts
+        if isinstance(row, dict) and "fast_cpu" in row["backends"]
+    }
+    # The eleven judged artifacts are the certified entries without a
+    # registry-held repair member; carried records (cross-artifact
+    # carry-over) are annotations of an anchor, not new judged artifacts.
+    judged = {
+        family
+        for family, entry in entries.items()
+        if entry["status"] == "certified_source" and "repair" not in entry
+    }
+    assert len(judged) == 11
+    loadable = binding["loadable_families"]
+    assert isinstance(loadable, list)
+    assert judged == set(loadable)
+    carried = binding["carried_families"]
+    assert isinstance(carried, dict)
+    assert {family for family, entry in entries.items() if "repair" in entry} == set(
+        carried
+    )
+    assert set(carried.values()) <= judged
     assert {
         family for family, status in states.items() if status == "unsupported"
     } == {
@@ -112,7 +134,7 @@ def test_integrated_gigatoken_sources_patch_and_notices_are_bound() -> None:
     assert observed == binding["source_digest"]
 
 
-def test_native_frontend_parity_covers_every_certified_artifact() -> None:
+def test_native_frontend_parity_covers_every_roster_artifact() -> None:
     binding = _json("tools/fast_cpu_binding.json")
     reading = _json("readings/fast_cpu_native_frontend_parity.json")
     assert reading["schema"] == "toktier.fast_cpu.native_frontend_parity.v1"
@@ -138,6 +160,51 @@ def test_native_frontend_parity_covers_every_certified_artifact() -> None:
     assert set(by_family) == set(loadable)
     assert all(row["full_encode_equal_hf"] is True for row in by_family.values())
     assert all(row["repair_equal_hf"] is True for row in by_family.values())
+
+
+def test_every_carried_family_has_an_engine_parity_reading() -> None:
+    binding = _json("tools/fast_cpu_binding.json")
+    registry = _json("tables/support_registry.json")
+    carried = binding["carried_families"]
+    assert isinstance(carried, dict) and carried
+    artifacts = registry["artifacts"]
+    assert isinstance(artifacts, list)
+    by_family = {row["family"]: row for row in artifacts if isinstance(row, dict)}
+    for family, anchor in carried.items():
+        node = by_family[family]["carryover"]
+        assert node["from_family"] == anchor
+        parity = node["engine_parity"]
+        assert _sha256(str(parity["path"])) == parity["sha256"]
+        reading = _json(str(parity["path"]))
+        assert reading["mismatches"] == 0
+        assert reading["documents"] == parity["docs"] >= 1
+        subject = reading["subject"]
+        engine = reading["engine"]
+        assert isinstance(subject, dict) and isinstance(engine, dict)
+        assert subject["artifact_sha256"] == by_family[family]["artifact_sha256"]
+        assert engine["source_digest"] == binding["source_digest"]
+
+
+def test_fast_cpu_binding_classes_partition_the_registry() -> None:
+    binding = _json("tools/fast_cpu_binding.json")
+    registry = _json("tables/support_registry.json")
+    loadable_list = binding["loadable_families"]
+    rejected_map = binding["rejected_families"]
+    assert isinstance(loadable_list, list) and isinstance(rejected_map, dict)
+    loadable = set(loadable_list)
+    rejected = set(rejected_map)
+    carried = binding["carried_families"]
+    assert isinstance(carried, dict)
+    assert not loadable & rejected
+    assert not set(carried) & (loadable | rejected)
+    artifacts = registry["artifacts"]
+    assert isinstance(artifacts, list)
+    shipped = {row["family"] for row in artifacts if isinstance(row, dict)}
+    assert shipped == loadable | (rejected & shipped) | set(carried)
+    coverage = binding["coverage"]
+    assert isinstance(coverage, dict)
+    assert coverage["unique_tokenizer_artifacts"] == len(loadable) == 11
+    assert set(carried.values()) <= loadable
 
 
 def test_fastokens_v031_license_materials_are_exact_upstream_files() -> None:

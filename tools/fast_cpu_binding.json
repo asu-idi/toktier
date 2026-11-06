@@ -87,5 +87,9 @@
     "hy4": "not judged: the repair roster has no row for this artifact, so the engine has no differential reading on it",
     "step5_preview": "not judged: the repair roster has no row for this artifact, so the engine has no differential reading on it",
     "muse_spark": "not judged: the repair roster has no row for this artifact, so the engine has no differential reading on it"
+  },
+  "carried_families": {
+    "deepseek_v4_1_flash": "deepseek_v4_flash",
+    "mimo_v2_6": "qwen3_8b"
   }
 }

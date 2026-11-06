@@ -635,7 +635,11 @@ is changed on the caller's behalf.
 
 An examined artifact (`docs/support-matrix.md`, Status vocabulary) is
 pinned in the shipped artifact manifest and listed in the embedded
-examined-artifact table, never in the support registry. `Runtime::load`
+examined-artifact table, never in the support registry. The embedded table
+carries no row in this release. A certified record carried from an anchor
+by the cross-artifact carry-over is not an examined artifact: it is a
+support row whose fast CPU entry holds its own repair parameters, and
+`Runtime::load` treats it as any other certified family. `Runtime::load`
 fetches and verifies it like any other family. Its plan always records
 `ReasonCode::ExaminedArtifact`. The fast CPU route is admitted against the
 engine binding of a certified support row holding the same pipeline

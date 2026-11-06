@@ -345,40 +345,29 @@ fallback 的计数。
 
 ## Rust serving API
 
-### 从 `main` 跑 DeepSeek-V4.1-Flash-1017：最短路径
+### 在 Rust serving API 上运行 DeepSeek-V4.1-Flash-1017
 
 `deepseek-ai/DeepSeek-V4.1-Flash-1017`（以及 `DeepSeek-V4.1-Flash`、
-`DeepSeek-V4-Flash-Vision-Exp`，三者的 `tokenizer.json` 逐字节相同）在 `main`
-上以 family `deepseek_v4_1_flash` 运行。它的状态是**已检视、未认证**
-（`examined`）：pipeline 与已认证的 `deepseek_v4_flash` 相同，added-token 表
-尚未经过任何认证 campaign 的判定
-（[支持矩阵](docs/support-matrix.md#runnable-not-certified-the-deepseek-v41-flash-tokenizer)）。
-crates.io 上的发布版还没有这个 family，所以请把 `main` 克隆到项目旁边，
-按路径依赖这个 crate；等发布版收录后，把这一行改回版本号即可。
+`DeepSeek-V4-Flash-Vision-Exp`，三者的 `tokenizer.json` 逐字节相同）是已认证的
+family `deepseek_v4_1_flash`。它的 pipeline 与已认证的 `deepseek_v4_flash`
+相同，added-token 表有 9 个 id 不同，这些字面量在认证语料中一次也没有出现，
+因此通过跨工件 carry-over 沿用该 family 的读数
+（[支持矩阵](docs/support-matrix.md#certified-by-cross-artifact-carry-over-deepseek-v41-flash-and-mimo-v26)）。
+`XiaomiMiMo/MiMo-V2.6-Flash-RL` 以 `mimo_v2_6` 同样从 `qwen3_8b` 沿用。
 
-```sh
-git clone https://github.com/asu-idi/toktier
-cargo new v41-example && cd v41-example
+```bash
+cargo add toktier
 ```
-
-```toml
-[dependencies]
-toktier = { path = "../toktier/crates/toktier", features = ["network"] }
-```
-
-请用路径依赖，而不是 `git` 依赖：Cargo 会把这个 crate 的同仓 crate 记为
-`git` 来源，认证核心的检查随之读作 `mismatched`，计划走参考路由
-（[`docs/rust-api.md`](docs/rust-api.md)）。
 
 ```rust
 use toktier::{Device, Policy, Revision, Runtime};
 
 fn main() -> toktier::Result<()> {
-    // Policy::Supported is the default, written out here: the fast CPU
-    // route runs, and the label says the artifact is examined, not certified.
+    // Policy::Certified admits only certified routes; this family's fast
+    // CPU route is one of them.
     let runtime = Runtime::builder()
         .device(Device::Cpu)
-        .policy(Policy::Supported)
+        .policy(Policy::Certified)
         .build()?;
 
     // Pinned in the shipped manifest: deepseek-ai/DeepSeek-V4.1-Flash-1017
@@ -393,7 +382,7 @@ fn main() -> toktier::Result<()> {
     // The label and the reason, read from the route plan.
     let plan = tokenizer.plan();
     println!("{:?} {:?} {:?}", plan.backends, plan.certification, plan.reasons);
-    // [FastCpu, HuggingFace] Supported [ExaminedArtifact]
+    // [FastCpu, HuggingFace] CertifiedSource []
 
     let turn = "<｜User｜>Summarize the design of a tokenizer cache.<｜Assistant｜>\
                 A tokenizer cache keeps the token ids of the conversation so far. ";
@@ -410,20 +399,14 @@ fn main() -> toktier::Result<()> {
 }
 ```
 
-`cargo run --release` 输出：
-
-```text
-[FastCpu, HuggingFace] Supported [ExaminedArtifact]
-kept 1087 ids, appended 10
-```
-
-`network` feature 通过 TLS 获取钉住的文件；镜像或离线缓存的取法见
-[`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)。`append` 返回
-`TokenPatch`，不会物化完整历史：`keep_tokens()` 是下游缓冲区的截断位置，
-`replacement_ids()` 是 repair 后的精确后缀。标签从 `plan()` 读取：
-`certification` 读作 `Supported`，`reasons` 里有 `ExaminedArtifact`。
-`Policy::Certified` 对这个 family 拒绝快路径。它的认证登记安排在后续版本。
-Python 门面不是服务路径：
+示例从已校验的工件缓存读取钉住的文件（用开启 `network` 的构建执行一次
+`toktier-rust artifacts fetch deepseek_v4_1_flash` 填充，或导入 bundle；见
+[`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)）。以 `--release` 和已发布
+crate 的默认 feature 构建（即经过判定的构建配方）时，`plan()` 读作
+`CertifiedSource`（源身份绑定路径的认证标签），没有 reason；开启 `network` 的构建走同一条路径，标签为
+`Supported`，因为 feature 列表属于该配方（`docs/rust-api.md`）。`append`
+返回 `TokenPatch`，不会物化完整历史：`keep_tokens()` 是下游缓冲区的截断
+位置，`replacement_ids()` 是 repair 后的精确后缀。Python 门面不是服务路径：
 `toktier.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash-1017")` 以同一条 CPU
 路径加载同一个工件，用于评估。
 
@@ -757,9 +740,9 @@ pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
 唯一工件与延续证据记录在
 [`docs/support-matrix.md`](docs/support-matrix.md#configuration-only-added-tokens)。
 
-本文档中出现了四类计数，各自回答不同的问题：**19 个随包工件**（`toktier
-inspect` 列出的那些：18 个已认证工件，加 1 个已检视、未认证的
-`deepseek_v4_1_flash`）、**18+3 个 model family**（byte-level BPE 加
+本文档中出现了四类计数，各自回答不同的问题：**20 个随包工件**（`toktier
+inspect` 列出的那些，全部已认证，其中 `deepseek_v4_1_flash` 与 `mimo_v2_6`
+通过跨工件 carry-over 认证）、**18+3 个 model family**（byte-level BPE 加
 WordPiece；不同 family 可以共用同一工件）、**11 个具备 CPU 快路径认证的
 工件**（按精确工件继承覆盖 12 个 family），以及**注册表 223 条**（222 个
 已审计 sibling 仓库加 1 个 canonical 自指条目）。如果某个数字看起来与另一个

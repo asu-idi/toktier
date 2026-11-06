@@ -74,7 +74,6 @@ def test_roster_is_the_certified_records_and_excludes_examined() -> None:
     roster = _roster()
     examined = {str(row["family"]) for row in _read(EXAMINED)["artifacts"]}
     assert len(roster) == tool.MATRIX_FAMILIES
-    assert examined
     assert not roster & examined
 
 
@@ -97,7 +96,10 @@ def test_an_examined_row_in_place_of_a_certified_one_is_refused(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     readings = copy.deepcopy(_readings())
-    examined = str(_read(EXAMINED)["artifacts"][0]["family"])
+    # The shipped examined table may be empty; any family outside the
+    # certified roster stands in for an examined one.
+    rows = _read(EXAMINED)["artifacts"]
+    examined = str(rows[0]["family"]) if rows else "examined_fixture"
     readings["cpu"]["rows"][0]["family"] = examined
     _install(monkeypatch, tmp_path, readings)
     with pytest.raises(GenerationError, match="certified artifact roster"):

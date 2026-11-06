@@ -332,14 +332,12 @@ support matrix's certified tables. Where a reconnaissance is worth reading it
 is written down in `docs/support-matrix.md`, which records what was looked at
 and says in the same breath that it carries no coverage. A
 family that shares a certified pipeline can also be made runnable before it
-is certified, as an `examined` artifact; the DeepSeek-V4.1-Flash row below
-is the one such family on `main`.
+is certified, as an `examined` artifact.
 
 | Family | Upstream repository | Note |
 |---|---|---|
 | Step 3.7 Flash | `stepfun-ai/Step-3.7-Flash` | pre-tokenizer, normalizer and decoder segments match an already certified splitter group; new vocabulary, merges and added-token table |
 | LongCat 2.0 | `meituan-longcat/LongCat-2.0` | script-partitioned pre-splits; each stage is a plain character-class run, so an existing construction applies, but it is a new kernel group |
-| DeepSeek-V4.1-Flash | `deepseek-ai/DeepSeek-V4.1-Flash`, `deepseek-ai/DeepSeek-V4.1-Flash-1017`, `deepseek-ai/DeepSeek-V4-Flash-Vision-Exp` | the same pipeline as the certified `deepseek_v4_flash` with a different added-token table. Runnable on `main` as the `examined` family `deepseek_v4_1_flash`: the fast CPU engine runs it labelled `supported_untested`, and `policy="certified"` refuses it (`docs/support-matrix.md`). Its certification -- an absence certificate for the 18 differing literals over the certification corpus and a cross-artifact carry-over record -- is registered for a later release |
 
 Requests for additional families are welcome as issues; what determines the
 effort is the pre-tokenizer structure, not the vocabulary size.

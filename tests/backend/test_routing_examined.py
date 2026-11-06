@@ -1,14 +1,16 @@
 """Examined artifacts: runnable on the fast CPU engine, never certified.
 
-Contract reference: ``docs/support-matrix.md`` (Status vocabulary, the
-examined DeepSeek-V4.1-Flash section) and ``routing/plan.py`` check 5a.
-The tests read the shipped tables, so they also pin what this release
-says about the one examined artifact it carries.
+Contract reference: ``docs/contracts/registry.md`` Section 3.0 and
+``routing/plan.py`` check 5a. The shipped examined-artifact table carries
+no row in this release; the mechanism is exercised through a fixture table
+read by the same digest-verified loader the shipped table goes through.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -20,19 +22,66 @@ from toktier.policy import (
     ReasonCode,
     RoutingPolicy,
 )
+from toktier.repair import registry as repair_registry
 from toktier.repair.registry import examined_families, families, family_spec
 from toktier.routing.explain import build_explanation
 from toktier.routing.plan import assessments_for, plan
 from toktier.routing.probe import ProbeSnapshot
-from toktier.routing.registry_load import shipped_registry
+from toktier.routing.registry_load import (
+    load_examined_artifacts,
+    load_registry_document,
+    shipped_registry,
+)
+from toktier.routing.registry_view import RegistryView
+from toktier.routing.tables import EXAMINED_ARTIFACTS, SUPPORT_REGISTRY
 
-FAMILY = "deepseek_v4_1_flash"
-ARTIFACT = "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b"
+FIXTURE = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "examined_artifacts.fixture.json"
+)
+FAMILY = "examined_fixture"
+ARTIFACT = "e" * 64
+
+
+def _fixture_registry() -> RegistryView:
+    """The shipped registry with the fixture examined table beside it."""
+    return RegistryView.from_document(
+        load_registry_document(SUPPORT_REGISTRY),
+        path=str(SUPPORT_REGISTRY),
+        examined=load_examined_artifacts(FIXTURE),
+    )
+
+
+@pytest.fixture
+def fixture_table(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Point the repair-parameter lookup at the fixture table."""
+    import toktier.routing.tables as tables
+
+    monkeypatch.setattr(tables, "EXAMINED_ARTIFACTS", FIXTURE)
+    examined_families.cache_clear()
+    repair_registry._sources.cache_clear()
+    yield
+    examined_families.cache_clear()
+    repair_registry._sources.cache_clear()
+
+
+def test_the_shipped_examined_table_is_empty() -> None:
+    assert load_examined_artifacts(EXAMINED_ARTIFACTS) == ()
+    assert examined_families() == ()
+    registry = shipped_registry()
+    assert registry.examined(ARTIFACT) is None
+    # The artifact that was runnable through the table is certified now.
+    match = registry.certification(
+        artifact_sha256=(
+            "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b"
+        )
+    )
+    assert match is not None and match.identity == "exact"
+    assert match.record.family == "deepseek_v4_1_flash"
 
 
 def _matching_engine_facts() -> FastCpuEngineFacts:
     """Engine facts that verify against the peer's fast CPU binding."""
-    match = shipped_registry().certification(artifact_sha256=ARTIFACT)
+    match = _fixture_registry().certification(artifact_sha256=ARTIFACT)
     assert match is not None
     entry = match.record.backends[BACKEND_FAST_CPU]
     return FastCpuEngineFacts(
@@ -45,7 +94,7 @@ def _matching_engine_facts() -> FastCpuEngineFacts:
 
 
 def _snapshot(**overrides: object) -> ProbeSnapshot:
-    registry = shipped_registry()
+    registry = _fixture_registry()
     values: dict[str, object] = {
         "family": FAMILY,
         "artifact_sha256": ARTIFACT,
@@ -60,7 +109,7 @@ def _snapshot(**overrides: object) -> ProbeSnapshot:
 
 
 def test_the_examined_row_is_not_a_certification_record() -> None:
-    registry = shipped_registry()
+    registry = _fixture_registry()
     examined = registry.examined(ARTIFACT)
     assert examined is not None
     assert examined.family == FAMILY
@@ -72,7 +121,9 @@ def test_the_examined_row_is_not_a_certification_record() -> None:
     assert match is not None
     assert match.identity == "examined"
     assert set(match.record.backends) == {BACKEND_FAST_CPU}
-    assert {"deepseek_v3", "deepseek_v4_flash"} <= set(match.pipeline_peers)
+    assert {"deepseek_v3", "deepseek_v4_1_flash", "deepseek_v4_flash"} <= set(
+        match.pipeline_peers
+    )
     certified = [
         registry.certification(artifact_sha256=item.artifact_sha256)
         for item in families()
@@ -81,6 +132,7 @@ def test_the_examined_row_is_not_a_certification_record() -> None:
     assert FAMILY not in {item.record.family for item in certified if item}
 
 
+@pytest.mark.usefixtures("fixture_table")
 def test_the_certified_repair_roster_is_unchanged() -> None:
     assert len(families()) == 11
     assert all(item.family != FAMILY for item in families())
@@ -102,9 +154,9 @@ def test_supported_runs_the_fast_cpu_engine_and_labels_it(
     policy: RoutingPolicy,
 ) -> None:
     snapshot = _snapshot()
-    route = plan(snapshot, policy, shipped_registry(), Config())
+    route = plan(snapshot, policy, _fixture_registry(), Config())
     assert route.backend == BACKEND_FAST_CPU
-    assessments = assessments_for(snapshot, policy, shipped_registry(), Config())
+    assessments = assessments_for(snapshot, policy, _fixture_registry(), Config())
     fast = next(item for item in assessments if item.backend == BACKEND_FAST_CPU)
     assert fast.eligible
     causes = [reason.detail.get("cause") for reason in fast.supported]
@@ -129,7 +181,7 @@ def test_supported_runs_the_fast_cpu_engine_and_labels_it(
 
 
 def test_certified_refuses_with_the_uncertified_artifact_reason() -> None:
-    route = plan(_snapshot(), RoutingPolicy.CERTIFIED, shipped_registry(), Config())
+    route = plan(_snapshot(), RoutingPolicy.CERTIFIED, _fixture_registry(), Config())
     assert route.backend == BACKEND_REFERENCE
     refusal = next(
         reason for reason in route.reasons if reason.backend == BACKEND_FAST_CPU
@@ -139,15 +191,15 @@ def test_certified_refuses_with_the_uncertified_artifact_reason() -> None:
 
 
 def test_reference_policy_considers_no_accelerated_option() -> None:
-    route = plan(_snapshot(), RoutingPolicy.REFERENCE, shipped_registry(), Config())
+    route = plan(_snapshot(), RoutingPolicy.REFERENCE, _fixture_registry(), Config())
     assert route.backend == BACKEND_REFERENCE
 
 
 def test_every_binding_still_verifies() -> None:
     """Coverage admission waives nothing that has to verify."""
-    registry = shipped_registry()
+    registry = _fixture_registry()
     other_face = plan(
-        _snapshot(loader_face_sha256="e" * 64),
+        _snapshot(loader_face_sha256="d" * 64),
         RoutingPolicy.SUPPORTED,
         registry,
         Config(),

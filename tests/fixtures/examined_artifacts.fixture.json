@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "generated_by": {
+    "tool": "tools/generate_examined_artifacts.py",
+    "tool_version": "1.0.0",
+    "source_commit": "0000000000000000000000000000000000000000",
+    "generated_at": "2026-11-06T00:00:00Z"
+  },
+  "root_digest": "sha256:fc6fda1abc9eaeb44de8794500bde681be11551adc8bdd92c7dc0baf8678dff9",
+  "status": "examined",
+  "statement": "An examined artifact is one whose pipeline capability is that of a certified family and whose added-token capability no campaign has judged. It is not certified: no reading in the support registry covers it. Its only accelerated route is the fast CPU engine, admitted under the supported policy and labelled supported_untested; the certified policy refuses it with R_UNCERTIFIED_ARTIFACT. The repair parameters below are the ones the maintainer repair-table exporter derives for this artifact; they are not part of the fast CPU engine's bound source set.",
+  "artifacts": [
+    {
+      "family": "examined_fixture",
+      "artifact_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "loader_face_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "pipeline_id": "pipeline.9f6d5117c3680d0e",
+      "added_frontend_id": "added-frontend.eeeeeeeeeeeeeeee",
+      "oracle_id": "tokenizers",
+      "repair": {
+        "margin": 36,
+        "effective_l_max": 128,
+        "has_normalizer": true,
+        "source_table_sha256": "f6af49ba4cf83beedb8a531767c55c436116bd74fb3f85adddc8d67903ba1317"
+      },
+      "examination": {
+        "examined_on": "2026-09-20",
+        "documents": 100000,
+        "characters": 218539216,
+        "mismatches": 0,
+        "divergent_literals": 18,
+        "divergent_literal_occurrences": 0,
+        "note": "Fixture row for the examined mechanism: an artifact on the pipeline capability of a certified family, with an added-token table no campaign has judged."
+      },
+      "missing_evidence": [
+        "corpus_absence_certificate",
+        "cross_artifact_carryover_record"
+      ]
+    }
+  ]
+}

@@ -421,42 +421,31 @@ data, and every fallback counter.
 
 ## Rust serving API
 
-### DeepSeek-V4.1-Flash-1017 from `main`: the shortest path
+### DeepSeek-V4.1-Flash-1017 on the Rust serving API
 
 `deepseek-ai/DeepSeek-V4.1-Flash-1017` (and `DeepSeek-V4.1-Flash` and
-`DeepSeek-V4-Flash-Vision-Exp`, which ship the same `tokenizer.json`) runs on
-`main` as the family `deepseek_v4_1_flash`. It is **examined, not
-certified**: its pipeline is the certified `deepseek_v4_flash` one and its
-added-token table is not one a campaign has judged
-([support matrix](docs/support-matrix.md#runnable-not-certified-the-deepseek-v41-flash-tokenizer)).
-No crates.io release carries it yet, so clone `main` next to your project
-and depend on the crate by path; once a release carries the family, switch
-the line back to a version number.
+`DeepSeek-V4-Flash-Vision-Exp`, which ship the same `tokenizer.json`) is the
+certified family `deepseek_v4_1_flash`. Its pipeline is the certified
+`deepseek_v4_flash` one, its added-token table differs in nine ids whose
+literals the certification corpus never contains, and it holds that
+family's readings through the cross-artifact carry-over
+([support matrix](docs/support-matrix.md#certified-by-cross-artifact-carry-over-deepseek-v41-flash-and-mimo-v26)).
+The same holds for `XiaomiMiMo/MiMo-V2.6-Flash-RL` as `mimo_v2_6`, carried
+from `qwen3_8b`.
 
-```sh
-git clone https://github.com/asu-idi/toktier
-cargo new v41-example && cd v41-example
+```bash
+cargo add toktier
 ```
-
-```toml
-[dependencies]
-toktier = { path = "../toktier/crates/toktier", features = ["network"] }
-```
-
-Take the crate by path rather than as a `git` dependency: Cargo records a
-`git` source for this crate's own siblings, the certified-core check then reads
-`mismatched`, and the plan is the reference route
-([`docs/rust-api.md`](docs/rust-api.md)).
 
 ```rust
 use toktier::{Device, Policy, Revision, Runtime};
 
 fn main() -> toktier::Result<()> {
-    // Policy::Supported is the default, written out here: the fast CPU
-    // route runs, and the label says the artifact is examined, not certified.
+    // Policy::Certified admits only certified routes; this family's fast
+    // CPU route is one of them.
     let runtime = Runtime::builder()
         .device(Device::Cpu)
-        .policy(Policy::Supported)
+        .policy(Policy::Certified)
         .build()?;
 
     // Pinned in the shipped manifest: deepseek-ai/DeepSeek-V4.1-Flash-1017
@@ -471,7 +460,7 @@ fn main() -> toktier::Result<()> {
     // The label and the reason, read from the route plan.
     let plan = tokenizer.plan();
     println!("{:?} {:?} {:?}", plan.backends, plan.certification, plan.reasons);
-    // [FastCpu, HuggingFace] Supported [ExaminedArtifact]
+    // [FastCpu, HuggingFace] CertifiedSource []
 
     let turn = "<｜User｜>Summarize the design of a tokenizer cache.<｜Assistant｜>\
                 A tokenizer cache keeps the token ids of the conversation so far. ";
@@ -488,22 +477,18 @@ fn main() -> toktier::Result<()> {
 }
 ```
 
-`cargo run --release` prints:
-
-```text
-[FastCpu, HuggingFace] Supported [ExaminedArtifact]
-kept 1087 ids, appended 10
-```
-
-The `network` feature fetches the pinned files over TLS; for a mirror or an
-offline cache, see [`docs/rust-lifecycle.md`](docs/rust-lifecycle.md).
-`append` returns a `TokenPatch` and does not materialize the complete
-history: `keep_tokens()` is where the downstream buffer is cut,
-`replacement_ids()` is the exact repaired suffix. The label is read from
-`plan()`: `certification` reads `Supported` and `reasons` carries
-`ExaminedArtifact`; `Policy::Certified` refuses the fast route for this
-family. Its certification is registered for a later
-release. The Python facade is not the serving path:
+The example reads the pinned files from a verified artifact cache (fill it
+once with `toktier-rust artifacts fetch deepseek_v4_1_flash` from a build
+with `network`, or import a bundle; see
+[`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)). Built with `--release`
+and the default features of the published crate, which is the judged build
+recipe, `plan()` reads `CertifiedSource` (the certified label of a
+source-bound route) with no reason; a build that turns
+`network` on runs the same route labelled `Supported`, because the feature
+list is part of that recipe (`docs/rust-api.md`). `append` returns a
+`TokenPatch` and does not materialize the complete history:
+`keep_tokens()` is where the downstream buffer is cut, `replacement_ids()`
+is the exact repaired suffix. The Python facade is not the serving path:
 `toktier.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash-1017")` loads the
 same artifact on the same CPU route for evaluation.
 
@@ -894,8 +879,9 @@ records the one artifact whose two faces differ as documents and the
 carry-over evidence.
 
 Four different counts appear in this document, and each answers a different
-question: **19 packaged artifacts** (what `toktier inspect` lists: the 18
-certified ones and one examined, not certified, `deepseek_v4_1_flash`), **18+3
+question: **20 packaged artifacts** (what `toktier inspect` lists, all
+certified; `deepseek_v4_1_flash` and `mimo_v2_6` through the cross-artifact
+carry-over), **18+3
 model families** (byte-level BPE plus WordPiece, since families can share an
 artifact), **11 artifacts with a certified CPU fast path** (12 families by
 exact-artifact inheritance), and **223 registry rows** (222 audited sibling

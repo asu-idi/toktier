@@ -69,7 +69,7 @@ const REPAIR_MANIFEST_SHA256: &str =
 const KERNEL_FAMILIES_SHA256: &str =
     "6dfd9d38ccd5401645d18e463b4c18dfd49e3a8beb18c443e81582cb453888b3";
 const EXAMINED_ARTIFACTS_SHA256: &str =
-    "172ae0e1395f2cc795aa58e20a09ade2ddc75c930756b10890e3bb6b42609ada";
+    "c218cf0e73c67dc02854bd88295acf329d4e7aa5a39d3ba9b0fb211c311892d4";
 const PREBUILT_MANIFEST_SHA256: &str =
     "9f193e6b42408a09ee0796cbff525e283836389c40a91d67aa4ec1271db8acbe";
 
@@ -1129,7 +1129,6 @@ mod tests {
     #[test]
     fn every_examined_artifact_has_a_certified_pipeline_peer() {
         let registry = super::Registry::load().expect("embedded tables load");
-        assert!(!registry.examined.is_empty());
         for (family, row) in &registry.examined {
             assert!(registry.support(family).is_none(), "{family} is certified");
             assert!(
@@ -1154,6 +1153,49 @@ mod tests {
                     .and_then(serde_json::Value::as_str)
                     == Some("certified_source")),
                 "{family} has no certified pipeline peer"
+            );
+        }
+    }
+
+    /// The examined table ships with no row in this release; the embedded
+    /// table still parses, and an examined row keeps its shape.
+    #[test]
+    fn the_shipped_examined_table_is_empty_and_rows_still_parse() {
+        let registry = super::Registry::load().expect("embedded tables load");
+        assert!(registry.examined.is_empty());
+        let table: super::ExaminedTable = serde_json::from_str(
+            r#"{"schema_version": 1, "status": "examined", "artifacts": [{
+                "family": "examined_fixture",
+                "artifact_sha256": "eeee",
+                "pipeline_id": "pipeline.9f6d5117c3680d0e",
+                "repair": {"margin": 36, "effective_l_max": 128, "has_normalizer": true}
+            }]}"#,
+        )
+        .expect("an examined row parses");
+        assert_eq!(table.artifacts.len(), 1);
+        assert_eq!(table.artifacts[0].repair.margin, 36);
+    }
+
+    /// Carried records join the repair lookup with their own parameters,
+    /// equal to their anchors' roster rows.
+    #[test]
+    fn carried_records_hold_their_anchors_repair_parameters() {
+        let registry = super::Registry::load().expect("embedded tables load");
+        for (family, anchor) in [
+            ("deepseek_v4_1_flash", "deepseek_v4_flash"),
+            ("mimo_v2_6", "qwen3_8b"),
+        ] {
+            let carried = registry.repair(family).expect("carried repair row");
+            let support = registry.support(family).expect("certified record");
+            assert_eq!(carried.artifact_sha256, support.artifact_sha256);
+            let anchor = registry.repair(anchor).expect("anchor roster row");
+            assert_eq!(
+                (
+                    carried.margin,
+                    carried.effective_l_max,
+                    carried.has_normalizer
+                ),
+                (anchor.margin, anchor.effective_l_max, anchor.has_normalizer)
             );
         }
     }

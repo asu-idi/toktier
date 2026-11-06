@@ -3,39 +3,11 @@
   "generated_by": {
     "tool": "tools/generate_examined_artifacts.py",
     "tool_version": "1.0.0",
-    "source_commit": "dd28a86b94c5f162b6edc65f67e078dfaa4be387",
-    "generated_at": "2026-11-05T05:00:00Z"
+    "source_commit": "faa8547ab2ee2c626b775aa189d7df6e55750b43",
+    "generated_at": "2026-11-06T00:00:00Z"
   },
-  "root_digest": "sha256:0efdb635ea6af8db0a305e13bf69191d0fcb836b181e2f5075494f5a541ee261",
+  "root_digest": "sha256:a9052025e7f69cf873a80858466fc40748ade2a26f1625c6f0c4dff676bf09bd",
   "status": "examined",
   "statement": "An examined artifact is one whose pipeline capability is that of a certified family and whose added-token capability no campaign has judged. It is not certified: no reading in the support registry covers it. Its only accelerated route is the fast CPU engine, admitted under the supported policy and labelled supported_untested; the certified policy refuses it with R_UNCERTIFIED_ARTIFACT. The repair parameters below are the ones the maintainer repair-table exporter derives for this artifact; they are not part of the fast CPU engine's bound source set.",
-  "artifacts": [
-    {
-      "family": "deepseek_v4_1_flash",
-      "artifact_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
-      "loader_face_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
-      "pipeline_id": "pipeline.9f6d5117c3680d0e",
-      "added_frontend_id": "added-frontend.b5b5d7ad62c0371f",
-      "oracle_id": "tokenizers",
-      "repair": {
-        "margin": 36,
-        "effective_l_max": 128,
-        "has_normalizer": true,
-        "source_table_sha256": "f6af49ba4cf83beedb8a531767c55c436116bd74fb3f85adddc8d67903ba1317"
-      },
-      "examination": {
-        "examined_on": "2026-09-20",
-        "documents": 100000,
-        "characters": 218539216,
-        "mismatches": 0,
-        "divergent_literals": 18,
-        "divergent_literal_occurrences": 0,
-        "note": "Reference route over this file, the reference engine over its loader face and the reference engine over the certified deepseek_v4_flash face returned the same ids on every document of web text, multilingual paragraphs and code; none of the 18 literals that differ between the two added-token tables occurs in the sample."
-      },
-      "missing_evidence": [
-        "corpus_absence_certificate",
-        "cross_artifact_carryover_record"
-      ]
-    }
-  ]
+  "artifacts": []
 }

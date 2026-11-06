@@ -181,6 +181,24 @@
       }
     }
   },
+  "mimo_v2_6": {
+    "repo_id": "XiaomiMiMo/MiMo-V2.6-Flash-RL",
+    "revision": "dcd3fd83fb181622fbc606fbb1709901982a62c2",
+    "files": {
+      "config.json": {
+        "sha256": "61bea4a0f7a0dd8969f8cae528761e26b697dd12ff63e98804c3f0945492e621",
+        "size": 8068
+      },
+      "tokenizer.json": {
+        "sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+        "size": 11423823
+      },
+      "tokenizer_config.json": {
+        "sha256": "413a7845f52943ccf4de0e5c838414507d16c44dbf573da9e20bc8902b384d06",
+        "size": 12150
+      }
+    }
+  },
   "minimax_m3": {
     "repo_id": "MiniMaxAI/MiniMax-M3",
     "revision": "50942730318c7943fe83db7ec8e9f9177ecb1cf8",

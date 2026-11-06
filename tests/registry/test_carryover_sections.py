@@ -58,13 +58,19 @@ def test_exactly_one_artifact_declares_configuration_side_tokens() -> None:
 
 
 def test_every_other_record_carries_neither_section() -> None:
-    """For every other packaged artifact the two faces are one function."""
+    """For every other packaged artifact the two faces are one function.
+
+    The records carried from an anchor (cross-artifact carry-over) hold a
+    ``carryover`` node of the cross-artifact form and no configuration-side
+    subset; they are pinned in ``test_cross_artifact_carryover.py``.
+    """
     document = _shipped()
     for row in document["artifacts"]:
         if row["family"] == "qwen3_5_08b":
             continue
         assert "config_added_tokens" not in row, row["family"]
-        assert "carryover" not in row, row["family"]
+        carryover = row.get("carryover")
+        assert carryover is None or "from_artifact_sha256" in carryover, row["family"]
 
 
 def test_the_carried_record_names_its_certificate() -> None:

@@ -46,6 +46,7 @@ os.environ.setdefault("RAYON_NUM_THREADS", "4")
 import toktier
 from toktier import chunked
 from toktier.artifacts.tables import ARTIFACT_MANIFEST
+from toktier.repair.registry import carried_families
 from toktier.repair.registry import families as roster_families
 
 from .test_chunked import (
@@ -61,7 +62,13 @@ from .test_chunked import (
 SHIPPED: tuple[str, ...] = tuple(
     sorted(json.loads(ARTIFACT_MANIFEST.read_text(encoding="utf-8")))
 )
-ROSTER: frozenset[str] = frozenset(item.family for item in roster_families())
+#: Families whose repair parameters the shipped tables hold: the repair
+#: roster and the certified records carried from an anchor, which both
+#: faces read alike (``backends.fast_cpu.repair``).
+CARRIED: frozenset[str] = frozenset(item.family for item in carried_families())
+ROSTER: frozenset[str] = (
+    frozenset(item.family for item in roster_families()) | CARRIED
+)
 
 #: The structural refusals the native encoder itself answers with; the
 #: Rust face reports them verbatim, as the Python face does.
@@ -152,6 +159,29 @@ def _expected_rust_refusal(
     if face is not None and face != artifact_sha256:
         return f"loader_face_differs_from_chunked_evidence:{artifact_sha256[:12]}"
     return None
+
+
+def test_carried_families_are_refused_alike_for_want_of_an_admission_row(
+    rust_example: Path, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """A carried family passes the roster step and has no admission row."""
+    checked = 0
+    for family in sorted(CARRIED):
+        if not _artifact_source(family):
+            continue
+        assert family not in TABLE_ROWS, family
+        report = _run(rust_example, family, "--policy", "supported", "--chars", "300")
+        tokenizer = load_isolated(family, tmp_path_factory)
+        try:
+            python = chunked.admission(tokenizer)
+        finally:
+            tokenizer.close()
+        assert report["admission"]["refusal"] == "artifact_without_chunked_evidence"
+        assert python["refusal"] == "artifact_without_chunked_evidence"
+        assert report["encode"]["equal_to_serial"] is True, family
+        checked += 1
+    if not checked:
+        pytest.skip("no carried family is available under TOKTIER_TEST_ARTIFACTS")
 
 
 def test_rust_admission_refusals_equal_the_python_ones(

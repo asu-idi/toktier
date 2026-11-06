@@ -115,7 +115,9 @@ def test_the_deepseek_pair_still_shares_one_pipeline_row() -> None:
         if row["pipeline_id"] in shared
     ]
     assert len(members) == 1
-    assert "deepseek_v3, deepseek_v4_flash" in members[0]["description"]
+    assert "deepseek_v3, deepseek_v4_1_flash, deepseek_v4_flash" in members[0][
+        "description"
+    ]
 
 
 def test_every_capability_id_names_exactly_one_fingerprint() -> None:

@@ -263,6 +263,7 @@ package.
 | `hy4` | `tencent/Hy4-preview` | ff67615de6e6 | unsupported (no repair row); HF | certified (prebuilt) | not admitted |
 | `step5_preview` | `stepfun-ai/Step-5-Preview` | b564c620eb77 | unsupported (no repair row); HF | certified (prebuilt) | not admitted |
 | `muse_spark` | `meta-models/Muse-Spark-Open-816B-A42B` | ac2f41ef2444 | unsupported (no repair row); HF | certified (prebuilt) | not admitted |
+| `nemotron_super_vl` | `nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16` | d0432ad8b1c2 | unsupported (no repair row); HF | certified (prebuilt) | not admitted |
 | `deepseek_v4_1_flash` | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | c90dfa01249d | certified (Gigatoken), carried from `deepseek_v4_flash` | certified (prebuilt), carried from `deepseek_v4_flash` | not admitted |
 | `mimo_v2_6` | `XiaomiMiMo/MiMo-V2.6-Flash-RL` | ff15eb925890 | certified (Gigatoken), carried from `qwen3_8b` | certified (prebuilt), carried from `qwen3_8b` | not admitted |
 <!-- TODO(fill): set the Chunked cuts column again from the shipped routing/tables/chunked_admission.v1.json once the release campaign readings are entered; the values above follow the table as it stands before that campaign (four certified on the Python path, seven with adversarial evidence only). -->
@@ -373,6 +374,20 @@ and the model sets `ignore_merges`, as `gpt_oss_120b` does; the vocabulary
 (200,000 entries), the merges and the 1,818-entry added-token table are its
 own.
 
+`nemotron_super_vl` note: the artifact is the `nemotron_3_nano_4b` file with
+the twelve in-vocabulary special slots at ids 18 to 29 renamed, and nothing
+else changed; it runs on the anchor's kernel band with the anchor's
+parameters. It was judged directly on the full certification corpus,
+3,800,016,491 documents encoded by the accelerated path and compared with the
+frozen reference digest, with zero mismatches
+(`evidence/evidence_manifest_super_vl_2026_11.json`,
+`ev-super-vl-2026-11-v1`), under the same pinned loader pair and with
+`add_special_tokens=False`. The certified repair roster has no row for it, so
+the CPU path is the reference engine and the GPU route is the certified one.
+What the rename changes, and why the anchor's readings could not simply be
+carried over, is described under [Renamed special slots inside the
+vocabulary](#renamed-special-slots-inside-the-vocabulary).
+
 `deepseek_v4_1_flash` and `mimo_v2_6` note: these two records hold the
 readings of a certified anchor through the cross-artifact carry-over, so
 their CPU and GPU entries are the anchor's, with the anchor's repair
@@ -395,10 +410,10 @@ carry-over](#certified-by-cross-artifact-carry-over-deepseek-v41-flash-and-mimo-
 Recorded differential evidence and package availability are separate facts,
 and for four rows the two currently differ. The artifact manifest shipped inside the package is
 generated from the differential-campaign registry
-(`tables/support_registry.json`) and carries its 20
+(`tables/support_registry.json`) and carries its 21
 families, two of them (`deepseek_v4_1_flash`, `mimo_v2_6`) certified by
 [cross-artifact carry-over](#certified-by-cross-artifact-carry-over-deepseek-v41-flash-and-mimo-v26):
-20 packaged artifacts, all certified. The examined-artifact table
+21 packaged artifacts, all certified. The examined-artifact table
 (`src/toktier/routing/tables/examined_artifacts.v1.json`) ships with no row. The three WordPiece families have
 boundary-predicate evidence, a second evidence family that has not been wired into
 the shipped registry yet, so no packaged artifact identity exists for them:
@@ -1320,6 +1335,56 @@ loader face are provably the same function. Why the construction failed is
 not classified; a failure over an artifact with a configuration-side added
 token propagates instead of the fallback silently dropping it.
 
+## Renamed special slots inside the vocabulary
+
+`nemotron_super_vl` differs from a certified artifact, `nemotron_3_nano_4b`,
+only in the names of twelve special slots that sit inside the vocabulary. At
+ids 18 to 29 the anchor holds `<SPECIAL_18>` to `<SPECIAL_29>`; this artifact
+holds `<image>`, `<img>`, `</img>`, `<quad>`, `</quad>`, `<ref>`, `</ref>`,
+`<box>`, `</box>`, `<so_embedding>`, `<so_start>` and `<so_end>` at the same
+ids. The rename is made in the vocabulary and in the added-token table alike,
+and the flags of each slot (special, not normalized) are the anchor's. The
+merges and the four splitter sections (normalizer, pre-tokenizer, decoder,
+post-processor) are byte-identical to the anchor's, so the kernel row is the
+anchor's.
+
+The previous section does not cover this case. There the extra literals live
+in the configuration and the artifact file is unchanged; here the file itself
+changes, and because the vocabulary belongs to the core pipeline, both
+capability ids move: `pipeline.dcfd047a66819db2` and
+`added-frontend.e7a4b96faa37718a`, against the anchor's
+`pipeline.75aef07b9b165fa7` and `added-frontend.90b04a1dbd156198`. The two
+artifacts give different ids exactly on inputs that contain one of 24
+literals: the twelve new names, each one id here and ordinary text for the
+anchor, and the twelve anchor names, each one id there and ordinary text
+here. On every other input their ids are equal.
+
+The cross-artifact carry-over (see [Certified by cross-artifact
+carry-over](#certified-by-cross-artifact-carry-over-deepseek-v41-flash-and-mimo-v26))
+needs an absence certificate: none of the differing literals may occur in the
+judged corpus. These do. A scan of the full certification corpus found them
+595,726 times in 222,203 of the 3,800,016,491 documents, all occurrences
+being new names (mostly markup such as `<img>`, `<ref>` and `</ref>`); the
+anchor names occur nowhere. The artifact was therefore judged directly, like
+`hy4`, `step5_preview` and `muse_spark`: every document of the corpus encoded
+by the accelerated path and compared with the frozen reference digest, with
+zero mismatches (`ev-super-vl-2026-11-v1`). The reference digests of the two
+artifacts were also compared document by document: they differ on 222,197
+documents, all of them among the 222,203 that contain a literal, and the six
+documents that contain a literal and still agree hold it only past the
+1,000,000-character point at which the campaign truncates a document.
+
+The repository's `tokenizer_config.json` names a `tokenizer_class` that the
+pinned `transformers` 4.57.6 does not resolve, and it declares no added token
+of its own, so the loader face is the artifact file itself (the file-only
+case described above). The same file sets `fix_mistral_regex: true`. A loader
+that applies that flag replaces the first `Split` of the pre-tokenizer with a
+fixed corrected pattern; the first `Split` of this artifact already holds
+exactly that pattern, with the same behaviour (`Isolated`, not inverted), so
+the flag is a no-op for this face whichever loader applies it. The readings
+were taken under the pinned loader pair, `transformers` 4.57.6 and
+`tokenizers` 0.22.2.
+
 ## Documented exclusions
 
 | Subject | Reason |
@@ -1351,7 +1416,7 @@ Families under reconnaissance are listed in [`../ROADMAP.md`](../ROADMAP.md).
 <!--
 Placeholder keys used in this file (registry: README.md):
   number  support.repos_audited
-  number  support.sha.{family}              — 18 BPE rows + 3 WordPiece rows
+  number  support.sha.{family}              — 21 BPE rows + 3 WordPiece rows
   pending support.status.{family}.cpu       — per family, reference/CPU backend
   pending support.status.{family}.gpu       — per family, GPU backend
   pending support.repo_revision.{family}    — generated table only

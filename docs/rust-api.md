@@ -427,10 +427,18 @@ What still earns no certificate at all:
   libraries resolve a version outside their certified reference versions,
   as above;
 - a dependency on this crate taken as a `git` dependency, even at the exact
-  release commit and with byte-identical sources: Cargo records the origin
-  as `git+...` rather than the registry, and this crate's own siblings then
-  resolve as copies of the judged packages rather than as them. Depend on
-  the published crate to be certified.
+  release commit, with byte-identical sources and on the judged recipe:
+  the consumer's lockfile records the origin as `git+...` rather than the
+  registry, this crate's own siblings then resolve as copies of the judged
+  packages rather than as them, `core_closure` reads `mismatched`, and
+  under `Policy::Supported` and `Policy::Certified` alike the plan is the
+  reference route with `RuntimeBuildUncertified`. That reading needs the
+  consumer's lockfile to be the governing one. With a `CARGO_TARGET_DIR`
+  outside the consumer's tree the lookup can instead find the `Cargo.lock`
+  in Cargo's checkout of this repository and read `verified`, and even
+  `certified`, for a `git` dependency; set `TOKTIER_CARGO_LOCK` to the
+  consumer's lockfile for the reading that describes the build, as for a
+  path dependency above. Depend on the published crate to be certified.
 
 A build refused on its core is not a broken one. `Policy::Certified` routes it to the
 frozen Hugging Face reference engine, which is the same implementation the
@@ -634,9 +642,12 @@ engine binding of a certified support row holding the same pipeline
 capability, with the artifact's own repair parameters, and is labelled
 `Certification::Supported` on any build, judged or not, since no reading
 covers the artifact; `Policy::Certified` refuses it (`CpuUncertified`
-beside `ExaminedArtifact`), and no GPU route is offered. A `git` or path
-dependency on `main` plans this route under the default `Policy::Supported`:
-the crate embeds the table and pins its digest, so adding or removing a row
+beside `ExaminedArtifact`), and no GPU route is offered. A path dependency
+on `main` plans this route under the default `Policy::Supported`; a `git`
+dependency plans it only where `core_closure` reads `verified`, which in the
+usual layout it does not (see the `git` item under "What still earns no
+certificate at all" above), and otherwise plans the reference route. The
+crate embeds the table and pins its digest, so adding or removing a row
 moves this crate's own source identity, and only that one, and the binding
 in the `runtime_builds` register is re-recorded with each change. On a
 build whose own sources the register does not record, every accelerated

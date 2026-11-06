@@ -169,12 +169,13 @@ python3 tools/generate_class_tables.py --out-dir DIR --check --manifest MANIFEST
 
 Artifact inputs for the full run: most tables are probed from the
 reference engine alone, but `deepseek_v1` reads split patterns from its
-band's artifacts (`deepseek_v3`, `deepseek_v4_flash`, `hy3`) and
-`kimi_v1` checks the frozen splitter fingerprint of `kimi_k3`. A
+band's artifacts (`deepseek_v3`, `deepseek_v4_flash`, `hy3`, `hy4`,
+`step5_preview`) and `kimi_v1` checks the frozen splitter fingerprint of
+`kimi_k3`. A
 `--manifest` is a JSON object mapping family name to `{"local_dir":
 ...}`; families it does not define are looked up in the local toktier
 artifact cache (`toktier artifacts fetch <family>`, honoring
-`TOKTIER_HOME`), so the four families this check reads need no manifest
+`TOKTIER_HOME`), so the six families this check reads need no manifest
 once fetched. To check a subset instead, name the tables:
 
 ```

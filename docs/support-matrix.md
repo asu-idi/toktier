@@ -228,7 +228,8 @@ uninstalling either then removes them; `doctor` reports a coinstalled or
 orphaned distribution and the adapter reports an advisory with the reinstall
 command (`pip uninstall -y fastokens toktier-fastokens && pip install
 "toktier[fastokens]"`). The adapter reaches the eleven families with a repair
-table entry; the evidence covers all fifteen certified artifacts. Reports about
+table entry; the evidence covers fifteen of the certified artifacts, and
+`hy4`, `step5_preview` and `muse_spark` are outside it. Reports about
 the id divergences these patches address have been submitted to the upstream
 project.
 
@@ -259,6 +260,9 @@ package.
 | `kimi_k3` | `moonshotai/Kimi-K3` | 773c2476259d | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
 | `ling_3_0_flash` | `inclusionAI/Ling-3.0-flash` | 40fb9d7d7795 | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
 | `laguna_s_2_1` | `poolside/Laguna-S-2.1` | 809240f7a182 | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
+| `hy4` | `tencent/Hy4-preview` | ff67615de6e6 | unsupported (no repair row); HF | certified (prebuilt) | not admitted |
+| `step5_preview` | `stepfun-ai/Step-5-Preview` | b564c620eb77 | unsupported (no repair row); HF | certified (prebuilt) | not admitted |
+| `muse_spark` | `meta-models/Muse-Spark-Open-816B-A42B` | ac2f41ef2444 | unsupported (no repair row); HF | certified (prebuilt) | not admitted |
 <!-- TODO(fill): set the Chunked cuts column again from the shipped routing/tables/chunked_admission.v1.json once the release campaign readings are entered; the values above follow the table as it stands before that campaign (four certified on the Python path, seven with adversarial evidence only). -->
 
 Pinned upstream revisions are recorded per row as
@@ -310,6 +314,63 @@ properties that bind your bytes to that evidence -- the conversion is
 deterministic, its output is the pinned sha256 and byte count, and the reserved
 added-token block is contiguous and complete.
 
+`hy4`, `step5_preview` and `muse_spark` were judged directly, each on the
+full certification corpus: 3,800,016,491 documents encoded by the
+accelerated path and compared with the frozen reference digest, with zero
+mismatches (`evidence/evidence_manifest_roster_2026_10.json`,
+`ev-roster-2026-10-v1`). The readings were taken with
+`add_special_tokens=False` under the pinned loader pair,
+`transformers` 4.57.6 and `tokenizers` 0.22.2. The certified repair
+roster has no row for any of the three, so the corrected CPU engine is not
+planned for them and the CPU path is the reference engine; the GPU route
+is the certified one.
+
+`hy4` note: the repository is a preview publication, so the revision
+pinned above is what was judged and what the sha256 describes; a later
+revision that changes these bytes is a different artifact. Its
+`normalizer`, `pre_tokenizer`, `post_processor` and `decoder` sections are
+identical to those of `hy3`, so it runs on the same kernel band. The
+`model` section is a retrain rather than an edit: both artifacts hold
+120,000 vocabulary entries and share 99,571 of the strings, but only 132 of
+the shared strings carry the same id; the merge lists hold 119,744 against
+119,758 entries with 91,582 in common; the added-token table holds 832
+entries against 818. Unlike `hy3`, its vocabulary covers all 256 byte
+symbols. The repository's `tokenizer_config.json` names a
+`tokenizer_class` that `transformers.AutoTokenizer` does not resolve, so
+the loader face is the artifact file itself, read the way this package's
+reference route reads it; that configuration file declares no added tokens
+of its own.
+
+`step5_preview` note: the core pipeline -- vocabulary, merge table,
+normalizer, pre-tokenizer and decoder -- is the one `deepseek_v3` and
+`deepseek_v4_flash` hold (`pipeline.9f6d5117c3680d0e`); the file writes the
+merge table in list form rather than the string form, which loads to the
+same table. The added-token table is its own, and the post-processor is a
+`TemplateProcessing` that prepends the beginning-of-sentence token. The
+certified readings encode text with `add_special_tokens=False`, so they
+cover the encoding of the text without that token. Under the pinned
+loader pair the repository loads through `LlamaTokenizerFast` and its loader
+face is the file; `transformers` 4.57.6 prints a notice suggesting
+`fix_mistral_regex=True` for this configuration, and the flag was not set
+anywhere in the campaign or in this package. A `transformers` 5.x release
+materializes a different object from the same files (a `LlamaTokenizer`
+whose ids differ from the file's on some inputs); beside such a loader the
+facade reports `R_LOADER_FACE_MISMATCH`, closes the accelerated routes and
+runs the reference engine on the face the installed loader built.
+
+`muse_spark` note: the anchor is the upstream repository at revision
+`0fb02478b025`. Access to it is granted on request, so fetching the
+artifact needs credentials that carry that access. The campaign read an
+openly published copy of the same tokenizer: its `tokenizer.json`,
+`tokenizer_config.json` and `special_tokens_map.json` are byte-identical to
+the upstream files, while its `config.json` and `chat_template.jinja`
+differ. Under the pinned loader both file groups materialize the same loader
+face, byte for byte, and that face is the certified object; the package
+pins the upstream files. The split pattern is identical to `gpt_oss_120b`'s
+and the model sets `ignore_merges`, as `gpt_oss_120b` does; the vocabulary
+(200,000 entries), the merges and the 1,818-entry added-token table are its
+own.
+
 ## WordPiece families
 
 | Family id | Anchor repository | Artifact sha256 (prefix) | CPU fast repair | GPU status |
@@ -323,12 +384,12 @@ added-token block is contiguous and complete.
 Recorded differential evidence and package availability are separate facts,
 and for four rows the two currently differ. The artifact manifest shipped inside the package is
 generated from the differential-campaign registry
-(`tables/support_registry.json`) and carries its 15
+(`tables/support_registry.json`) and carries its 18
 families, plus one examined family that the registry does not certify,
 `deepseek_v4_1_flash`, listed in the examined-artifact table
 (`src/toktier/routing/tables/examined_artifacts.v1.json`) and described
-[below](#runnable-not-certified-the-deepseek-v41-flash-tokenizer): 16 packaged
-artifacts, 15 of them certified. The three WordPiece families have
+[below](#runnable-not-certified-the-deepseek-v41-flash-tokenizer): 19 packaged
+artifacts, 18 of them certified. The three WordPiece families have
 boundary-predicate evidence, a second evidence family that has not been wired into
 the shipped registry yet, so no packaged artifact identity exists for them:
 `toktier artifacts fetch` and `toktier.load()` report `ARTIFACT_NOT_FOUND`
@@ -401,7 +462,7 @@ everything below rests on it:
 | equivalent (serialisation) | loads to the same tokenizer; byte difference is legacy serialisation form | 38 |
 | equivalent (loader face) | the audited file group materializes, under the pinned loader, a loader face byte-identical to the certified artifact's | 2 |
 
-**222 repositories** are verified on these bases, spread over 15 of the 18
+**222 repositories** are verified on these bases, spread over 15 of the 21
 artifacts in the family matrix. Twelve of them were published after the audit
 snapshot and were admitted one at a time -- eight byte-identical files on the
 identical basis, the two Qwen3.8 repositories on the loader-face basis (since
@@ -464,6 +525,9 @@ counted.
 | `olmo_3_7b` | 9 | 7 | 0 | 2 | 0 | 0 |
 | `hy3` | 1 | 1 | 0 | 0 | 0 | 21 |
 | `kimi_k3` | 13 | 13 * | 0 | 0 | 0 | 0 |
+| `hy4` | 0 | 0 | 0 | 0 | 0 | -- &dagger; |
+| `step5_preview` | 0 | 0 | 0 | 0 | 0 | -- &dagger; |
+| `muse_spark` | 0 | 0 | 0 | 0 | 0 | -- &dagger; |
 | `bert_cased` | 4 | 2 | 2 | 0 | 0 | 0 |
 | `bert_uncased` | 3 | 3 | 0 | 0 | 0 | 0 |
 | `bert_multilingual_cased` | 0 | 0 | 0 | 0 | 0 | 0 |
@@ -471,6 +535,10 @@ counted.
 
 `*` `kimi_k3` rows are compared at `tiktoken.model` level, for the reason given
 under the family matrix above.
+
+&dagger; Certified after the audit snapshot and not part of its sweep, so no
+core-equal count exists for these artifacts; see [Recorded and not
+counted](#recorded-and-not-counted).
 
 `bert_multilingual_cased` has no sibling in the audited set: the audit found no
 other official repository shipping that artifact.
@@ -816,12 +884,13 @@ relationship to `llama_3_1_8b` is plausible and unmeasured; the comparison is
 pending access and no claim is made in the meantime. Re-running the sweep with
 access resolves these thirteen rows and nothing else.
 
-Two artifacts in the family matrix above, `ling_3_0_flash` and
-`laguna_s_2_1`, were admitted after this snapshot and were therefore not part
-of the sweep. No sub-versions are listed for them. The reconnaissance that
-preceded their admission did note byte-identical quantised twins for both, but
-that observation was not carried through the revision-and-digest bookkeeping
-this section reports, so nothing is listed and nothing is counted.
+Five artifacts in the family matrix above, `ling_3_0_flash`,
+`laguna_s_2_1`, `hy4`, `step5_preview` and `muse_spark`, were admitted after
+this snapshot and were therefore not part of the sweep. No sub-versions are
+listed for them. The reconnaissance that preceded the admission of the first
+two did note byte-identical quantised twins for both, but that observation was
+not carried through the revision-and-digest bookkeeping this section reports,
+so nothing is listed and nothing is counted.
 
 A further 39 repositories were examined and fall outside the certified set by
 design: the `google/gemma-4-*` line and `FacebookAI/xlm-roberta-*` are the
@@ -983,65 +1052,15 @@ certificates, exactly as the other 212 sibling rows are. Admission is still by
 digest: a Qwen3.8 revision whose `tokenizer.json` differs from the audited
 bytes matches no row and stays on the reference route.
 
-What still does not follow is a sixteenth family. The registry keeps fifteen
-artifact rows, and coverage stays recorded per certified object rather than
-per repository name. There is no `qwen3_8_27b` family id in this release:
+What still does not follow is a family of its own. The registry adds no
+artifact row for these repositories, and coverage stays recorded per
+certified object rather than per repository name. There is no `qwen3_8_27b` family id in this release:
 `load("qwen3_8_27b")` and `toktier doctor --family qwen3_8_27b` report
 `ARTIFACT_NOT_FOUND`, because a family id names the certified family itself,
 and these repositories reach the same object through content resolution.
 (This is the treatment 0.2.8 could not give them: there the capability
 fingerprints were still computed from the artifact file, so the two spellings
 carried different ids and no accelerated route was eligible for either.)
-
-### Examined and not certified: the Hy4-preview tokenizer
-
-| Repository | Revision | `tokenizer.json` sha256 | Size | Nearest certified family | Basis | Examined on |
-|---|---|---|---|---|---|---|
-| `tencent/Hy4-preview` | `705d81ee5156` | `ff67615de6e6` | 9,358,955 | `hy3` | splitter equal, model retrained | 2026-08-28 |
-
-The repository is a preview publication, so the revision above is what was
-read and what the sha256 describes; a later revision that changes these bytes
-is a different artifact and would be examined again on its own terms.
-
-What was established. Its `normalizer`, `pre_tokenizer`, `post_processor` and
-`decoder` sections are byte-equal to the certified `hy3` artifact, so the
-splitter structure an accelerated route attaches to is the one already
-certified for that family, and pre-tokenized segments agree with `hy3` on the
-probes taken, Chinese, Japanese and Korean text included. The `model` section
-is a retrain rather than an edit. Both artifacts hold 120,000 vocabulary
-entries and share 99,571 of the strings, but only 132 of the shared strings
-carry the same id; the merge lists hold 119,744 against 119,758 entries with
-91,582 in common; the added-token table holds 832 against 818.
-
-What follows from that. An artifact's capability fingerprint covers the model
-alongside the splitter sections, so different vocabulary and merges make this
-a new pipeline capability, `pipeline.bdc79624a2c5a5ce`, composed with a new
-added-token capability, `added-frontend.af450eb8cc1f3384`. Neither has a
-campaign reading behind it, nothing carries over from `hy3`, and the equal
-splitter sections are a statement about future campaign cost rather than
-present evidence. No accelerated route is therefore eligible: wherever an
-accelerated backend is installed to be assessed, the plan records
-`R_UNCERTIFIED_ARTIFACT`. `policy="require_accelerated"` reports the first
-refusal in plan order, and the GPU is assessed first: where the GPU passes the
-machine and path checks (installed, enabled, and a device found by a probe the
-path performs), it refuses with that reason; elsewhere it names the GPU's own
-refusal instead, as it does for any family on that host, for example
-`BACKEND_UNAVAILABLE` with "backend 'gpu' is not installed" where the GPU
-extra is absent. `from_pretrained("tencent/Hy4-preview")` loads and returns the
-reference engine's ids, which is the same answer the package gives for any
-content it has not certified.
-
-Two practical notes for a reader who tries it. There is no `hy4` family id in
-this release: the repository is reached through `from_pretrained`, while
-`load("hy4")` and `toktier doctor --family hy4` report `ARTIFACT_NOT_FOUND`,
-because a family id is what a certified artifact gets. And the repository's
-`tokenizer_config.json` names a `tokenizer_class` that
-`transformers.AutoTokenizer` does not resolve, so loading it through that
-entry point raises before any tokenization happens; this package's reference
-route reads `tokenizer.json` and is unaffected. That configuration file
-declares no added tokens of its own, so the boundary recorded under
-[Configuration-only added tokens](#configuration-only-added-tokens) does not
-arise for this artifact.
 
 ### Runnable, not certified: the DeepSeek-V4.1-Flash tokenizer
 
@@ -1230,7 +1249,7 @@ Families under reconnaissance are listed in [`../ROADMAP.md`](../ROADMAP.md).
 <!--
 Placeholder keys used in this file (registry: README.md):
   number  support.repos_audited
-  number  support.sha.{family}              — 15 BPE rows + 3 WordPiece rows
+  number  support.sha.{family}              — 18 BPE rows + 3 WordPiece rows
   pending support.status.{family}.cpu       — per family, reference/CPU backend
   pending support.status.{family}.gpu       — per family, GPU backend
   pending support.repo_revision.{family}    — generated table only

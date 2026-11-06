@@ -27,7 +27,8 @@ in the loader's search order.
 
 Artifact inputs: most tables are probed from the reference engine
 alone, but the ``deepseek_v1`` table reads the split patterns of its
-band's artifacts (``deepseek_v3``, ``deepseek_v4_flash``, ``hy3``) and
+band's artifacts (``deepseek_v3``, ``deepseek_v4_flash``, ``hy3``,
+``hy4``, ``step5_preview``) and
 the ``kimi_v1`` table checks its family's frozen splitter fingerprint
 (``kimi_k3``). Families named by an explicit ``--manifest`` /
 ``--extra-manifest`` are taken from there; any family those do not

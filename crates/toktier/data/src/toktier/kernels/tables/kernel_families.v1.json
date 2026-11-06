@@ -223,6 +223,14 @@
       "class_table": "o200k_v4",
       "contractions": false
     },
+    "nemotron_super_vl": {
+      "band": "o200k",
+      "ruleset": "o200k",
+      "digits_max": 1,
+      "class_table": "o200k_v4",
+      "contractions": false,
+      "note": "Variant of nemotron_3_nano_4b: the twelve special slots with ids 18 to 29 are renamed, in the vocabulary and in the added tokens alike; the merges and the four splitter sections (normalizer, pre-tokenizer, decoder, post-processor) are byte-identical to it."
+    },
     "muse_spark": {
       "band": "o200k",
       "ruleset": "o200k",

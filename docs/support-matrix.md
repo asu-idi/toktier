@@ -395,24 +395,26 @@ everything below rests on it:
 
 | Basis | What was compared | Rows |
 |---|---|---|
-| identical | `tokenizer.json` sha256 equal to the certified artifact | 152 |
-| identical (source file) | `kimi_k3` lineage: upstream `tiktoken.model` sha256 equal to the conversion source of the certified artifact | 12 |
-| equivalent (canonicalisation) | JSON content equal after canonicalisation; byte difference is formatting only | 10 |
+| identical | `tokenizer.json` sha256 equal to the certified artifact | 158 |
+| identical (source file) | `kimi_k3` lineage: upstream `tiktoken.model` sha256 equal to the conversion source of the certified artifact | 13 |
+| equivalent (canonicalisation) | JSON content equal after canonicalisation; byte difference is formatting only | 11 |
 | equivalent (serialisation) | loads to the same tokenizer; byte difference is legacy serialisation form | 38 |
 | equivalent (loader face) | the audited file group materializes, under the pinned loader, a loader face byte-identical to the certified artifact's | 2 |
 
-**214 repositories** are verified on these bases, spread over 15 of the 18
-artifacts in the family matrix. Four of them were published after the audit
-snapshot and were admitted one at a time -- two byte-identical files on the
-identical basis, and, since 0.2.9, the two Qwen3.8 repositories on the
-loader-face basis; they are listed under [Repositories admitted after the
+**222 repositories** are verified on these bases, spread over 15 of the 18
+artifacts in the family matrix. Twelve of them were published after the audit
+snapshot and were admitted one at a time -- eight byte-identical files on the
+identical basis, the two Qwen3.8 repositories on the loader-face basis (since
+0.2.9), one file that differs from its anchor only in line endings on the
+canonicalisation basis, and one `kimi_k3` repository on the source-file basis;
+they are listed under [Repositories admitted after the
 snapshot](#repositories-admitted-after-the-snapshot), and the audit accounting
 at the end of the page counts the 210 that were in the snapshot. The shipped
 registry carries one further row that is not a sibling:
 `moonshotai/Kimi-K3`, the canonical repository of the `kimi_k3` family
 itself, so that resolving it by name reports itself as the evidence
-repository instead of a byte-identical sibling. The file therefore holds 215
-rows; every count in this section counts the 214 siblings. Nine of them are
+repository instead of a byte-identical sibling. The file therefore holds 223
+rows; every count in this section counts the 222 siblings. Nine of them are
 cross-vendor: three
 `nvidia/Nemotron-Terminal-*` repositories ship the `qwen3_8b` artifact
 verbatim, and six `nvidia/Llama-3.x-Nemotron-*` repositories carry the
@@ -422,13 +424,13 @@ which is the same rule the loader applies.
 
 The shipped file's own `counts` object counts rows, not siblings, so it
 reads one higher on two of them and is not a second opinion about the
-table above: `identical_source` is **13** there against 12 here, and
-`total` is 215 against 214, both because the canonical `kimi_k3` row is
+table above: `identical_source` is **14** there against 13 here, and
+`total` is 223 against 222, both because the canonical `kimi_k3` row is
 an `identical_source` row that is not a sibling. The per-artifact table
-further down totals `identical` at **164** rather than 152 for a
-different reason: it folds the 12 `identical (source file)` rows into
+further down totals `identical` at **171** rather than 158 for a
+different reason: it folds the 13 `identical (source file)` rows into
 that column, as its footnote says. The three numbers are consistent --
-152 + 12 = 164 siblings compared on a hash, plus the one canonical row
+158 + 13 = 171 siblings compared on a hash, plus the one canonical row
 the shipped counts also carry.
 
 The executable counterpart is `toktier.from_pretrained(repo_id)`. It resolves
@@ -449,23 +451,23 @@ counted.
 
 | Artifact | Verified sub-versions | identical | equivalent (canonicalisation) | equivalent (serialisation) | equivalent (loader face) | Core-equal only (added-token face) |
 |---|---|---|---|---|---|---|
-| `qwen3_8b` | 110 | 79 | 0 | 31 | 0 | 18 |
+| `qwen3_8b` | 112 | 80 | 1 | 31 | 0 | 18 |
 | `qwen3_5_08b` | 21 | 19 | 0 | 0 | 2 | 5 |
 | `llama_3_1_8b` | 13 | 3 | 5 | 5 | 0 | 6 |
 | `deepseek_v3` | 2 | 2 | 0 | 0 | 0 | 10 |
 | `deepseek_v4_flash` | 7 | 7 | 0 | 0 | 0 | 0 |
 | `gpt_oss_120b` | 3 | 3 | 0 | 0 | 0 | 0 |
-| `glm_5_2` | 7 | 7 | 0 | 0 | 0 | 0 |
-| `minimax_m3` | 1 | 1 | 0 | 0 | 0 | 11 |
+| `glm_5_2` | 9 | 9 | 0 | 0 | 0 | 0 |
+| `minimax_m3` | 2 | 2 | 0 | 0 | 0 | 11 |
 | `ministral_3_8b` | 2 | 2 | 0 | 0 | 0 | 5 |
-| `nemotron_3_nano_4b` | 19 | 16 | 3 | 0 | 0 | 1 |
+| `nemotron_3_nano_4b` | 21 | 18 | 3 | 0 | 0 | 1 |
 | `olmo_3_7b` | 9 | 7 | 0 | 2 | 0 | 0 |
 | `hy3` | 1 | 1 | 0 | 0 | 0 | 21 |
-| `kimi_k3` | 12 | 12 * | 0 | 0 | 0 | 0 |
+| `kimi_k3` | 13 | 13 * | 0 | 0 | 0 | 0 |
 | `bert_cased` | 4 | 2 | 2 | 0 | 0 | 0 |
 | `bert_uncased` | 3 | 3 | 0 | 0 | 0 | 0 |
 | `bert_multilingual_cased` | 0 | 0 | 0 | 0 | 0 | 0 |
-| **total** | **214** | 164 | 10 | 38 | 2 | 77 |
+| **total** | **222** | 171 | 11 | 38 | 2 | 77 |
 
 `*` `kimi_k3` rows are compared at `tiktoken.model` level, for the reason given
 under the family matrix above.
@@ -486,7 +488,7 @@ the snapshot and admitted later; its revision is the commit it was compared at
 on the date given under [Repositories admitted after the
 snapshot](#repositories-admitted-after-the-snapshot).
 
-#### `qwen3_8b` (110 repositories)
+#### `qwen3_8b` (112 repositories)
 
 | Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
 |---|---|---|---|
@@ -600,6 +602,8 @@ snapshot](#repositories-admitted-after-the-snapshot).
 | `Qwen/Qwen3-VL-8B-Thinking-FP8` | `a6638e84662f` | `ba85e4e5222d` | equivalent (serialisation) |
 | `Qwen/Qwen3-VL-Reranker-2B` | `4bd860ac4f15` | `aeb13307a71a` | identical |
 | `Qwen/Qwen3-VL-Reranker-8B` | `b212dc8c91a8` | `aeb13307a71a` | identical |
+| `XiaomiMiMo/MiMo-V2-Flash` &dagger; | `1afd314a2406` | `aeb13307a71a` | identical |
+| `XiaomiMiMo/MiMo-V2.5-Pro` &dagger; | `21d1ecfecd7b` | `cdd40b08814d` | equivalent (canonicalisation) |
 
 #### `qwen3_5_08b` (21 repositories)
 
@@ -678,7 +682,7 @@ They ship a different tokenizer file, which runs but is not certified, recorded 
 | `openai/gpt-oss-safeguard-120b` | `3c7391182603` | `0614fe83cada` | identical |
 | `openai/gpt-oss-safeguard-20b` | `8a11e17b25c9` | `0614fe83cada` | identical |
 
-#### `glm_5_2` (7 repositories)
+#### `glm_5_2` (9 repositories)
 
 | Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
 |---|---|---|---|
@@ -688,13 +692,16 @@ They ship a different tokenizer file, which runs but is not certified, recorded 
 | `zai-org/GLM-5.1` | `26e1bd6e011f` | `19e773648cb4` | identical |
 | `zai-org/GLM-5.1-FP8` | `f396cf805182` | `19e773648cb4` | identical |
 | `zai-org/GLM-5.2-FP8` | `ba978f7d347e` | `19e773648cb4` | identical |
+| `zai-org/GLM-5.3` &dagger; | `ba32f8c19c87` | `19e773648cb4` | identical |
+| `zai-org/GLM-5.3-BF16` &dagger; | `abf42e6c0e53` | `19e773648cb4` | identical |
 | `zai-org/GLM-5.3-Flash` &dagger; | `3f1971b7b5f7` | `19e773648cb4` | identical |
 
-#### `minimax_m3` (1 repositories)
+#### `minimax_m3` (2 repositories)
 
 | Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
 |---|---|---|---|
 | `MiniMaxAI/MiniMax-M3-MXFP8` | `c5454eb03678` | `bb1f1626cf01` | identical |
+| `MiniMaxAI/MiniMax-M3.1-Flash` &dagger; | `ce7f4df87d2e` | `bb1f1626cf01` | identical |
 
 #### `ministral_3_8b` (2 repositories)
 
@@ -703,7 +710,7 @@ They ship a different tokenizer file, which runs but is not certified, recorded 
 | `mistralai/Ministral-3-14B-Instruct-2512-BF16` | `3cea74c1ebaf` | `d5f6046775b1` | identical |
 | `mistralai/Ministral-3-3B-Instruct-2512-BF16` | `b6d637bef239` | `d5f6046775b1` | identical |
 
-#### `nemotron_3_nano_4b` (19 repositories)
+#### `nemotron_3_nano_4b` (21 repositories)
 
 | Repository | Revision at snapshot | tokenizer.json sha256 | Basis |
 |---|---|---|---|
@@ -720,6 +727,8 @@ They ship a different tokenizer file, which runs but is not certified, recorded 
 | `nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16` | `624ba927cfbe` | `623c34567aeb` | identical |
 | `nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-GenRM` | `116af7cb1a23` | `623c34567aeb` | identical |
 | `nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4` | `183968f87ae4` | `623c34567aeb` | identical |
+| `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16` &dagger; | `a9904d24bcc1` | `623c34567aeb` | identical |
+| `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4` &dagger; | `bee7596271d1` | `623c34567aeb` | identical |
 | `nvidia/NVIDIA-Nemotron-Labs-3-Elastic-30B-A3B-BF16` | `4bcc4326801e` | `623c34567aeb` | identical |
 | `nvidia/NVIDIA-Nemotron-Labs-3-Elastic-30B-A3B-FP8` | `0515e708cb8c` | `623c34567aeb` | identical |
 | `nvidia/NVIDIA-Nemotron-Labs-3-Elastic-30B-A3B-NVFP4` | `a8b6f7c6dba5` | `623c34567aeb` | identical |
@@ -747,7 +756,7 @@ They ship a different tokenizer file, which runs but is not certified, recorded 
 |---|---|---|---|
 | `tencent/Hy3-FP8` | `ecc1d8e194e0` | `446e0b59cd94` | identical |
 
-#### `kimi_k3` (12 repositories)
+#### `kimi_k3` (13 repositories)
 
 | Repository | Revision at snapshot | tiktoken.model sha256 | Basis |
 |---|---|---|---|
@@ -758,6 +767,7 @@ They ship a different tokenizer file, which runs but is not certified, recorded 
 | `moonshotai/Kimi-K2.5` | `4d01dfe0332d` | `b6c497a7469b` | identical (source file) |
 | `moonshotai/Kimi-K2.6` | `7eb5002f6aad` | `b6c497a7469b` | identical (source file) |
 | `moonshotai/Kimi-K2.7-Code` | `74797c9c6237` | `b6c497a7469b` | identical (source file) |
+| `moonshotai/Kimi-K3.1-Pro` &dagger; | `6d0a02029567` | `b6c497a7469b` | identical (source file) |
 | `moonshotai/Kimi-Linear-48B-A3B-Base` | `3b171c17bfc4` | `b6c497a7469b` | identical (source file) |
 | `moonshotai/Kimi-Linear-48B-A3B-Instruct` | `e1df551a4471` | `b6c497a7469b` | identical (source file) |
 | `moonshotai/Kimi-VL-A3B-Instruct` | `398eede0903c` | `b6c497a7469b` | identical (source file) |
@@ -821,9 +831,9 @@ a benchmark reference rather than a certified family.
 The accounting closes on the snapshot total: 470 repositories examined = 16
 anchors + 210 verified sub-versions + 77 core-equal + 83 different + 32 without
 a comparable file + 13 gated + 39 out of scope. This equation is about the
-snapshot and stays fixed: the four repositories admitted afterwards were not
+snapshot and stays fixed: the twelve repositories admitted afterwards were not
 among the 470 examined on that date, which is why the verified total elsewhere
-on this page reads 214 while this line reads 210.
+on this page reads 222 while this line reads 210.
 
 ### What the snapshot is and is not
 
@@ -859,6 +869,14 @@ repository on a later date.
 | `zai-org/GLM-5.3-Flash` | `3f1971b7b5f7` | `19e773648cb4` | 20,217,442 | `glm_5_2` | identical | 2026-08-27 |
 | `Qwen/Qwen3.8-27B` | `1d4bf0f2ff60` | `0997f410c57a` | 12,809,320 | `qwen3_5_08b` | equivalent (loader face) | 2026-08-27 |
 | `Qwen/Qwen3.8-Flash-Next` | `de4b8e4d43b9` | `0997f410c57a` | 12,809,320 | `qwen3_5_08b` | equivalent (loader face) | 2026-08-27 |
+| `MiniMaxAI/MiniMax-M3.1-Flash` | `ce7f4df87d2e` | `bb1f1626cf01` | 9,731,500 | `minimax_m3` | identical | 2026-11-06 |
+| `moonshotai/Kimi-K3.1-Pro` | `6d0a02029567` | `b6c497a7469b` (`tiktoken.model`) | 2,795,286 | `kimi_k3` | identical (source file) | 2026-11-06 |
+| `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16` | `a9904d24bcc1` | `623c34567aeb` | 17,077,484 | `nemotron_3_nano_4b` | identical | 2026-11-06 |
+| `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4` | `bee7596271d1` | `623c34567aeb` | 17,077,484 | `nemotron_3_nano_4b` | identical | 2026-11-06 |
+| `XiaomiMiMo/MiMo-V2-Flash` | `1afd314a2406` | `aeb13307a71a` | 11,422,654 | `qwen3_8b` | identical | 2026-11-06 |
+| `XiaomiMiMo/MiMo-V2.5-Pro` | `21d1ecfecd7b` | `cdd40b08814d` | 12,180,133 | `qwen3_8b` | equivalent (canonicalisation) | 2026-11-06 |
+| `zai-org/GLM-5.3` | `ba32f8c19c87` | `19e773648cb4` | 20,217,442 | `glm_5_2` | identical | 2026-11-06 |
+| `zai-org/GLM-5.3-BF16` | `abf42e6c0e53` | `19e773648cb4` | 20,217,442 | `glm_5_2` | identical | 2026-11-06 |
 
 The first two files are byte-identical to the anchor their family was
 certified on, so the certificate carries over unchanged and no campaign was
@@ -875,11 +893,48 @@ re-establishes from the frozen directories before such a row is written
 [The Qwen3.8 tokenizer](#the-qwen38-tokenizer-two-more-spellings-of-a-certified-object)
 records what was measured and what follows.
 
+The eight repositories compared on 2026-11-06 were fetched at the pinned
+commit and hashed, and each file was compared byte for byte against the frozen
+anchor file and against an earlier download of the same commit. Six of them
+ship a `tokenizer.json` byte-identical to the anchor of a certified family:
+`zai-org/GLM-5.3` and `zai-org/GLM-5.3-BF16` (`glm_5_2`), the two
+`nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-*` repositories
+(`nemotron_3_nano_4b`), `XiaomiMiMo/MiMo-V2-Flash` (`qwen3_8b`) and
+`MiniMaxAI/MiniMax-M3.1-Flash` (`minimax_m3`). The two GLM-5.3 repositories
+and `MiniMaxAI/MiniMax-M3.1-Flash` carry the anchor's `tokenizer_config.json`
+byte for byte as well. The configurations of the two Lightning repositories
+and of `XiaomiMiMo/MiMo-V2-Flash` differ from their anchor's in fields such as
+the chat template, `pad_token`, `model_max_length` and
+`extra_special_tokens`; for every one of the seven `tokenizer.json` rows of
+this date, the pinned loader materializes a loader face byte-identical to the
+anchor's, which was checked before the rows were written.
+
+`XiaomiMiMo/MiMo-V2.5-Pro` ships a `tokenizer.json` that differs from the
+`qwen3_8b` anchor only in its line endings: all 757,479 line breaks are CRLF,
+and with the carriage returns removed the file is the anchor byte for byte
+(sha256 `aeb13307a71a`). It is admitted on the `equivalent (canonicalisation)`
+basis, the basis the three `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-*` rows
+already use for the same kind of difference. The row covers these bytes only;
+the separate `XiaomiMiMo/MiMo-V2.5` repository ships a different tokenizer
+and is not covered by it.
+
+`moonshotai/Kimi-K3.1-Pro` is admitted on the `identical (source file)` basis,
+like the twelve `kimi_k3` rows of the snapshot: its `tiktoken.model` is
+byte-identical to the conversion source of the certified `kimi_k3` artifact,
+and the sha256 and size in its row refer to that file. The other two pinned
+conversion inputs are not byte-identical in this repository: its
+`tokenization_kimi.py` differs in layout only (both parse to the same syntax
+tree), and its `tokenizer_config.json` adds one empty `extra_special_tokens`
+object. The row resolves to the artifact derived from the canonical
+repository's pinned conversion inputs, so the executed tokenizer is that
+certified conversion, and the conversion table is unchanged.
+
 These rows are in the shipped registry, so the packaged counts include them:
-`identical` reads 152 and `total` reads 215 there, with 208 rows pointing at a
-packaged family. Counted as siblings, the verified total is 214; the two
-identical-basis families hold seven sub-versions each, and `qwen3_5_08b`
-holds 21.
+`identical` reads 158, `identical_source` 14, `equivalent_canonicalisation` 11
+and `total` 223 there, with 216 rows pointing at a packaged family. Counted as
+siblings, the verified total is 222; `glm_5_2` holds nine sub-versions,
+`deepseek_v4_flash` seven, `qwen3_5_08b` 21, `qwen3_8b` 112,
+`nemotron_3_nano_4b` 21, `minimax_m3` two and `kimi_k3` 13.
 
 A repository listed here is subject to the same caveat as every other row: it
 records a comparison made on a date, not a promise about the repository's

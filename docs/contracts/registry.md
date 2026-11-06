@@ -404,15 +404,15 @@ face is proven byte-identical to the frozen snapshot's face.
 companion, normatively shaped by `schemas/sibling_aliases.schema.json`. Each
 row records a model repository, full audit revision, source file name/length/
 sha256, comparison basis, canonical family/anchor sha256, and whether that
-anchor is present in the wheel. Its public source projection contains the 214
+anchor is present in the wheel. Its public source projection contains the 222
 sibling rows enumerated in `docs/support-matrix.md`, plus one canonical
 self-row per family whose upstream source file is not `tokenizer.json` --
-215 rows in this release. A self-row names the family's own repository, so
+223 rows in this release. A self-row names the family's own repository, so
 resolving that repository reports itself as the evidence repository rather
 than a byte-identical sibling; the generator checks each self-row's
 repository and revision against the shipped artifact manifest, and the audit
-accounting in `docs/support-matrix.md` counts the 214 siblings only; its
-dated audit equation counts the 210 that were in the snapshot, the other four
+accounting in `docs/support-matrix.md` counts the 222 siblings only; its
+dated audit equation counts the 210 that were in the snapshot, the other twelve
 having been published after it.
 
 Since 0.2.9 a fifth basis, `equivalent_loader_face`, admits a repository

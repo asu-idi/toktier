@@ -327,7 +327,7 @@ tok = toktier.from_pretrained("Qwen/Qwen3-0.6B")
 
 `from_pretrained()` downloads the audited immutable revision for a recorded
 sibling or canonical repository, hashes the exact file, and consults the
-sibling registry, which contains 214 audited repositories plus one canonical
+sibling registry, which contains 222 audited repositories plus one canonical
 self-row and is itself covered by a root digest.
 For an unknown repository, `from_pretrained()` resolves `main` unless
 `revision=` is passed.
@@ -898,7 +898,7 @@ question: **16 packaged artifacts** (what `toktier inspect` lists: the 15
 certified ones and one examined, not certified, `deepseek_v4_1_flash`), **15+3
 model families** (byte-level BPE plus WordPiece, since families can share an
 artifact), **11 artifacts with a certified CPU fast path** (12 families by
-exact-artifact inheritance), and **215 registry rows** (214 audited sibling
+exact-artifact inheritance), and **223 registry rows** (222 audited sibling
 repositories plus one canonical self-row). Numbers that appear inconsistent
 usually belong to different axes.
 
@@ -1048,7 +1048,7 @@ document also shows the regimes where direct use of another engine is faster.
 | Structural exclusions | 2 | reason recorded |
 
 [`docs/support-matrix.md`](docs/support-matrix.md) lists every anchor artifact,
-SHA-256, backend status, and **214 verified model repositories** whose
+SHA-256, backend status, and **222 verified model repositories** whose
 tokenizer is byte-identical to a certified one, identical at the upstream
 source file it is converted from, or equivalent after canonicalization, in
 serialization form, or on the loader face. Coverage follows tokenizer
@@ -1056,13 +1056,13 @@ content, not repository naming. `toktier.from_pretrained(repo_id)` enforces
 that rule at runtime: it hashes the resolved file, maps registered content to
 the canonical artifact, and otherwise remains on HF.
 
-The shipped registry holds 215 rows: those 214 siblings plus
+The shipped registry holds 223 rows: those 222 siblings plus
 `moonshotai/Kimi-K3` itself, so resolving the canonical repository by name
 reports itself as the evidence repository rather than a byte-identical
-sibling. 208 of the rows map to canonical artifacts present in this wheel.
+sibling. 216 of the rows map to canonical artifacts present in this wheel.
 The other 7 are WordPiece rows, whose canonical artifacts are not packaged and
-which therefore run through HF. The 13 source-level `kimi_k3` rows are among
-the 208: their canonical artifact is derived on your machine from pinned
+which therefore run through HF. The 14 source-level `kimi_k3` rows are among
+the 216: their canonical artifact is derived on your machine from pinned
 upstream bytes, so the comparison stays at `tiktoken.model` level while the
 loaded object is the certified conversion. `toktier inspect` is the
 authoritative packaged-family list.

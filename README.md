@@ -387,10 +387,10 @@ The install profile and input shape then determine the automatic route:
 
 | Situation under the default `SUPPORTED` policy | Automatic route |
 |---|---|
-| `toktier`, one of 11 certified tokenizer artifacts (12 model families) | Corrected Gigatoken for full CPU encoding; HF if any binding check fails |
+| `toktier`, one of 13 tokenizer artifacts with a certified CPU fast path (14 model families) | Corrected Gigatoken for full CPU encoding; HF if any binding check fails |
 | `toktier[gpu]`, cold/plain input below the GPU crossover (64 KiB default) | Corrected Gigatoken CPU path (HF for a family without CPU-fast certification) |
 | `toktier[gpu]`, cold/plain input at or above the GPU crossover (64 KiB default) | Shipped prebuilt GPU path; then corrected Gigatoken and HF in the frozen fallback chain |
-| Existing session receives a strict append | Corrected Gigatoken CPU repair for the 12 covered model families, independent of total transcript size |
+| Existing session receives a strict append | Corrected Gigatoken CPU repair for the 14 covered model families, independent of total transcript size |
 | Added-token or repair guard cannot prove its premise | HF reference path for that input |
 
 The two GPU rows describe what happens when the GPU route is admitted, and
@@ -900,10 +900,11 @@ carry-over evidence.
 Four different counts appear in this document, and each answers a different
 question: **20 packaged artifacts** (what `toktier inspect` lists, all
 certified; `deepseek_v4_1_flash` and `mimo_v2_6` through the cross-artifact
-carry-over), **18+3
+carry-over), **20+3
 model families** (byte-level BPE plus WordPiece, since families can share an
-artifact), **11 artifacts with a certified CPU fast path** (12 families by
-exact-artifact inheritance), and **223 registry rows** (222 audited sibling
+artifact), **13 artifacts with a certified CPU fast path** (the 11 the CPU
+campaign judged, covering 12 families by exact-artifact inheritance, and the
+two certified through the cross-artifact carry-over), and **223 registry rows** (222 audited sibling
 repositories plus one canonical self-row). Numbers that appear inconsistent
 usually belong to different axes.
 
@@ -928,8 +929,8 @@ audit records behind this document and does not ship inside the package.
 A focused end-to-end rerun through the historical public session API is
 kept in
 [`readings/fast_cpu_focused_parity.json`](readings/fast_cpu_focused_parity.json).
-The executing one-call Rust front end is separately checked across all 11
-CPU-fast artifacts in
+The executing one-call Rust front end is separately checked, across the 11
+CPU-fast artifacts of the campaign, in
 [`readings/fast_cpu_native_frontend_parity.json`](readings/fast_cpu_native_frontend_parity.json).
 
 Three status values keep evidence and runtime behavior distinct:
@@ -1048,8 +1049,8 @@ document also shows the regimes where direct use of another engine is faster.
 
 | Track | Families | Coverage |
 |---|---:|---|
-| Certified CPU fast repair | 12 model families / 11 unique tokenizer artifacts | corrected Gigatoken, 12.33T characters, zero observed ID divergence |
-| Byte-level BPE | 18 | CPU evidence; GPU status recorded per artifact |
+| Certified CPU fast repair | 14 model families / 13 unique tokenizer artifacts | corrected Gigatoken; 11 artifacts judged over 12.33T characters with zero observed ID divergence, 2 by cross-artifact carry-over |
+| Byte-level BPE | 20 | CPU evidence; GPU status recorded per artifact |
 | WordPiece | 3 | CPU evidence |
 | Structural exclusions | 2 | reason recorded |
 
@@ -1115,10 +1116,11 @@ TokTier's CPU Fast Pass and Fast Repair build on the excellent
 [Fastokens](https://github.com/crusoecloud/fastokens) projects. We thank their
 authors and contributors for making this work openly available.
 
-Corrected Gigatoken is the default certified repair-window engine for 11
-unique tokenizer artifacts, covering 12 model families because NVIDIA
-Nemotron-Terminal ships a tokenizer that is byte-for-byte identical to the
-`qwen3_8b` tokenizer. TokTier's
+Corrected Gigatoken is the default certified repair-window engine for 13
+unique tokenizer artifacts: the 11 the CPU campaign judged, covering 12 model
+families because NVIDIA Nemotron-Terminal ships a tokenizer that is
+byte-for-byte identical to the `qwen3_8b` tokenizer, and the two certified
+through the cross-artifact carry-over. TokTier's
 compatibility patch aligns Gigatoken's Unicode data and UTF-8 handling with the
 frozen [Hugging Face tokenizers](https://github.com/huggingface/tokenizers)
 reference; the resulting path recorded 41.8 billion checks over 12.33 trillion

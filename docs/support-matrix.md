@@ -263,6 +263,8 @@ package.
 | `hy4` | `tencent/Hy4-preview` | ff67615de6e6 | unsupported (no repair row); HF | certified (prebuilt) | not admitted |
 | `step5_preview` | `stepfun-ai/Step-5-Preview` | b564c620eb77 | unsupported (no repair row); HF | certified (prebuilt) | not admitted |
 | `muse_spark` | `meta-models/Muse-Spark-Open-816B-A42B` | ac2f41ef2444 | unsupported (no repair row); HF | certified (prebuilt) | not admitted |
+| `deepseek_v4_1_flash` | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | c90dfa01249d | certified (Gigatoken), carried from `deepseek_v4_flash` | certified (prebuilt), carried from `deepseek_v4_flash` | not admitted |
+| `mimo_v2_6` | `XiaomiMiMo/MiMo-V2.6-Flash-RL` | ff15eb925890 | certified (Gigatoken), carried from `qwen3_8b` | certified (prebuilt), carried from `qwen3_8b` | not admitted |
 <!-- TODO(fill): set the Chunked cuts column again from the shipped routing/tables/chunked_admission.v1.json once the release campaign readings are entered; the values above follow the table as it stands before that campaign (four certified on the Python path, seven with adversarial evidence only). -->
 
 Pinned upstream revisions are recorded per row as
@@ -371,6 +373,15 @@ and the model sets `ignore_merges`, as `gpt_oss_120b` does; the vocabulary
 (200,000 entries), the merges and the 1,818-entry added-token table are its
 own.
 
+`deepseek_v4_1_flash` and `mimo_v2_6` note: these two records hold the
+readings of a certified anchor through the cross-artifact carry-over, so
+their CPU and GPU entries are the anchor's, with the anchor's repair
+parameters recorded in the registry record itself. They have no row in the
+chunked admission table, so `toktier.chunked` encodes them serially. The
+evidence and the conditions are described under [Certified by
+cross-artifact
+carry-over](#certified-by-cross-artifact-carry-over-deepseek-v41-flash-and-mimo-v26).
+
 ## WordPiece families
 
 | Family id | Anchor repository | Artifact sha256 (prefix) | CPU fast repair | GPU status |
@@ -461,7 +472,7 @@ everything below rests on it:
 | equivalent (serialisation) | loads to the same tokenizer; byte difference is legacy serialisation form | 38 |
 | equivalent (loader face) | the audited file group materializes, under the pinned loader, a loader face byte-identical to the certified artifact's | 2 |
 
-**222 repositories** are verified on these bases, spread over 15 of the 21
+**222 repositories** are verified on these bases, spread over 15 of the 23
 artifacts in the family matrix. Twelve of them were published after the audit
 snapshot and were admitted one at a time -- eight byte-identical files on the
 identical basis, the two Qwen3.8 repositories on the loader-face basis (since
@@ -527,6 +538,8 @@ counted.
 | `hy4` | 0 | 0 | 0 | 0 | 0 | -- &dagger; |
 | `step5_preview` | 0 | 0 | 0 | 0 | 0 | -- &dagger; |
 | `muse_spark` | 0 | 0 | 0 | 0 | 0 | -- &dagger; |
+| `deepseek_v4_1_flash` | 0 | 0 | 0 | 0 | 0 | -- &dagger; |
+| `mimo_v2_6` | 0 | 0 | 0 | 0 | 0 | -- &dagger; |
 | `bert_cased` | 4 | 2 | 2 | 0 | 0 | 0 |
 | `bert_uncased` | 3 | 3 | 0 | 0 | 0 | 0 |
 | `bert_multilingual_cased` | 0 | 0 | 0 | 0 | 0 | 0 |
@@ -884,9 +897,10 @@ relationship to `llama_3_1_8b` is plausible and unmeasured; the comparison is
 pending access and no claim is made in the meantime. Re-running the sweep with
 access resolves these thirteen rows and nothing else.
 
-Five artifacts in the family matrix above, `ling_3_0_flash`,
-`laguna_s_2_1`, `hy4`, `step5_preview` and `muse_spark`, were admitted after
-this snapshot and were therefore not part of the sweep. No sub-versions are
+Seven artifacts in the family matrix above, `ling_3_0_flash`,
+`laguna_s_2_1`, `hy4`, `step5_preview`, `muse_spark`, `deepseek_v4_1_flash`
+and `mimo_v2_6`, were admitted after this snapshot and were therefore not
+part of the sweep. No sub-versions are
 listed for them. The reconnaissance that preceded the admission of the first
 two did note byte-identical quantised twins for both, but that observation was
 not carried through the revision-and-digest bookkeeping this section reports,

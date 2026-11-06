@@ -352,7 +352,7 @@ the lookup can then find this crate's own `Cargo.lock` and read
 `verified` although the consumer compiled another version of a package
 (an `icu_properties` release, for one), so set `TOKTIER_CARGO_LOCK` to the
 consumer's lockfile for the reading that describes the build. A lookup
-that finds the consumer's lockfile in that layout is planned for 0.3.1.
+that finds the consumer's lockfile in that layout is planned for 0.3.2.
 Content hashes and origins come from the judged `Cargo.lock`, which travels
 with the crate as well, so the two shipped records cannot hold different
 opinions about one package; a compiled closure naming something that lockfile

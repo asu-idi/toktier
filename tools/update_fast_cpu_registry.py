@@ -152,21 +152,50 @@ def _verify_identity(binding: dict[str, Any]) -> None:
     )
 
 
+def _carried_families(binding: dict[str, Any]) -> dict[str, str]:
+    """Carried family to anchor family (third class beside the two above).
+
+    A carried family is certified through a cross-artifact carry-over
+    (``docs/contracts/evidence-carryover.md`` Section 3.1). Its fast CPU
+    entry is the anchor's certified entry plus the ``repair`` member the
+    registry record already holds; it adds no row to the repair roster and
+    is not one of the eleven artifacts the campaign judged, so the counts
+    below stay those of the judged artifacts.
+    """
+    raw = binding.get("carried_families")
+    if raw is None:
+        return {}
+    carried = _require_mapping(raw, label="carried_families")
+    return {str(family): str(anchor) for family, anchor in carried.items()}
+
+
 def _verify_coverage(
     registry: dict[str, Any], binding: dict[str, Any]
-) -> tuple[set[str], set[str], dict[str, dict[str, Any]], dict[str, Any]]:
+) -> tuple[
+    set[str], set[str], dict[str, str], dict[str, dict[str, Any]], dict[str, Any]
+]:
     loadable = set(binding.get("loadable_families") or ())
     rejected = set(
         _require_mapping(
             binding.get("rejected_families"), label="rejected_families"
         )
     )
+    carried = _carried_families(binding)
     if len(loadable) != 11:
         raise GenerationError(
             f"fast CPU binding must certify 11 unique artifacts, found {len(loadable)}"
         )
     if loadable & rejected:
         raise GenerationError("a family is both loadable and rejected")
+    if set(carried) & (loadable | rejected):
+        raise GenerationError(
+            "a carried family is also classified loadable or rejected"
+        )
+    for family, anchor in sorted(carried.items()):
+        if anchor not in loadable:
+            raise GenerationError(
+                f"{family}: the carry-over anchor {anchor} is not a loadable family"
+            )
 
     coverage = _require_mapping(binding.get("coverage"), label="coverage")
     if coverage.get("unique_tokenizer_artifacts") != len(loadable):
@@ -203,13 +232,16 @@ def _verify_coverage(
             + ", ".join(sorted(missing))
         )
     known_rejected = rejected & set(by_family)
-    if set(by_family) != loadable | known_rejected:
-        unexpected = set(by_family) - loadable - known_rejected
+    known_carried = {
+        family: anchor for family, anchor in carried.items() if family in by_family
+    }
+    if set(by_family) != loadable | known_rejected | set(known_carried):
+        unexpected = set(by_family) - loadable - known_rejected - set(known_carried)
         raise GenerationError(
             "every shipped artifact must be classified; unclassified: "
             + ", ".join(sorted(unexpected))
         )
-    return loadable, known_rejected, by_family, coverage
+    return loadable, known_rejected, known_carried, by_family, coverage
 
 
 def _verify_repair_tables(
@@ -312,6 +344,48 @@ def _verify_native_reading(
             raise GenerationError(f"{family}: native-frontend parity did not pass")
 
 
+def _carried_repair(row: dict[str, Any], anchor: str) -> dict[str, Any]:
+    """The repair member of one carried record, checked against its anchor.
+
+    The member is written by the generation channel beside the record's
+    cross-artifact carry-over node; this tool keeps it and refuses when the
+    node names another anchor or the parameters differ from the anchor's
+    roster row (contract C6).
+    """
+    family = str(row.get("family"))
+    carryover = row.get("carryover")
+    if not isinstance(carryover, dict) or carryover.get("from_family") != anchor:
+        raise GenerationError(
+            f"{family}: the registry record carries no cross-artifact "
+            f"carry-over from {anchor}"
+        )
+    existing = ((row.get("backends") or {}).get("fast_cpu") or {}).get("repair")
+    repair = _require_mapping(existing, label=f"{family}: backends.fast_cpu.repair")
+    roster = {
+        str(item.get("family")): item
+        for item in load_json(REPAIR_TABLE_PATH).get("families") or ()
+        if isinstance(item, dict)
+    }
+    anchor_row = roster.get(anchor)
+    if anchor_row is None:
+        raise GenerationError(f"{family}: the anchor {anchor} has no roster row")
+    for key in ("margin", "effective_l_max", "has_normalizer"):
+        if repair.get(key) != anchor_row.get(key):
+            raise GenerationError(
+                f"{family}: repair {key} differs from the {anchor} roster row"
+            )
+    _require_digest(
+        repair.get("source_table_sha256"),
+        label=f"{family}: repair.source_table_sha256",
+    )
+    return {
+        "margin": int(repair["margin"]),
+        "effective_l_max": int(repair["effective_l_max"]),
+        "has_normalizer": bool(repair["has_normalizer"]),
+        "source_table_sha256": str(repair["source_table_sha256"]),
+    }
+
+
 def _records_v2(registry: dict[str, Any]) -> bool:
     return any(
         isinstance(entry, dict) and "source_digest_v2" in entry
@@ -332,7 +406,9 @@ def augmented_document(
         include_v2 = _records_v2(registry)
     _verify_identity(binding)
     completed = copy.deepcopy(registry)
-    loadable, rejected, by_family, _coverage = _verify_coverage(completed, binding)
+    loadable, rejected, carried, by_family, _coverage = _verify_coverage(
+        completed, binding
+    )
     config_digest = _verify_repair_tables(binding, loadable, by_family)
     _verify_native_reading(binding, loadable, by_family)
 
@@ -363,6 +439,11 @@ def augmented_document(
             raise GenerationError(f"{family}: backends must be an object")
         if family in loadable:
             backends["fast_cpu"] = dict(certified_entry)
+        elif family in carried:
+            backends["fast_cpu"] = {
+                **certified_entry,
+                "repair": _carried_repair(row, carried[family]),
+            }
         elif family in rejected:
             backends["fast_cpu"] = {
                 "status": "unsupported",

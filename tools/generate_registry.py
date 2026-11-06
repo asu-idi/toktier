@@ -633,27 +633,352 @@ def sync_prebuilt_bindings(registry_path: Path) -> None:
     PACKAGED_OUTPUT.write_bytes(registry_path.read_bytes())
 
 
+REPAIR_ROSTER_PATH = (
+    REPOSITORY_ROOT
+    / "src"
+    / "toktier"
+    / "repair"
+    / "tables"
+    / "fast_repair_families.v1.json"
+)
+
+#: The repair parameters a carried record must share with its anchor's
+#: roster row (contract C6). ``source_table_sha256`` is provenance of the
+#: exported table and is not compared: the anchor's row names its own
+#: export, which differs from the new artifact's by construction.
+REPAIR_PARAMETERS = ("margin", "effective_l_max", "has_normalizer")
+
+
+def _evidence_corpus_ids(evidence_id: str) -> set[str] | None:
+    """``corpus_id`` values of the shipped evidence manifest for one id."""
+    for path in sorted((REPOSITORY_ROOT / "evidence").glob("*.json")):
+        try:
+            manifest = load_json(path)
+        except (OSError, ValueError):
+            continue
+        if isinstance(manifest, dict) and manifest.get("evidence_id") == evidence_id:
+            return {
+                str(corpus.get("corpus_id"))
+                for corpus in manifest.get("corpora") or ()
+                if isinstance(corpus, dict)
+            }
+    return None
+
+
+def _certificate_scan_problems(family: str, scan: dict[str, Any]) -> list[str]:
+    """Coverage and positive controls of one absence certificate.
+
+    The coverage counters are spelled ``units_*`` or ``shards_*`` (the
+    scanner's unit of work); whichever is present must be complete. Every
+    positive control must be nonzero, and no unit may have failed its
+    controls: a scanner that read no text would otherwise report the same
+    zeros as true absence.
+    """
+    problems: list[str] = []
+    spelled = [
+        unit
+        for unit in ("units", "shards")
+        if f"{unit}_complete" in scan or f"{unit}_expected" in scan
+    ]
+    for unit in spelled:
+        complete = scan.get(f"{unit}_complete")
+        expected = scan.get(f"{unit}_expected")
+        if not isinstance(expected, int) or expected < 1 or complete != expected:
+            problems.append(
+                f"{family}: certificate coverage {unit}_complete={complete} "
+                f"does not close {unit}_expected={expected}"
+            )
+    controls = scan.get("controls")
+    if not isinstance(controls, dict) or not controls:
+        problems.append(f"{family}: certificate records no positive controls")
+    else:
+        for name, count in controls.items():
+            if not isinstance(count, int) or count <= 0:
+                problems.append(
+                    f"{family}: certificate positive control {name!r} is not "
+                    "nonzero"
+                )
+    failed = [
+        scan[key]
+        for key in ("control_failed_units", "control_failed_shards")
+        if key in scan
+    ]
+    if not failed or any(value != 0 for value in failed):
+        problems.append(
+            f"{family}: certificate does not state zero units failing their "
+            "controls"
+        )
+    return problems
+
+
+def _cross_artifact_problems(
+    artifact: dict[str, Any],
+    carryover: dict[str, Any],
+    reading: dict[str, Any],
+    by_family: dict[str, dict[str, Any]],
+    roster: dict[str, dict[str, Any]],
+    composition_keys: set[tuple[str, str, str]],
+) -> list[str]:
+    """Contract conditions of a cross-artifact node that the release ships.
+
+    The generation channel holds the artifact pair and recomputes C1-C3
+    there; this half re-reads what the release carries: the anchor record
+    (C5), the copied readings and identities, the certificate subject and
+    corpus identity (C4), the repair parameters (C6) and the recorded
+    engine-parity reading (C7).
+    """
+    family = str(artifact.get("family", "<unknown>"))
+    problems: list[str] = []
+    anchor_family = str(carryover.get("from_family"))
+    anchor = by_family.get(anchor_family)
+    if anchor is None:
+        return [f"{family}: carry-over anchor {anchor_family!r} has no record"]
+    if anchor.get("artifact_sha256") != carryover.get("from_artifact_sha256"):
+        problems.append(
+            f"{family}: carry-over names anchor artifact "
+            f"{carryover.get('from_artifact_sha256')}, but the {anchor_family} "
+            f"record is {anchor.get('artifact_sha256')}"
+        )
+    if "carryover" in anchor:
+        problems.append(
+            f"{family}: the anchor {anchor_family} holds a carry-over node "
+            "itself; carry-over does not chain"
+        )
+    for key in ("readings", "evidence_id", "suite_version", "oracle_id", "pipeline_id"):
+        if artifact.get(key) != anchor.get(key):
+            problems.append(
+                f"{family}: {key} differs from the anchor {anchor_family}"
+            )
+    if artifact.get("added_frontend_id") == anchor.get("added_frontend_id"):
+        problems.append(
+            f"{family}: the added-token capability equals the anchor's; the "
+            "pair is a sibling, not a carry-over"
+        )
+    if artifact.get("artifact_sha256") == anchor.get("artifact_sha256"):
+        problems.append(f"{family}: the record names the anchor's artifact")
+    for key in ("aliases",):
+        if key in artifact:
+            problems.append(f"{family}: a carried record carries no {key}")
+    if (
+        str(artifact.get("pipeline_id")),
+        str(artifact.get("added_frontend_id")),
+        str(artifact.get("evidence_id")),
+    ) not in composition_keys:
+        problems.append(
+            f"{family}: no composition row grants the carried capability pair"
+        )
+
+    subject = reading.get("subject") or {}
+    for subject_key, expected in (
+        ("family", family),
+        ("from_family", anchor_family),
+        ("from_artifact_sha256", carryover.get("from_artifact_sha256")),
+        ("loader_face_sha256", artifact.get("loader_face_sha256")),
+        ("from_loader_face_sha256", anchor.get("loader_face_sha256")),
+        ("pipeline_id", artifact.get("pipeline_id")),
+    ):
+        if expected is None or subject.get(subject_key) != expected:
+            problems.append(
+                f"{family}: certificate subject {subject_key} "
+                f"{subject.get(subject_key)!r} does not match the registry "
+                f"({expected!r})"
+            )
+    rows = subject.get("divergence_set") or []
+    sides = {
+        (row.get("id"), row.get("side"))
+        for row in rows
+        if isinstance(row, dict)
+    }
+    if len(sides) != len(rows) or not all(
+        isinstance(token_id, int) and side in {"from", "to"}
+        for token_id, side in sides
+    ):
+        problems.append(
+            f"{family}: certificate divergence rows are not unique "
+            "{id, side, content} rows"
+        )
+    digest = subject.get("divergence_set_sha256")
+    if not (
+        isinstance(digest, str)
+        and len(digest) == 64
+        and all(character in "0123456789abcdef" for character in digest)
+    ):
+        problems.append(f"{family}: certificate carries no divergence_set_sha256")
+
+    corpus = reading.get("corpus") or {}
+    if corpus.get("evidence_id") != artifact.get("evidence_id"):
+        problems.append(
+            f"{family}: certificate corpus evidence id "
+            f"{corpus.get('evidence_id')!r} is not the record's"
+        )
+    corpus_ids = _evidence_corpus_ids(str(artifact.get("evidence_id")))
+    spelled = f"{corpus.get('corpus_id')}@{corpus.get('revision')}"
+    if corpus_ids is None:
+        problems.append(
+            f"{family}: no shipped evidence manifest carries "
+            f"{artifact.get('evidence_id')!r}"
+        )
+    elif spelled not in corpus_ids:
+        problems.append(
+            f"{family}: certificate corpus {spelled!r} is not the corpus of "
+            f"the evidence manifest ({sorted(corpus_ids)})"
+        )
+
+    backends = artifact.get("backends") or {}
+    anchor_backends = anchor.get("backends") or {}
+    if backends.get("gpu") != anchor_backends.get("gpu"):
+        problems.append(f"{family}: the GPU entry differs from the anchor's")
+    fast = backends.get("fast_cpu")
+    if isinstance(fast, dict):
+        repair = fast.get("repair")
+        rest = {key: value for key, value in fast.items() if key != "repair"}
+        anchor_row = roster.get(anchor_family)
+        if not isinstance(repair, dict):
+            problems.append(
+                f"{family}: the fast CPU entry carries no repair parameters"
+            )
+        elif anchor_row is None:
+            problems.append(
+                f"{family}: the anchor {anchor_family} is not in the repair roster"
+            )
+        else:
+            for key in REPAIR_PARAMETERS:
+                if repair.get(key) != anchor_row.get(key):
+                    problems.append(
+                        f"{family}: repair {key}={repair.get(key)!r} differs "
+                        f"from the anchor's roster row ({anchor_row.get(key)!r})"
+                    )
+        if rest != anchor_backends.get("fast_cpu"):
+            problems.append(
+                f"{family}: the fast CPU entry (without repair) differs from "
+                "the anchor's"
+            )
+        if family in roster or artifact.get("artifact_sha256") in {
+            row.get("artifact_sha256") for row in roster.values()
+        }:
+            problems.append(
+                f"{family}: a carried record is already in the repair roster"
+            )
+        problems += _engine_parity_problems(artifact, carryover)
+    elif "engine_parity" in carryover:
+        problems.append(
+            f"{family}: engine_parity is recorded without a fast CPU entry"
+        )
+    return problems
+
+
+def _engine_parity_problems(
+    artifact: dict[str, Any], carryover: dict[str, Any]
+) -> list[str]:
+    """Contract C7 for the fast CPU entry: the recorded parity reading."""
+    family = str(artifact.get("family", "<unknown>"))
+    parity = carryover.get("engine_parity")
+    if not isinstance(parity, dict):
+        return [f"{family}: the carried fast CPU entry has no engine_parity reading"]
+    path = REPOSITORY_ROOT / str(parity.get("path", ""))
+    if not path.is_file():
+        return [f"{family}: engine-parity reading is missing ({path})"]
+    observed = sha256_of_file(path)
+    if observed != parity.get("sha256"):
+        return [
+            f"{family}: engine-parity reading digest {observed} does not match "
+            f"the recorded {parity.get('sha256')}"
+        ]
+    try:
+        reading = load_json(path)
+    except (OSError, ValueError) as error:
+        return [f"{family}: engine-parity reading is unreadable: {error}"]
+    problems: list[str] = []
+    subject = reading.get("subject") or {}
+    engine = reading.get("engine") or {}
+    fast = (artifact.get("backends") or {}).get("fast_cpu") or {}
+    if reading.get("schema") != "toktier.fast_cpu.carryover_parity.v1":
+        problems.append(f"{family}: engine-parity reading has an unknown schema")
+    if subject.get("artifact_sha256") != artifact.get("artifact_sha256"):
+        problems.append(f"{family}: engine-parity reading is of another artifact")
+    if subject.get("family") != family:
+        problems.append(f"{family}: engine-parity reading names another family")
+    if engine.get("source_digest") != fast.get("source_digest"):
+        problems.append(
+            f"{family}: engine-parity reading was taken on another fast CPU "
+            "engine source identity"
+        )
+    documents = reading.get("documents")
+    mismatches = reading.get("mismatches")
+    if not isinstance(documents, int) or documents < 1:
+        problems.append(f"{family}: engine-parity reading covers no document")
+    if mismatches != 0 or parity.get("mismatches") != 0:
+        problems.append(f"{family}: engine-parity reading reports mismatches")
+    if documents != parity.get("docs"):
+        problems.append(
+            f"{family}: engine-parity document count {documents} differs from "
+            f"the registry ({parity.get('docs')})"
+        )
+    return problems
+
+
 def carryover_problems(registry_path: Path) -> list[str]:
     """Verify the corpus-equivalence carry-over annotations against their evidence.
 
     A ``carryover`` node states that the record's readings, taken under an
-    earlier judge definition, remain valid under the current one because
-    every divergence-set literal is absent from the judged corpus. The
-    statement is only as good as its certificate, so this check re-reads
-    the shipped certificate byte for byte: digest, subject, per-literal
-    zero counts, corpus totals, and the subset relation between the
-    record's readings and the certificate corpus. The generation side
-    (maintainer tooling) recomputes the divergence set from the artifact
-    pair; this verification half covers everything the release ships.
+    earlier judge definition or on an anchor artifact, remain valid for
+    this record because every divergence-set literal is absent from the
+    judged corpus. The statement is only as good as its certificate, so
+    this check re-reads the shipped certificate byte for byte: digest,
+    subject, per-literal zero counts, coverage and positive controls,
+    corpus totals, and the subset relation between the record's readings
+    and the certificate corpus. A cross-artifact node
+    (``from_artifact_sha256``, ``evidence-carryover.md`` Section 3.1)
+    additionally binds the anchor record, the corpus identity of the
+    shipped evidence manifest, the repair parameters and the recorded
+    engine-parity reading.
+
+    The generation side (maintainer tooling) recomputes the divergence set
+    and its ``divergence_set_sha256`` from the artifact pair; this
+    verification half covers everything the release ships. A certificate
+    and a node that are wrong *consistently* (the same wrong literal in
+    both) are outside what the shipped files can show; there the
+    generation channel is the authority, as for the configuration-side
+    form.
     """
     document = load_json(registry_path)
     problems: list[str] = []
-    for artifact in document.get("artifacts", []):
-        if not isinstance(artifact, dict):
-            continue
+    artifacts = [
+        artifact
+        for artifact in document.get("artifacts", [])
+        if isinstance(artifact, dict)
+    ]
+    by_family = {str(artifact.get("family")): artifact for artifact in artifacts}
+    composition_keys = {
+        (
+            str(row.get("pipeline_id")),
+            str(row.get("added_frontend_id")),
+            str(row.get("evidence_id")),
+        )
+        for row in document.get("compositions") or ()
+        if isinstance(row, dict)
+    }
+    try:
+        roster = {
+            str(row.get("family")): row
+            for row in load_json(REPAIR_ROSTER_PATH).get("families") or ()
+            if isinstance(row, dict)
+        }
+    except (OSError, ValueError) as error:
+        return [f"the fast CPU repair roster is unreadable: {error}"]
+    for artifact in artifacts:
         family = artifact.get("family", "<unknown>")
         carryover = artifact.get("carryover")
         declared = artifact.get("config_added_tokens")
+        fast = (artifact.get("backends") or {}).get("fast_cpu")
+        cross_artifact = isinstance(carryover, dict) and (
+            "from_artifact_sha256" in carryover or "from_family" in carryover
+        )
+        if isinstance(fast, dict) and "repair" in fast and not cross_artifact:
+            problems.append(
+                f"{family}: fast CPU repair parameters are recorded without a "
+                "cross-artifact carry-over"
+            )
         if carryover is None:
             continue
         if not isinstance(carryover, dict):
@@ -662,7 +987,8 @@ def carryover_problems(registry_path: Path) -> list[str]:
         certificate = carryover.get("certificate") or {}
         divergence = [str(item) for item in carryover.get("divergence_set") or ()]
         if (
-            isinstance(declared, dict)
+            not cross_artifact
+            and isinstance(declared, dict)
             and int(declared.get("count", -1)) != len(divergence)
         ):
             problems.append(
@@ -695,7 +1021,9 @@ def carryover_problems(registry_path: Path) -> list[str]:
         ]
         if subject.get("artifact_sha256") != artifact.get("artifact_sha256"):
             problems.append(f"{family}: certificate subject is a different artifact")
-        if sorted(certificate_literals) != sorted(divergence):
+        if sorted(set(certificate_literals)) != sorted(divergence) or len(
+            set(divergence)
+        ) != len(divergence):
             problems.append(
                 f"{family}: certificate divergence set differs from the registry"
             )
@@ -707,6 +1035,7 @@ def carryover_problems(registry_path: Path) -> list[str]:
             problems.append(
                 f"{family}: certificate reports documents holding a target"
             )
+        problems += _certificate_scan_problems(str(family), scan)
         for literal in divergence:
             if occurrences.get(literal) != 0:
                 problems.append(
@@ -723,6 +1052,14 @@ def carryover_problems(registry_path: Path) -> list[str]:
             problems.append(
                 f"{family}: readings cover more documents than the certificate "
                 "corpus, so absence there does not imply absence here"
+            )
+        if cross_artifact:
+            problems += _cross_artifact_problems(
+                artifact, carryover, reading, by_family, roster, composition_keys
+            )
+        elif "engine_parity" in carryover:
+            problems.append(
+                f"{family}: engine_parity belongs to the cross-artifact form"
             )
     return problems
 

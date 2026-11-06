@@ -4,7 +4,7 @@
   "identity_rule": "content-addressed source sets; independent of repository history",
   "native_host_source_sha256": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
   "native_host_source_sha256_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5",
-  "rust_api_source_sha256": "82691dc0ae89fe60731ab3119b6b7097ebf52b46950cb0e90b1df8376bf4fe0a",
-  "rust_api_source_sha256_v2": "dd3c6f7fddbf1f3ef1b4c515277d8e11ac8a00c0ac6878beac30c5c598b46a34",
+  "rust_api_source_sha256": "b1ec8436af4440650b67d025063cb4c3a503ce56ead2a04209e6b09879a5f4f5",
+  "rust_api_source_sha256_v2": "ab74254bd58e1dff7a19e3c5c33f78bb12cd64e1103866cdde2ef849f0ce37d5",
   "schema": "toktier.rust_package_source_identity.v1"
 }

@@ -18,7 +18,7 @@ from toktier.errors import RegistryInvalid
 
 def test_shipped_registry_closes_to_the_documented_coverage() -> None:
     registry = shipped_sibling_aliases()
-    assert len(registry.records) == 237
+    assert len(registry.records) == 241
     equivalent = [
         record
         for record in registry.records
@@ -26,7 +26,7 @@ def test_shipped_registry_closes_to_the_documented_coverage() -> None:
     ]
     assert len(equivalent) == 52
     assert sum(record.canonical_packaged for record in equivalent) == 50
-    assert sum(record.canonical_packaged for record in registry.records) == 230
+    assert sum(record.canonical_packaged for record in registry.records) == 234
     assert registry.root_digest.startswith("sha256:")
 
 

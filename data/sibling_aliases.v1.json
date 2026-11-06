@@ -5,15 +5,15 @@
     "audit_rows": 470,
     "audit_sha256": "f3cc273898e7604a7d3b947be95bbf24dc6fa1df082aa55cf777c0c83d6a3fd2",
     "support_matrix_sha256": "c17c3091b3c0ced929383b7d4c5507a09ed5dee3fde690496aa85da39a25cb9a",
-    "selection": "as recorded at the 2026-08-04 admission audit: the verified repositories docs/support-matrix.md enumerated then, plus the canonical repository of each family whose upstream source file is not tokenizer.json, plus repositories published after that snapshot whose upstream file was compared byte for byte against the shipped anchor on the date recorded beside them in docs/support-matrix.md. This whole block is a snapshot of that audit and is deliberately not refreshed against the current tree: audit_date, audit_rows and audit_sha256 are what was observed then, and support_matrix_sha256 is the digest docs/support-matrix.md carried at the admission commit, not the digest it carries today. Nothing checks it, because there is nothing for it to agree with; rewriting it to the current digest would make the record describe an audit that did not happen. Rows whose basis is equivalent_loader_face were admitted since 0.2.9: their audited tokenizer file group materializes, under the pinned loader, a loader face byte-identical to the certified family anchor face, re-established by the maintainer materialization check on the date recorded beside them in docs/support-matrix.md. Post-snapshot rows on the equivalent_canonicalisation basis were compared byte for byte after line-ending normalization, and differ from the anchor only in CRLF line endings. Post-snapshot rows on the identical_source basis compared the upstream tiktoken.model byte for byte against the pinned conversion source of the certified artifact; the row resolves to the artifact derived from the canonical repository's pinned conversion inputs, so the repository's own copies of the other conversion inputs are not part of the comparison and the conversion table is unchanged. Post-snapshot rows on the equivalent_serialisation basis differ from the anchor only in the form the merge table is written in and in an omitted model field that takes its default; the pinned tokenizers library loads both files to the same document, and the pinned loader materializes a loader face byte-identical to the anchor's."
+    "selection": "as recorded at the 2026-08-04 admission audit: the verified repositories docs/support-matrix.md enumerated then, plus the canonical repository of each family whose upstream source file is not tokenizer.json, plus repositories published after that snapshot whose upstream file was compared byte for byte against the shipped anchor on the date recorded beside them in docs/support-matrix.md. This whole block is a snapshot of that audit and is deliberately not refreshed against the current tree: audit_date, audit_rows and audit_sha256 are what was observed then, and support_matrix_sha256 is the digest docs/support-matrix.md carried at the admission commit, not the digest it carries today. Nothing checks it, because there is nothing for it to agree with; rewriting it to the current digest would make the record describe an audit that did not happen. Rows whose basis is equivalent_loader_face were admitted since 0.2.9: their audited tokenizer file group materializes, under the pinned loader, a loader face byte-identical to the certified family anchor face, re-established by the maintainer materialization check on the date recorded beside them in docs/support-matrix.md. Post-snapshot rows on the equivalent_canonicalisation basis were compared byte for byte after line-ending normalization, and differ from the anchor only in CRLF line endings. Post-snapshot rows on the identical_source basis compared the upstream tiktoken.model byte for byte against the pinned conversion source of the certified artifact; the row resolves to the artifact derived from the canonical repository's pinned conversion inputs, so the repository's own copies of the other conversion inputs are not part of the comparison and the conversion table is unchanged. Post-snapshot rows on the equivalent_serialisation basis differ from the anchor only in the form the merge table is written in and in an omitted model field that takes its default; the pinned tokenizers library loads both files to the same document, and the pinned loader materializes a loader face byte-identical to the anchor's. Post-snapshot rows on the identical basis may ship a tokenizer_config.json that differs from the anchor's in fields the loader face does not read (model_max_length, is_local); the pinned loader materializes a loader face byte-identical to the anchor's from each of them, and that equality was checked on the admission date."
   },
   "counts": {
-    "identical": 171,
+    "identical": 175,
     "identical_source": 14,
     "equivalent_canonicalisation": 11,
     "equivalent_serialisation": 39,
     "equivalent_loader_face": 2,
-    "total": 237
+    "total": 241
   },
   "aliases": [
     {
@@ -787,6 +787,26 @@
       "basis": "identical"
     },
     {
+      "repo_id": "nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB",
+      "revision": "cf2effc5c4b794ee9fb8d34eab3d1d65ce64142f",
+      "source_file": "tokenizer.json",
+      "source_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
+      "source_size": 17077366,
+      "canonical_family": "nemotron_super_vl",
+      "canonical_anchor_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
+      "basis": "identical"
+    },
+    {
+      "repo_id": "nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-BF16",
+      "revision": "e09a4cedb1787db1760375ee5539f222cae0c672",
+      "source_file": "tokenizer.json",
+      "source_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
+      "source_size": 17077366,
+      "canonical_family": "nemotron_super_vl",
+      "canonical_anchor_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
+      "basis": "identical"
+    },
+    {
       "repo_id": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
       "revision": "a9904d24bcc1d289a1950fa9d2b978c47cf903b9",
       "source_file": "tokenizer.json",
@@ -804,6 +824,26 @@
       "source_size": 17077484,
       "canonical_family": "nemotron_3_nano_4b",
       "canonical_anchor_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+      "basis": "identical"
+    },
+    {
+      "repo_id": "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-Base-BF16",
+      "revision": "5d80455a9bf1305b898a1088f8824b02ba451c93",
+      "source_file": "tokenizer.json",
+      "source_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
+      "source_size": 17077366,
+      "canonical_family": "nemotron_super_vl",
+      "canonical_anchor_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
+      "basis": "identical"
+    },
+    {
+      "repo_id": "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4",
+      "revision": "da5b2650a835292c678994a1fa3fb653250fb508",
+      "source_file": "tokenizer.json",
+      "source_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
+      "source_size": 17077366,
+      "canonical_family": "nemotron_super_vl",
+      "canonical_anchor_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
       "basis": "identical"
     },
     {

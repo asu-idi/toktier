@@ -121,7 +121,9 @@ def test_a_repeated_row_is_refused(
 
 def test_a_roster_of_another_size_is_refused() -> None:
     roster = _roster()
-    with pytest.raises(GenerationError, match="certifies 14 artifacts"):
+    with pytest.raises(
+        GenerationError, match=f"certifies {tool.MATRIX_FAMILIES - 1} artifacts"
+    ):
         tool.verify_public_matrix(
             _binding(_readings()), bootstrap=False, roster=set(sorted(roster)[1:])
         )

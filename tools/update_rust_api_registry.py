@@ -54,7 +54,7 @@ MATRIX_READINGS = {
 #: (``src/toktier/routing/tables/examined_artifacts.v1.json``) is never in
 #: the registry and is therefore not a row of the matrix, and a reading that
 #: carries one does not match the roster.
-MATRIX_FAMILIES = 15
+MATRIX_FAMILIES = 18
 MATRIX_DOCUMENTS = MATRIX_FAMILIES * 7
 
 #: Families the GPU parity readings cover; the same roster.
@@ -62,7 +62,7 @@ GPU_FAMILIES = MATRIX_FAMILIES
 
 #: Backend roster the CPU venue must observe: the artifacts with a certified
 #: Gigatoken row run there, and the rest answer through the reference engine.
-CPU_MATRIX_BACKENDS = {"FastCpu": 11, "HuggingFace": 4}
+CPU_MATRIX_BACKENDS = {"FastCpu": 11, "HuggingFace": 7}
 
 
 def _mapping(value: object, *, label: str) -> dict[str, Any]:

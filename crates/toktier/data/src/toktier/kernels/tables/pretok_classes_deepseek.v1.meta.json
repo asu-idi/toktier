@@ -78,7 +78,8 @@
   "deepseek_v4_flash",
   "hy3",
   "hy4",
-  "step5_preview"
+  "step5_preview",
+  "deepseek_v4_1_flash"
  ],
  "patterns": [
   "\\p{N}{1,3}",

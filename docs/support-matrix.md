@@ -1133,10 +1133,14 @@ the repair roster, which keeps the eleven artifacts the CPU campaign judged,
 its digest, and the fast CPU engine's bound source set unchanged. A document
 holding one of the differing literals is routed to the reference, like any
 input holding an added-token literal. `toktier.chunked` encodes them
-serially: they have no row in the chunked admission table. No GPU route is
-offered for them yet: the GPU kernel table does not list the two families,
-because its class tables are generated from the families it lists and a new
-row is a GPU binding change recorded with a hardware parity run.
+serially: they have no row in the chunked admission table. The GPU route is
+carried from the anchor under the same conditions: the record's GPU entry is
+the anchor's, the kernel table lists each family in its anchor's band with
+its anchor's class table (`deepseek_v1`, `cl100k_v3`), and the class-table
+bytes are the ones the anchors' readings were taken with. As for the fast CPU
+route, a recorded parity reading backs the entry: the release check requires
+the hardware parity readings of every certified prebuilt architecture to
+cover every family the registry certifies, these two included.
 
 The repository also ships `encoding/encoding.py`. It is a prompt-format
 reference written against the Python standard library alone: it builds

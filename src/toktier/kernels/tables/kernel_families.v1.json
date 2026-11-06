@@ -32,7 +32,7 @@
       "generator": "class_tables:deepseek",
       "note": "Seven-class table for the three-splitter ruleset; carries a metadata sidecar cross-checked against the kernel inline constants.",
       "meta_file": "pretok_classes_deepseek.v1.meta.json",
-      "meta_sha256": "sha256:214e563fab35d93e824ce29e7515249142d9160925e3c102aeec38be33d375e5"
+      "meta_sha256": "sha256:8f714fd15718a842a746e95996f60a484c9fbd9e8aba94e283c7dd74908d6a0e"
     },
     "o200k_v4": {
       "file": "pretok_classes_o200k.v4.npy",
@@ -238,6 +238,20 @@
       "class_table": "kimi_v1",
       "contractions": true,
       "note": "digits_max is 3 because the artifact's digit alternative is {1,3}; the kernel compiles that bound in, so no other value can be honoured. The contraction suffix is always on for this splitter, likewise compiled in."
+    },
+    "deepseek_v4_1_flash": {
+      "band": "deepseek",
+      "ruleset": "deepseek",
+      "digits_max": null,
+      "class_table": "deepseek_v1",
+      "contractions": false
+    },
+    "mimo_v2_6": {
+      "band": "cl100k",
+      "ruleset": "cl100k",
+      "digits_max": 1,
+      "class_table": "cl100k_v3",
+      "contractions": true
     }
   }
 }

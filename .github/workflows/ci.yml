@@ -34,7 +34,23 @@ jobs:
         run: mypy .
 
   python-tests:
+    # Two loader lines: transformers 4.57.6 with tokenizers 0.22.2 and
+    # huggingface-hub 0.36.2, and the newest 5.x release with the tokenizers
+    # and huggingface-hub releases pip resolves beside it.
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - loader: "4.57.6"
+            transformers: "transformers==4.57.6"
+            tokenizers: "tokenizers==0.22.2"
+            hub: "huggingface-hub==0.36.2"
+          - loader: "5.x"
+            transformers: "transformers>=5,<6"
+            tokenizers: "tokenizers"
+            hub: "huggingface-hub"
+    name: python-tests (transformers ${{ matrix.loader }})
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - id: python_phase
@@ -67,8 +83,9 @@ jobs:
           python -m pip install \
             pytest==9.1.1 \
             jsonschema==4.26.0 \
-            tokenizers==0.22.2 \
-            huggingface-hub==0.36.2 \
+            "${{ matrix.transformers }}" \
+            "${{ matrix.tokenizers }}" \
+            "${{ matrix.hub }}" \
             platformdirs==4.11.0 \
             maturin==1.14.1 \
             tomli==2.4.0
@@ -76,6 +93,7 @@ jobs:
       - if: ${{ steps.python_phase.outputs.enabled == 'true' }}
         run: |
           . .ci-venv/bin/activate
+          python -m pip list | grep -i -E '^(tokenizers|transformers|huggingface.hub) '
           pytest
 
   generated-tables:

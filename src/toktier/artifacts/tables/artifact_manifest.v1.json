@@ -111,6 +111,20 @@
       }
     }
   },
+  "hy4": {
+    "repo_id": "tencent/Hy4-preview",
+    "revision": "705d81ee51566a186d645b74c974d642ef2828fe",
+    "files": {
+      "tokenizer.json": {
+        "sha256": "ff67615de6e6ee073a20bd1fe3a776053e821573f4ae566aeb8e9d43de801201",
+        "size": 9358955
+      },
+      "tokenizer_config.json": {
+        "sha256": "15267c495102b0ce259408a0b3a9dc11a6de74dd7dd8ef5b9757f64252a9b2df",
+        "size": 351
+      }
+    }
+  },
   "kimi_k3": {
     "repo_id": "moonshotai/Kimi-K3",
     "revision": "9f62e4e9fffbd0a83ddd60e1c209d828994b3569",
@@ -211,6 +225,28 @@
       }
     }
   },
+  "muse_spark": {
+    "repo_id": "meta-models/Muse-Spark-Open-816B-A42B",
+    "revision": "0fb02478b02565b2ce7fc57e6051c91172774ac9",
+    "files": {
+      "chat_template.jinja": {
+        "sha256": "2341a2d3b1f1b0ac92b6237d46e2fff495109bd3305cacdea54726f5e98411db",
+        "size": 16295
+      },
+      "config.json": {
+        "sha256": "4e91fd887cd1f61e59d717f1ec5dea5fa82f4c01f3dca8d7d96b5b29b7b25ea3",
+        "size": 7229
+      },
+      "tokenizer.json": {
+        "sha256": "ac2f41ef2444dec82fdc90e334f80543f298535005fe78aec7e8311ef86f84d0",
+        "size": 28085854
+      },
+      "tokenizer_config.json": {
+        "sha256": "3d02f9e7f11d7d2e053811c35c725f975e36243c18784d91efb9952d189d0250",
+        "size": 364712
+      }
+    }
+  },
   "nemotron_3_nano_4b": {
     "repo_id": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
     "revision": "dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f",
@@ -288,6 +324,28 @@
       "tokenizer_config.json": {
         "sha256": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
         "size": 9732
+      }
+    }
+  },
+  "step5_preview": {
+    "repo_id": "stepfun-ai/Step-5-Preview",
+    "revision": "364b3b03fed2477aa0953fe855a2c4c8c48ee3cc",
+    "files": {
+      "chat_template.jinja": {
+        "sha256": "9d459a466e9648721ef6dda4cd168d921c2b6b4e7c0a82e032d261ea9854ef2e",
+        "size": 6004
+      },
+      "config.json": {
+        "sha256": "e535c5c9e6385e5c39d55daf346fc0b42dd93496bf5e540ea442168b2524bb63",
+        "size": 78447
+      },
+      "tokenizer.json": {
+        "sha256": "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0",
+        "size": 9976972
+      },
+      "tokenizer_config.json": {
+        "sha256": "78202af487f4d4360e8d15cb0506d60718f8599770599c6f28f7f1fa045a591f",
+        "size": 163405
       }
     }
   }

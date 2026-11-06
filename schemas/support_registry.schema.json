@@ -449,6 +449,33 @@
           "$ref": "#/$defs/sha256_hex",
           "description": "Digest of the packaged repair-family table consumed at runtime."
         },
+        "repair": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "margin",
+            "effective_l_max",
+            "has_normalizer",
+            "source_table_sha256"
+          ],
+          "properties": {
+            "margin": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "effective_l_max": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "has_normalizer": {
+              "type": "boolean"
+            },
+            "source_table_sha256": {
+              "$ref": "#/$defs/sha256_hex"
+            }
+          },
+          "description": "Fast CPU repair parameters of a certified artifact that is not in the repair roster (written only beside a cross-artifact carry-over; equal to the anchor's roster row, evidence-carryover.md Section 3.1 C6). Same shape as the examined table's repair block; outside the fast CPU engine's bound source set. source_table_sha256 is provenance of the exported parameter table."
+        },
         "deliveries": {
           "type": "object",
           "additionalProperties": false,
@@ -512,6 +539,24 @@
               "devices",
               "class_table_digest"
             ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "repair"
+            ]
+          },
+          "then": {
+            "required": [
+              "engine",
+              "config_id"
+            ],
+            "properties": {
+              "status": {
+                "const": "certified_source"
+              }
+            }
           }
         }
       ]
@@ -605,7 +650,7 @@
       }
     },
     "carryover": {
-      "description": "Corpus-equivalence carry-over: the recorded readings were taken under an earlier judge definition and remain valid under the current one because every literal of the divergence set is absent from the judged corpus, per the named absence certificate.",
+      "description": "Corpus-equivalence carry-over: the recorded readings were taken under an earlier judge definition, or on another artifact, and remain valid for this record because every literal of the divergence set is absent from the judged corpus, per the named absence certificate. With from_family and from_artifact_sha256 present the node is a cross-artifact application (evidence-carryover.md Section 3.1): the readings are the named anchor record's, and engine_parity names the recorded engine-parity reading of this artifact.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -669,9 +714,57 @@
             }
           }
         },
+        "from_family": {
+          "$ref": "#/$defs/identifier",
+          "description": "Family of the anchor record whose readings this record holds (cross-artifact form)."
+        },
+        "from_artifact_sha256": {
+          "$ref": "#/$defs/sha256_hex",
+          "description": "Artifact digest of the anchor record (cross-artifact form)."
+        },
+        "engine_parity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256",
+            "docs",
+            "mismatches"
+          ],
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^readings/[^#]+\\.json$"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256_hex"
+            },
+            "docs": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "mismatches": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "description": "Recorded fast CPU engine-parity reading of this artifact against the reference (evidence-carryover.md Section 3.1 C7)."
+        },
         "note": {
           "type": "string"
         }
+      },
+      "dependentRequired": {
+        "from_family": [
+          "from_artifact_sha256"
+        ],
+        "from_artifact_sha256": [
+          "from_family"
+        ],
+        "engine_parity": [
+          "from_artifact_sha256"
+        ]
       }
     },
     "composition": {

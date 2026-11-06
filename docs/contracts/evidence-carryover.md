@@ -154,12 +154,97 @@ The same limiting case settles when two artifacts materialize byte-identical
 loader faces: the divergence set between the two subjects is empty, so they
 hold the same capability ids (since 0.2.9 computed on that shared face,
 `registry.md` Section 1) and their readings need no carry-over record at all
--- there is no difference for one to annotate. That is why the `carryover`
-node carries no cross-artifact members: 0.2.8 reserved two (the artifact
-whose readings were carried, and the readings the argument rested on) for a
-cross-artifact form that this limiting case makes unnecessary; neither was
-ever written, and 0.2.9 removes them. A future need for them is an additive
-change.
+-- there is no difference for one to annotate. That is why an artifact-pair
+difference needs a carry-over only when it is not empty; the cross-artifact
+form below is for that case.
+
+### 3.1 Cross-artifact application
+
+A new artifact may hold the readings of a certified one, its *anchor*, when
+the two differ only in added-token rows that the judged corpus never
+contains. The registry records the new artifact as its own record. Its
+`readings`, `evidence_id`, `suite_version`, `oracle_id` and `pipeline_id`
+equal the anchor's, and its `carryover` node names the anchor by
+`from_family` and `from_artifact_sha256`. The **divergence set** is the set
+of added-token rows, keyed by id, that differ between the two **loader
+faces** in content or in any matching flag; the literals of both sides are
+members. The certificate's subject is the new artifact: it lists the set as
+`{id, side, content}` rows (`side` is `from` for the anchor's row and `to`
+for the new artifact's) and records `divergence_set_sha256`, the SHA-256 of
+the canonical row form: the rows in ascending `(id, side)` order, each
+carrying `id`, `side`, `content` and the five matching-semantics flags of
+`fingerprint.md` Section 6 (`special`, `single_word`, `lstrip`, `rstrip`,
+`normalized`), serialized with sorted keys, no whitespace and literal non-ASCII, the same
+convention as the `config_added_tokens` digest.
+
+The node is valid only when every condition below holds and the generation
+channel has recomputed each one from the two artifact directories under the
+pinned loader:
+
+- **C1** -- the two loader faces are equal as JSON documents after the
+  `added_tokens` member is removed. This covers the `normalizer`,
+  `pre_tokenizer`, `model` (vocabulary, merges and every flag), `decoder`
+  and `post_processor` sections and the remaining top-level members such as
+  `truncation`, `padding` and `version`; it implies equal `pipeline_id`
+  values, whose fingerprint hashes four of those sections verbatim.
+- **C2** -- outside the divergence set, the two added-token tables are equal
+  row for row.
+- **C2'** -- no divergence literal is equal to a byte string of the shared
+  `model.vocab`. An engine that extends its id-to-bytes vocabulary with the
+  added rows would otherwise meet two candidate ids for one string, and the
+  choice between them would be a property of that engine.
+- **C3** -- every divergence row is `normalized: false`, or the shared
+  normalizer is empty. A `normalized: true` row is matched against the
+  normalized text; under this condition that text is the raw text, so the
+  substring census of C4 is the census that matters.
+- **C4** -- the certificate reads ABSENT with closed coverage, every positive
+  control nonzero and no unit failing its controls, over a corpus whose id
+  and revision are those of the anchor's readings (the evidence manifest of
+  the record's `evidence_id` names them), and it covers at least their
+  document count. Readings taken on a subset of the documents, or on their
+  length-truncated texts, are covered as well: a literal absent from a
+  document is absent from every part of it. This is why two character
+  totals of one corpus are a measurement difference, not a corpus
+  difference (Section 3, corpus identity).
+- **C5** -- the anchor record holds no `carryover` node itself; one hop
+  only, no chains.
+- **C6** -- when the record carries a fast CPU entry, the repair parameters
+  it carries (`backends.fast_cpu.repair`: margin, effective window length,
+  normalizer presence) equal the anchor's.
+- **C7** -- for each accelerated backend entry the record carries, a recorded
+  engine-parity reading of the new artifact against the reference returns
+  zero mismatches. For the fast CPU entry this is the reading named by the
+  node's `engine_parity` member (the engine compared with the reference
+  over the new artifact's own face, on a specimen set that includes
+  documents holding the divergence literals); for a certified prebuilt GPU
+  delivery it is the per-family row the hardware readings already require
+  of every certified family.
+
+The `config_added_tokens` member, when present, describes the new face as it
+does for any record; the cross-artifact check does not compare its `count`
+with the divergence set, which belongs to the configuration-side form of
+Section 3.
+
+Beside the node, the registry carries one `compositions` row for the new
+pair (the anchor's `pipeline_id` with the new artifact's
+`added_frontend_id`, under the anchor's `evidence_id`), and the
+`engine_parity` member names the C7 reading by path, SHA-256, document count
+and mismatch count. `tools/generate_registry.py --check` re-reads the
+certificate, the parity reading and the evidence manifest for every such
+node; a record and certificate that are wrong *consistently* are outside
+what the shipped files can show, and the generation channel, which holds the
+artifact pair, is the authority there.
+
+C1-C4 establish that the reference returns the same ids for both artifacts
+on every document of the carried readings: under C1-C3 a document holding no
+divergence literal gives both added-token matchers the same matches, and the
+remaining text passes through equal sections, so readings taken on the
+anchor face over such documents are readings of the new face. For each
+accelerated backend entry the record carries, the same conclusion rests on
+the backend consuming the added-token table only through matching and id
+lookup; the registry cannot state that property, and the recorded parity
+reading of C7 is the check that it holds for this artifact. The claim covers
+encoding only. Decoding is outside it, because special flags differ.
 
 ## 4. Add-only record
 

@@ -302,6 +302,15 @@ source identities but the Rust API's, which embeds the table; the Rust API
 binding is then re-recorded (Section 1.1). A row leaves
 the table when its artifact is certified and joins this registry.
 
+A certified record whose artifact is not in the fast CPU repair roster
+carries its repair parameters in this registry, in the `repair` member of
+its `backends.fast_cpu` entry (`margin`, `effective_l_max`,
+`has_normalizer`, `source_table_sha256`). The member is written only beside
+a cross-artifact carry-over (`evidence-carryover.md` Section 3.1), whose
+condition C6 requires the parameters to equal the anchor's roster row. Like
+the examined table, the member sits outside the fast CPU engine's bound
+source set, and the engine binding of the entry is the anchor's.
+
 Driver and CUDA runtime versions are environment facts rather than
 certificate premises, and are reported as such on both faces. Where a
 delivery row binds `driver_min`, that floor is a precondition for the

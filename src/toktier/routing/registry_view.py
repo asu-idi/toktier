@@ -95,6 +95,7 @@ class _BackendDocumentOptional(TypedDict, total=False):
     patch_sha256: str
     config_id: str
     config_digest: str
+    repair: Mapping[str, object]
 
 
 class _BackendDocument(_BackendDocumentOptional):
@@ -205,6 +206,12 @@ class BackendEntry:
     patch_sha256: str | None = None
     config_id: str | None = None
     config_digest: str | None = None
+    #: Fast CPU repair parameters held by the registry record itself
+    #: (``margin``, ``effective_l_max``, ``has_normalizer``,
+    #: ``source_table_sha256``). Present only on a certified record whose
+    #: artifact is carried from an anchor by a cross-artifact carry-over
+    #: and is therefore not in the repair roster.
+    repair: Mapping[str, object] | None = None
 
     def architecture_statuses(self) -> dict[str, str]:
         """Per-architecture status labels of this entry.
@@ -393,6 +400,7 @@ def _backend_entry(
         patch_sha256=raw.get("patch_sha256"),
         config_id=raw.get("config_id"),
         config_digest=raw.get("config_digest"),
+        repair=dict(raw["repair"]) if "repair" in raw else None,
     )
 
 
@@ -514,6 +522,10 @@ class RegistryView:
         )
 
     # -- lookups ---------------------------------------------------------
+
+    def artifact_records(self) -> tuple[ArtifactRecord, ...]:
+        """Every certified artifact record, in document order."""
+        return tuple(self._by_sha.values())
 
     def oracle(self, oracle_id: str) -> OracleRecord | None:
         """Oracle record by id."""

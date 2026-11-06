@@ -156,6 +156,18 @@ pub(crate) struct RepairRow {
     pub(crate) has_normalizer: bool,
 }
 
+/// Repair parameters a certified support record holds itself
+/// (`backends.fast_cpu.repair`): the record is carried from an anchor by a
+/// cross-artifact carry-over (`docs/contracts/evidence-carryover.md`
+/// Section 3.1) and is not in the repair roster. The parameters equal the
+/// anchor's roster row (condition C6, checked by the release check).
+#[derive(Debug, Deserialize)]
+struct CarriedRepair {
+    margin: usize,
+    effective_l_max: usize,
+    has_normalizer: bool,
+}
+
 #[derive(Debug, Deserialize)]
 struct RepairManifest {
     schema: String,
@@ -646,11 +658,55 @@ impl Registry {
             }
         }
 
-        let repairs = repair
+        let mut repairs: HashMap<String, RepairRow> = repair
             .families
             .into_iter()
             .map(|row| (row.family.clone(), row))
             .collect();
+        // Carried records hold their own repair parameters; they join the
+        // same lookup the roster rows answer, so the fast CPU route and the
+        // chunked roster test treat them alike. A family or digest that
+        // the roster or the examined table already names is an
+        // inconsistent installation and is refused.
+        for row in &support.artifacts {
+            let Some(raw) = row
+                .backends
+                .get("fast_cpu")
+                .and_then(|entry| entry.get("repair"))
+            else {
+                continue;
+            };
+            let carried: CarriedRepair = serde_json::from_value(raw.clone()).map_err(|error| {
+                registry_error(format!(
+                    "carried repair parameters of {} are malformed: {error}",
+                    row.family
+                ))
+            })?;
+            if repairs.contains_key(&row.family)
+                || repairs
+                    .values()
+                    .any(|other| other.artifact_sha256 == row.artifact_sha256)
+                || examined.contains_key(&row.family)
+                || examined
+                    .values()
+                    .any(|other| other.artifact_sha256 == row.artifact_sha256)
+            {
+                return Err(registry_error(format!(
+                    "carried repair parameters of {} collide with another repair source",
+                    row.family
+                )));
+            }
+            repairs.insert(
+                row.family.clone(),
+                RepairRow {
+                    family: row.family.clone(),
+                    artifact_sha256: row.artifact_sha256.clone(),
+                    margin: carried.margin,
+                    effective_l_max: carried.effective_l_max,
+                    has_normalizer: carried.has_normalizer,
+                },
+            );
+        }
         let runtime_builds = support.runtime_builds;
         let support = support
             .artifacts

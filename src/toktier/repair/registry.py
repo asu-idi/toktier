@@ -151,20 +151,91 @@ def examined_families() -> tuple[RepairFamily, ...]:
         raise _failure("an examined repair row is malformed") from exc
 
 
+@lru_cache(maxsize=1)
+def carried_families() -> tuple[RepairFamily, ...]:
+    """Repair parameters held by certified registry records themselves.
+
+    A record certified through a cross-artifact carry-over
+    (``docs/contracts/evidence-carryover.md`` Section 3.1) is not in the
+    repair roster; its fast CPU entry carries the parameters in a ``repair``
+    member, equal to its anchor's roster row (condition C6, checked by the
+    release check). Read from the digest-verified packaged registry, and
+    kept apart from :func:`families`, which stays exactly the eleven
+    artifacts the campaign judged.
+    """
+    from ..routing.registry_load import load_registry
+    from ..routing.tables import SUPPORT_REGISTRY
+
+    rows: list[RepairFamily] = []
+    try:
+        for record in load_registry(SUPPORT_REGISTRY).artifact_records():
+            entry = record.backends.get("fast_cpu")
+            if entry is None or entry.repair is None:
+                continue
+            rows.append(
+                RepairFamily(
+                    family=record.family,
+                    artifact_sha256=record.artifact_sha256,
+                    margin=int(str(entry.repair["margin"])),
+                    effective_l_max=int(str(entry.repair["effective_l_max"])),
+                    has_normalizer=entry.repair["has_normalizer"] is True,
+                    source_table_sha256=str(entry.repair["source_table_sha256"]),
+                )
+            )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise _failure("a carried repair row is malformed") from exc
+    return tuple(rows)
+
+
+@lru_cache(maxsize=1)
+def _sources() -> tuple[
+    dict[tuple[str, str], RepairFamily], frozenset[str]
+]:
+    """Every (family, artifact) row, and the families named twice.
+
+    A family or an artifact digest that two sources name (the roster, the
+    carried records, the examined table) is an inconsistent installation:
+    the parameters a route runs with must have one source. Such families
+    are refused by :func:`family_spec` rather than resolved by order.
+    """
+    index: dict[tuple[str, str], RepairFamily] = {}
+    family_sources: dict[str, set[str]] = {}
+    digest_sources: dict[str, set[str]] = {}
+    digest_families: dict[str, set[str]] = {}
+    for source, rows in (
+        ("roster", families()),
+        ("carried", carried_families()),
+        ("examined", examined_families()),
+    ):
+        for item in rows:
+            family_sources.setdefault(item.family, set()).add(source)
+            digest_sources.setdefault(item.artifact_sha256, set()).add(source)
+            digest_families.setdefault(item.artifact_sha256, set()).add(item.family)
+            index.setdefault((item.family, item.artifact_sha256), item)
+    conflicts = {
+        family for family, sources in family_sources.items() if len(sources) > 1
+    }
+    for digest, sources in digest_sources.items():
+        if len(sources) > 1:
+            conflicts |= digest_families[digest]
+    return index, frozenset(conflicts)
+
+
 def family_spec(family: str, artifact_sha256: str) -> RepairFamily | None:
     """Exact family-and-artifact repair parameters, or ``None``.
 
-    The certified roster is consulted first, then the examined artifacts.
-    A row from the second answers "with which parameters would the engine
-    run this artifact", not "is it certified": the plan refuses an
-    examined artifact under ``CERTIFIED`` and labels it
-    ``supported_untested`` under ``SUPPORTED``.
+    The certified roster is consulted first, then the certified records
+    carried from an anchor (:func:`carried_families`), then the examined
+    artifacts. A row from the last answers "with which parameters would
+    the engine run this artifact", not "is it certified": the plan refuses
+    an examined artifact under ``CERTIFIED`` and labels it
+    ``supported_untested`` under ``SUPPORTED``. A family or digest that two
+    of the sources name raises ``RegistryInvalid``.
     """
-    return next(
-        (
-            item
-            for item in (*families(), *examined_families())
-            if item.family == family and item.artifact_sha256 == artifact_sha256
-        ),
-        None,
-    )
+    index, conflicts = _sources()
+    if family in conflicts:
+        raise _failure(
+            "a repair family is named by more than one parameter source",
+            family=family,
+        )
+    return index.get((family, artifact_sha256))

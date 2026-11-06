@@ -2,12 +2,12 @@
   "all_ids_equal_hf": true,
   "architecture": "sm_89",
   "architecture_digest": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
-  "characters": 6104728470,
+  "characters": 8139637960,
   "devices": [
     "NVIDIA GeForce RTX 4090, 8.9, 580.178.04"
   ],
-  "documents": 1500000,
-  "families": 15,
+  "documents": 2000000,
+  "families": 20,
   "fatbin_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
   "gil_released": true,
   "mismatches": 0,
@@ -19,7 +19,7 @@
       "rustflags=",
       "pyo3=abi3-py310+extension-module"
     ],
-    "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+    "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
     "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5",
     "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
   },
@@ -35,6 +35,16 @@
       "characters": 406981898,
       "documents": 100000,
       "family": "deepseek_v3",
+      "gil_released": true,
+      "mismatches": 0,
+      "one_python_to_rust_call_per_batch": true
+    },
+    {
+      "all_ids_equal_hf": true,
+      "artifact_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+      "characters": 406981898,
+      "documents": 100000,
+      "family": "deepseek_v4_1_flash",
       "gil_released": true,
       "mismatches": 0,
       "one_python_to_rust_call_per_batch": true
@@ -81,6 +91,16 @@
     },
     {
       "all_ids_equal_hf": true,
+      "artifact_sha256": "ff67615de6e6ee073a20bd1fe3a776053e821573f4ae566aeb8e9d43de801201",
+      "characters": 406981898,
+      "documents": 100000,
+      "family": "hy4",
+      "gil_released": true,
+      "mismatches": 0,
+      "one_python_to_rust_call_per_batch": true
+    },
+    {
+      "all_ids_equal_hf": true,
       "artifact_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
       "characters": 406981898,
       "documents": 100000,
@@ -121,6 +141,16 @@
     },
     {
       "all_ids_equal_hf": true,
+      "artifact_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+      "characters": 406981898,
+      "documents": 100000,
+      "family": "mimo_v2_6",
+      "gil_released": true,
+      "mismatches": 0,
+      "one_python_to_rust_call_per_batch": true
+    },
+    {
+      "all_ids_equal_hf": true,
       "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
       "characters": 406981898,
       "documents": 100000,
@@ -135,6 +165,16 @@
       "characters": 406981898,
       "documents": 100000,
       "family": "ministral_3_8b",
+      "gil_released": true,
+      "mismatches": 0,
+      "one_python_to_rust_call_per_batch": true
+    },
+    {
+      "all_ids_equal_hf": true,
+      "artifact_sha256": "ac2f41ef2444dec82fdc90e334f80543f298535005fe78aec7e8311ef86f84d0",
+      "characters": 406981898,
+      "documents": 100000,
+      "family": "muse_spark",
       "gil_released": true,
       "mismatches": 0,
       "one_python_to_rust_call_per_batch": true
@@ -175,6 +215,16 @@
       "characters": 406981898,
       "documents": 100000,
       "family": "qwen3_8b",
+      "gil_released": true,
+      "mismatches": 0,
+      "one_python_to_rust_call_per_batch": true
+    },
+    {
+      "all_ids_equal_hf": true,
+      "artifact_sha256": "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0",
+      "characters": 406981898,
+      "documents": 100000,
+      "family": "step5_preview",
       "gil_released": true,
       "mismatches": 0,
       "one_python_to_rust_call_per_batch": true

@@ -2,12 +2,12 @@
   "all_ids_equal_hf": true,
   "architecture": "sm_89",
   "architecture_digest": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
-  "characters": 8139637960,
+  "characters": 8546619858,
   "devices": [
     "NVIDIA GeForce RTX 4090, 8.9, 580.178.04"
   ],
-  "documents": 2000000,
-  "families": 20,
+  "documents": 2100000,
+  "families": 21,
   "fatbin_digest": "e61e28c7b9616858394c66ebcc5572eb75008e33592df9d216a2bee3187573b1",
   "gil_released": true,
   "mismatches": 0,
@@ -185,6 +185,16 @@
       "characters": 406981898,
       "documents": 100000,
       "family": "nemotron_3_nano_4b",
+      "gil_released": true,
+      "mismatches": 0,
+      "one_python_to_rust_call_per_batch": true
+    },
+    {
+      "all_ids_equal_hf": true,
+      "artifact_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
+      "characters": 406981898,
+      "documents": 100000,
+      "family": "nemotron_super_vl",
       "gil_released": true,
       "mismatches": 0,
       "one_python_to_rust_call_per_batch": true

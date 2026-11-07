@@ -381,6 +381,11 @@ def test_serialisation_is_ascii_only_and_newline_terminated() -> None:
             EVIDENCE_DOMAIN_TAG,
         ),
         (
+            "evidence/evidence_manifest_super_vl_2026_11.json",
+            EVIDENCE_SCHEMA,
+            EVIDENCE_DOMAIN_TAG,
+        ),
+        (
             "evidence/evidence_manifest_fastokens_pinned.json",
             EVIDENCE_SCHEMA,
             EVIDENCE_DOMAIN_TAG,

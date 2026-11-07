@@ -37,6 +37,7 @@ Usage::
     python tools/generate_evidence.py --check --campaign extra
     python tools/generate_evidence.py --check --campaign kimi
     python tools/generate_evidence.py --check --campaign roster_2026_10
+    python tools/generate_evidence.py --check --campaign super_vl_2026_11
     python tools/generate_evidence.py --check --campaign fastokens_pinned
     python tools/generate_evidence.py --check --campaign chunked_cuts
 
@@ -84,6 +85,9 @@ DEFAULT_OUTPUTS = {
     "kimi": REPOSITORY_ROOT / "evidence" / "evidence_manifest_kimi_band.json",
     "roster_2026_10": (
         REPOSITORY_ROOT / "evidence" / "evidence_manifest_roster_2026_10.json"
+    ),
+    "super_vl_2026_11": (
+        REPOSITORY_ROOT / "evidence" / "evidence_manifest_super_vl_2026_11.json"
     ),
     "fastokens_pinned": (
         REPOSITORY_ROOT / "evidence" / "evidence_manifest_fastokens_pinned.json"

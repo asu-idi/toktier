@@ -19,8 +19,8 @@ TokTier 是面向智能体 LLM 服务的有状态分词系统。它保留每个�
 > 对照与溯源路线，不是服务路径。见 [Rust serving API](#rust-serving-api)
 > 与 [`docs/rust-api.md`](docs/rust-api.md)。
 
-- **大规模精确验证。** 认证验证覆盖 18 个 tokenizer 工件、38 亿篇真实文档，
-  共记录 **684 亿次检查**（12.33 万亿字符），未观察到任何不一致。
+- **大规模精确验证。** 认证验证覆盖 19 个 tokenizer 工件、38 亿篇真实文档，
+  共记录 **722 亿次检查**（12.33 万亿字符），未观察到任何不一致。
 - **CPU 与 GPU 均有快速路径。** 在已记录的整套基准测试中，GPU 路径处理一个
   全新的 400 万字符请求（约 78.6 万 token）用时 **3.88 ms**；对 419 万字符
   会话追加 256 个字符时，有界 CPU repair 为 **1.68 ms**。
@@ -770,7 +770,7 @@ carry-over 认证），以及**注册表 241 条**（240 个
 
 | 验证活动 | 规模 | 观测到的不一致 |
 |---|---:|---:|
-| 全语料差分验证 | 18 个工件 × 3,800,016,491 篇文档 = **68,400,296,838 次检查** | 0 |
+| 全语料差分验证 | 19 个工件 × 3,800,016,491 篇文档 = **72,200,313,329 次检查** | 0 |
 | 语料体量 | 12,328,592,579,973 个 Unicode 码点 | — |
 | 发布代码一致性验证 | 15,960,166 篇文档 | 0 |
 | 修正版 Gigatoken CPU repair | 11 个唯一工件 × 3,800,016,491 篇文档 = **41,800,181,401 次检查**（通过精确工件继承覆盖 12 个 family） | 0 |
@@ -779,9 +779,10 @@ carry-over 认证），以及**注册表 241 条**（240 个
 [`evidence/evidence_manifest.json`](evidence/evidence_manifest.json)、
 [`evidence/evidence_manifest_added_families.json`](evidence/evidence_manifest_added_families.json)、
 [`evidence/evidence_manifest_kimi_band.json`](evidence/evidence_manifest_kimi_band.json)、
-[`evidence/evidence_manifest_roster_2026_10.json`](evidence/evidence_manifest_roster_2026_10.json)
+[`evidence/evidence_manifest_roster_2026_10.json`](evidence/evidence_manifest_roster_2026_10.json)、
+[`evidence/evidence_manifest_super_vl_2026_11.json`](evidence/evidence_manifest_super_vl_2026_11.json)
 和 [`tables/support_registry.json`](tables/support_registry.json)。随版本提供的
-逐工件测量记录覆盖 65,120,264,977 次检查；早期归档阶段覆盖其余
+逐工件测量记录覆盖 68,920,281,468 次检查；早期归档阶段覆盖其余
 3,280,031,861 次，两者相加得到上面的总数。经由既有的公开会话 API 做的
 一次针对性端到端复验，记录在
 [`readings/fast_cpu_focused_parity.json`](readings/fast_cpu_focused_parity.json)；

@@ -23,8 +23,8 @@ offers a certified GPU path for fresh or large requests. Both fast paths return 
 > a serving path. See [Rust serving API](#rust-serving-api) and
 > [`docs/rust-api.md`](docs/rust-api.md).
 
-- **Exact, at scale.** The certification campaigns record **68.4 billion checks**
-  across 18 tokenizer artifacts and 3.8 billion real documents
+- **Exact, at scale.** The certification campaigns record **72.2 billion checks**
+  across 19 tokenizer artifacts and 3.8 billion real documents
   (12.33 trillion characters), with zero observed divergence.
 - **Fast on both paths.** On the recorded benchmark battery, the GPU path
   encodes a fresh 4-million-character request (~786K tokens) in **3.88 ms**,
@@ -910,7 +910,7 @@ usually belong to different axes.
 
 | Campaign | Scale | Recorded divergence |
 |---|---:|---:|
-| Full-corpus differential | 18 artifacts × 3,800,016,491 documents = **68,400,296,838 checks** | 0 |
+| Full-corpus differential | 19 artifacts × 3,800,016,491 documents = **72,200,313,329 checks** | 0 |
 | Corpus volume | 12,328,592,579,973 Unicode code points | — |
 | Released-code parity | 15,960,166 documents | 0 |
 | Corrected Gigatoken CPU repair | 11 unique artifacts × 3,800,016,491 documents = **41,800,181,401 checks** (12 model families by exact-artifact inheritance) | 0 |
@@ -920,8 +920,9 @@ The machine-readable records are
 [`evidence/evidence_manifest_added_families.json`](evidence/evidence_manifest_added_families.json),
 [`evidence/evidence_manifest_kimi_band.json`](evidence/evidence_manifest_kimi_band.json),
 [`evidence/evidence_manifest_roster_2026_10.json`](evidence/evidence_manifest_roster_2026_10.json),
+[`evidence/evidence_manifest_super_vl_2026_11.json`](evidence/evidence_manifest_super_vl_2026_11.json),
 and [`tables/support_registry.json`](tables/support_registry.json). Shipped
-per-artifact readings account for 65,120,264,977 checks; an archived earlier
+per-artifact readings account for 68,920,281,468 checks; an archived earlier
 phase accounts for the remaining 3,280,031,861. Together they produce the
 headline total above. What ships is that per-artifact summary: the
 document-by-document ledger the campaigns were reduced from lives in the

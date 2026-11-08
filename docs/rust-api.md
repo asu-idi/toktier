@@ -639,8 +639,9 @@ examined-artifact table, never in the support registry. The embedded table
 carries no row in this release. A certified record carried from an anchor
 by the cross-artifact carry-over is not an examined artifact: it is a
 support row whose fast CPU entry holds its own repair parameters, and
-`Runtime::load` treats it as any other certified family. `Runtime::load`
-fetches and verifies it like any other family. Its plan always records
+`Runtime::load` treats it as any other certified family. The rest of this
+section is about examined artifacts only. `Runtime::load` fetches and
+verifies an examined artifact like any other family. Its plan always records
 `ReasonCode::ExaminedArtifact`. The fast CPU route is admitted against the
 engine binding of a certified support row holding the same pipeline
 capability, with the artifact's own repair parameters, and is labelled

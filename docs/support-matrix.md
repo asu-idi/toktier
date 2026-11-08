@@ -417,7 +417,7 @@ carry-over](#certified-by-cross-artifact-carry-over-deepseek-v41-flash-and-mimo-
 ## Availability in this package
 
 Recorded differential evidence and package availability are separate facts,
-and for four rows the two currently differ. The artifact manifest shipped inside the package is
+and for three rows the two currently differ. The artifact manifest shipped inside the package is
 generated from the differential-campaign registry
 (`tables/support_registry.json`) and carries its 21
 families, two of them (`deepseek_v4_1_flash`, `mimo_v2_6`) certified by
@@ -511,11 +511,13 @@ registry carries one further row that is not a sibling:
 `moonshotai/Kimi-K3`, the canonical repository of the `kimi_k3` family
 itself, so that resolving it by name reports itself as the evidence
 repository instead of a byte-identical sibling. The file therefore holds 241
-rows; every count in this section counts the 240 siblings. Nine of them are
-cross-vendor: three
-`nvidia/Nemotron-Terminal-*` repositories ship the `qwen3_8b` artifact
-verbatim, and six `nvidia/Llama-3.x-Nemotron-*` repositories carry the
-`llama_3_1_8b` tokenizer in a different serialisation. They are listed under
+rows; every count in this section counts the 240 siblings. Thirteen of them
+are cross-vendor: three `nvidia/Nemotron-Terminal-*` repositories and
+`XiaomiMiMo/MiMo-V2-Flash` ship the `qwen3_8b` artifact verbatim, and
+`XiaomiMiMo/MiMo-V2.5-Pro` carries it in an equivalent form; six
+`nvidia/Llama-3.x-Nemotron-*` repositories carry the `llama_3_1_8b`
+tokenizer in a different serialisation; and two copies of the `muse_spark`
+tokenizer published by other organisations ship it verbatim. They are listed under
 the artifact that covers them, not under the organisation that published them,
 which is the same rule the loader applies.
 

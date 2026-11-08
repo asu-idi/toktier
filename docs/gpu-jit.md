@@ -175,7 +175,7 @@ fingerprint of `kimi_k3`. A
 `--manifest` is a JSON object mapping family name to `{"local_dir":
 ...}`; families it does not define are looked up in the local toktier
 artifact cache (`toktier artifacts fetch <family>`, honoring
-`TOKTIER_HOME`), so the six families this check reads need no manifest
+`TOKTIER_HOME`), so the seven families this check reads need no manifest
 once fetched. To check a subset instead, name the tables:
 
 ```

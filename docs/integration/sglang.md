@@ -435,7 +435,7 @@ way:
 
 ```
 pip install "sglang==<version>"
-pip install toktier==0.3.0
+pip install toktier==0.3.1
 pip check
 ```
 

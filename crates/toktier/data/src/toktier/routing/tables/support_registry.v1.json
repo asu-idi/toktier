@@ -6,7 +6,7 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:a00c643037be4d2c8d331e9e8e87c85d326df1264161ddaea55ce1de2e419051",
+  "root_digest": "sha256:a7200e415f0b72292564a8a7de26cb7d46488c0abcd122096bcfd7fd2ce53bef",
   "oracles": [
     {
       "oracle_id": "tokenizers",
@@ -254,7 +254,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -302,7 +302,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -379,7 +379,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -427,7 +427,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -551,7 +551,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -599,7 +599,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -676,7 +676,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -724,7 +724,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -801,7 +801,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -849,7 +849,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -926,7 +926,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -974,7 +974,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1039,7 +1039,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1087,7 +1087,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1152,7 +1152,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1200,7 +1200,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1265,7 +1265,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1313,7 +1313,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1378,7 +1378,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1426,7 +1426,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1491,7 +1491,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1539,7 +1539,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1616,7 +1616,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1664,7 +1664,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1776,7 +1776,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1824,7 +1824,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1901,7 +1901,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1949,7 +1949,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -2026,7 +2026,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -2074,7 +2074,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -2139,7 +2139,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -2187,7 +2187,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -2264,7 +2264,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -2312,7 +2312,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -2377,7 +2377,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -2425,7 +2425,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -2502,7 +2502,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -2550,7 +2550,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -2654,7 +2654,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -2702,7 +2702,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -2779,7 +2779,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -2827,7 +2827,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -2984,10 +2984,10 @@
   "runtime_builds": [
     {
       "runtime": "rust_api",
-      "source_digest": "474f91cf321b988ed76b42cb422c901140e69b96bf34ebffd71cea0e66cd2e34",
-      "fast_cpu_source_digest": "9594ff243421b89ff95137bda5a439a314343470951b6b7c0a98238bf51c4f41",
-      "native_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
-      "source_digest_v2": "a9427145ca0e61c61444777ee559cd5b871f944c1154d1942ac49516328435fb",
+      "source_digest": "c023b873df7c2d0e303ddadfc2aab0b2cb17f5388c969fa756e1e18a3d0c4915",
+      "fast_cpu_source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+      "native_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+      "source_digest_v2": "ab74254bd58e1dff7a19e3c5c33f78bb12cd64e1103866cdde2ef849f0ce37d5",
       "fast_cpu_source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
       "native_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5",
       "build_flags": [
@@ -3004,10 +3004,10 @@
     },
     {
       "runtime": "rust_api",
-      "source_digest": "474f91cf321b988ed76b42cb422c901140e69b96bf34ebffd71cea0e66cd2e34",
-      "fast_cpu_source_digest": "9594ff243421b89ff95137bda5a439a314343470951b6b7c0a98238bf51c4f41",
-      "native_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
-      "source_digest_v2": "a9427145ca0e61c61444777ee559cd5b871f944c1154d1942ac49516328435fb",
+      "source_digest": "c023b873df7c2d0e303ddadfc2aab0b2cb17f5388c969fa756e1e18a3d0c4915",
+      "fast_cpu_source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+      "native_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+      "source_digest_v2": "ab74254bd58e1dff7a19e3c5c33f78bb12cd64e1103866cdde2ef849f0ce37d5",
       "fast_cpu_source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
       "native_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5",
       "build_flags": [

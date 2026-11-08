@@ -2,9 +2,9 @@
   "schema": "toktier.rust_api.matrix.v1",
   "requested_device": "cuda:0",
   "architecture": "sm_89",
-  "runtime_source_digest": "474f91cf321b988ed76b42cb422c901140e69b96bf34ebffd71cea0e66cd2e34",
-  "fast_cpu_source_digest": "9594ff243421b89ff95137bda5a439a314343470951b6b7c0a98238bf51c4f41",
-  "native_host_source_digest": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
+  "runtime_source_digest": "c023b873df7c2d0e303ddadfc2aab0b2cb17f5388c969fa756e1e18a3d0c4915",
+  "fast_cpu_source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+  "native_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
   "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
   "build_flags": [
     "profile=release",
@@ -16,14 +16,22 @@
     "features=default,prebuilt-gpu,serving,sqlite"
   ],
   "runtime_build_certified": true,
-  "families": 15,
-  "documents": 105,
-  "token_checks": 633086,
+  "families": 21,
+  "documents": 147,
+  "token_checks": 885098,
   "mismatches": 0,
   "rows": [
     {
       "family": "deepseek_v3",
       "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
+      "backend": "Gpu",
+      "documents": 7,
+      "token_checks": 39954,
+      "mismatches": 0
+    },
+    {
+      "family": "deepseek_v4_1_flash",
+      "artifact_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
       "backend": "Gpu",
       "documents": 7,
       "token_checks": 39954,
@@ -62,6 +70,14 @@
       "mismatches": 0
     },
     {
+      "family": "hy4",
+      "artifact_sha256": "ff67615de6e6ee073a20bd1fe3a776053e821573f4ae566aeb8e9d43de801201",
+      "backend": "Gpu",
+      "documents": 7,
+      "token_checks": 39954,
+      "mismatches": 0
+    },
+    {
       "family": "kimi_k3",
       "artifact_sha256": "773c2476259d9e092bba48d1f4840aaf584fa87cd5083a7e33b54d6d6f9feb77",
       "backend": "Gpu",
@@ -94,6 +110,14 @@
       "mismatches": 0
     },
     {
+      "family": "mimo_v2_6",
+      "artifact_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+      "backend": "Gpu",
+      "documents": 7,
+      "token_checks": 47118,
+      "mismatches": 0
+    },
+    {
       "family": "minimax_m3",
       "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
       "backend": "Gpu",
@@ -110,8 +134,24 @@
       "mismatches": 0
     },
     {
+      "family": "muse_spark",
+      "artifact_sha256": "ac2f41ef2444dec82fdc90e334f80543f298535005fe78aec7e8311ef86f84d0",
+      "backend": "Gpu",
+      "documents": 7,
+      "token_checks": 37906,
+      "mismatches": 0
+    },
+    {
       "family": "nemotron_3_nano_4b",
       "artifact_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+      "backend": "Gpu",
+      "documents": 7,
+      "token_checks": 47126,
+      "mismatches": 0
+    },
+    {
+      "family": "nemotron_super_vl",
+      "artifact_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
       "backend": "Gpu",
       "documents": 7,
       "token_checks": 47126,
@@ -139,6 +179,14 @@
       "backend": "Gpu",
       "documents": 7,
       "token_checks": 47118,
+      "mismatches": 0
+    },
+    {
+      "family": "step5_preview",
+      "artifact_sha256": "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0",
+      "backend": "Gpu",
+      "documents": 7,
+      "token_checks": 39954,
       "mismatches": 0
     }
   ]

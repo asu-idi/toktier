@@ -22,9 +22,9 @@ import verify_carryover  # noqa: E402
 # anchors to a campaign only when its source identities are exactly the ones
 # the registry carries, so these move with every recertification wave.
 CERTIFIED = {
-    "fast_cpu": "9594ff243421b89ff95137bda5a439a314343470951b6b7c0a98238bf51c4f41",
-    "native_host": "b023860bf3f52c709051e512d55685294ae3cc7661b498e181c2e37f8f8709c5",
-    "rust_api": "474f91cf321b988ed76b42cb422c901140e69b96bf34ebffd71cea0e66cd2e34",
+    "fast_cpu": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+    "native_host": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+    "rust_api": "c023b873df7c2d0e303ddadfc2aab0b2cb17f5388c969fa756e1e18a3d0c4915",
 }
 
 

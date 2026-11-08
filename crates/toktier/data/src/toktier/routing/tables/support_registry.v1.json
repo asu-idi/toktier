@@ -6,7 +6,7 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:a7200e415f0b72292564a8a7de26cb7d46488c0abcd122096bcfd7fd2ce53bef",
+  "root_digest": "sha256:a6c1c8c4abeca0ab645de51661122b66263083c509df800b6f66110edb976ea9",
   "oracles": [
     {
       "oracle_id": "tokenizers",
@@ -283,13 +283,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -408,13 +408,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -580,13 +580,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -705,13 +705,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -830,13 +830,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -955,13 +955,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1068,13 +1068,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1181,13 +1181,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1294,13 +1294,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1407,13 +1407,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1520,13 +1520,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1645,13 +1645,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1805,13 +1805,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -1930,13 +1930,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -2055,13 +2055,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -2168,13 +2168,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -2293,13 +2293,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -2406,13 +2406,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -2531,13 +2531,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -2683,13 +2683,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",
@@ -2808,13 +2808,13 @@
               "devices": [
                 "sm_120",
                 "sm_80",
-                "sm_89"
+                "sm_89",
+                "sm_90"
               ],
               "devices_experimental": [
                 "sm_100",
                 "sm_75",
-                "sm_86",
-                "sm_90"
+                "sm_86"
               ],
               "architecture_digests": {
                 "compute_75": "b47368bc564ff3890057133576cb94bf04081e57640a4f5283b115bf3909c1ad",

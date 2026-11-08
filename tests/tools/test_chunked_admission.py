@@ -400,7 +400,9 @@ def test_release_check_names_the_absent_roster_families(tmp_path: Path) -> None:
 
 def test_check_rejects_a_hand_edited_table(tmp_path: Path) -> None:
     table: dict[str, Any] = load_json(tool.TABLE_PATH)
-    table["rows"][0]["paths"] = ["python", "native"]
+    row = table["rows"][0]
+    # Flip the native path, whichever way the shipped row records it.
+    row["paths"] = ["python"] if "native" in row["paths"] else ["python", "native"]
     edited = tmp_path / "table.json"
     edited.write_bytes(
         serialise_document(with_root_digest(table, CHUNKED_ADMISSION_DOMAIN_TAG))

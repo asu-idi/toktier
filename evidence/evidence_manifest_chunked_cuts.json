@@ -4,12 +4,12 @@
   "generated_by": {
     "tool": "tools/update_chunked_admission.py",
     "tool_version": "1.0.0",
-    "source_commit": "b5967c17a81779b4939718b74e55291a9f706318",
-    "generated_at": "2026-10-15T10:48:20Z"
+    "source_commit": "98cd71b52aa73140d66e8056c8a1af7dc849a0c1",
+    "generated_at": "2026-11-08T13:42:05Z"
   },
   "run": {
-    "run_id": "chunked-cuts-20260917",
-    "date": "2026-09-17",
+    "run_id": "chunked-cuts-20261108",
+    "date": "2026-11-08",
     "suite_version": "chunked-cuts-four-way-v1"
   },
   "oracle": {
@@ -75,16 +75,41 @@
     "mismatches": 0
   },
   "environment": {
-    "os": "Linux x86_64",
-    "python": "3.12.14",
+    "os": "Linux x86_64 (Rocky Linux release 8.10 (Green Obsidian))",
+    "python": "3.13.13",
     "hosts": [
+      "sc003",
+      "sc004",
+      "sc005",
+      "sc007",
+      "sc008",
       "sc018",
-      "sc046",
-      "sc104",
-      "sc105",
-      "scc053",
-      "scc058"
+      "sc019",
+      "sc022",
+      "sc024",
+      "sc025",
+      "sc028",
+      "sc030",
+      "sc032",
+      "sc043",
+      "sc059",
+      "sc061",
+      "sc062",
+      "sc075",
+      "sc076",
+      "sc078",
+      "sc079",
+      "sc086",
+      "sc087",
+      "sc088",
+      "sc090",
+      "sc091",
+      "sc092",
+      "sc093",
+      "sc095",
+      "sc110",
+      "sc111"
     ]
   },
-  "root_digest": "sha256:6adcb963e5d980b9cb9b8732147dfe69e7056464b850dfcb34e4c69b3918792f"
+  "root_digest": "sha256:7913c07e626bc7cba6bf4752b5c68e9a52c906fcdfb9bed1285b8853d0ce4eef"
 }

@@ -356,11 +356,19 @@ cover the encoding of the text without that token. Under the pinned
 loader pair the repository loads through `LlamaTokenizerFast` and its loader
 face is the file; `transformers` 4.57.6 prints a notice suggesting
 `fix_mistral_regex=True` for this configuration, and the flag was not set
-anywhere in the campaign or in this package. A `transformers` 5.x release
-materializes a different object from the same files (a `LlamaTokenizer`
-whose ids differ from the file's on some inputs); beside such a loader the
-facade reports `R_LOADER_FACE_MISMATCH`, closes the accelerated routes and
-runs the reference engine on the face the installed loader built.
+anywhere in the campaign or in this package. The configuration declares
+no added token beyond the file, so the facade executes the file as written
+and does not materialize the loader's object for this artifact: the face it
+compares is the file, and the ids it serves are the file's whichever
+`transformers` release is installed. A `transformers` 5.x release can build
+a different object from the same files. Beside 5.12.1, `AutoTokenizer`
+returns a `LlamaTokenizer` whose ids differ from the file's (on each of 200
+sampled multilingual documents, checked on 2026-11-07); beside 5.22.2 it
+returns an object whose ids equal the file's. The facade reports no
+`R_LOADER_FACE_MISMATCH` in either case, so beside a loader of the first
+kind the ids toktier returns for this artifact are the file's, the object
+the readings were taken on, and differ from those of the installed
+`AutoTokenizer`.
 
 `muse_spark` note: the anchor is the upstream repository at revision
 `0fb02478b025`. Access to it is granted on request, so fetching the

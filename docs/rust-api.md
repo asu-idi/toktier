@@ -875,15 +875,11 @@ once it holds both, and the same label is carried by
 `ChunkedStats::evidence_label` and by every `ChunkedEncoding` that was
 cut (a serial result's ids are the plain route's, and it carries none).
 The label is a function of the row alone, for a refused tokenizer as
-well. In this release four of the eleven roster artifacts
-have certified rows (qwen3_8b, llama_3_1_8b, deepseek_v3 and
-gpt_oss_120b) and are admitted under the default policy with the label
-`native_evidence:adversarial_only`, since the native path holds the
-adversarial battery and not yet the corpus cut comparison; the other
-seven answer `chunked_evidence_incomplete:adversarial_only`, as they do
-on the Python face. A table whose rows record the corpus level for the
-native path removes the label without a code change. Either way the ids
-equal the serial encode. `Policy::Experimental` lifts the table step,
+well. In this release all eleven roster artifacts have certified rows
+that hold both levels for the native path as well, so they are admitted
+under the default policy and the label reads `None`, as on the Python
+face. Either way the ids equal the serial encode.
+`Policy::Experimental` lifts the table step,
 the way the campaign tool lifts it to collect the evidence a row is
 made of; `admission().gate` says when that happened, every result is
 labelled `Certification::Experimental` like the rest of the route, and

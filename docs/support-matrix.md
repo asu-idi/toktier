@@ -132,7 +132,7 @@ it, and only two of them are about the chunked path.
 |---|---|---|
 | Engine differential | the corrected CPU engine encoding whole documents; it never cuts one, so it says nothing about cuts | 41,800,181,401 checks, 11 artifacts x 3,800,016,491 documents, 0 divergences ([`tools/fast_cpu_binding.json`](../tools/fast_cpu_binding.json)) |
 | Adversarial battery | the cut rule on strings built to stress it: decomposing characters, combining sequences, jamo, kana voicing marks, literals beside marks | 460,000 strings, 11 artifacts (100,000 each for qwen3_8b, qwen3_5_08b and minimax_m3, 20,000 for each of the other eight), Python and native paths, 0 mismatches in all four comparisons and 0 plan differences between the two paths, 2026-10-15 ([`readings/chunked_cuts_campaign.json`](../readings/chunked_cuts_campaign.json), adversarial section) |
-| Corpus cut comparison | web documents of 512 to 400,000 characters, encoded with forced cuts and compared id for id with the serial encode and the reference | <!-- TODO(fill): documents per family, families, paths, mismatches and serial fallbacks from readings/chunked_cuts_campaign.json --> |
+| Corpus cut comparison | web documents of 512 to 400,000 characters, encoded with forced cuts and compared id for id with the serial encode and the reference | 102,400,000 documents for each of the 11 roster artifacts, Python and native paths, 0 mismatches in all four comparisons and 0 plan differences between the two paths; 35 or 36 documents per artifact had no admissible cut and were encoded serially on both paths, 2026-11-08 ([`readings/chunked_cuts_campaign.json`](../readings/chunked_cuts_campaign.json)) |
 
 The engine differential stays what it was in the section above. It
 supports the chunked path only in the sense that each chunk is encoded
@@ -153,10 +153,8 @@ on: the Python path to `chunked_identity`, a digest of
 `toktier/chunked.py` and the two repair tables it reads, and the native
 path to the corrected CPU engine's version-normalized source digest. A
 change to either code takes the matching rows out of the evidence until
-it is measured again. In the table as it stands, four of the eleven
-roster artifacts have certified rows, on the Python path, and the other
-seven have rows with adversarial evidence only.
-<!-- TODO(fill): revise this coverage sentence once the release campaign readings are entered, e.g. "All eleven roster artifacts have rows, on both paths." -->
+it is measured again. All eleven roster artifacts have certified rows,
+on both paths.
 
 ## Pinned Fastokens distribution (toktier-fastokens)
 
@@ -246,17 +244,17 @@ package.
 
 | Family id | Anchor repository | Artifact sha256 (prefix) | CPU fast repair | GPU status | Chunked cuts |
 |---|---|---|---|---|---|
-| `qwen3_8b` | `Qwen/Qwen3-8B` | aeb13307a71a | certified (Gigatoken) | certified (prebuilt) | certified (python) |
-| `qwen3_5_08b` | `Qwen/Qwen3.5-0.8B` | 5f9e4d4901a9 | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
-| `llama_3_1_8b` | `meta-llama/Llama-3.1-8B` | 76e48799b099 | certified (Gigatoken) | certified (prebuilt) | certified (python) |
-| `deepseek_v3` | `deepseek-ai/DeepSeek-V3` | 621ac2e32d0d | certified (Gigatoken) | certified (prebuilt) | certified (python) |
-| `deepseek_v4_flash` | `deepseek-ai/DeepSeek-V4-Flash` | 8f9f37ca37fd | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
-| `gpt_oss_120b` | `openai/gpt-oss-120b` | 0614fe83cada | certified (Gigatoken) | certified (prebuilt) | certified (python) |
-| `glm_5_2` | `zai-org/GLM-5.2` | 19e773648cb4 | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
-| `minimax_m3` | `MiniMaxAI/MiniMax-M3` | bb1f1626cf01 | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
-| `ministral_3_8b` | `mistralai/Ministral-3-8B-Instruct-2512-BF16` | d5f6046775b1 | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
-| `nemotron_3_nano_4b` | `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` | 623c34567aeb | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
-| `olmo_3_7b` | `allenai/Olmo-3-1025-7B` | 73fd5254624f | certified (Gigatoken) | certified (prebuilt) | not admitted (adversarial evidence only) |
+| `qwen3_8b` | `Qwen/Qwen3-8B` | aeb13307a71a | certified (Gigatoken) | certified (prebuilt) | certified (python, native) |
+| `qwen3_5_08b` | `Qwen/Qwen3.5-0.8B` | 5f9e4d4901a9 | certified (Gigatoken) | certified (prebuilt) | certified (python, native) |
+| `llama_3_1_8b` | `meta-llama/Llama-3.1-8B` | 76e48799b099 | certified (Gigatoken) | certified (prebuilt) | certified (python, native) |
+| `deepseek_v3` | `deepseek-ai/DeepSeek-V3` | 621ac2e32d0d | certified (Gigatoken) | certified (prebuilt) | certified (python, native) |
+| `deepseek_v4_flash` | `deepseek-ai/DeepSeek-V4-Flash` | 8f9f37ca37fd | certified (Gigatoken) | certified (prebuilt) | certified (python, native) |
+| `gpt_oss_120b` | `openai/gpt-oss-120b` | 0614fe83cada | certified (Gigatoken) | certified (prebuilt) | certified (python, native) |
+| `glm_5_2` | `zai-org/GLM-5.2` | 19e773648cb4 | certified (Gigatoken) | certified (prebuilt) | certified (python, native) |
+| `minimax_m3` | `MiniMaxAI/MiniMax-M3` | bb1f1626cf01 | certified (Gigatoken) | certified (prebuilt) | certified (python, native) |
+| `ministral_3_8b` | `mistralai/Ministral-3-8B-Instruct-2512-BF16` | d5f6046775b1 | certified (Gigatoken) | certified (prebuilt) | certified (python, native) |
+| `nemotron_3_nano_4b` | `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` | 623c34567aeb | certified (Gigatoken) | certified (prebuilt) | certified (python, native) |
+| `olmo_3_7b` | `allenai/Olmo-3-1025-7B` | 73fd5254624f | certified (Gigatoken) | certified (prebuilt) | certified (python, native) |
 | `hy3` | `tencent/Hy3` | 446e0b59cd94 | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
 | `kimi_k3` | `moonshotai/Kimi-K3` | 773c2476259d | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
 | `ling_3_0_flash` | `inclusionAI/Ling-3.0-flash` | 40fb9d7d7795 | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
@@ -265,9 +263,8 @@ package.
 | `step5_preview` | `stepfun-ai/Step-5-Preview` | b564c620eb77 | unsupported (no repair row); HF | certified (prebuilt) | not admitted |
 | `muse_spark` | `meta-models/Muse-Spark-Open-816B-A42B` | ac2f41ef2444 | unsupported (no repair row); HF | certified (prebuilt) | not admitted |
 | `nemotron_super_vl` | `nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16` | d0432ad8b1c2 | unsupported (no repair row); HF | certified (prebuilt) | not admitted |
-| `deepseek_v4_1_flash` | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | c90dfa01249d | certified (Gigatoken), carried from `deepseek_v4_flash` | certified (prebuilt), carried from `deepseek_v4_flash` | not admitted |
-| `mimo_v2_6` | `XiaomiMiMo/MiMo-V2.6-Flash-RL` | ff15eb925890 | certified (Gigatoken), carried from `qwen3_8b` | certified (prebuilt), carried from `qwen3_8b` | not admitted |
-<!-- TODO(fill): set the Chunked cuts column again from the shipped routing/tables/chunked_admission.v1.json once the release campaign readings are entered; the values above follow the table as it stands before that campaign (four certified on the Python path, seven with adversarial evidence only). -->
+| `deepseek_v4_1_flash` | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | c90dfa01249d | certified (Gigatoken), carried from `deepseek_v4_flash` | certified (prebuilt), carried from `deepseek_v4_flash` | not admitted (row pending) |
+| `mimo_v2_6` | `XiaomiMiMo/MiMo-V2.6-Flash-RL` | ff15eb925890 | certified (Gigatoken), carried from `qwen3_8b` | certified (prebuilt), carried from `qwen3_8b` | not admitted (row pending) |
 
 Pinned upstream revisions are recorded per row as
 `support.repo_revision.{family}` in the generated table; the package verifies
@@ -279,22 +276,18 @@ the chunked admission table that ships with the package
 the evidence in `evidence/evidence_manifest_chunked_cuts.json` and
 `readings/chunked_cuts_campaign.json`. `certified (python, native)`
 means the table's row holds both levels of evidence for the Python path
-and for the native chunk encoder, and `certified (python)` means it
-holds both for the Python path and the adversarial battery alone for
-the native one. The artifact is admitted either way, and
-`chunked.encode` runs the native encoder by default wherever it can run;
-in the second case `chunked.admission` labels it
-`native_evidence:adversarial_only`. `not admitted (adversarial evidence only)` means
-the table has a row that holds the adversarial battery and not yet the
-corpus cut comparison; such a row is not certified, so chunked encode
-runs serially and names the refusal
-`chunked_evidence_incomplete:adversarial_only` until the corpus
-comparison covers the artifact. `not admitted (evidence pending)` means
-the artifact is on the certified repair roster with a normalizer the cut
-rule reasons about, but no row exists yet, so chunked encode runs
+and for the native chunk encoder; the artifact is admitted, and
+`chunked.encode` runs the native encoder by default wherever it can run.
+`not admitted (row pending)` marks the two carried artifacts: they run
+on the corrected CPU engine, certified through a carry-over, but the
+table has no row for them in this release, so chunked encode runs
 serially and names the refusal `artifact_without_chunked_evidence`.
-`not admitted` alone means the artifact is not on the repair roster at
-all. The whole-document routes
+Their cut readings are taken, and the row is registered for a later
+release. `not admitted` alone means the artifact is not on the repair
+roster (its CPU route is the reference engine); the chunked path is for
+the corrected CPU engine's route only, so chunked encode runs
+serially and names the refusal `artifact_not_in_certified_repair_roster`.
+The whole-document routes
 in the other columns do not depend on this one; see
 [Certified chunk cuts](#certified-chunk-cuts).
 

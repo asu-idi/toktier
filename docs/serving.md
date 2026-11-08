@@ -244,15 +244,13 @@ The native path does not wait for a complete record of its own
 evidence. Both paths make the same cuts and return the serial ids by
 construction, and a call that cannot be cut is encoded serially, so
 the table's record for the native path is shown as a label rather than
-used as a condition. Where that record holds the adversarial battery
-but not yet the corpus cut comparison, as on the certified rows of the
-table shipped with this release, the native encoder runs on the
-certified row and `native_evidence_label` reads
-`native_evidence:adversarial_only` (`corpus_only` and `none` are
-spelled the same way). When the corpus comparison for the native path
-is recorded in the table, the label reads `None`, with no change of
-code. A row that is not certified is
-refused on both paths alike.
+used as a condition. On the rows of the table shipped with this
+release that record holds both levels, so `native_evidence_label` reads
+`None`. A row whose native record held the adversarial battery but not
+yet the corpus cut comparison would still run the native encoder on a
+certified row, with the label `native_evidence:adversarial_only`
+(`corpus_only` and `none` are spelled the same way). A row that is not
+certified is refused on both paths alike.
 
 `Tokenizer.encode(text, parallel="auto")`, or `parallel=` a positive
 chunk count, makes the same choice for a stateless core-stream call (no

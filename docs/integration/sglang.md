@@ -522,11 +522,10 @@ detail names the recorded face (`a57b5c62...`) and the observed one
 (`ffb7a28b...`); `probe.loader_face_sha256` carries the observed digest.
 The ids are those of the installed Hugging Face object, as they were, and
 no certified claim attaches to them. The chunk-parallel path does not
-chunk it either. In the admission table as it stands its row holds
-adversarial evidence only, so `explain()["chunked"]["refusal"]` reads
-`chunked_evidence_incomplete:adversarial_only` under both versions; once
-the row is certified, the face recorded in it refuses a different one
-(`loader_face_differs_from_chunked_evidence:<digest>`). The other ten
+chunk it either: its row in the admission table is certified and
+records the face its evidence was taken on, so the different face is
+refused, and `explain()["chunked"]["refusal"]` reads
+`loader_face_differs_from_chunked_evidence:<digest>`. The other ten
 families materialize the same face under both versions, and nothing
 about their `explain()` changes.
 Beside `transformers` 5.19.0, the loader SGLang's main branch pins,

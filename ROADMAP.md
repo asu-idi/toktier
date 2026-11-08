@@ -192,8 +192,6 @@ cuts long requests into chunk tasks on the same rule.
 
 What remains is registered for a later release:
 
-- chunked-path evidence for every roster artifact the shipped admission
-  table does not yet certify;
 - a patch-shaped native return for session appends, behind the
   `Session.append_patch` surface shipped in 0.3.0;
 - a pool entry point outside SGLang;
@@ -208,7 +206,6 @@ What remains is registered for a later release:
   encoder's pool already has; and per-chunk guard judgement inside a
   plain `encode`, so that an unchunked request only pays reference speed
   for the passage that tripped a guard.
-<!-- TODO(fill): drop the first item if the shipped admission table certifies every roster artifact. -->
 
 0.3.2: segment the serial fast route at added-token literals the way the
 chunked rows are. Today a prompt that contains an added-token literal, as
@@ -231,6 +228,19 @@ now says; an earlier text of that contract called it `INVALID_ARGUMENT`.
 says that by default the call is not a native change, while the native
 chunk encoder runs by default on the certified rows; `docs/serving.md`
 Section 3 describes the current rule.
+
+0.3.2: add chunked admission rows for the two carried artifacts,
+`deepseek_v4_1_flash` and `mimo_v2_6`. Their cut readings and adversarial
+battery are taken; the table generator first has to accept a carried
+record.
+
+0.3.2: serve the default `add_special_tokens=True` on the corrected CPU
+engine. Today a plain `encode(text)` on an artifact with a post-processor
+is served by the reference backend at reference speed; the ids are
+unaffected. The plan is to classify
+post-processors, so that one which inserts no token takes the fast route,
+and, for the artifacts whose template does insert tokens, to insert them in
+the facade with certified readings for `add_special_tokens=True`.
 
 ## Routing large session deltas to the GPU
 

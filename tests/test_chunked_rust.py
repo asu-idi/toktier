@@ -247,8 +247,15 @@ def test_rust_admission_refusals_equal_the_python_ones(
         # Rust face, and where it refuses on the table, the strings are
         # identical. (The installed-reference check of the Python face has
         # no Rust counterpart; Section "Admission" of the module says why.)
-        if python_refusal is None or not python_refusal.startswith(
-            "oracle_differs_from_chunked_evidence"
+        # A certified row taken on a loader face other than the file the
+        # Rust face reads refuses there by the face rule (asserted above),
+        # whatever the Python face decides on its own face.
+        rust_face_refusal = isinstance(rust["refusal"], str) and rust[
+            "refusal"
+        ].startswith("loader_face_differs_from_chunked_evidence")
+        if not rust_face_refusal and (
+            python_refusal is None
+            or not python_refusal.startswith("oracle_differs_from_chunked_evidence")
         ):
             assert (rust["refusal"] is None) == (python_refusal is None), family
         if python_refusal is not None and python_refusal.startswith(
@@ -306,6 +313,13 @@ def test_rust_default_policy_admits_the_certified_rows(
         )
         rust = report["admission"]
         assert rust["gate"] == "EvidenceTable"
+        face_refusal = _expected_rust_refusal(None, row, rust["artifact_sha256"])
+        if face_refusal is not None:
+            # The row was taken on a loader face other than the file the
+            # Rust face reads: refused there by the face rule.
+            assert rust["admitted"] is False, (family, rust)
+            assert rust["refusal"] == face_refusal, (family, rust)
+            continue
         assert rust["admitted"] is True and rust["refusal"] is None, (family, rust)
         native_levels = list(row["evidence"]["native"])
         assert rust["native_evidence"] == native_levels, family

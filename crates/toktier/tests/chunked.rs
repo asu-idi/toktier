@@ -287,10 +287,8 @@ fn admission_follows_the_roster_the_structural_rule_and_the_shipped_table() {
             "{family}"
         );
         // The Python face's status decides; the native levels only label,
-        // admitted or not. In this release every row holds the battery
-        // alone for the native path, so the label reads adversarial_only
-        // on all of them, and the uncertified rows answer with the Python
-        // face's string.
+        // admitted or not, and the uncertified rows answer with the
+        // Python face's string.
         assert_eq!(
             admission.evidence_label,
             expected_label(Some(row)),
@@ -358,6 +356,15 @@ fn the_default_policy_admits_the_certified_rows_and_labels_the_native_evidence()
         let chunked = tokenizer.chunked();
         let admission = chunked.admission().unwrap();
         assert_eq!(admission.gate, AdmissionGate::EvidenceTable);
+        // A certified row whose evidence was taken on a loader face other
+        // than the file this face reads does not speak for it: refused,
+        // with the rule's string, and not encoded here.
+        let refusal = expected_table_refusal(row, &admission.artifact_sha256);
+        if refusal.is_some() {
+            assert!(!admission.admitted, "{family}");
+            assert_eq!(admission.refusal, refusal, "{family}");
+            continue;
+        }
         assert!(admission.admitted, "{family}: {:?}", admission.refusal);
         assert_eq!(admission.refusal, None);
         let label = expected_label(row);

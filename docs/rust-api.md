@@ -853,7 +853,10 @@ readings were taken on a loader face other than the artifact file; and
 whether the admitted route carries the corrected CPU engine
 (`cpu_route`), reported beside the refusal rather than as one. The two
 faces therefore admit and refuse the same artifacts with the same
-strings. A refused tokenizer is encoded serially on the plain route
+strings, except where a certified row's loader face is not the artifact
+file: in this release that is `qwen3_5_08b`, which the Python facade
+admits on the face it materializes and this crate refuses with
+`loader_face_differs_from_chunked_evidence:<digest>`. A refused tokenizer is encoded serially on the plain route
 under `ChunkFamilyUnsupported`, and `plan()` says why with
 `UNCERTIFIED_TOKENIZER`; an admitted tokenizer whose route does not
 start at the corrected CPU engine, a route without the engine included,
@@ -876,9 +879,10 @@ once it holds both, and the same label is carried by
 cut (a serial result's ids are the plain route's, and it carries none).
 The label is a function of the row alone, for a refused tokenizer as
 well. In this release all eleven roster artifacts have certified rows
-that hold both levels for the native path as well, so they are admitted
-under the default policy and the label reads `None`, as on the Python
-face. Either way the ids equal the serial encode.
+that hold both levels for the native path as well, and the label reads
+`None`, as on the Python face; ten are admitted under the default
+policy, and `qwen3_5_08b` is refused by the loader-face rule above.
+Either way the ids equal the serial encode.
 `Policy::Experimental` lifts the table step,
 the way the campaign tool lifts it to collect the evidence a row is
 made of; `admission().gate` says when that happened, every result is

@@ -278,6 +278,9 @@ the evidence in `evidence/evidence_manifest_chunked_cuts.json` and
 means the table's row holds both levels of evidence for the Python path
 and for the native chunk encoder; the artifact is admitted, and
 `chunked.encode` runs the native encoder by default wherever it can run.
+The Rust crate reads the artifact file rather than the loader face, so
+it refuses `qwen3_5_08b`, whose row was taken on the face the Python
+facade materializes (`loader_face_differs_from_chunked_evidence`).
 `not admitted (row pending)` marks the two carried artifacts: they run
 on the corrected CPU engine, certified through a carry-over, but the
 table has no row for them in this release, so chunked encode runs

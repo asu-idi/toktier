@@ -194,8 +194,8 @@ def verify(wheel: Path) -> None:
             if row.get("backends", {}).get("fast_cpu", {}).get("status")
             == "certified_source"
         ]
-        if len(certified_cpu) != 11:
-            _fail("wheel registry does not certify eleven integrated CPU artifacts")
+        if len(certified_cpu) != 13:
+            _fail("wheel registry does not certify thirteen integrated CPU artifacts")
         for entry in certified_cpu:
             if (
                 entry.get("engine_delivery") != "integrated"

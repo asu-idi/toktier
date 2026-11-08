@@ -503,7 +503,7 @@ history: `keep_tokens()` is where the downstream buffer is cut,
 `replacement_ids()` is the exact repaired suffix. The label is read from
 `plan()`: with this dependency `certification` reads `Supported` with no
 reason, and `Policy::Certified` plans the same route with the same label.
-The build is not the judged recipe (`network` is on, and a path dependency
+The build is not the judged recipe (`network` is on, and a registry dependency
 resolves against your project's own lockfile), so the route carries the
 supported label rather than a certified one; [`docs/rust-api.md`](docs/rust-api.md)
 describes the build that reads `CertifiedSource`. The Python facade is not the serving path:

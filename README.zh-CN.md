@@ -422,7 +422,7 @@ kept 1087 ids, appended 10
 `replacement_ids()` 是 repair 后的精确后缀。标签从 `plan()` 读取：
 用这种依赖方式时 `certification` 读作 `Supported`，没有 reason；
 `Policy::Certified` 规划出同一条路径、同一个标签。这个构建不是经过判定的配方
-（开启了 `network`，且路径依赖按你项目自己的 lockfile 解析），所以路径带的是
+（开启了 `network`，且按版本取的 registry 依赖按你项目自己的 lockfile 解析），所以路径带的是
 supported 标签而不是认证标签；读作 `CertifiedSource` 的构建方式见
 [`docs/rust-api.md`](docs/rust-api.md)。Python 门面不是服务路径：
 `toktier.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash-1017")` 以同一条 CPU

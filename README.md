@@ -62,6 +62,7 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
 
 ## News
 
+- **2026.11.08** 🚀 **toktier 0.3.1** released: six more certified tokenizer artifacts (`hy4`, `step5_preview`, `muse_spark`, `nemotron_super_vl`, `deepseek_v4_1_flash`, `mimo_v2_6`), and the prebuilt GPU delivery is now certified on `sm_80` and `sm_90` as well. Upgrading from 0.3.0: a persistent session store written by 0.3.0 is not opened by 0.3.1, so point `store=` at a new directory. See the [v0.3.1 release notes](docs/releases/v0.3.1.md).
 - **2026.10.15** 🚀 **toktier 0.3.0** released — one long request can now use
   more than one core on the CPU route without leaving the exact-ID contract.
   `toktier.chunked.encode` cuts the input at certified stable boundaries,
@@ -421,7 +422,7 @@ data, and every fallback counter.
 
 ## Rust serving API
 
-### DeepSeek-V4.1-Flash-1017 from `main`: the shortest path
+### DeepSeek-V4.1-Flash-1017: the shortest path
 
 `deepseek-ai/DeepSeek-V4.1-Flash-1017` (and `DeepSeek-V4.1-Flash` and
 `DeepSeek-V4-Flash-Vision-Exp`, which ship the same `tokenizer.json`) is the
@@ -432,24 +433,22 @@ family's readings through the cross-artifact carry-over
 ([support matrix](docs/support-matrix.md#certified-by-cross-artifact-carry-over-deepseek-v41-flash-and-mimo-v26)).
 The same holds for `XiaomiMiMo/MiMo-V2.6-Flash-RL` as `mimo_v2_6`, carried
 from `qwen3_8b`.
-No crates.io release carries it yet, so clone `main` next to your project
-and depend on the crate by path; once a release carries the family, switch
-the line back to a version number.
+toktier 0.3.1 on crates.io carries the family, so a new project takes the
+crate by version:
 
 ```sh
-git clone https://github.com/asu-idi/toktier
 cargo new v41-example && cd v41-example
 ```
 
 ```toml
 [dependencies]
-toktier = { path = "../toktier/crates/toktier", features = ["network"] }
+toktier = { version = "0.3.1", features = ["network"] }
 ```
 
-Take the crate by path rather than as a `git` dependency: Cargo records a
-`git` source for this crate's own siblings, the certified-core check then reads
-`mismatched`, and the plan is the reference route
-([`docs/rust-api.md`](docs/rust-api.md)).
+If you build from a clone of `main` instead, depend on `crates/toktier` by
+path rather than as a `git` dependency: Cargo records a `git` source for this
+crate's own siblings, the certified-core check then reads `mismatched`, and
+the plan is the reference route ([`docs/rust-api.md`](docs/rust-api.md)).
 
 ```rust
 use toktier::{Device, Policy, Revision, Runtime};

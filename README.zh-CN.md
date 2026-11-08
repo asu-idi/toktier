@@ -52,6 +52,7 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 
 ## 最新动态
 
+- **2026.11.08** 🚀 **toktier 0.3.1** 发布：新增六个已认证 tokenizer——`hy4`、`step5_preview`、`muse_spark`、`nemotron_super_vl`、`deepseek_v4_1_flash`、`mimo_v2_6`；预编译 GPU 交付新增 `sm_80` 与 `sm_90` 认证。从 0.3.0 升级时，持久 session store 需换新目录。详见[发布说明](docs/releases/v0.3.1.md)。
 - **2026.10.15** 🚀 **toktier 0.3.0** 发布——单个长请求现在可以在 CPU 路由上用到
   多个核，且不离开精确 ID 契约。`toktier.chunked.encode` 在认证过的稳定边界处
   切开输入，并行编码各块再拼接 id，按构造即等于串行编码；它既可以作为批路径之上
@@ -345,7 +346,7 @@ fallback 的计数。
 
 ## Rust serving API
 
-### 从 `main` 跑 DeepSeek-V4.1-Flash-1017：最短路径
+### DeepSeek-V4.1-Flash-1017：最短路径
 
 `deepseek-ai/DeepSeek-V4.1-Flash-1017`（以及 `DeepSeek-V4.1-Flash`、
 `DeepSeek-V4-Flash-Vision-Exp`，三者的 `tokenizer.json` 逐字节相同）是已认证的
@@ -354,22 +355,20 @@ family `deepseek_v4_1_flash`。它的 pipeline 与已认证的 `deepseek_v4_flas
 因此通过跨工件 carry-over 沿用该 family 的读数
 （[支持矩阵](docs/support-matrix.md#certified-by-cross-artifact-carry-over-deepseek-v41-flash-and-mimo-v26)）。
 `XiaomiMiMo/MiMo-V2.6-Flash-RL` 以 `mimo_v2_6` 同样从 `qwen3_8b` 沿用。
-crates.io 上的发布版还没有这个 family，所以请把 `main` 克隆到项目旁边，
-按路径依赖这个 crate；等发布版收录后，把这一行改回版本号即可。
+crates.io 上的 toktier 0.3.1 已收录这个 family，新项目按版本依赖即可：
 
 ```sh
-git clone https://github.com/asu-idi/toktier
 cargo new v41-example && cd v41-example
 ```
 
 ```toml
 [dependencies]
-toktier = { path = "../toktier/crates/toktier", features = ["network"] }
+toktier = { version = "0.3.1", features = ["network"] }
 ```
 
-请用路径依赖，而不是 `git` 依赖：Cargo 会把这个 crate 的同仓 crate 记为
-`git` 来源，认证核心的检查随之读作 `mismatched`，计划走参考路由
-（[`docs/rust-api.md`](docs/rust-api.md)）。
+若从 `main` 的克隆构建，请按路径依赖 `crates/toktier`，而不是 `git` 依赖：
+Cargo 会把这个 crate 的同仓 crate 记为 `git` 来源，认证核心的检查随之读作
+`mismatched`，计划走参考路由（[`docs/rust-api.md`](docs/rust-api.md)）。
 
 ```rust
 use toktier::{Device, Policy, Revision, Runtime};

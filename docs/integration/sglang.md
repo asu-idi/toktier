@@ -493,8 +493,8 @@ This release ships three certified reference versions: `tokenizers`
 SGLang 0.5.19 to 0.5.21 and 0.23.2 for SGLang's main branch. The two 0.23
 releases were certified on readings taken with each of them installed
 beside `transformers` 5.19.0: the fast CPU engine on 1,437,469 documents
-and the prebuilt GPU engine on sm_120 (16,540,125 documents) and on sm_89
-(1,500,000 documents), every id equal to the installed release's, and the
+and the prebuilt GPU engine on sm_120 (23,156,175 documents) and on sm_89
+(2,100,000 documents), every id equal to the installed release's, and the
 chunk-parallel path's adversarial battery (460,000 strings over eleven
 artifacts), with no difference in any comparison. The parity readings
 ship in `readings/oracle_compat/`.

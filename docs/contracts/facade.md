@@ -80,9 +80,24 @@ tok.explain()                                # full plan, reasons, counters
   that crossover. `device="cpu"` disables GPU adoption and device probing;
   `device="cuda"` requires an eligible GPU route and raises
   `BACKEND_UNAVAILABLE` if the planner cannot open one.
-- `gpu_delivery="auto"` maps the `gpu` installation profile to the shipped
-  prebuilt delivery and the `gpu-jit` profile to local JIT. The explicit
-  values `"prebuilt"` and `"jit"` take precedence over profile detection.
+  `device="cuda:N"` requires it on CUDA ordinal `N` among the visible
+  devices, a decimal without a leading zero (`cuda:0` included): the
+  planner judges the route on device `N` alone, so another card on a mixed
+  host cannot open it. `N` is the index the CUDA runtime reports, which
+  matches the system tool's numbering only when the device order is pinned
+  to bus order (`CUDA_DEVICE_ORDER=PCI_BUS_ID`). A refusal carries
+  `requested_ordinal` and `visible_devices` in its `details`, and names the
+  ordinal in its message when it is not among them.
+- `gpu_delivery="auto"` takes the shipped prebuilt delivery whenever the
+  route plan built with it holds the GPU backend for this tokenizer, and
+  local JIT only when that plan does not and the `gpu-jit` installation
+  profile is present (`ninja` importable, the profile's marker) and the
+  plan built with JIT holds it; otherwise it reads `prebuilt`, so a closed
+  route reports the prebuilt reasons. With `device="cpu"` or the
+  `REFERENCE` policy nothing is probed and `auto` reads `prebuilt`. A
+  process that has already loaded one delivery keeps it, since a second
+  cannot load beside it. The explicit values `"prebuilt"` and `"jit"`
+  take precedence over this rule.
 - Artifacts resolve through the shipped manifest and the verified cache
   (per-file sha256, `registry.md` Section 4). Routing follows the
   standing policy semantics: the plan is fixed at construction and adopts the
@@ -181,10 +196,27 @@ def encode(self, text, *, session=None, lookup=None,
   named sessions, while strict prefix extensions use CPU repair.
 - `lookup="off"`: skip the store entirely. `session` and `lookup` do
   not combine.
-- `add_special_tokens=True` is served by the plain routed path.
-  Combining it with an explicit `session` or `lookup="auto"` raises
-  `UNSUPPORTED_CONFIG` (the stored stream is the core stream; we reject
-  rather than silently re-encode).
+- `add_special_tokens=True` means the post-processor of the reference
+  document (the loader face, Section 5): the call returns the core stream
+  with whatever that post-processor adds around a single sequence. No
+  loader release is consulted. The post-processor is classified once at
+  construction: `identity` when it adds nothing to a single sequence
+  (absent, `ByteLevel`, a template whose single form is the sequence
+  alone, or a `Sequence` of those with at most one template), `prefix`
+  when the single form is one special token carrying one id followed by
+  the sequence, and `reference` for anything else (a suffix, both sides,
+  several special tokens, the BERT and RoBERTa processors, truncation or
+  padding, unknown shapes). For `identity` and `prefix` the core stream
+  runs on the plain routed path with the store bypassed and the facade
+  places the prefix id in front; for `reference` the request runs on the
+  reference engine. The class is confirmed on the reference engine at
+  construction, `encode(p, True) == prefix_ids + encode(p, False)` over a
+  fixed probe set (an empty, ASCII and non-ASCII text, and the face's first
+  added token alone and inside text), and any difference or error demotes
+  it to `reference`, which can only cost speed. Combining `True` with an
+  explicit `session` or `lookup="auto"` raises `UNSUPPORTED_CONFIG` (the
+  stored stream is the core stream; we reject rather than silently
+  re-encode).
 - `encode_batch` runs the plain routed path row by row; content lookup
   is a single-document affair in 0.x.
 
@@ -199,9 +231,27 @@ Four layers with distinct loss semantics, named honestly:
    through the current engine; anything that fails is a miss, never a
    wrong answer. A store written under a different semantic fingerprint
    (artifact, oracle, or engine semantics changed) is refused with
-   `SESSION_STATE_MISMATCH`. The fingerprint includes the selected repair
-   backend, its delivery/version/configuration, and corrected-Gigatoken
-   binary/config digests, so state does not cross engine meanings.
+   `SESSION_STATE_MISMATCH`. The fingerprint binds the artifact, the
+   loader face, the oracle package and version, the facade engine and
+   session semantics, the selected repair backend with its
+   configuration, version and digest, the repair parameters in force,
+   and the corrected CPU engine's version, build flags, toolchain and
+   configuration digest, so state does not cross engine meanings. Its
+   source-identity part depends on who owns the store. A store owned by
+   the native request runtime is keyed on the version-normalized source
+   identities of the corrected CPU engine and the native host
+   (`fast_cpu` v2, `native_host` v2) whenever the shipped registry binds
+   them to this build: it is refused when the engine or host code
+   changes, and not when only the package version does. A store owned by
+   the Python entry store, a development build, or a registry that does
+   not bind the pair keys on the exact per-build digests. A store an
+   earlier release wrote in the earlier key form is recognized through
+   the shipped history table
+   (`routing/tables/store_fingerprint_history.v1.json`) when that
+   release's version-normalized pair, loader face and repair parameters
+   equal this build's for the artifact, and is then opened under its own
+   stored key, never rewritten. This describes the Python facade's
+   stores; the Rust crate keys its own stores by its own rule.
 2. **Sealed-entry recovery binding** (`entries/<name>.binding`, private
    facade sidecar): store-format v1 intentionally omits stable-prefix
    plaintext. This sidecar stores no plaintext or token IDs; it binds the full
@@ -322,8 +372,9 @@ two the value is (``"last_execution"`` / ``"plan"``) and
 ``planned_backend`` reports the plan in both cases. Routing is a
 per-input decision, so a plan is a prediction: the GPU crossover, a
 bounded session repair below that crossover, and an added-token literal
-routed to HF all produce a headline that differs from the plan, and each
-is a correct report rather than a fallback of the plan.
+routed to HF on a face outside literal segmentation all produce a
+headline that differs from the plan, and each is a correct report rather
+than a fallback of the plan.
 
 The GPU backend ships two deliveries whose certification kinds differ --
 the judged prebuilt binary is ``certified``, a locally compiled JIT
@@ -380,7 +431,10 @@ beyond that file, which is the object the pinned loader
 SGLang take their ids from) materializes. The reference backend, the decode
 oracle, the added-token router and the certified fast path all read that one
 subject, so an input holding a configuration-side literal receives the same
-ids on every route. A certified artifact declares its configuration-side
+ids on every route. That object defines the core stream and the added-token
+vocabulary; what `add_special_tokens=True` adds is the post-processor of the
+same document (Section 2), not a template the installed loader class writes
+on its own. A certified artifact declares its configuration-side
 subset in the registry (``config_added_tokens``), and the loading paths fail
 closed when the subset on disk does not match the declared one
 (``ARTIFACT_HASH_MISMATCH``, reason ``config_added_tokens_mismatch``). When
@@ -449,9 +503,34 @@ and last route), ``gpu_backend`` (planned/loaded/device/load error), and
 ``state_encode`` (how stored state was seeded). The loaded-process counterpart
 also remains available on the explicit GPU engine
 (``GpuEngine.explain()`` / ``binding_set()``; `docs/gpu-jit.md` Section 9).
-If state seeding calls HF directly (for an added-token literal or a failed span
-guard), ``runtime_policy.last_execution`` reports `executed_backend="hf"` plus
-`source="state_encode"` and the matching state path. The final-result execution
+If state seeding calls HF directly (for an added-token literal on a face
+outside literal segmentation, or a failed span guard),
+``runtime_policy.last_execution`` reports `executed_backend="hf"` plus
+`source="state_encode"` and the matching state path.
+
+A literal-bearing input on a face inside literal segmentation
+(`routing.md` Section 5.2) is cut at its added-token literals by the native
+router, each literal contributing its id and each text segment encoded on
+the route's engine. ``runtime_policy.last_execution.path`` then reads
+`gigatoken_segmented` when the corrected CPU engine served the segments and
+`gpu_segmented` on a GPU-headed route, and the record carries a ``segments``
+block: ``literals`` and ``text`` (how many pieces of each), ``literal_bytes``,
+``largest_text_bytes``, and ``bytes`` with the text bytes each engine
+produced (``gpu``, ``fast_cpu``, ``hf``). The block is absent for every
+other document.
+
+``special_tokens`` reports how `add_special_tokens=True` is served
+(Section 2): ``postprocessor_class`` (`identity`, `prefix` or `reference`,
+after the construction check), ``document_class`` (the classification of
+the document before that check), ``prefix_ids``, ``served_by``
+(`core_stream`, `facade_prefix` or `reference`), ``self_check``
+(``passed``, ``probes``, and on a failure the failing probe), and
+``requests``, how many `True` requests the facade answered and how many
+went to the reference engine. ``store_fingerprint`` reports the key form
+(``domain``) and, per store this tokenizer opened (``native`` or
+``python``), the identity the key carries: ``axis`` (`source-v2` or
+`source-v1`), ``fast_cpu``, ``native_host``, and ``opened_as_release`` when
+a store an earlier release wrote was opened under its own key. The final-result execution
 count and canonical runtime fallback counter are updated exactly once; the
 static plan remains unchanged.
 
@@ -698,6 +777,17 @@ well-formed-but-newer records, in the contract's explicit-verify split.
   returned `None`: on the certified configurations sessions are served
   by the native request runtime, which that lookup did not consult, so
   it answered `None` for every session the product actually stores.
+  When the native request runtime is built it owns the store directory
+  and its answer is the whole answer, `None` included; the Python entry
+  store is consulted only where that runtime is absent. So reading
+  `Session.revision` on a fresh persistent session whose plan puts the GPU
+  ahead of the corrected CPU engine returns the store's answer.
+- `Session.final_ids(add_special_tokens=True)` is the read-time view: the
+  post-processor of Section 2 applied over the session's core stream. For
+  an `identity` or `prefix` face on a path with the exact-ID guarantee it
+  is `prefix_ids` followed by the session's own ids, with no encode;
+  otherwise, and under `EXPERIMENTAL` or with the Fastokens repair
+  adapter, the text is encoded once more with `add_special_tokens=True`.
 - `Session.append_patch(text)` (added in 0.3.0) is a second append
   entry point beside `append`, returning a `SessionPatch` --
   `replace_from` and `replacement_ids` only, with the same meaning as

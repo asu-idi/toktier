@@ -150,7 +150,7 @@ that may accompany them is not a machine interface.
 
 | Code | Meaning |
 |---|---|
-| `R_INPUT_ADDED_TOKEN` | Input contains an added-token literal; this input is routed to the reference frontend path. Part of the certified pipeline design, not a correctness incident. Since 0.2.8 the literal table every scanning surface reads is the loader face's -- the artifact file's added tokens plus the declared configuration-side ones -- so the router and the execution ledger answer alike about the same input (`docs/contracts/facade.md` Section 5). |
+| `R_INPUT_ADDED_TOKEN` | Input contains an added-token literal and was routed to the reference frontend path, because its face is outside literal segmentation (below) or a premise of the segmented route failed closed. A literal-bearing input on a face inside literal segmentation is not routed: it runs on the accelerated route by segments and records no reason. Part of the certified pipeline design, not a correctness incident. Since 0.2.8 the literal table every scanning surface reads is the loader face's -- the artifact file's added tokens plus the declared configuration-side ones -- so the router and the execution ledger answer alike about the same input (`docs/contracts/facade.md` Section 5). |
 | `R_INPUT_BELOW_GPU_THRESHOLD` | Input is smaller than the configured GPU crossover, so execution starts at the next eligible backend in the immutable fallback chain. This is a normal latency policy, not a fault. |
 | `R_INPUT_GUARD_ROUTED` | A per-input guard premise on an accelerated path could not be proved -- a guarded fast-CPU input, or a state-seed closure/span premise -- so this input was routed to the reference backend. Every event detail identifies the failing `stage`: `engine_guard` for the fast-CPU engine guard, `span_bridge` for the native accelerated state-seed bridge, or `state_encode` for a facade-owned state-encoding guard. |
 | `R_SESSION_NO_SAFE_CUT` | A session append found no certified safe cut point; the accumulated text was fully re-encoded. Correctness preserved by construction. |
@@ -158,8 +158,41 @@ that may accompany them is not a machine interface.
 | `R_INPUT_POSTPROCESS_ROUTED` | A core-stream-only accelerated backend was bypassed before execution because the request asked for postprocessing that can change the ID stream. The reference backend produced the postprocessed result. This is a capability route, not an execution fault. |
 | `R_INVALID_PRIOR_STATE` | A stored session tail did not describe itself consistently, so the accumulated text was re-encoded from the reference. Both repair adapters name this outcome in their path (`hf_full_invalid_prior_state`). Added in 0.2.7: the Rust face reported it as an unnamed string before, which was in neither vocabulary. Correctness preserved by construction. |
 | `R_CHUNK_NO_CUT` | Chunk-parallel encode (`toktier.chunked.encode`) found no certified stable boundary in the document, so the document was encoded serially on the plain route. Added in 0.3.0. Reported under `explain()["chunked"]["fallback_counts"]` rather than the routing ledger's top-level `fallback_counts`: the serial route is the same certified backend the chunks would have used, so nothing fell back between backends. Correctness preserved by construction. |
-| `R_CHUNK_FAMILY_UNSUPPORTED` | Chunk-parallel encode was asked for a tokenizer it does not admit: its family and artifact digest are outside the certified repair roster, which is the roster the chunk-cut rule was certified on, or its loader-face normalizer is not one the rule reasons about (none, the empty sequence, or NFC with input-matched added tokens), or an added token of its loader face sets `lstrip`, `rstrip` or `single_word` (refusal `added_token_strip_or_single_word`), or the chunked admission table that ships with the package has no certified row for its artifact (refusal `artifact_without_chunked_evidence` when there is no row, `chunked_evidence_incomplete:<status>` when the row holds one of the two levels of evidence, `oracle_differs_from_chunked_evidence:<version>` when the installed oracle is outside the set the artifact's record was judged with (the comparison behind `R_ORACLE_MISMATCH`), `loader_face_differs_from_chunked_evidence:<digest>` when the loaded face is not the one the row's evidence was taken on). The document was encoded serially on the plain route and `explain()["chunked"]["refusal"]` names the reason. Added in 0.3.0; reported under `explain()["chunked"]["fallback_counts"]` like `R_CHUNK_NO_CUT`. |
+| `R_CHUNK_FAMILY_UNSUPPORTED` | Chunk-parallel encode was asked for a tokenizer it does not admit: its family and artifact digest are outside the chunk admission roster -- the certified repair roster, which the chunk-cut rule was certified on, and the records carried from one of its artifacts by the cross-artifact carry-over (the refusal keeps its name, `artifact_not_in_certified_repair_roster`) -- or its loader-face normalizer is not one the rule reasons about (none, the empty sequence, or NFC with input-matched added tokens), or an added token of its loader face sets `lstrip`, `rstrip` or `single_word` (refusal `added_token_strip_or_single_word`), or the chunked admission table that ships with the package has no certified row for its artifact (refusal `artifact_without_chunked_evidence` when there is no row, `chunked_evidence_incomplete:<status>` when the row holds one of the two levels of evidence, `oracle_differs_from_chunked_evidence:<version>` when the installed oracle is outside the set the artifact's record was judged with (the comparison behind `R_ORACLE_MISMATCH`), `loader_face_differs_from_chunked_evidence:<digest>` when the loaded face is not the one the row's evidence was taken on). The document was encoded serially on the plain route and `explain()["chunked"]["refusal"]` names the reason. Added in 0.3.0; reported under `explain()["chunked"]["fallback_counts"]` like `R_CHUNK_NO_CUT`. |
 | `R_CHUNK_ROUTE_NOT_FAST_CPU` | The native chunk encoder was selected (`toktier.chunked.encode(..., native=True)`, or the default `native=None` on an admitted tokenizer, including through `Tokenizer.encode(..., parallel=...)`) for an input whose route does not start at the corrected CPU engine: a plan with a GPU at its head, for an input at or above its crossover, or, under `native=True` only, a route without the corrected CPU engine (the default `native=None` takes the Python path on such a route). The input was encoded serially through the normal route; chunking is CPU-route only. Added in 0.3.0; reported in the call's `serial_reason` and under `explain()["chunked"]["fallback_counts"]` like `R_CHUNK_NO_CUT`. |
+
+**Literal segmentation.** On a face inside it, the native router cuts a
+literal-bearing input at its added-token literals, found leftmost-longest
+the way the reference library extracts them (first the literals that match
+raw text, over the raw text; then, inside each gap and only on a face whose
+normalizer is the identity, the literals that match normalized text). Each
+literal contributes the id the reference emits for it, and each text
+segment is encoded as a document of its own on the route's engine: the
+corrected CPU engine on a CPU-headed route; on a GPU-headed route the GPU for
+the segments at or above the crossover, in one batch call, and the next
+engine in the chain for the others. The concatenation is the reference
+encoding, since the reference encodes every gap between literals on its
+own. The router serves the plain ID route, batch rows, the native chunk
+encoder's rows and the state route (session seeds and content lookup). A
+face is outside literal segmentation when one of its added tokens sets
+`lstrip`, `rstrip` or `single_word`, when a literal that matches normalized
+text sits on a face whose normalizer is not the identity, when its
+normalizer is outside the served shapes (none, the empty sequence, NFC), or
+when its post-processor is not one the argument covers; the segmenter's
+self-check at construction keeps a face outside when it disagrees with the
+reference library's extraction. The execution record names the path:
+
+| `path` | Meaning |
+|---|---|
+| `gigatoken_segmented` | the corrected CPU engine encoded the text segments of a literal-bearing input |
+| `gpu_segmented` | a GPU-headed route encoded the text segments, the GPU taking those at or above the crossover |
+| `hf_added_token` | the input went to the reference engine with `R_INPUT_ADDED_TOKEN` |
+
+A segmented record carries a `segments` block (`docs/contracts/facade.md`
+Section 5). A text segment that trips a per-input guard -- on a face that
+normalizes to NFC, a segment not already in NFC -- sends the document to
+the reference engine with `R_INPUT_GUARD_ROUTED`, as for a literal-free
+document.
 
 ### 5.3 Interaction with `REQUIRE_ACCELERATED`
 
@@ -213,17 +246,23 @@ this, and it is append-only on the same terms as Section 5.4:
 | `ReferenceRequested` | `Policy::Reference` was asked for, so no accelerated option was considered. The nearest Python code is `R_POLICY_REFERENCE`. |
 | `RuntimeBuildUncertified` | This build's own source identity is not in the shipped `runtime_builds` register, or one of this project's own crates resolves from another copy or version than the judged one (`core_closure: mismatched`), so no accelerated route is admitted whatever the artifact is. Since 0.3.0 neither a rustc or feature recipe no campaign judged nor a reference library outside its certified reference versions is recorded here under any policy: a build from judged sources admits the fast CPU route and labels it `Supported`, with `reference_certification_reason: uncertified_reference` in `doctor` for the second case. There is no Python code for it: the Python facade does not certify a Rust build. |
 | `GpuUnavailable` | A GPU route was wanted and the runtime could not offer one here: no `prebuilt-gpu` feature in this build, or the GPU runtime failed to open on this machine. The nearest Python codes are `R_BACKEND_UNAVAILABLE` and `R_GPU_DISABLED`. |
-| `GpuUncertified` | A GPU route was wanted, and either this build is not certified for one or the artifact has no eligible GPU identity. The nearest Python codes are `R_UNCERTIFIED_ARTIFACT` and `R_SM_UNCERTIFIED`. |
+| `GpuUncertified` | A GPU route was wanted, and either this build is not admitted to one or the artifact has no eligible GPU identity. A build from the judged sources whose compiler or flags no judged row records is admitted under `Policy::Supported` and `Policy::RequireAccelerated`; this variant then stands for a build whose sources are not judged, a sibling crate that is not the judged copy, a closure that could not be compared, or a reference library outside its certified versions. The nearest Python codes are `R_UNCERTIFIED_ARTIFACT` and `R_SM_UNCERTIFIED`. |
+| `GpuBuildRecipeUnjudged` | A GPU route was wanted under `Policy::Certified` on a build whose source identities are judged and whose Rust compiler or build flags no judged row records. That policy admits the GPU route only on the judged recipe; `Policy::Supported` runs it labelled `Supported`. Recorded beside `GpuUncertified`. The nearest Python code is `R_UNCERTIFIED_ARTIFACT` with cause `host_toolchain_mismatch` or `host_build_flags_mismatch`, which the Python planner records as a refusal under every policy but `EXPERIMENTAL`. Added in 0.3.2. |
 | `ExaminedArtifact` | The artifact is an examined one rather than a certified one: its pipeline capability is the one a certified family holds and its added-token table no campaign has judged (`docs/support-matrix.md`, Status vocabulary). Recorded whenever such an artifact is planned. Where the fast CPU route is admitted it runs with the artifact's own repair parameters and is labelled `Supported` (or `Experimental` under that policy); under `Policy::Certified` it stands beside `CpuUncertified`. The nearest Python code is `R_UNCERTIFIED_ARTIFACT` with cause `examined_not_certified`. Added after 0.3.0. |
 | `CpuUncertified` | The fast CPU route was refused: the artifact has no certified repair row, or the engine's status, artifact or source binding does not match the registry. Since 0.3.0 the compiler is not part of this refusal; a compiler no campaign used decides the route's label, not its admission. Under `Policy::Experimental` the source binding is not part of it either (since 0.3.0), as the Python facade's experimental policy waives `R_ENGINE_BINDING_MISMATCH`, and the route is labelled experimental. The nearest Python code is `R_ENGINE_BINDING_MISMATCH`. |
 
-One of the six has no Python counterpart at all, which is why the set is
+One of the seven has no Python counterpart at all, which is why the set is
 named here rather than folded into Section 5.1: a Rust build certifies
 its own compiled closure, and the Python facade has no such premise, so
-`RuntimeBuildUncertified` has nothing to point at. The other five are
+`RuntimeBuildUncertified` has nothing to point at. The other six are
 named here as well because they are recorded through a different surface
 -- `RoutePlan::reasons` rather than an `R_*` string -- not because the
-condition itself is unknown on the Python side. A
+condition itself is unknown on the Python side. The two faces do not admit
+the same set on that condition: the Rust crate admits a judged-source build
+on another compiler or flag recipe to the GPU route under
+`Policy::Supported`, where the Python planner refuses the route for a
+request-host toolchain or flag mismatch under `certified` and `supported`
+alike. A
 consumer that switches on `RoutePlan::reasons` needs a catch-all arm for
 the same reason Section 5.4 gives, and `ReasonCode` is
 `#[non_exhaustive]` accordingly.

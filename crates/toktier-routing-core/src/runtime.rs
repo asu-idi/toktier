@@ -277,6 +277,27 @@ impl AddedGate {
     }
 }
 
+/// The segment work of one GPU-headed, literal-bearing document.
+enum GpuCompose {
+    /// Every text segment was encoded; at least one ran on the GPU.
+    Ids {
+        ids: Vec<u32>,
+        facts: SegmentFacts,
+        delivery: String,
+        reason: Option<&'static str>,
+    },
+    /// The whole document goes to the reference because of its literals.
+    AddedTokenReference,
+    /// The engine guard refused a segment (its event is recorded): the
+    /// whole document goes to the reference.
+    EngineGuard {
+        path: &'static str,
+        code: &'static str,
+    },
+    /// Continue the ordered chain from the backend after the GPU.
+    Continue(Option<&'static str>),
+}
+
 /// What the GPU-headed segmented route decided for one document.
 enum SegmentedGpu {
     /// The document is answered; the caller records its execution.
@@ -890,12 +911,56 @@ impl NativeRouter {
         start: usize,
         segmenter: &LiteralSegmenter,
     ) -> Result<SegmentedGpu, EngineError> {
+        Ok(match self.compose_segmented_gpu(text, start, segmenter)? {
+            GpuCompose::Ids {
+                ids,
+                facts,
+                delivery,
+                reason,
+            } => SegmentedGpu::Routed(
+                RoutedIds {
+                    ids,
+                    backend: BACKEND_GPU.to_owned(),
+                    source: Some(delivery),
+                    path: Some("gpu_segmented".to_owned()),
+                    reason,
+                },
+                Some(facts),
+            ),
+            GpuCompose::AddedTokenReference => {
+                SegmentedGpu::Routed(self.added_token_reference(text, start)?, None)
+            }
+            GpuCompose::EngineGuard { path, code } => SegmentedGpu::Routed(
+                RoutedIds {
+                    ids: self
+                        .reference
+                        .encode_ids(text, false)
+                        .map_err(|error| EngineError(error.to_string()))?,
+                    backend: BACKEND_REFERENCE.to_owned(),
+                    source: None,
+                    path: Some(path.to_owned()),
+                    reason: Some(code),
+                },
+                None,
+            ),
+            GpuCompose::Continue(reason) => SegmentedGpu::Continue(reason),
+        })
+    }
+
+    /// The segment work of a literal-bearing, GPU-headed document, shared
+    /// by the ID route and the state route; each wraps the outcome in its
+    /// own carrier.
+    fn compose_segmented_gpu(
+        &self,
+        text: &str,
+        start: usize,
+        segmenter: &LiteralSegmenter,
+    ) -> Result<GpuCompose, EngineError> {
         let pieces = segmenter.plan(text);
         let next = start + 1;
         if !self.added.text_pieces_closed(text, &pieces) {
             // A text segment holds a literal: the whole document goes to the reference.
-            let routed = self.added_token_reference(text, start)?;
-            return Ok(SegmentedGpu::Routed(routed, None));
+            return Ok(GpuCompose::AddedTokenReference);
         }
         let crossover = self.thresholds[start];
         let on_gpu = |piece: &LiteralPiece| match *piece {
@@ -903,20 +968,17 @@ impl NativeRouter {
             LiteralPiece::Literal { .. } => false,
         };
         if !pieces.iter().any(on_gpu) {
-            return match self.chain[next] {
-                BackendKind::FastCpu => Ok(SegmentedGpu::Continue(None)),
-                _ => {
-                    let routed = self.added_token_reference(text, start)?;
-                    Ok(SegmentedGpu::Routed(routed, None))
-                }
-            };
+            return Ok(match self.chain[next] {
+                BackendKind::FastCpu => GpuCompose::Continue(None),
+                _ => GpuCompose::AddedTokenReference,
+            });
         }
         let cell = self.gpu.as_ref().expect("constructor gate");
         let gpu = match cell.engine() {
             Ok(gpu) => gpu,
             Err(error) => {
                 self.gpu_open_fault_event(start, &error);
-                return Ok(SegmentedGpu::Continue(Some(R_EXEC_FAULT)));
+                return Ok(GpuCompose::Continue(Some(R_EXEC_FAULT)));
             }
         };
         let gpu_pieces = pieces
@@ -964,7 +1026,7 @@ impl NativeRouter {
             }
         }
         if facts.gpu_bytes == 0 {
-            return Ok(SegmentedGpu::Continue(reason));
+            return Ok(GpuCompose::Continue(reason));
         }
         let rest = pieces
             .iter()
@@ -995,20 +1057,7 @@ impl NativeRouter {
                     // full encode is.
                     let (path, code) =
                         self.fast_cpu_reference_path(FastEncodeSource::ReferenceEngineGuard);
-                    let ids = self
-                        .reference
-                        .encode_ids(text, false)
-                        .map_err(|error| EngineError(error.to_string()))?;
-                    return Ok(SegmentedGpu::Routed(
-                        RoutedIds {
-                            ids,
-                            backend: BACKEND_REFERENCE.to_owned(),
-                            source: None,
-                            path: Some(path.to_owned()),
-                            reason: Some(code),
-                        },
-                        None,
-                    ));
+                    return Ok(GpuCompose::EngineGuard { path, code });
                 }
                 Err(error) => {
                     self.record_event(
@@ -1049,16 +1098,123 @@ impl NativeRouter {
                 }
             }
         }
-        Ok(SegmentedGpu::Routed(
-            RoutedIds {
-                ids,
-                backend: BACKEND_GPU.to_owned(),
-                source: Some(gpu.delivery().to_owned()),
-                path: Some("gpu_segmented".to_owned()),
-                reason,
-            },
-            Some(facts),
-        ))
+        Ok(GpuCompose::Ids {
+            ids,
+            facts,
+            delivery: gpu.delivery().to_owned(),
+            reason,
+        })
+    }
+
+    /// The state-route acceptance of a GPU-produced ID row: both modes
+    /// share one fail-closed decision over the exact row; only the
+    /// successful payload representation differs. A rejected row is
+    /// re-encoded by the reference (`hf_span_guard`).
+    #[allow(clippy::too_many_arguments)]
+    fn accept_gpu_state(
+        &self,
+        text: &str,
+        ids: Vec<u32>,
+        mode: StateMode,
+        start: usize,
+        delivery: &str,
+        path: &'static str,
+        segments: Option<SegmentFacts>,
+    ) -> Result<(StatePayload, String), EngineError> {
+        let input_bytes = text.len() as u64;
+        let accepted = match mode {
+            StateMode::LazySeed => self
+                .reference
+                .verify_ids_close(text, &ids)
+                .and_then(|()| self.reference.raw_byte_lengths_arc())
+                .map(|table| StatePayload::Lazy { ids, table }),
+            StateMode::Materialized => {
+                self.reference
+                    .spans_soa_for_ids(text, &ids)
+                    .map(|(span_starts, span_ends)| {
+                        StatePayload::Soa(SoaEncoding {
+                            ids,
+                            span_starts,
+                            span_ends,
+                        })
+                    })
+            }
+        };
+        match accepted {
+            Ok(payload) => {
+                let state_encode_path = payload.accelerated_state_encode_path();
+                self.record_execution_detail(
+                    BACKEND_GPU,
+                    input_bytes,
+                    self.chain[start].as_str(),
+                    Some(delivery),
+                    Some(path),
+                    segments,
+                );
+                self.record_state_encode(
+                    state_encode_path,
+                    json!({
+                        "path": state_encode_path,
+                        "backend": BACKEND_GPU,
+                        "input_bytes": input_bytes,
+                    }),
+                );
+                Ok((payload, path.to_owned()))
+            }
+            Err(error) => {
+                self.record_event(
+                    R_INPUT_GUARD_ROUTED,
+                    BACKEND_GPU,
+                    BACKEND_REFERENCE,
+                    json!({
+                        "stage": "span_bridge",
+                        "message": error.to_string(),
+                    }),
+                );
+                let reference = self.reference_state(text)?;
+                self.record_execution(
+                    BACKEND_REFERENCE,
+                    input_bytes,
+                    start,
+                    Some("state_encode"),
+                    Some("hf_span_guard"),
+                );
+                self.record_state_encode(
+                    "hf_span_guard",
+                    json!({
+                        "path": "hf_span_guard",
+                        "error": "ReferenceEngineError",
+                        "message": error.to_string(),
+                    }),
+                );
+                Ok((StatePayload::Soa(reference), "hf_span_guard".to_owned()))
+            }
+        }
+    }
+
+    /// The whole input encoded by the reference because of its literals,
+    /// on the state route.
+    fn added_token_state(
+        &self,
+        encoding: SoaEncoding,
+        input_bytes: u64,
+        start: usize,
+    ) -> (StatePayload, String) {
+        self.record_event(
+            R_INPUT_ADDED_TOKEN,
+            self.chain[start].as_str(),
+            BACKEND_REFERENCE,
+            json!({}),
+        );
+        self.record_execution(
+            BACKEND_REFERENCE,
+            input_bytes,
+            start,
+            Some("state_encode"),
+            Some("hf_added_token"),
+        );
+        self.record_state_encode("hf_added_token", json!({"path": "hf_added_token"}));
+        (StatePayload::Soa(encoding), "hf_added_token".to_owned())
     }
 
     /// State route: session state adopts the payload without any
@@ -1081,26 +1237,61 @@ impl NativeRouter {
         let input_bytes = text.len() as u64;
         let start = self.start_index(input_bytes);
         self.below_gpu_threshold_event(input_bytes, start);
+        let mut first = start;
         if self.chain[start] != BackendKind::Reference {
-            if let Some(encoding) = self.exact_added_reference_state(text)? {
-                self.record_event(
-                    R_INPUT_ADDED_TOKEN,
-                    self.chain[start].as_str(),
-                    BACKEND_REFERENCE,
-                    json!({}),
-                );
-                self.record_execution(
-                    BACKEND_REFERENCE,
-                    input_bytes,
-                    start,
-                    Some("state_encode"),
-                    Some("hf_added_token"),
-                );
-                self.record_state_encode("hf_added_token", json!({"path": "hf_added_token"}));
-                return Ok((StatePayload::Soa(encoding), "hf_added_token".to_owned()));
+            if let Some(segmenter) = self.served_segmenter() {
+                if self.chain[start] == BackendKind::Gpu && self.added.candidate(text) {
+                    match self.compose_segmented_gpu(text, start, segmenter)? {
+                        GpuCompose::Ids {
+                            ids,
+                            facts,
+                            delivery,
+                            reason: _,
+                        } => {
+                            return self.accept_gpu_state(
+                                text,
+                                ids,
+                                mode,
+                                start,
+                                &delivery,
+                                "gpu_segmented",
+                                Some(facts),
+                            );
+                        }
+                        GpuCompose::AddedTokenReference => {
+                            let encoding = self.reference_state(text)?;
+                            return Ok(self.added_token_state(encoding, input_bytes, start));
+                        }
+                        GpuCompose::EngineGuard { path, code: _ } => {
+                            let encoding = self.reference_state(text)?;
+                            let payload = StatePayload::Soa(encoding);
+                            let state_encode_path = payload.accelerated_state_encode_path();
+                            self.record_execution(
+                                BACKEND_REFERENCE,
+                                input_bytes,
+                                start,
+                                None,
+                                Some(path),
+                            );
+                            self.record_state_encode(
+                                state_encode_path,
+                                json!({
+                                    "path": state_encode_path,
+                                    "backend": BACKEND_REFERENCE,
+                                    "input_bytes": input_bytes,
+                                }),
+                            );
+                            return Ok((payload, path.to_owned()));
+                        }
+                        GpuCompose::Continue(_) => first = start + 1,
+                    }
+                }
+                // A fast-CPU start segments inside the engine.
+            } else if let Some(encoding) = self.exact_added_reference_state(text)? {
+                return Ok(self.added_token_state(encoding, input_bytes, start));
             }
         }
-        for index in start..self.chain.len() {
+        for index in first..self.chain.len() {
             match self.chain[index] {
                 BackendKind::Gpu => {
                     let cell = self.gpu.as_ref().expect("constructor gate");
@@ -1113,78 +1304,15 @@ impl NativeRouter {
                     };
                     match gpu.encode_ids(text) {
                         Ok(ids) => {
-                            // Both modes share one fail-closed acceptance
-                            // decision over the exact ID row; only the
-                            // successful payload representation differs.
-                            let accepted = match mode {
-                                StateMode::LazySeed => self
-                                    .reference
-                                    .verify_ids_close(text, &ids)
-                                    .and_then(|()| self.reference.raw_byte_lengths_arc())
-                                    .map(|table| StatePayload::Lazy { ids, table }),
-                                StateMode::Materialized => self
-                                    .reference
-                                    .spans_soa_for_ids(text, &ids)
-                                    .map(|(span_starts, span_ends)| {
-                                        StatePayload::Soa(SoaEncoding {
-                                            ids,
-                                            span_starts,
-                                            span_ends,
-                                        })
-                                    }),
-                            };
-                            match accepted {
-                                Ok(payload) => {
-                                    let state_encode_path = payload.accelerated_state_encode_path();
-                                    self.record_execution(
-                                        BACKEND_GPU,
-                                        input_bytes,
-                                        start,
-                                        Some(gpu.delivery()),
-                                        Some("gpu_full"),
-                                    );
-                                    self.record_state_encode(
-                                        state_encode_path,
-                                        json!({
-                                            "path": state_encode_path,
-                                            "backend": BACKEND_GPU,
-                                            "input_bytes": input_bytes,
-                                        }),
-                                    );
-                                    return Ok((payload, "gpu_full".to_owned()));
-                                }
-                                Err(error) => {
-                                    self.record_event(
-                                        R_INPUT_GUARD_ROUTED,
-                                        BACKEND_GPU,
-                                        BACKEND_REFERENCE,
-                                        json!({
-                                            "stage": "span_bridge",
-                                            "message": error.to_string(),
-                                        }),
-                                    );
-                                    let reference = self.reference_state(text)?;
-                                    self.record_execution(
-                                        BACKEND_REFERENCE,
-                                        input_bytes,
-                                        start,
-                                        Some("state_encode"),
-                                        Some("hf_span_guard"),
-                                    );
-                                    self.record_state_encode(
-                                        "hf_span_guard",
-                                        json!({
-                                            "path": "hf_span_guard",
-                                            "error": "ReferenceEngineError",
-                                            "message": error.to_string(),
-                                        }),
-                                    );
-                                    return Ok((
-                                        StatePayload::Soa(reference),
-                                        "hf_span_guard".to_owned(),
-                                    ));
-                                }
-                            }
+                            return self.accept_gpu_state(
+                                text,
+                                ids,
+                                mode,
+                                start,
+                                gpu.delivery(),
+                                "gpu_full",
+                                None,
+                            );
                         }
                         Err(error) => self.gpu_fault_event(index, &error),
                     }
@@ -1192,17 +1320,16 @@ impl NativeRouter {
                 BackendKind::FastCpu => {
                     let fast = self.fast_cpu.as_ref().expect("constructor gate");
                     let outcome = match mode {
-                        StateMode::LazySeed => fast.encode_seed_with_source(text),
-                        StateMode::Materialized => {
-                            fast.encode_state_with_source(text)
-                                .map(|(encoding, source)| {
-                                    (FastSeedPayload::Reference(encoding), source)
-                                })
-                        }
+                        StateMode::LazySeed => fast.encode_seed_with_segments(text),
+                        StateMode::Materialized => fast.encode_state_with_segments(text).map(
+                            |(encoding, source, segments)| {
+                                (FastSeedPayload::Reference(encoding), source, segments)
+                            },
+                        ),
                     };
                     match outcome {
                         Err(error) => self.fast_cpu_fault_event(index, &error),
-                        Ok((payload, FastEncodeSource::Gigatoken)) => {
+                        Ok((payload, FastEncodeSource::Gigatoken, segments)) => {
                             let payload = match payload {
                                 FastSeedPayload::GigatokenIds(ids) => StatePayload::Lazy {
                                     ids,
@@ -1218,12 +1345,18 @@ impl NativeRouter {
                                 FastSeedPayload::Reference(encoding) => StatePayload::Soa(encoding),
                             };
                             let state_encode_path = payload.accelerated_state_encode_path();
-                            self.record_execution(
+                            let path = if segments.is_some() {
+                                "gigatoken_segmented"
+                            } else {
+                                "gigatoken_full"
+                            };
+                            self.record_execution_detail(
                                 BACKEND_FAST_CPU,
                                 input_bytes,
-                                start,
+                                self.chain[start].as_str(),
                                 Some("gigatoken"),
-                                Some("gigatoken_full"),
+                                Some(path),
+                                segments,
                             );
                             self.record_state_encode(
                                 state_encode_path,
@@ -1233,9 +1366,9 @@ impl NativeRouter {
                                     "input_bytes": input_bytes,
                                 }),
                             );
-                            return Ok((payload, "gigatoken_full".to_owned()));
+                            return Ok((payload, path.to_owned()));
                         }
-                        Ok((payload, source)) => {
+                        Ok((payload, source, _segments)) => {
                             let FastSeedPayload::Reference(encoding) = payload else {
                                 return Err(EngineError(
                                     "reference-routed fast encode returned an ID-only payload"
@@ -3533,5 +3666,193 @@ mod literal_segment_tests {
             .unwrap();
         let (ids, _path) = seed_then_append(&setup.router, &seed, &delta);
         assert_eq!(ids, expected);
+    }
+}
+
+/// Literal segmentation on the span-carrying carriers and the state route:
+/// session seeds, materialized state encodes, and appends after a
+/// segmented seed, against the reference's ids and character offsets.
+#[cfg(test)]
+mod literal_state_tests {
+    use super::*;
+    use crate::reference::test_support::{face_json, plain, TestNormalizer};
+    use sha2::{Digest, Sha256};
+
+    struct RefGpu(Arc<ReferenceEngine>, Vec<String>);
+
+    impl NativeGpuEngine for RefGpu {
+        fn encode_ids(&self, text: &str) -> Result<Vec<u32>, NativeRuntimeError> {
+            assert!(
+                self.1
+                    .iter()
+                    .all(|literal| !text.contains(literal.as_str())),
+                "a literal reached the device: {text:?}"
+            );
+            self.0
+                .encode_ids(text, false)
+                .map_err(|error| NativeRuntimeError::new(error.to_string()))
+        }
+
+        fn delivery(&self) -> &'static str {
+            "prebuilt"
+        }
+    }
+
+    fn router(normalizer: TestNormalizer, gpu: bool) -> (NativeRouter, Arc<ReferenceEngine>) {
+        let tokens = [
+            plain("<|im_start|>", false),
+            plain("<|im_end|>", false),
+            plain("<think>", true),
+            plain("\u{e9}t\u{e9}", false),
+        ];
+        let tokens = match normalizer {
+            // A normalized token under NFC is outside the served class.
+            TestNormalizer::Nfc => tokens[..2].to_vec(),
+            _ => tokens.to_vec(),
+        };
+        let json = face_json(normalizer, &tokens);
+        let reference = Arc::new(ReferenceEngine::from_bytes(&json).unwrap());
+        let digest = Sha256::digest(&json)
+            .iter()
+            .map(|value| format!("{value:02x}"))
+            .collect::<String>();
+        let mut spec = crate::FastRepairSpec::new(
+            "tiny_bytes".to_owned(),
+            digest,
+            4,
+            2,
+            reference.has_normalizer(),
+        );
+        spec.window_chars = 64;
+        spec.max_retries = 2;
+        let mut pclass = vec![0u8; crate::N_CODEPOINTS];
+        for value in b'a'..=b'z' {
+            pclass[value as usize] = 2;
+        }
+        pclass[b' ' as usize] = 1;
+        let fast = Arc::new(
+            FastCpuEngine::from_reference(&json, Arc::clone(&reference), spec, pclass).unwrap(),
+        );
+        let literals = tokens.iter().map(|token| token.content.clone()).collect();
+        let (chain, thresholds, source) = if gpu {
+            (
+                vec![BACKEND_GPU, BACKEND_FAST_CPU, BACKEND_REFERENCE],
+                vec![48, 0, 0],
+                Some(NativeGpuSource::Open(Arc::new(RefGpu(
+                    Arc::clone(&reference),
+                    literals,
+                )))),
+            )
+        } else {
+            (vec![BACKEND_FAST_CPU, BACKEND_REFERENCE], vec![0, 0], None)
+        };
+        let router = NativeRouter::new(
+            chain.into_iter().map(str::to_owned).collect(),
+            thresholds,
+            Arc::clone(&reference),
+            Some(fast),
+            true,
+            source,
+            false,
+            true,
+        )
+        .unwrap();
+        (router, reference)
+    }
+
+    fn chat(seed: u64) -> String {
+        let bodies = [
+            "hello there, a fairly long user turn with words",
+            "short",
+            "caf\u{e9} \u{4e2d}\u{6587} mixed text that runs long enough",
+            "x",
+        ];
+        let mut text = String::new();
+        for turn in 0..4u64 {
+            let body = bodies[((seed + turn) % 4) as usize];
+            text.push_str("<|im_start|>user\n");
+            if turn % 2 == 1 {
+                text.push_str("<think>plan</think>\u{e9}t\u{e9}");
+            }
+            text.push_str(body);
+            text.push_str("<|im_end|>\n");
+        }
+        text
+    }
+
+    fn assert_state(tail: &TailState, reference: &ReferenceEngine, text: &str) {
+        let expected = reference.encode_core(text).unwrap();
+        assert_eq!(tail.ids(), expected.ids.as_slice(), "{text:?}");
+        assert_eq!(tail.spans(), expected.spans, "{text:?}");
+    }
+
+    #[test]
+    fn segmented_seeds_and_appends_equal_the_reference_state() {
+        for normalizer in [
+            TestNormalizer::None,
+            TestNormalizer::EmptySequence,
+            TestNormalizer::Nfc,
+        ] {
+            for gpu in [false, true] {
+                let (router, reference) = router(normalizer, gpu);
+                for seed in 0..4u64 {
+                    let text = chat(seed);
+                    // Lazy seed (append on an empty tail), then appends that
+                    // carry literals, one straddling the boundary.
+                    let mut tail = TailState::new();
+                    let report = router.append(&mut tail, &text).unwrap();
+                    assert!(
+                        report.path == "gigatoken_segmented" || report.path == "gpu_segmented",
+                        "{}",
+                        report.path
+                    );
+                    assert_state(&tail, &reference, &text);
+                    let mut full = text.clone();
+                    for delta in [
+                        "<|im_start|>assistant\n",
+                        "<thi",
+                        "nk>ok</think> done<|im_end|>",
+                    ] {
+                        router.append(&mut tail, delta).unwrap();
+                        full.push_str(delta);
+                        assert_state(&tail, &reference, &full);
+                    }
+                    // Materialized state encode.
+                    let encoded = router.encode(&text).unwrap();
+                    let expected = reference.encode_core(&text).unwrap();
+                    assert_eq!(encoded, expected);
+                    let stats = router.stats();
+                    let last = stats.last_execution.as_ref().unwrap();
+                    assert!(last.get("segments").is_some(), "{last:?}");
+                    assert!(
+                        !stats
+                            .events
+                            .iter()
+                            .any(|event| event.code == R_INPUT_ADDED_TOKEN),
+                        "{:?}",
+                        stats.events
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_engine_session_surface_segments_its_seed() {
+        let (router, reference) = router(TestNormalizer::EmptySequence, false);
+        let fast = router.fast_cpu.as_ref().unwrap();
+        let text = chat(1);
+        let mut tail = TailState::new();
+        let report = fast.append(&mut tail, &text).unwrap();
+        assert_eq!(report.path, "cold_full");
+        assert_state(&tail, &reference, &text);
+        assert_eq!(
+            fast.encode(&text).unwrap(),
+            reference.encode_core(&text).unwrap()
+        );
+        assert_eq!(
+            fast.stats().path_counts.get("gigatoken_segmented"),
+            Some(&2)
+        );
     }
 }

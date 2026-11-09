@@ -545,8 +545,20 @@ impl FastCpuEngine {
         &self,
         text: &str,
     ) -> Result<(SoaEncoding, FastEncodeSource), EngineError> {
+        self.encode_state_with_segments(text)
+            .map(|(encoding, source, _segments)| (encoding, source))
+    }
+
+    /// [`Self::encode_state_with_source`] plus the segment facts of a
+    /// literal-segmented result.
+    pub(crate) fn encode_state_with_segments(
+        &self,
+        text: &str,
+    ) -> Result<(SoaEncoding, FastEncodeSource, Option<SegmentFacts>), EngineError> {
         let mut engine = self.locked_primary()?;
-        self.full_state_with_source(text, &mut engine)
+        let mut segments = None;
+        let (encoding, source) = self.full_state_with_source(text, &mut engine, &mut segments)?;
+        Ok((encoding, source, segments))
     }
 
     /// ID-only counterpart of [`Self::encode_with_source`] for stateless
@@ -595,8 +607,21 @@ impl FastCpuEngine {
         &self,
         text: &str,
     ) -> Result<(FastSeedPayload, FastEncodeSource), EngineError> {
+        self.encode_seed_with_segments(text)
+            .map(|(payload, source, _segments)| (payload, source))
+    }
+
+    /// [`Self::encode_seed_with_source`] plus the segment facts of a
+    /// literal-segmented seed. A literal-bearing seed of a served face is
+    /// segmented exactly as on the ID carrier; its closure-verified row is
+    /// adopted with lazy checkpointed spans like any other accelerated seed.
+    pub(crate) fn encode_seed_with_segments(
+        &self,
+        text: &str,
+    ) -> Result<(FastSeedPayload, FastEncodeSource, Option<SegmentFacts>), EngineError> {
         let mut engine = self.locked_primary()?;
-        self.guarded_full_with(
+        let mut segments = None;
+        let (payload, source) = self.guarded_full_with(
             text,
             &mut engine,
             |reference, text| {
@@ -613,9 +638,10 @@ impl FastCpuEngine {
                 this.fast_ids_with(text, engine)
                     .map(FastSeedPayload::GigatokenIds)
             },
-            None,
-            &mut None,
-        )
+            Some(Self::segmented_seed_with),
+            &mut segments,
+        )?;
+        Ok((payload, source, segments))
     }
 
     /// Preserve row order while using persistent per-worker Gigatoken
@@ -793,7 +819,7 @@ impl FastCpuEngine {
     /// decisions, fallback order, and path accounting cannot drift apart.
     /// A literal-bearing input of a face in the served literal class is
     /// segmented at its literals when the carrier supplies a segment
-    /// encoder (only the ID carrier does); any segment the
+    /// encoder (all but the retained pair carrier do); any segment the
     /// engine guard refuses sends the whole input to the reference.
     #[allow(clippy::too_many_arguments)]
     fn guarded_full_with<T>(
@@ -889,6 +915,7 @@ impl FastCpuEngine {
         &self,
         text: &str,
         engine: &mut Gigatoken,
+        segments: &mut Option<SegmentFacts>,
     ) -> Result<(SoaEncoding, FastEncodeSource), EngineError> {
         self.guarded_full_with(
             text,
@@ -896,8 +923,8 @@ impl FastCpuEngine {
             |reference, text| reference.encode_state_soa(text),
             |reference, text| reference.encode_state_soa_with_added_flag(text),
             |this, text, engine| this.fast_state_encoding_with(text, engine),
-            None,
-            &mut None,
+            Some(Self::segmented_state_with),
+            segments,
         )
     }
 
@@ -910,8 +937,8 @@ impl FastCpuEngine {
             .map(|(ids, source, _segments)| (ids, source))
     }
 
-    /// The ID carrier: the only carrier on which a literal-bearing input
-    /// of a served face is segmented.
+    /// The ID carrier. The structure-of-arrays and lazy-seed carriers are
+    /// segmented the same way; the retained pair carrier is not.
     fn full_ids_with_segments(
         &self,
         text: &str,
@@ -959,6 +986,43 @@ impl FastCpuEngine {
             .verify_ids_close(text, &ids)
             .map_err(|error| FastCpuEngineError::new(error.to_string()))?;
         Ok((ids, facts))
+    }
+
+    /// The structure-of-arrays carrier of a segmented document: the
+    /// concatenated row, closure-verified as on the ID carrier, with its
+    /// character spans built over the whole text by the same one-pass
+    /// bridge an unsegmented row uses.
+    fn segmented_state_with(
+        &self,
+        text: &str,
+        pieces: &[LiteralPiece],
+        engine: &mut Gigatoken,
+    ) -> Result<(SoaEncoding, SegmentFacts), FastCpuEngineError> {
+        let (ids, facts) = self.segmented_ids_with(text, pieces, engine)?;
+        let (span_starts, span_ends) = self
+            .reference
+            .spans_soa_for_ids(text, &ids)
+            .map_err(|error| FastCpuEngineError::new(error.to_string()))?;
+        Ok((
+            SoaEncoding {
+                ids,
+                span_starts,
+                span_ends,
+            },
+            facts,
+        ))
+    }
+
+    /// The lazy-seed carrier of a segmented document: the closure-verified
+    /// row itself.
+    fn segmented_seed_with(
+        &self,
+        text: &str,
+        pieces: &[LiteralPiece],
+        engine: &mut Gigatoken,
+    ) -> Result<(FastSeedPayload, SegmentFacts), FastCpuEngineError> {
+        self.segmented_ids_with(text, pieces, engine)
+            .map(|(ids, facts)| (FastSeedPayload::GigatokenIds(ids), facts))
     }
 
     /// A fresh corrected-Gigatoken worker sharing the primary's model

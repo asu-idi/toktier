@@ -479,6 +479,32 @@ impl NativeRouter {
         })
     }
 
+    /// How this router treats added-token literals, for plans and
+    /// diagnostics: `served` (the face is segmented), `reason` (why it is
+    /// not, a segmenter self-check difference included), whether the
+    /// engine core's matcher agrees with the reference, and whether
+    /// session repair runs (it does not where the matcher may disagree).
+    pub fn literal_segmentation(&self) -> Value {
+        let accelerated = self
+            .chain
+            .iter()
+            .any(|backend| *backend != BackendKind::Reference);
+        if !accelerated {
+            return json!({
+                "served": false,
+                "reason": "the route is the reference engine alone",
+                "engine_matcher_agrees": Value::Null,
+                "session_repair": false,
+            });
+        }
+        json!({
+            "served": self.reference.literal_segmentation_served(),
+            "reason": self.reference.literal_class_reason(),
+            "engine_matcher_agrees": self.reference.engine_matcher_agrees(),
+            "session_repair": self.repair_fast_cpu,
+        })
+    }
+
     pub fn stats(&self) -> RuntimeStats {
         self.stats
             .lock()
@@ -2655,6 +2681,71 @@ mod tests {
                 "message": "tokenizer returned unknown id 99",
             }))
         );
+    }
+
+    /// A segmenter self-check difference is visible in the router's
+    /// literal facts and turns session repair off.
+    #[test]
+    fn a_self_check_difference_is_reported_and_turns_repair_off() {
+        use crate::reference::test_support::{
+            face_json, plain, TestNormalizer, SELF_CHECK_DIFFERS,
+        };
+        let json = face_json(TestNormalizer::None, &[plain("<|im_start|>", false)]);
+        let build = |differs: bool| {
+            SELF_CHECK_DIFFERS.with(|flag| flag.set(differs));
+            let reference = Arc::new(ReferenceEngine::from_bytes(&json).unwrap());
+            let digest = Sha256::digest(&json)
+                .iter()
+                .map(|value| format!("{value:02x}"))
+                .collect::<String>();
+            let mut spec = crate::FastRepairSpec::new("tiny_bytes".to_owned(), digest, 4, 2, false);
+            spec.window_chars = 64;
+            spec.max_retries = 2;
+            let mut pclass = vec![0u8; crate::N_CODEPOINTS];
+            for value in b'a'..=b'z' {
+                pclass[value as usize] = 2;
+            }
+            pclass[b' ' as usize] = 1;
+            let fast = Arc::new(
+                FastCpuEngine::from_reference(&json, Arc::clone(&reference), spec, pclass).unwrap(),
+            );
+            let router = NativeRouter::new(
+                vec![BACKEND_FAST_CPU.to_owned(), BACKEND_REFERENCE.to_owned()],
+                vec![0, 0],
+                Arc::clone(&reference),
+                Some(fast),
+                true,
+                None,
+                false,
+                true,
+            )
+            .unwrap();
+            SELF_CHECK_DIFFERS.with(|flag| flag.set(false));
+            (router, reference)
+        };
+        let (router, _) = build(false);
+        let facts = router.literal_segmentation();
+        assert_eq!(facts["served"], true);
+        assert_eq!(facts["session_repair"], true);
+        assert_eq!(
+            router.witness_category(),
+            WitnessCategory::BpeSyncTransition
+        );
+        let (router, reference) = build(true);
+        let facts = router.literal_segmentation();
+        assert_eq!(facts["served"], false);
+        assert_eq!(facts["engine_matcher_agrees"], false);
+        assert_eq!(facts["session_repair"], false);
+        assert!(facts["reason"]
+            .as_str()
+            .unwrap()
+            .contains("self-check differs"));
+        assert_eq!(router.witness_category(), WitnessCategory::NoneFullReencode);
+        // Literal-bearing input still equals the reference, on the whole-document path.
+        let text = "<|im_start|>user hello there";
+        let routed = router.encode_ids(text, false).unwrap();
+        assert_eq!(routed.ids, reference.encode_ids(text, false).unwrap());
+        assert_eq!(routed.path.as_deref(), Some("hf_added_token"));
     }
 
     /// A reference-only chain builds no literal class: not at

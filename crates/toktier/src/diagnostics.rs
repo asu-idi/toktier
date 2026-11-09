@@ -286,6 +286,14 @@ pub struct RoutePlan {
     /// reference engine (with and without special tokens), the reason the
     /// class reads `"reference"`. Added in 0.3.2.
     pub postprocessor_self_check: Option<String>,
+    /// `None` when the route segments the artifact's added-token literals
+    /// (each text segment runs on the plain route, the literals are
+    /// emitted by id). Otherwise why it does not -- an artifact outside
+    /// the served class, a construction self-check of the segmenter that
+    /// answered differently from the reference (session repair is then
+    /// off as well), or a reference-only route -- and a literal-bearing
+    /// input is encoded whole by the reference. Added in 0.3.2.
+    pub literal_segmentation: Option<String>,
 }
 
 /// Facts for one completed encode or append operation.

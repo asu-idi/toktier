@@ -1304,6 +1304,10 @@ impl PyNativeRuntime {
         output.set_item("events", events)?;
         output.set_item("state_encode_counts", stats.state_encode_counts)?;
         output.set_item(
+            "literal_segmentation",
+            json_to_py(py, &self.router.literal_segmentation())?,
+        )?;
+        output.set_item(
             "last_state_encode",
             match &stats.last_state_encode {
                 Some(value) => json_to_py(py, value)?,

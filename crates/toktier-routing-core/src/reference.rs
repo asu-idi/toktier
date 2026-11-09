@@ -817,6 +817,10 @@ impl LiteralClass {
         let engine_matcher_agrees = rows
             .as_ref()
             .is_ok_and(|rows| matcher_agreement(rows, engine.has_effective_normalizer()));
+        // A self-check difference shows that the native reading of this
+        // face's literals does not hold; the engine core's matcher must
+        // not be trusted over literal-bearing repair windows either.
+        let mut self_check_failed = false;
         let segmenter = rows.and_then(|rows| {
             if rows.is_empty() {
                 return Err("the face has no added tokens".to_owned());
@@ -838,12 +842,13 @@ impl LiteralClass {
                 return Err("a normalized added token under an active normalizer".to_owned());
             }
             let segmenter = LiteralSegmenter::new(rows)?;
-            segmenter_self_check(engine, tokenizer, &segmenter, rows)?;
+            segmenter_self_check(engine, tokenizer, &segmenter, rows)
+                .inspect_err(|_| self_check_failed = true)?;
             Ok(segmenter)
         });
         Self {
             segmenter,
-            engine_matcher_agrees,
+            engine_matcher_agrees: engine_matcher_agrees && !self_check_failed,
         }
     }
 }
@@ -940,6 +945,10 @@ fn segmenter_self_check(
     segmenter: &LiteralSegmenter,
     rows: &[DocumentRow],
 ) -> Result<(), String> {
+    #[cfg(test)]
+    if test_support::SELF_CHECK_DIFFERS.with(std::cell::Cell::get) {
+        return Err("the segmenter self-check differs (injected by a test)".to_owned());
+    }
     let mut split_probes = Vec::new();
     let mut id_probes = Vec::new();
     for row in rows {
@@ -1782,6 +1791,13 @@ pub(crate) mod test_support {
     use tokenizers::pre_tokenizers::byte_level::ByteLevel;
     use tokenizers::{AddedToken, Tokenizer};
 
+    thread_local! {
+        /// Makes the segmenter self-check report a difference on this
+        /// thread, for the faces whose class is built while it is set.
+        pub(crate) static SELF_CHECK_DIFFERS: std::cell::Cell<bool> =
+            const { std::cell::Cell::new(false) };
+    }
+
     /// Normalizer of a test face.
     #[derive(Clone, Copy)]
     pub(crate) enum TestNormalizer {
@@ -2212,6 +2228,24 @@ mod literal_class_tests {
         ));
         assert!(plain_face.engine_matcher_agrees());
         assert!(plain_face.literal_segmentation_served());
+    }
+
+    /// A segmenter self-check difference leaves the face unserved, names
+    /// itself as the reason, and also clears the engine matcher's
+    /// agreement, so session repair stays off on that face.
+    #[test]
+    fn a_self_check_difference_also_turns_the_engine_matcher_off() {
+        let json = face_json(TestNormalizer::Nfc, &[plain("<|im_start|>", false)]);
+        assert!(load(&json).engine_matcher_agrees());
+        test_support::SELF_CHECK_DIFFERS.with(|flag| flag.set(true));
+        let engine = load(&json);
+        let served = engine.literal_segmentation_served();
+        let reason = engine.literal_class_reason().map(str::to_owned);
+        let agrees = engine.engine_matcher_agrees();
+        test_support::SELF_CHECK_DIFFERS.with(|flag| flag.set(false));
+        assert!(!served);
+        assert!(reason.unwrap().contains("self-check differs"));
+        assert!(!agrees);
     }
 
     /// `dropout` 0.0 is no dropout (the shipped `laguna_s_2_1` shape),

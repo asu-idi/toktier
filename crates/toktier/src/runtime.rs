@@ -717,6 +717,15 @@ impl Runtime {
             postprocessor_class: special_tokens.kind.word().to_owned(),
             special_token_prefix: special_tokens.kind.prefix().to_vec(),
             postprocessor_self_check: special_tokens.self_check,
+            literal_segmentation: {
+                let facts = router.literal_segmentation();
+                (facts["served"] != true).then(|| {
+                    facts["reason"]
+                        .as_str()
+                        .unwrap_or("the artifact is outside the served class")
+                        .to_owned()
+                })
+            },
         };
         Ok(Tokenizer {
             inner: Arc::new(TokenizerInner {

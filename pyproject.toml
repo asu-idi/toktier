@@ -87,8 +87,14 @@ dependencies = [
 # the engine bytes the readings describe are the ones this extra installs.
 # It keeps the upstream import name `fastokens`; install either it or the
 # upstream distribution, not both (packaging/fastokens-pinned/README.md).
+# The extra also holds the reference library at the oracle version the
+# pinned build's readings were taken against (the oracle on the fastokens
+# node of the support registry), so a fresh install of the extra resolves
+# the release those readings describe rather than the newest one the base
+# range admits.
 fastokens = [
     "toktier-fastokens==0.3.1.2",
+    "tokenizers==0.22.2",
 ]
 # Prebuilt delivery mode for the GPU backend: the shipped fatbin is loaded
 # through the CUDA driver API (bound via the standard library's ctypes over

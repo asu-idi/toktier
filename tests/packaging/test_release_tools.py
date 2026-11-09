@@ -109,7 +109,11 @@ def test_release_artifact_gate_requires_the_pinned_fastokens_extra() -> None:
     pinned = binding["distribution"]
     project = toml.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     extra = project["project"]["optional-dependencies"]["fastokens"]
-    assert extra == [f"{pinned['name']}=={pinned['version']}"]
+    oracle = binding["oracle"]
+    assert extra == [
+        f"{pinned['name']}=={pinned['version']}",
+        f"{oracle['package']}=={oracle['version']}",
+    ]
 
 
 def test_release_artifact_gate_requires_the_declared_ranges() -> None:

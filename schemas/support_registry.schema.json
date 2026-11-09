@@ -488,7 +488,7 @@
           "properties": {
             "reading": {
               "type": "string",
-              "pattern": "^readings/[A-Za-z0-9_./-]+[.]json$"
+              "pattern": "^readings/([A-Za-z0-9_-][A-Za-z0-9_.-]*/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*[.]json$"
             },
             "sha256": {
               "$ref": "#/$defs/sha256_hex"
@@ -733,7 +733,7 @@
           "properties": {
             "path": {
               "type": "string",
-              "pattern": "^readings/[^#]+\\.json$"
+              "pattern": "^readings/([A-Za-z0-9_-][A-Za-z0-9_.-]*/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*[.]json$"
             },
             "sha256": {
               "$ref": "#/$defs/sha256_hex"
@@ -773,7 +773,7 @@
           "properties": {
             "path": {
               "type": "string",
-              "pattern": "^readings/[^#]+\\.json$"
+              "pattern": "^readings/([A-Za-z0-9_-][A-Za-z0-9_.-]*/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*[.]json$"
             },
             "sha256": {
               "$ref": "#/$defs/sha256_hex"

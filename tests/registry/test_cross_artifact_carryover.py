@@ -395,3 +395,27 @@ def test_a_parity_reading_without_v2_is_held_to_the_per_build_identity(
     assert "mimo_v2_6: engine-parity reading was taken on another fast CPU" in (
         _problems(path)
     )
+
+
+def test_a_parity_reading_bound_by_v2_still_names_its_per_build_identity(
+    tree: Path,
+) -> None:
+    """``source_digest_v2`` is computed from the tree; ``source_digest`` is
+    what the executing extension reported, and has to be there too."""
+    v2 = _row(_document(), "mimo_v2_6")["backends"]["fast_cpu"]["source_digest_v2"]
+
+    def v2_only(reading: dict[str, Any]) -> None:
+        reading["engine"]["source_digest_v2"] = v2
+        del reading["engine"]["source_digest"]
+
+    path = _edit_reading(tree, "mimo_v2_6", "engine_parity", v2_only)
+    assert "records source_digest_v2 but no per-build engine identity" in (
+        _problems(path)
+    )
+
+    def malformed(reading: dict[str, Any]) -> None:
+        reading["engine"]["source_digest_v2"] = v2
+        reading["engine"]["source_digest"] = "not a digest"
+
+    path = _edit_reading(tree, "mimo_v2_6", "engine_parity", malformed)
+    assert "malformed per-build engine identity" in _problems(path)

@@ -948,8 +948,18 @@ def _engine_parity_problems(
                 "version-normalized fast CPU engine source identity "
                 f"({recorded_v2}, the entry binds {fast.get('source_digest_v2')})"
             )
+        # The version-normalized identity is computed from the tree; the
+        # per-build digest is the one the executing extension reported.
+        # Both are recorded, so a reading cannot carry a tree-computed v2
+        # with no extension-reported engine identity at all.
         recorded_v1 = engine.get("source_digest")
-        if recorded_v1 is not None and not _is_sha256(recorded_v1):
+        if recorded_v1 is None:
+            problems.append(
+                f"{family}: engine-parity reading records source_digest_v2 but "
+                "no per-build engine identity (engine.source_digest, the digest "
+                "the executing extension reported)"
+            )
+        elif not _is_sha256(recorded_v1):
             problems.append(
                 f"{family}: engine-parity reading records a malformed "
                 "per-build engine identity"
@@ -1283,6 +1293,17 @@ def carryover_problems(registry_path: Path) -> list[str]:
     return problems
 
 
+def _judged_devices(entry: dict[str, Any]) -> set[str] | None:
+    """The devices a delivery entry is judged on; ``None`` for no restriction.
+
+    The planner restricts a route to the listed architectures only when the
+    list is non-empty (``routing/plan.py`` check 10), so an empty or absent
+    list is read the same way here.
+    """
+    devices = entry.get("devices")
+    return {str(item) for item in devices} if devices else None
+
+
 def delivery_device_problems(registry_path: Path) -> list[str]:
     """Per record, the prebuilt delivery judges every device the JIT one does.
 
@@ -1307,12 +1328,24 @@ def delivery_device_problems(registry_path: Path) -> list[str]:
             "certified_source",
         ):
             continue
-        judged_jit = set(jit.get("devices") or ())
+        # An empty or absent device list restricts nothing, as the planner
+        # reads it (plan check 10): ``None`` here means "every device".
+        judged_jit = _judged_devices(jit)
         judged_prebuilt = (
-            set(prebuilt.get("devices") or ())
+            _judged_devices(prebuilt)
             if isinstance(prebuilt, dict) and prebuilt.get("status") == "certified"
             else set()
         )
+        if judged_prebuilt is None:
+            continue
+        if judged_jit is None:
+            problems.append(
+                f"{artifact.get('family')}: the JIT delivery is judged on every "
+                f"device where the prebuilt delivery is judged on "
+                f"{sorted(judged_prebuilt)}; gpu_delivery=\"auto\" would prefer "
+                "an unjudged prebuilt image"
+            )
+            continue
         missing = judged_jit - judged_prebuilt
         if missing:
             problems.append(

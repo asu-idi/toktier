@@ -368,6 +368,20 @@ def test_d1_a_record_not_listed_in_the_binding_is_refused(tree: Path) -> None:
     )
 
 
+def test_d1_a_record_in_the_examined_table_is_refused(tree: Path) -> None:
+    """D1: a directly judged record is not an examined artifact either (the
+    shipped examined table is empty, so the check is exercised here)."""
+    examined_path = tree / "src" / "toktier" / "routing" / "tables"
+    examined_path /= "examined_artifacts.v1.json"
+    examined = _load(examined_path)
+    artifact = _row(_load(_registry(tree)), FAMILY)
+    examined.setdefault("artifacts", []).append(
+        {"family": FAMILY, "artifact_sha256": artifact["artifact_sha256"]}
+    )
+    _dump(examined_path, examined)
+    assert any("is in the examined table" in p for p in _problems(tree))
+
+
 def test_d1_a_carry_over_node_is_refused(tree: Path) -> None:
     def change(document: dict[str, Any]) -> None:
         _row(document, FAMILY)["carryover"] = {"divergence_set": []}

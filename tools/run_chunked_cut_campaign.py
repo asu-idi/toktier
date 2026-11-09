@@ -1042,7 +1042,9 @@ def chat_variant(text: str, literals: list[str], seed: str) -> tuple[str, int]:
         return text, 0
     rng = random.Random(hashlib.sha256(seed.encode("utf-8")).digest())
     turns = rng.randint(1, 8)
-    cuts = sorted(rng.sample(range(1, len(text)), min(turns - 1, len(text) - 1)))
+    cuts = sorted(
+        rng.sample(range(1, len(text)), max(0, min(turns - 1, len(text) - 1)))
+    )
     pieces = [text[a:b] for a, b in zip([0, *cuts], [*cuts, len(text)], strict=True)]
     placed = 0
     out: list[str] = []

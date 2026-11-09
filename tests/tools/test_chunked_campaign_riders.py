@@ -59,6 +59,13 @@ def test_a_chat_variant_is_deterministic_and_places_the_literals() -> None:
         tool.chat_variant(text, literals, f"f\0{i}")[1] > 0 for i in range(50)
     )
     assert tool.chat_variant(text, [], "f") == (text, 0)
+    # One character or none: no cut, literals placed only around it.
+    for short in ("", "x"):
+        variant, placed = tool.chat_variant(short, literals, "f\0short")
+        stripped = variant
+        for literal in literals:
+            stripped = stripped.replace(literal, "")
+        assert stripped == short and placed >= 0
 
 
 def _family(tmp_path: Path, riders: tuple[str, ...]) -> Any:

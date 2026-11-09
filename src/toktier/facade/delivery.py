@@ -137,7 +137,16 @@ def prebuilt_covers_jit_devices(document: Mapping[str, Any]) -> list[str]:
         prebuilt = deliveries.get("prebuilt")
         if not isinstance(prebuilt, Mapping) or not isinstance(jit, Mapping):
             continue
-        missing = set(jit.get("devices") or ()) - set(prebuilt.get("devices") or ())
+        # An empty or absent device list restricts nothing, as the planner
+        # reads it (plan check 10).
+        jit_devices = set(jit.get("devices") or ())
+        prebuilt_devices = set(prebuilt.get("devices") or ())
+        if not prebuilt_devices:
+            continue
+        if not jit_devices:
+            problems.append(f"{record.get('family')}: every device")
+            continue
+        missing = jit_devices - prebuilt_devices
         if missing:
             problems.append(f"{record.get('family')}: {sorted(missing)}")
     return problems

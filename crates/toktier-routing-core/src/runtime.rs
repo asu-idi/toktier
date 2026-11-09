@@ -11,6 +11,8 @@ use toktier_store_core::{
     TailState, WitnessCategory,
 };
 
+use crate::fast_cpu::SegmentFacts;
+use crate::reference::{LiteralPiece, LiteralSegmenter};
 use crate::{
     ChunkEncoder, ChunkPlan, ChunkedIds, FastCpuEngine, FastEncodeSource, FastSeedPayload,
     ReferenceEngine, R_CHUNK_ROUTE_NOT_FAST_CPU,
@@ -265,6 +267,23 @@ impl AddedGate {
                 .as_ref()
                 .is_some_and(|matcher| matcher.is_match(text))
     }
+
+    /// Run-time closure check over a plan, with the gate's own matcher.
+    fn text_pieces_closed(&self, text: &str, pieces: &[LiteralPiece]) -> bool {
+        pieces.iter().all(|piece| match *piece {
+            LiteralPiece::Literal { .. } => true,
+            LiteralPiece::Text { start, end } => !self.candidate(&text[start..end]),
+        })
+    }
+}
+
+/// What the GPU-headed segmented route decided for one document.
+enum SegmentedGpu {
+    /// The document is answered; the caller records its execution.
+    Routed(RoutedIds, Option<SegmentFacts>),
+    /// Continue the ordered chain for the whole document from the backend
+    /// after the GPU, carrying this routing reason.
+    Continue(Option<&'static str>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -400,6 +419,22 @@ impl NativeRouter {
             ));
         }
         let added = AddedGate::new(&reference)?;
+        if chain
+            .iter()
+            .any(|backend| *backend != BackendKind::Reference)
+        {
+            // Build the literal class, with its segmenter self-check, at
+            // construction rather than inside the first request.
+            let _ = reference.literal_class_reason();
+        }
+        // Session repair runs the engine core's one-pass
+        // added-token matcher over the repair window; on a face where that
+        // matcher could disagree with the reference's two passes, repair
+        // is disabled and appends re-encode through the reference.
+        let repair_fast_cpu = repair_fast_cpu
+            && fast_cpu
+                .as_ref()
+                .is_none_or(|engine| engine.reference().engine_matcher_agrees());
         if gpu.is_some() {
             // The GPU state route reconstructs spans from the frozen raw
             // byte-length table; build and freeze it during construction so
@@ -493,6 +528,21 @@ impl NativeRouter {
         source: Option<&str>,
         path: Option<&str>,
     ) {
+        self.record_execution_detail(backend, input_bytes, selected_start, source, path, None);
+    }
+
+    /// One routed result, with the segment facts of a literal-segmented
+    /// document under `segments` (absent for every other document, so the
+    /// record of a literal-free input keeps its earlier shape).
+    fn record_execution_detail(
+        &self,
+        backend: &str,
+        input_bytes: u64,
+        selected_start: &str,
+        source: Option<&str>,
+        path: Option<&str>,
+        segments: Option<SegmentFacts>,
+    ) {
         let mut last = json!({
             "input_bytes": input_bytes,
             "selected_start": selected_start,
@@ -503,6 +553,9 @@ impl NativeRouter {
         }
         if let Some(path) = path {
             last["path"] = Value::String(path.to_owned());
+        }
+        if let Some(segments) = segments {
+            last["segments"] = segments.to_json();
         }
         let mut stats = self
             .stats
@@ -535,7 +588,9 @@ impl NativeRouter {
             .reference
             .encode_ids_with_added_flag(text)
             .map_err(|error| EngineError(error.to_string()))?;
-        Ok(has_added.then_some(ids))
+        // Outside the served class a gate match is answered
+        // by the reference whether or not its row holds an added id.
+        Ok((has_added || !self.reference.literal_segmentation_served()).then_some(ids))
     }
 
     fn exact_added_reference_state(&self, text: &str) -> Result<Option<SoaEncoding>, EngineError> {
@@ -546,7 +601,9 @@ impl NativeRouter {
             .reference
             .encode_state_soa_with_added_flag(text)
             .map_err(|error| EngineError(error.to_string()))?;
-        Ok(has_added.then_some(encoding))
+        // Outside the served class every gate match is answered by the
+        // reference, as on the ID route.
+        Ok((has_added || !self.reference.literal_segmentation_served()).then_some(encoding))
     }
 
     fn reference_state(&self, text: &str) -> Result<SoaEncoding, EngineError> {
@@ -637,36 +694,93 @@ impl NativeRouter {
     /// Stateless ID route: no span array, byte-to-character map, or pair
     /// vector is constructed anywhere on this path. Ledger events, counters,
     /// and diagnostic shapes are identical to the historical combined route
-    /// with `state_encode=false`.
+    /// with `state_encode=false` for every input that holds no added-token
+    /// literal; a literal-bearing input of a served face is segmented
+    /// and its execution record names the segments.
     fn route_ids_internal(&self, text: &str) -> Result<RoutedIds, EngineError> {
+        let (routed, start, segments) = self.route_ids_unrecorded(text)?;
+        self.record_execution_detail(
+            &routed.backend,
+            text.len() as u64,
+            self.chain[start].as_str(),
+            routed.source.as_deref(),
+            routed.path.as_deref(),
+            segments,
+        );
+        Ok(routed)
+    }
+
+    /// The literal segmenter when this router serves the face.
+    fn served_segmenter(&self) -> Option<&LiteralSegmenter> {
+        self.reference.literal_segmenter()
+    }
+
+    fn added_token_reference(&self, text: &str, start: usize) -> Result<RoutedIds, EngineError> {
+        let ids = self
+            .reference
+            .encode_ids(text, false)
+            .map_err(|error| EngineError(error.to_string()))?;
+        self.record_event(
+            R_INPUT_ADDED_TOKEN,
+            self.chain[start].as_str(),
+            BACKEND_REFERENCE,
+            json!({}),
+        );
+        Ok(RoutedIds {
+            ids,
+            backend: BACKEND_REFERENCE.to_owned(),
+            source: None,
+            path: Some("hf_added_token".to_owned()),
+            reason: Some(R_INPUT_ADDED_TOKEN),
+        })
+    }
+
+    /// The ID route without its final execution record: the routed result,
+    /// the chain index the input started at, and the segment facts of a
+    /// literal-segmented result. Every event is recorded here, in order.
+    fn route_ids_unrecorded(
+        &self,
+        text: &str,
+    ) -> Result<(RoutedIds, usize, Option<SegmentFacts>), EngineError> {
         let input_bytes = text.len() as u64;
         let start = self.start_index(input_bytes);
         let mut reason = self.below_gpu_threshold_event(input_bytes, start);
+        let mut first = start;
         if self.chain[start] != BackendKind::Reference {
-            if let Some(ids) = self.exact_added_reference_ids(text)? {
+            if let Some(segmenter) = self.served_segmenter() {
+                if self.chain[start] == BackendKind::Gpu && self.added.candidate(text) {
+                    match self.route_segmented_gpu(text, start, segmenter)? {
+                        SegmentedGpu::Routed(routed, segments) => {
+                            return Ok((routed, start, segments));
+                        }
+                        SegmentedGpu::Continue(carried) => {
+                            reason = carried;
+                            first = start + 1;
+                        }
+                    }
+                }
+                // A fast-CPU start segments inside the engine.
+            } else if let Some(ids) = self.exact_added_reference_ids(text)? {
                 self.record_event(
                     R_INPUT_ADDED_TOKEN,
                     self.chain[start].as_str(),
                     BACKEND_REFERENCE,
                     json!({}),
                 );
-                self.record_execution(
-                    BACKEND_REFERENCE,
-                    input_bytes,
+                return Ok((
+                    RoutedIds {
+                        ids,
+                        backend: BACKEND_REFERENCE.to_owned(),
+                        source: None,
+                        path: Some("hf_added_token".to_owned()),
+                        reason: Some(R_INPUT_ADDED_TOKEN),
+                    },
                     start,
                     None,
-                    Some("hf_added_token"),
-                );
-                return Ok(RoutedIds {
-                    ids,
-                    backend: BACKEND_REFERENCE.to_owned(),
-                    source: None,
-                    path: Some("hf_added_token".to_owned()),
-                    reason: Some(R_INPUT_ADDED_TOKEN),
-                });
+                ));
             }
         }
-        for index in start..self.chain.len() {
+        for index in first..self.chain.len() {
             match self.chain[index] {
                 BackendKind::Gpu => {
                     let cell = self.gpu.as_ref().expect("constructor gate");
@@ -677,20 +791,17 @@ impl NativeRouter {
                         }
                         Ok(gpu) => match gpu.encode_ids(text) {
                             Ok(ids) => {
-                                self.record_execution(
-                                    BACKEND_GPU,
-                                    input_bytes,
+                                return Ok((
+                                    RoutedIds {
+                                        ids,
+                                        backend: BACKEND_GPU.to_owned(),
+                                        source: Some(gpu.delivery().to_owned()),
+                                        path: Some("gpu_full".to_owned()),
+                                        reason,
+                                    },
                                     start,
-                                    Some(gpu.delivery()),
-                                    Some("gpu_full"),
-                                );
-                                return Ok(RoutedIds {
-                                    ids,
-                                    backend: BACKEND_GPU.to_owned(),
-                                    source: Some(gpu.delivery().to_owned()),
-                                    path: Some("gpu_full".to_owned()),
-                                    reason,
-                                });
+                                    None,
+                                ));
                             }
                             Err(error) => {
                                 self.gpu_fault_event(index, &error);
@@ -701,43 +812,42 @@ impl NativeRouter {
                 }
                 BackendKind::FastCpu => {
                     let fast = self.fast_cpu.as_ref().expect("constructor gate");
-                    match fast.encode_ids_with_source(text) {
+                    match fast.encode_ids_with_segments(text) {
                         Err(error) => {
                             self.fast_cpu_fault_event(index, &error);
                             reason = Some(R_EXEC_FAULT);
                         }
-                        Ok((ids, FastEncodeSource::Gigatoken)) => {
-                            self.record_execution(
-                                BACKEND_FAST_CPU,
-                                input_bytes,
+                        Ok((ids, FastEncodeSource::Gigatoken, segments)) => {
+                            let path = if segments.is_some() {
+                                "gigatoken_segmented"
+                            } else {
+                                "gigatoken_full"
+                            };
+                            return Ok((
+                                RoutedIds {
+                                    ids,
+                                    backend: BACKEND_FAST_CPU.to_owned(),
+                                    source: Some("gigatoken".to_owned()),
+                                    path: Some(path.to_owned()),
+                                    reason,
+                                },
                                 start,
-                                Some("gigatoken"),
-                                Some("gigatoken_full"),
-                            );
-                            return Ok(RoutedIds {
-                                ids,
-                                backend: BACKEND_FAST_CPU.to_owned(),
-                                source: Some("gigatoken".to_owned()),
-                                path: Some("gigatoken_full".to_owned()),
-                                reason,
-                            });
+                                segments,
+                            ));
                         }
-                        Ok((ids, source)) => {
+                        Ok((ids, source, _segments)) => {
                             let (path, code) = self.fast_cpu_reference_path(source);
-                            self.record_execution(
-                                BACKEND_REFERENCE,
-                                input_bytes,
+                            return Ok((
+                                RoutedIds {
+                                    ids,
+                                    backend: BACKEND_REFERENCE.to_owned(),
+                                    source: None,
+                                    path: Some(path.to_owned()),
+                                    reason: Some(code),
+                                },
                                 start,
                                 None,
-                                Some(path),
-                            );
-                            return Ok(RoutedIds {
-                                ids,
-                                backend: BACKEND_REFERENCE.to_owned(),
-                                source: None,
-                                path: Some(path.to_owned()),
-                                reason: Some(code),
-                            });
+                            ));
                         }
                     }
                 }
@@ -746,25 +856,208 @@ impl NativeRouter {
                         .reference
                         .encode_ids(text, false)
                         .map_err(|error| EngineError(error.to_string()))?;
-                    self.record_execution(
-                        BACKEND_REFERENCE,
-                        input_bytes,
+                    return Ok((
+                        RoutedIds {
+                            ids,
+                            backend: BACKEND_REFERENCE.to_owned(),
+                            source: None,
+                            path: Some("hf_full".to_owned()),
+                            reason,
+                        },
                         start,
                         None,
-                        Some("hf_full"),
-                    );
-                    return Ok(RoutedIds {
-                        ids,
-                        backend: BACKEND_REFERENCE.to_owned(),
-                        source: None,
-                        path: Some("hf_full".to_owned()),
-                        reason,
-                    });
+                    ));
                 }
             }
         }
         Err(EngineError(
             "native fallback chain terminated without hf".to_owned(),
+        ))
+    }
+
+    /// A literal-bearing document of a served face whose route starts on
+    /// the GPU. Each text segment is routed as a document
+    /// of its own size: segments at or above the crossover run on the GPU
+    /// in one batch call, the others (and any segment the device faults on)
+    /// on the backend after the GPU, sequentially on this thread. No
+    /// `R_INPUT_BELOW_GPU_THRESHOLD` is recorded for the document; the
+    /// execution record carries
+    /// `segments.largest_text_bytes`. A document with no segment at the
+    /// crossover continues on the next backend as a whole.
+    fn route_segmented_gpu(
+        &self,
+        text: &str,
+        start: usize,
+        segmenter: &LiteralSegmenter,
+    ) -> Result<SegmentedGpu, EngineError> {
+        let pieces = segmenter.plan(text);
+        let next = start + 1;
+        if !self.added.text_pieces_closed(text, &pieces) {
+            // A text segment holds a literal: the whole document goes to the reference.
+            let routed = self.added_token_reference(text, start)?;
+            return Ok(SegmentedGpu::Routed(routed, None));
+        }
+        let crossover = self.thresholds[start];
+        let on_gpu = |piece: &LiteralPiece| match *piece {
+            LiteralPiece::Text { start, end } => (end - start) as u64 >= crossover,
+            LiteralPiece::Literal { .. } => false,
+        };
+        if !pieces.iter().any(on_gpu) {
+            return match self.chain[next] {
+                BackendKind::FastCpu => Ok(SegmentedGpu::Continue(None)),
+                _ => {
+                    let routed = self.added_token_reference(text, start)?;
+                    Ok(SegmentedGpu::Routed(routed, None))
+                }
+            };
+        }
+        let cell = self.gpu.as_ref().expect("constructor gate");
+        let gpu = match cell.engine() {
+            Ok(gpu) => gpu,
+            Err(error) => {
+                self.gpu_open_fault_event(start, &error);
+                return Ok(SegmentedGpu::Continue(Some(R_EXEC_FAULT)));
+            }
+        };
+        let gpu_pieces = pieces
+            .iter()
+            .enumerate()
+            .filter(|(_, piece)| on_gpu(piece))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        let batch = gpu_pieces
+            .iter()
+            .map(|&index| piece_text(text, pieces[index]))
+            .collect::<Vec<_>>();
+        let results = if batch.len() == 1 {
+            vec![gpu.encode_ids(batch[0])]
+        } else {
+            gpu.encode_batch_ids(&batch)
+        };
+        if results.len() != batch.len() {
+            return Err(EngineError(
+                "native GPU batch returned the wrong row count".to_owned(),
+            ));
+        }
+        let mut rows: Vec<Option<Vec<u32>>> = vec![None; pieces.len()];
+        let mut reason = None;
+        let mut facts = SegmentFacts::default();
+        for (&index, result) in gpu_pieces.iter().zip(results) {
+            match result {
+                Ok(ids) => {
+                    facts.gpu_bytes += piece_text(text, pieces[index]).len();
+                    rows[index] = Some(ids);
+                }
+                Err(error) => {
+                    self.record_event(
+                        R_EXEC_FAULT,
+                        BACKEND_GPU,
+                        self.chain[next].as_str(),
+                        json!({
+                            "error": "NativeGpuError",
+                            "message": error.to_string(),
+                            "scope": "segment",
+                        }),
+                    );
+                    reason = Some(R_EXEC_FAULT);
+                }
+            }
+        }
+        if facts.gpu_bytes == 0 {
+            return Ok(SegmentedGpu::Continue(reason));
+        }
+        let rest = pieces
+            .iter()
+            .enumerate()
+            .filter(|(index, piece)| {
+                rows[*index].is_none() && matches!(piece, LiteralPiece::Text { .. })
+            })
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        let rest_text = rest
+            .iter()
+            .map(|&index| piece_text(text, pieces[index]))
+            .collect::<Vec<_>>();
+        let mut on_reference = rest.clone();
+        if !rest.is_empty() && self.chain[next] == BackendKind::FastCpu {
+            let fast = self.fast_cpu.as_ref().expect("constructor gate");
+            match fast.encode_literal_free_segments(&rest_text) {
+                Ok(Some(encoded)) => {
+                    for (&index, ids) in rest.iter().zip(encoded) {
+                        facts.fast_cpu_bytes += piece_text(text, pieces[index]).len();
+                        rows[index] = Some(ids);
+                    }
+                    on_reference.clear();
+                }
+                Ok(None) => {
+                    // The engine guard refused a segment: the whole
+                    // document is answered by the reference, as a guarded
+                    // full encode is.
+                    let (path, code) =
+                        self.fast_cpu_reference_path(FastEncodeSource::ReferenceEngineGuard);
+                    let ids = self
+                        .reference
+                        .encode_ids(text, false)
+                        .map_err(|error| EngineError(error.to_string()))?;
+                    return Ok(SegmentedGpu::Routed(
+                        RoutedIds {
+                            ids,
+                            backend: BACKEND_REFERENCE.to_owned(),
+                            source: None,
+                            path: Some(path.to_owned()),
+                            reason: Some(code),
+                        },
+                        None,
+                    ));
+                }
+                Err(error) => {
+                    self.record_event(
+                        R_EXEC_FAULT,
+                        BACKEND_FAST_CPU,
+                        BACKEND_REFERENCE,
+                        json!({
+                            "error": "FastCpuEngineError",
+                            "message": error.to_string(),
+                            "scope": "segment",
+                        }),
+                    );
+                    reason = Some(R_EXEC_FAULT);
+                }
+            }
+        }
+        for index in on_reference {
+            let segment = piece_text(text, pieces[index]);
+            rows[index] = Some(
+                self.reference
+                    .encode_ids(segment, false)
+                    .map_err(|error| EngineError(error.to_string()))?,
+            );
+            facts.hf_bytes += segment.len();
+        }
+        let mut ids = Vec::new();
+        for (index, piece) in pieces.iter().enumerate() {
+            match *piece {
+                LiteralPiece::Literal { id, start, end } => {
+                    ids.push(id);
+                    facts.add_literal(end - start);
+                }
+                LiteralPiece::Text { start, end } => {
+                    ids.extend(rows[index].take().ok_or_else(|| {
+                        EngineError("a text segment was left unencoded".to_owned())
+                    })?);
+                    facts.add_text(end - start);
+                }
+            }
+        }
+        Ok(SegmentedGpu::Routed(
+            RoutedIds {
+                ids,
+                backend: BACKEND_GPU.to_owned(),
+                source: Some(gpu.delivery().to_owned()),
+                path: Some("gpu_segmented".to_owned()),
+                reason,
+            },
+            Some(facts),
         ))
     }
 
@@ -1096,6 +1389,8 @@ impl NativeRouter {
         // it so the returned facts quote the ledger rather than re-read
         // the path string.
         let mut reasons: Vec<Option<&'static str>> = vec![None; texts.len()];
+        let mut segments: Vec<Option<SegmentFacts>> = vec![None; texts.len()];
+        let served = self.served_segmenter().is_some();
 
         // Resolve the exact added-token frontend before grouping rows.  The
         // native matcher is only a cheap candidate gate; the reference
@@ -1115,6 +1410,18 @@ impl NativeRouter {
                 reasons[row] = Some(R_INPUT_BELOW_GPU_THRESHOLD);
             }
             if self.chain[starts[row]] == BackendKind::Reference {
+                continue;
+            }
+            if served {
+                // A literal-bearing row whose route starts on the GPU takes
+                // the single-document path; a fast-CPU-stage row is
+                // segmented inside its batch worker.
+                if self.chain[starts[row]] == BackendKind::Gpu && self.added.candidate(text) {
+                    let (routed, _start, facts) = self.route_ids_unrecorded(text)?;
+                    reasons[row] = routed.reason;
+                    segments[row] = facts;
+                    output[row] = Some(routed);
+                }
                 continue;
             }
             if let Some(ids) = self.exact_added_reference_ids(text)? {
@@ -1193,15 +1500,22 @@ impl NativeRouter {
                 }
                 BackendKind::FastCpu => {
                     let fast = self.fast_cpu.as_ref().expect("constructor gate");
-                    match fast.encode_batch_ids_with_source(&batch) {
+                    match fast.encode_batch_ids_with_segments(&batch) {
                         Ok(rows) => {
-                            for (row, (ids, source)) in indices.into_iter().zip(rows) {
+                            for (row, (ids, source, facts)) in indices.into_iter().zip(rows) {
                                 let routed = match source {
                                     FastEncodeSource::Gigatoken => RoutedIds {
                                         ids,
                                         backend: BACKEND_FAST_CPU.to_owned(),
                                         source: Some("gigatoken".to_owned()),
-                                        path: Some("gigatoken_full".to_owned()),
+                                        path: Some(
+                                            if facts.is_some() {
+                                                "gigatoken_segmented"
+                                            } else {
+                                                "gigatoken_full"
+                                            }
+                                            .to_owned(),
+                                        ),
                                         reason: reasons[row],
                                     },
                                     source @ (FastEncodeSource::ReferenceAddedToken
@@ -1217,6 +1531,9 @@ impl NativeRouter {
                                         }
                                     }
                                 };
+                                if routed.backend == BACKEND_FAST_CPU {
+                                    segments[row] = facts;
+                                }
                                 output[row] = Some(routed);
                             }
                         }
@@ -1264,12 +1581,13 @@ impl NativeRouter {
         // recorded in caller order so `last_execution` and counters retain
         // the same observable semantics as row-by-row encoding.
         for (row, routed) in output.iter().enumerate() {
-            self.record_execution(
+            self.record_execution_detail(
                 &routed.backend,
                 texts[row].len() as u64,
-                starts[row],
+                self.chain[starts[row]].as_str(),
                 routed.source.as_deref(),
                 routed.path.as_deref(),
+                segments[row],
             );
         }
         Ok(output)
@@ -1356,14 +1674,24 @@ impl NativeRouter {
             }
         };
         let encoded = fast.chunked_encode_ids(text, k, min_chunk, scan_budget)?;
+        let served = self.served_segmenter().is_some();
+        let mut row_start = 0usize;
         for (source, bytes) in encoded.sources.iter().zip(&encoded.row_bytes) {
+            let row = text.get(row_start..row_start + *bytes).unwrap_or("");
+            row_start += *bytes;
             match source {
+                // A chunk row that holds a literal was segmented inside its
+                // worker.
                 FastEncodeSource::Gigatoken => self.record_execution(
                     BACKEND_FAST_CPU,
                     *bytes as u64,
                     start,
                     Some("gigatoken"),
-                    Some("gigatoken_full"),
+                    Some(if served && self.added.candidate(row) {
+                        "gigatoken_segmented"
+                    } else {
+                        "gigatoken_full"
+                    }),
                 ),
                 source => {
                     let (path, _code) = self.fast_cpu_reference_path(*source);
@@ -1476,6 +1804,14 @@ impl SessionEncoder for NativeRouter {
         match (&self.fast_cpu, self.repair_fast_cpu) {
             (Some(engine), true) => engine.witness_category(),
             _ => WitnessCategory::NoneFullReencode,
+        }
+    }
+}
+
+fn piece_text(text: &str, piece: LiteralPiece) -> &str {
+    match piece {
+        LiteralPiece::Literal { start, end, .. } | LiteralPiece::Text { start, end } => {
+            &text[start..end]
         }
     }
 }
@@ -2653,5 +2989,549 @@ mod tests {
         let router = gpu_router(Arc::new(ClosingGpu::default()));
         assert!(router.gpu_engine_opened());
         assert_eq!(router.gpu_engine_open_error(), None);
+    }
+}
+
+/// Literal segmentation on the router's ID carrier. The faces are small
+/// byte-level faces;
+/// the GPU stand-in encodes through the reference and refuses any input
+/// that holds a literal, so a passing test also shows that only text
+/// segments reach the device.
+#[cfg(test)]
+mod literal_segment_tests {
+    use super::*;
+    use crate::reference::test_support::{face_json, plain, TestNormalizer};
+    use sha2::{Digest, Sha256};
+    use tokenizers::AddedToken;
+
+    const CHAT: [(&str, bool); 4] = [
+        ("<|im_start|>", false),
+        ("<|im_end|>", false),
+        ("<think>", true),
+        ("</think>", true),
+    ];
+
+    struct RefGpu {
+        reference: Arc<ReferenceEngine>,
+        literals: Vec<String>,
+        fault_marker: Option<&'static str>,
+        inputs: Mutex<Vec<String>>,
+    }
+
+    impl NativeGpuEngine for RefGpu {
+        fn encode_ids(&self, text: &str) -> Result<Vec<u32>, NativeRuntimeError> {
+            assert!(
+                self.literals
+                    .iter()
+                    .all(|literal| !text.contains(literal.as_str())),
+                "a literal reached the device: {text:?}"
+            );
+            self.inputs.lock().unwrap().push(text.to_owned());
+            if self
+                .fault_marker
+                .is_some_and(|marker| text.contains(marker))
+            {
+                return Err(NativeRuntimeError::new("injected device fault"));
+            }
+            self.reference
+                .encode_ids(text, false)
+                .map_err(|error| NativeRuntimeError::new(error.to_string()))
+        }
+
+        fn delivery(&self) -> &'static str {
+            "prebuilt"
+        }
+    }
+
+    fn pclass() -> Vec<u8> {
+        let mut pclass = vec![0u8; crate::N_CODEPOINTS];
+        for value in b'a'..=b'z' {
+            pclass[value as usize] = 2;
+        }
+        for value in b'A'..=b'Z' {
+            pclass[value as usize] = 2;
+        }
+        for value in b'0'..=b'9' {
+            pclass[value as usize] = 3;
+        }
+        pclass[b' ' as usize] = 1;
+        pclass
+    }
+
+    fn chat_json() -> Vec<u8> {
+        let tokens = CHAT
+            .iter()
+            .map(|(content, normalized)| plain(content, *normalized))
+            .collect::<Vec<_>>();
+        face_json(TestNormalizer::EmptySequence, &tokens)
+    }
+
+    fn fast_engine(json: &[u8], reference: &Arc<ReferenceEngine>) -> Arc<FastCpuEngine> {
+        let digest = Sha256::digest(json)
+            .iter()
+            .map(|value| format!("{value:02x}"))
+            .collect::<String>();
+        let mut spec = crate::FastRepairSpec::new(
+            "tiny_bytes".to_owned(),
+            digest,
+            4,
+            2,
+            reference.has_normalizer(),
+        );
+        spec.window_chars = 64;
+        spec.max_retries = 2;
+        Arc::new(
+            FastCpuEngine::from_reference(json, Arc::clone(reference), spec, pclass()).unwrap(),
+        )
+    }
+
+    struct Setup {
+        router: NativeRouter,
+        reference: Arc<ReferenceEngine>,
+        gpu: Option<Arc<RefGpu>>,
+    }
+
+    fn setup(
+        json: &[u8],
+        chain: &[&str],
+        thresholds: &[u64],
+        fault: Option<&'static str>,
+    ) -> Setup {
+        let reference = Arc::new(ReferenceEngine::from_bytes(json).unwrap());
+        let fast = chain
+            .contains(&BACKEND_FAST_CPU)
+            .then(|| fast_engine(json, &reference));
+        let literals = reference
+            .added_tokens()
+            .into_iter()
+            .map(|(_, content, _)| content)
+            .collect::<Vec<_>>();
+        let gpu = chain.contains(&BACKEND_GPU).then(|| {
+            Arc::new(RefGpu {
+                reference: Arc::clone(&reference),
+                literals,
+                fault_marker: fault,
+                inputs: Mutex::new(Vec::new()),
+            })
+        });
+        let router = NativeRouter::new(
+            chain.iter().map(|name| (*name).to_owned()).collect(),
+            thresholds.to_vec(),
+            Arc::clone(&reference),
+            fast,
+            true,
+            gpu.clone()
+                .map(|gpu| NativeGpuSource::Open(gpu as Arc<dyn NativeGpuEngine>)),
+            false,
+            true,
+        )
+        .unwrap();
+        Setup {
+            router,
+            reference,
+            gpu,
+        }
+    }
+
+    fn chat(turns: &[&str]) -> String {
+        let mut text = String::new();
+        for (index, turn) in turns.iter().enumerate() {
+            let role = if index % 2 == 0 { "user" } else { "assistant" };
+            text.push_str(&format!("<|im_start|>{role}\n"));
+            if index % 2 == 1 {
+                text.push_str("<think>\nreasoning here\n</think>\n");
+            }
+            text.push_str(turn);
+            text.push_str("<|im_end|>\n");
+        }
+        text
+    }
+
+    fn segments(stats: &RuntimeStats) -> Value {
+        stats.last_execution.as_ref().unwrap()["segments"].clone()
+    }
+
+    fn codes(stats: &RuntimeStats) -> Vec<String> {
+        stats
+            .events
+            .iter()
+            .map(|event| event.code.clone())
+            .collect()
+    }
+
+    #[test]
+    fn a_literal_bearing_document_is_segmented_on_the_fast_cpu_route() {
+        let setup = setup(
+            &chat_json(),
+            &[BACKEND_FAST_CPU, BACKEND_REFERENCE],
+            &[0, 0],
+            None,
+        );
+        assert!(setup.reference.literal_segmentation_served());
+        let text = chat(&[
+            "hello there, caf\u{e9} \u{4e2d}\u{6587}",
+            "a reply with 42 words",
+        ]);
+        let routed = setup.router.encode_ids(&text, false).unwrap();
+        assert_eq!(
+            routed.ids,
+            setup.reference.encode_ids(&text, false).unwrap()
+        );
+        assert_eq!(routed.backend, BACKEND_FAST_CPU);
+        assert_eq!(routed.path.as_deref(), Some("gigatoken_segmented"));
+        assert_eq!(routed.reason, None);
+        let stats = setup.router.stats();
+        assert!(codes(&stats).is_empty(), "{:?}", stats.events);
+        let facts = segments(&stats);
+        assert_eq!(facts["literals"], 6);
+        assert_eq!(facts["bytes"]["hf"], 0);
+        assert_eq!(facts["bytes"]["gpu"], 0);
+        assert!(facts["bytes"]["fast_cpu"].as_u64().unwrap() > 0);
+        assert_eq!(
+            facts["bytes"]["fast_cpu"].as_u64().unwrap() + facts["literal_bytes"].as_u64().unwrap(),
+            text.len() as u64
+        );
+        let fast_stats = setup.router.fast_cpu.as_ref().unwrap().stats();
+        assert_eq!(fast_stats.path_counts.get("gigatoken_segmented"), Some(&1));
+        // A literal at offset 0, at the end, and adjacent literals.
+        for text in [
+            "<|im_start|>",
+            "<|im_end|><|im_start|>x",
+            "a<think></think>",
+            "</think>",
+        ] {
+            let routed = setup.router.encode_ids(text, false).unwrap();
+            assert_eq!(
+                routed.ids,
+                setup.reference.encode_ids(text, false).unwrap(),
+                "{text:?}"
+            );
+            assert_eq!(routed.path.as_deref(), Some("gigatoken_segmented"));
+        }
+    }
+
+    #[test]
+    fn a_literal_free_document_keeps_its_unsegmented_record() {
+        let setup = setup(
+            &chat_json(),
+            &[BACKEND_FAST_CPU, BACKEND_REFERENCE],
+            &[0, 0],
+            None,
+        );
+        let text = "plain text with <|im_star and think> fragments";
+        let routed = setup.router.encode_ids(text, false).unwrap();
+        assert_eq!(routed.path.as_deref(), Some("gigatoken_full"));
+        let stats = setup.router.stats();
+        assert_eq!(
+            stats.last_execution,
+            Some(json!({
+                "input_bytes": text.len(),
+                "selected_start": BACKEND_FAST_CPU,
+                "executed_backend": BACKEND_FAST_CPU,
+                "source": "gigatoken",
+                "path": "gigatoken_full",
+            }))
+        );
+        assert!(stats.events.is_empty());
+    }
+
+    #[test]
+    fn batch_rows_holding_literals_are_segmented_in_their_workers() {
+        let setup = setup(
+            &chat_json(),
+            &[BACKEND_FAST_CPU, BACKEND_REFERENCE],
+            &[0, 0],
+            None,
+        );
+        let texts = [
+            chat(&["first"]),
+            "no literal at all".to_owned(),
+            chat(&["second", "third"]),
+            String::new(),
+        ];
+        let refs = texts.iter().map(String::as_str).collect::<Vec<_>>();
+        let rows = setup.router.encode_batch_ids(&refs, false).unwrap();
+        let paths = rows
+            .iter()
+            .map(|row| row.path.clone().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            paths,
+            [
+                "gigatoken_segmented",
+                "gigatoken_full",
+                "gigatoken_segmented",
+                "gigatoken_full"
+            ]
+        );
+        for (row, text) in rows.iter().zip(&texts) {
+            assert_eq!(row.ids, setup.reference.encode_ids(text, false).unwrap());
+        }
+        let stats = setup.router.stats();
+        assert_eq!(stats.execution_counts.get(BACKEND_FAST_CPU), Some(&4));
+        assert!(stats.events.is_empty());
+    }
+
+    #[test]
+    fn gpu_headed_documents_route_each_segment_by_its_own_size() {
+        let crossover = 64u64;
+        let setup = setup(
+            &chat_json(),
+            &[BACKEND_GPU, BACKEND_FAST_CPU, BACKEND_REFERENCE],
+            &[crossover, 0, 0],
+            None,
+        );
+        let long = "the quick brown fox jumps over the lazy dog ".repeat(4);
+        let text = chat(&[&long, "short"]);
+        let routed = setup.router.encode_ids(&text, false).unwrap();
+        assert_eq!(
+            routed.ids,
+            setup.reference.encode_ids(&text, false).unwrap()
+        );
+        assert_eq!(routed.backend, BACKEND_GPU);
+        assert_eq!(routed.path.as_deref(), Some("gpu_segmented"));
+        assert_eq!(routed.reason, None);
+        let stats = setup.router.stats();
+        assert!(!codes(&stats).contains(&R_INPUT_BELOW_GPU_THRESHOLD.to_owned()));
+        let facts = segments(&stats);
+        assert!(facts["bytes"]["gpu"].as_u64().unwrap() >= crossover);
+        assert!(facts["bytes"]["fast_cpu"].as_u64().unwrap() > 0);
+        assert_eq!(facts["bytes"]["hf"], 0);
+        let inputs = setup.gpu.as_ref().unwrap().inputs.lock().unwrap().clone();
+        assert!(inputs.iter().all(|input| input.len() as u64 >= crossover));
+
+        // At or above the crossover, every segment below it: the corrected
+        // CPU engine runs the document, and no below-threshold code is
+        // recorded for it.
+        let small = chat(&["one small turn", "and another", "a third one"]);
+        assert!(small.len() as u64 >= crossover);
+        let routed = setup.router.encode_ids(&small, false).unwrap();
+        assert_eq!(
+            routed.ids,
+            setup.reference.encode_ids(&small, false).unwrap()
+        );
+        assert_eq!(routed.path.as_deref(), Some("gigatoken_segmented"));
+        assert_eq!(routed.reason, None);
+        let stats = setup.router.stats();
+        assert!(!codes(&stats).contains(&R_INPUT_BELOW_GPU_THRESHOLD.to_owned()));
+        assert!(segments(&stats)["largest_text_bytes"].as_u64().unwrap() < crossover);
+        assert_eq!(
+            stats.last_execution.as_ref().unwrap()["selected_start"],
+            BACKEND_GPU
+        );
+
+        // Below the crossover the document-level decision is recorded as
+        // before, then the engine segments it.
+        let tiny = "<|im_start|>hi";
+        let routed = setup.router.encode_ids(tiny, false).unwrap();
+        assert_eq!(routed.reason, Some(R_INPUT_BELOW_GPU_THRESHOLD));
+        assert_eq!(routed.path.as_deref(), Some("gigatoken_segmented"));
+    }
+
+    #[test]
+    fn a_segment_the_device_faults_on_falls_back_alone() {
+        let setup = setup(
+            &chat_json(),
+            &[BACKEND_GPU, BACKEND_FAST_CPU, BACKEND_REFERENCE],
+            &[32, 0, 0],
+            Some("FAULT"),
+        );
+        let text = chat(&[
+            "a long enough first turn for the device to run",
+            "a long enough FAULT turn that the device refuses",
+        ]);
+        let routed = setup.router.encode_ids(&text, false).unwrap();
+        assert_eq!(
+            routed.ids,
+            setup.reference.encode_ids(&text, false).unwrap()
+        );
+        assert_eq!(routed.path.as_deref(), Some("gpu_segmented"));
+        assert_eq!(routed.reason, Some(R_EXEC_FAULT));
+        let stats = setup.router.stats();
+        let fault = stats
+            .events
+            .iter()
+            .find(|event| event.code == R_EXEC_FAULT)
+            .unwrap();
+        assert_eq!(fault.detail["scope"], "segment");
+        // Every device segment faulting: the whole document continues on
+        // the next backend, segmented there.
+        let all_fault = chat(&[
+            "FAULT on a long enough first turn",
+            "FAULT again, long enough here",
+        ]);
+        let routed = setup.router.encode_ids(&all_fault, false).unwrap();
+        assert_eq!(
+            routed.ids,
+            setup.reference.encode_ids(&all_fault, false).unwrap()
+        );
+        assert_eq!(routed.path.as_deref(), Some("gigatoken_segmented"));
+        assert_eq!(routed.reason, Some(R_EXEC_FAULT));
+    }
+
+    #[test]
+    fn a_gpu_reference_chain_answers_small_segments_on_the_reference() {
+        let setup = setup(
+            &chat_json(),
+            &[BACKEND_GPU, BACKEND_REFERENCE],
+            &[48, 0],
+            None,
+        );
+        let small = chat(&["one small turn", "and another one"]);
+        assert!(small.len() >= 48);
+        let routed = setup.router.encode_ids(&small, false).unwrap();
+        assert_eq!(
+            routed.ids,
+            setup.reference.encode_ids(&small, false).unwrap()
+        );
+        assert_eq!(routed.path.as_deref(), Some("hf_added_token"));
+        assert_eq!(routed.reason, Some(R_INPUT_ADDED_TOKEN));
+        let long = "the quick brown fox jumps over the lazy dog ".repeat(2);
+        let mixed = chat(&[&long, "short"]);
+        let routed = setup.router.encode_ids(&mixed, false).unwrap();
+        assert_eq!(
+            routed.ids,
+            setup.reference.encode_ids(&mixed, false).unwrap()
+        );
+        assert_eq!(routed.path.as_deref(), Some("gpu_segmented"));
+        let facts = segments(&setup.router.stats());
+        assert!(facts["bytes"]["gpu"].as_u64().unwrap() > 0);
+        assert!(facts["bytes"]["hf"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn gpu_headed_batch_rows_with_literals_take_the_single_document_path() {
+        let setup = setup(
+            &chat_json(),
+            &[BACKEND_GPU, BACKEND_FAST_CPU, BACKEND_REFERENCE],
+            &[64, 0, 0],
+            None,
+        );
+        let long = "the quick brown fox jumps over the lazy dog ".repeat(4);
+        let texts = [
+            chat(&[&long]),
+            long.clone(),
+            "<|im_start|>x".to_owned(),
+            chat(&["a", "b"]),
+        ];
+        let refs = texts.iter().map(String::as_str).collect::<Vec<_>>();
+        let rows = setup.router.encode_batch_ids(&refs, false).unwrap();
+        let paths = rows
+            .iter()
+            .map(|row| row.path.clone().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            paths,
+            [
+                "gpu_segmented",
+                "gpu_full",
+                "gigatoken_segmented",
+                "gigatoken_segmented"
+            ]
+        );
+        for (row, text) in rows.iter().zip(&texts) {
+            assert_eq!(row.ids, setup.reference.encode_ids(text, false).unwrap());
+        }
+        let stats = setup.router.stats();
+        let executions = stats.execution_counts.values().sum::<u64>();
+        assert_eq!(executions, 4);
+    }
+
+    /// On a face outside the served class a gate match goes to the
+    /// reference even when the reference declines the literal there.
+    #[test]
+    fn an_unserved_face_answers_every_gate_match_on_the_reference() {
+        let json = face_json(
+            TestNormalizer::None,
+            &[AddedToken::from("xq", true)
+                .single_word(true)
+                .normalized(false)],
+        );
+        let setup = setup(&json, &[BACKEND_FAST_CPU, BACKEND_REFERENCE], &[0, 0], None);
+        assert!(!setup.reference.literal_segmentation_served());
+        for text in ["axq", "a xq b", "xqxq"] {
+            let routed = setup.router.encode_ids(text, false).unwrap();
+            assert_eq!(
+                routed.ids,
+                setup.reference.encode_ids(text, false).unwrap(),
+                "{text:?}"
+            );
+            assert_eq!(routed.path.as_deref(), Some("hf_added_token"));
+            let rows = setup.router.encode_batch_ids(&[text], false).unwrap();
+            assert_eq!(rows[0].ids, routed.ids);
+            let fast = setup.router.fast_cpu.as_ref().unwrap();
+            assert_eq!(fast.encode_ids(text).unwrap(), routed.ids);
+        }
+        // The engine core's matcher ignores the flag, so repair is off.
+        assert_eq!(
+            setup.router.witness_category(),
+            WitnessCategory::NoneFullReencode
+        );
+    }
+
+    fn seed_then_append(
+        encoder: &dyn SessionEncoder,
+        seed: &str,
+        delta: &str,
+    ) -> (Vec<u32>, String) {
+        let mut tail = TailState::new();
+        encoder.append(&mut tail, seed).unwrap();
+        let report = encoder.append(&mut tail, delta).unwrap();
+        (tail.ids().to_vec(), report.path)
+    }
+
+    /// The append path on cross-phase overlap faces: a session seeded
+    /// with literal-free text and extended by overlapping literals.
+    #[test]
+    fn a_face_whose_engine_matcher_disagrees_never_repairs_over_literals() {
+        for later in ["x<zq>y", "kk<z"] {
+            let json = face_json(
+                TestNormalizer::EmptySequence,
+                &[plain("<zq>", false), plain(later, true)],
+            );
+            let setup = setup(&json, &[BACKEND_FAST_CPU, BACKEND_REFERENCE], &[0, 0], None);
+            assert!(setup.reference.literal_segmentation_served());
+            assert!(!setup.reference.engine_matcher_agrees());
+            assert_eq!(
+                setup.router.witness_category(),
+                WitnessCategory::NoneFullReencode
+            );
+            let seed = "lorem ipsum dolor sit amet ".repeat(70);
+            let delta = format!("note {later}<zq>y end kk<zq> and x<zq>y again");
+            let full = format!("{seed}{delta}");
+            let expected = setup.reference.encode_ids(&full, false).unwrap();
+            let (ids, _path) = seed_then_append(&setup.router, &seed, &delta);
+            assert_eq!(ids, expected, "router {later}");
+            let fast = setup.router.fast_cpu.as_ref().unwrap();
+            let (ids, path) = seed_then_append(fast.as_ref(), &seed, &delta);
+            assert_eq!(ids, expected, "engine {later}");
+            assert_eq!(path, "hf_full_added_token");
+            // Full encodes are segmented and exact.
+            let routed = setup.router.encode_ids(&full, false).unwrap();
+            assert_eq!(routed.ids, expected);
+            assert_eq!(routed.path.as_deref(), Some("gigatoken_segmented"));
+        }
+        // The harmless direction keeps repair, and it is exact.
+        let json = face_json(
+            TestNormalizer::EmptySequence,
+            &[
+                plain("<\u{ff5c}/table>\u{ff5c}", false),
+                plain("\u{ff5c}DSML\u{ff5c}", true),
+            ],
+        );
+        let setup = setup(&json, &[BACKEND_FAST_CPU, BACKEND_REFERENCE], &[0, 0], None);
+        assert!(setup.reference.engine_matcher_agrees());
+        assert_eq!(
+            setup.router.witness_category(),
+            WitnessCategory::BpeSyncTransition
+        );
+        let seed = "lorem ipsum dolor sit amet ".repeat(70);
+        let delta = " a <\u{ff5c}/table>\u{ff5c}DSML\u{ff5c} b \u{ff5c}DSML\u{ff5c} c".to_owned();
+        let expected = setup
+            .reference
+            .encode_ids(&format!("{seed}{delta}"), false)
+            .unwrap();
+        let (ids, _path) = seed_then_append(&setup.router, &seed, &delta);
+        assert_eq!(ids, expected);
     }
 }

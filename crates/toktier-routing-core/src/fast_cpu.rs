@@ -14,6 +14,9 @@ use toktier_store_core::{
     WitnessCategory,
 };
 
+use serde_json::{json, Value};
+
+use crate::reference::LiteralPiece;
 use crate::{BpeSyncBoundary, ReferenceEngine, ReferenceEngineError};
 
 /// Frozen artifact-specific repair parameters.
@@ -96,6 +99,59 @@ pub struct FastEncodeOutcome {
     pub encoding: Encoding,
     pub source: FastEncodeSource,
 }
+
+/// What one literal-segmented document consisted of and which engine
+/// produced its text-segment bytes.
+/// Literal bytes are emitted by the segmenter itself and are counted
+/// apart from every engine.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct SegmentFacts {
+    pub(crate) literals: usize,
+    pub(crate) text: usize,
+    pub(crate) literal_bytes: usize,
+    pub(crate) largest_text_bytes: usize,
+    pub(crate) gpu_bytes: usize,
+    pub(crate) fast_cpu_bytes: usize,
+    pub(crate) hf_bytes: usize,
+}
+
+impl SegmentFacts {
+    pub(crate) fn add_literal(&mut self, bytes: usize) {
+        self.literals += 1;
+        self.literal_bytes += bytes;
+    }
+
+    pub(crate) fn add_text(&mut self, bytes: usize) {
+        self.text += 1;
+        self.largest_text_bytes = self.largest_text_bytes.max(bytes);
+    }
+
+    pub(crate) fn to_json(self) -> Value {
+        json!({
+            "literals": self.literals,
+            "text": self.text,
+            "literal_bytes": self.literal_bytes,
+            "largest_text_bytes": self.largest_text_bytes,
+            "bytes": {
+                "gpu": self.gpu_bytes,
+                "fast_cpu": self.fast_cpu_bytes,
+                "hf": self.hf_bytes,
+            },
+        })
+    }
+}
+
+/// One batch row: ids, the implementation that produced them, and the
+/// segment facts when the row was literal-segmented.
+pub(crate) type SegmentedRow = (Vec<u32>, FastEncodeSource, Option<SegmentFacts>);
+
+/// The ID-carrier encoder of one literal-segmented document.
+type SegmentEncode<T> = fn(
+    &FastCpuEngine,
+    &str,
+    &[LiteralPiece],
+    &mut Gigatoken,
+) -> Result<(T, SegmentFacts), FastCpuEngineError>;
 
 /// State-seed payload of the corrected CPU route.
 ///
@@ -185,6 +241,17 @@ impl AddedTokenGate {
                 .as_ref()
                 .is_some_and(|matcher| matcher.is_match(text))
     }
+
+    /// Run-time closure check: no text piece of a plan holds any
+    /// added-token content.
+    /// This is the gate's own matcher, so it also witnesses that the plan's
+    /// pattern sets and the gate's agree.
+    fn text_pieces_closed(&self, text: &str, pieces: &[LiteralPiece]) -> bool {
+        pieces.iter().all(|piece| match *piece {
+            LiteralPiece::Literal { .. } => true,
+            LiteralPiece::Text { start, end } => !self.may_match(&text[start..end]),
+        })
+    }
 }
 
 /// Corrected-Gigatoken state with payload-sized lazy batch workers.
@@ -246,6 +313,11 @@ pub struct FastCpuEngine {
     core: OnceLock<Result<FastCpuCore, FastCpuEngineError>>,
     boundary: BpeSyncBoundary,
     added_gate: AddedTokenGate,
+    /// Whether the engine core's one-pass matcher agrees
+    /// with the reference's two extraction passes on this face. When it
+    /// does not, a repair window that holds literal text is re-encoded by
+    /// the reference instead of reaching that matcher.
+    matcher_agrees: bool,
     stats: Mutex<FastRepairStats>,
     /// The certified chunk-parallel planner and its worker pool, built on
     /// first use (`chunked.rs`).
@@ -322,6 +394,9 @@ impl FastCpuEngine {
         let boundary = BpeSyncBoundary::new(pclass)
             .map_err(|error| FastCpuEngineError::new(error.to_string()))?;
         let added_gate = AddedTokenGate::from_reference(&reference)?;
+        // Build the literal class (and run the segmenter self-check) now,
+        // at construction, rather than inside the first request.
+        let matcher_agrees = reference.engine_matcher_agrees();
         let engine = Self {
             spec,
             reference,
@@ -329,6 +404,7 @@ impl FastCpuEngine {
             core: OnceLock::new(),
             boundary,
             added_gate,
+            matcher_agrees,
             stats: Mutex::new(FastRepairStats::default()),
             chunked: OnceLock::new(),
         };
@@ -483,6 +559,33 @@ impl FastCpuEngine {
         self.full_ids_with_source(text, &mut engine)
     }
 
+    /// [`Self::encode_ids_with_source`] plus the segment facts of a
+    /// literal-segmented result, for the router's execution ledger.
+    pub(crate) fn encode_ids_with_segments(&self, text: &str) -> Result<SegmentedRow, EngineError> {
+        let mut engine = self.locked_primary()?;
+        self.full_ids_with_segments(text, &mut engine)
+    }
+
+    /// Encode literal-free text segments of one document sequentially on
+    /// the calling thread, with the per-segment byte-identity
+    /// and closure checks of a full encode. `Ok(None)` means the engine
+    /// guard refused a segment; the caller then answers the whole document
+    /// with the reference.
+    pub(crate) fn encode_literal_free_segments(
+        &self,
+        segments: &[&str],
+    ) -> Result<Option<Vec<Vec<u32>>>, EngineError> {
+        let mut engine = self.locked_primary()?;
+        let mut rows = Vec::with_capacity(segments.len());
+        for segment in segments {
+            match self.fast_ids_with(segment, &mut engine) {
+                Ok(ids) => rows.push(ids),
+                Err(_) => return Ok(None),
+            }
+        }
+        Ok(Some(rows))
+    }
+
     /// State-seed encode through the single guarded gate: the Gigatoken
     /// row yields closure-verified IDs for lazy span adoption, and the
     /// reference rows yield materialized structure-of-arrays spans. The
@@ -510,6 +613,8 @@ impl FastCpuEngine {
                 this.fast_ids_with(text, engine)
                     .map(FastSeedPayload::GigatokenIds)
             },
+            None,
+            &mut None,
         )
     }
 
@@ -527,6 +632,20 @@ impl FastCpuEngine {
         &self,
         texts: &[&str],
     ) -> Result<Vec<(Vec<u32>, FastEncodeSource)>, EngineError> {
+        self.encode_batch_ids_with_segments(texts).map(|rows| {
+            rows.into_iter()
+                .map(|(ids, source, _segments)| (ids, source))
+                .collect()
+        })
+    }
+
+    /// Batch counterpart of [`Self::encode_ids_with_segments`]. A row that
+    /// holds literals is segmented inside its worker; the segments of one
+    /// row are encoded sequentially by that worker.
+    pub(crate) fn encode_batch_ids_with_segments(
+        &self,
+        texts: &[&str],
+    ) -> Result<Vec<SegmentedRow>, EngineError> {
         if texts.is_empty() {
             return Ok(Vec::new());
         }
@@ -548,7 +667,7 @@ impl FastCpuEngine {
                     .map_err(|_| EngineError("Gigatoken worker mutex is poisoned".to_owned()))?;
                 chunk
                     .iter()
-                    .map(|text| self.full_ids_with_source(text, &mut worker))
+                    .map(|text| self.full_ids_with_segments(text, &mut worker))
                     .collect::<Result<Vec<_>, EngineError>>()
             })
             .collect::<Result<Vec<_>, EngineError>>()?;
@@ -672,6 +791,11 @@ impl FastCpuEngine {
     /// result carrier. The pair-based, structure-of-arrays, and ID-only
     /// surfaces instantiate this single gate, so their acceptance
     /// decisions, fallback order, and path accounting cannot drift apart.
+    /// A literal-bearing input of a face in the served literal class is
+    /// segmented at its literals when the carrier supplies a segment
+    /// encoder (only the ID carrier does); any segment the
+    /// engine guard refuses sends the whole input to the reference.
+    #[allow(clippy::too_many_arguments)]
     fn guarded_full_with<T>(
         &self,
         text: &str,
@@ -679,6 +803,8 @@ impl FastCpuEngine {
         reference_plain: impl Fn(&ReferenceEngine, &str) -> Result<T, ReferenceEngineError>,
         reference_with_flag: impl Fn(&ReferenceEngine, &str) -> Result<(T, bool), ReferenceEngineError>,
         gigatoken_encode: impl FnOnce(&Self, &str, &mut Gigatoken) -> Result<T, FastCpuEngineError>,
+        segmented: Option<SegmentEncode<T>>,
+        segments: &mut Option<SegmentFacts>,
     ) -> Result<(T, FastEncodeSource), EngineError> {
         let mut candidate_reference = None;
         if self.added_gate.route_every_input {
@@ -688,9 +814,38 @@ impl FastCpuEngine {
             return Ok((encoded, FastEncodeSource::ReferenceAddedToken));
         }
         if self.added_gate.may_match(text) {
+            if let (Some(segmenter), Some(segmented)) =
+                (self.reference.literal_segmenter(), segmented)
+            {
+                let pieces = segmenter.plan(text);
+                if self.added_gate.text_pieces_closed(text, &pieces) {
+                    return match segmented(self, text, &pieces, engine) {
+                        Ok((encoded, facts)) => {
+                            self.count("gigatoken_segmented", None, 0, 0, 0);
+                            *segments = Some(facts);
+                            Ok((encoded, FastEncodeSource::Gigatoken))
+                        }
+                        Err(_) => {
+                            let encoded = reference_plain(&self.reference, text)
+                                .map_err(|error| EngineError(error.to_string()))?;
+                            self.count("hf_full_engine_guard", Some("engine_guard"), 0, 0, 0);
+                            Ok((encoded, FastEncodeSource::ReferenceEngineGuard))
+                        }
+                    };
+                }
+                // A text segment holds a literal: the whole document goes to the reference.
+                let encoded = reference_plain(&self.reference, text)
+                    .map_err(|error| EngineError(error.to_string()))?;
+                self.count("hf_full_added_token", Some("added_token"), 0, 0, 0);
+                return Ok((encoded, FastEncodeSource::ReferenceAddedToken));
+            }
             let (encoded, has_added) = reference_with_flag(&self.reference, text)
                 .map_err(|error| EngineError(error.to_string()))?;
-            if has_added {
+            // On a face outside the served class a gate
+            // match is answered by the reference whether or not its row
+            // holds an added id, so text the reference declined to match
+            // never reaches the engine core's own matcher.
+            if has_added || !self.reference.literal_segmentation_served() {
                 self.count("hf_full_added_token", Some("added_token"), 0, 0, 0);
                 return Ok((encoded, FastEncodeSource::ReferenceAddedToken));
             }
@@ -724,6 +879,8 @@ impl FastCpuEngine {
             |reference, text| reference.encode_core(text),
             |reference, text| reference.encode_core_with_added_flag(text),
             |this, text, engine| this.fast_encoding_with(text, engine),
+            None,
+            &mut None,
         )
         .map(|(encoding, source)| FastEncodeOutcome { encoding, source })
     }
@@ -739,6 +896,8 @@ impl FastCpuEngine {
             |reference, text| reference.encode_state_soa(text),
             |reference, text| reference.encode_state_soa_with_added_flag(text),
             |this, text, engine| this.fast_state_encoding_with(text, engine),
+            None,
+            &mut None,
         )
     }
 
@@ -747,13 +906,59 @@ impl FastCpuEngine {
         text: &str,
         engine: &mut Gigatoken,
     ) -> Result<(Vec<u32>, FastEncodeSource), EngineError> {
-        self.guarded_full_with(
+        self.full_ids_with_segments(text, engine)
+            .map(|(ids, source, _segments)| (ids, source))
+    }
+
+    /// The ID carrier: the only carrier on which a literal-bearing input
+    /// of a served face is segmented.
+    fn full_ids_with_segments(
+        &self,
+        text: &str,
+        engine: &mut Gigatoken,
+    ) -> Result<SegmentedRow, EngineError> {
+        let mut segments = None;
+        let (ids, source) = self.guarded_full_with(
             text,
             engine,
             |reference, text| reference.encode_ids(text, false),
             |reference, text| reference.encode_ids_with_added_flag(text),
             |this, text, engine| this.fast_ids_with(text, engine),
-        )
+            Some(Self::segmented_ids_with),
+            &mut segments,
+        )?;
+        Ok((ids, source, segments))
+    }
+
+    /// Literals contribute their reference ids; each text segment is
+    /// encoded on its own by the engine with the byte-identity and closure
+    /// checks of a full encode, sequentially on this thread. The whole row
+    /// must then close over the whole text.
+    fn segmented_ids_with(
+        &self,
+        text: &str,
+        pieces: &[LiteralPiece],
+        engine: &mut Gigatoken,
+    ) -> Result<(Vec<u32>, SegmentFacts), FastCpuEngineError> {
+        let mut ids = Vec::new();
+        let mut facts = SegmentFacts::default();
+        for piece in pieces {
+            match *piece {
+                LiteralPiece::Literal { id, start, end } => {
+                    ids.push(id);
+                    facts.add_literal(end - start);
+                }
+                LiteralPiece::Text { start, end } => {
+                    ids.extend(self.fast_ids_with(&text[start..end], engine)?);
+                    facts.add_text(end - start);
+                    facts.fast_cpu_bytes += end - start;
+                }
+            }
+        }
+        self.reference
+            .verify_ids_close(text, &ids)
+            .map_err(|error| FastCpuEngineError::new(error.to_string()))?;
+        Ok((ids, facts))
     }
 
     /// A fresh corrected-Gigatoken worker sharing the primary's model
@@ -840,6 +1045,15 @@ impl FastCpuEngine {
         let mut full = String::with_capacity(tail.text_bytes() + delta.len());
         full.push_str(tail.text());
         full.push_str(delta);
+        if !self.matcher_agrees && self.added_gate.may_match(&full) {
+            let encoded = self.reference_full(&full, "added_token")?;
+            tail.fill(&full, encoded)
+                .map_err(|error| EngineError(error.to_string()))?;
+            return Ok(AppendReport {
+                path: "hf_full_added_token".to_owned(),
+                kept_tokens: 0,
+            });
+        }
         let previous_chars = tail.text_chars() as usize;
         let prior_spans = tail.spans();
         if tail.ids().len() != prior_spans.len() {

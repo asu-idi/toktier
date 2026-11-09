@@ -1792,24 +1792,26 @@ mod tests {
             assert_eq!(encoded.sources.len(), encoded.chunks);
             assert_eq!(encoded.row_bytes.iter().sum::<usize>(), text.len());
             // The literal-bearing chunks (both literals sit in the first
-            // half) went to the reference on their own, the decomposed
-            // sequence tripped the engine guard in its own chunk once the
-            // chunks are small enough to separate it from a literal, and
-            // the others stayed on corrected Gigatoken.
-            for source in [
-                FastEncodeSource::ReferenceAddedToken,
-                FastEncodeSource::Gigatoken,
-            ] {
-                assert!(encoded.sources.contains(&source), "k={k} {source:?}");
-            }
-            if k >= 4 {
-                assert!(
-                    encoded
-                        .sources
-                        .contains(&FastEncodeSource::ReferenceEngineGuard),
-                    "k={k}"
-                );
-            }
+            // half) were segmented at the literals inside their workers
+            // and stayed on corrected Gigatoken, the decomposed sequence
+            // tripped the engine guard in its own chunk, and no chunk went
+            // to the reference because of a literal.
+            assert!(
+                encoded.sources.contains(&FastEncodeSource::Gigatoken),
+                "k={k}"
+            );
+            assert!(
+                encoded
+                    .sources
+                    .contains(&FastEncodeSource::ReferenceEngineGuard),
+                "k={k}"
+            );
+            assert!(
+                !encoded
+                    .sources
+                    .contains(&FastEncodeSource::ReferenceAddedToken),
+                "k={k}"
+            );
         }
         // Below the threshold and k = 1 are serial without a reason.
         let short = fast

@@ -9,6 +9,11 @@
 //! `identity` or `prefix` the request must have been served on the plain
 //! route, not by the reference's post-processed path; where it is
 //! `reference` it must have been. A host with no artifact skips the tier.
+//!
+//! `TOKTIER_TEST_ARTIFACT_FAMILIES`, when set, is the number of families
+//! the tier has to check (the release gate points `TOKTIER_TEST_ARTIFACTS`
+//! at the 21-family seed and sets it to 21), so a short cache cannot pass
+//! by checking fewer faces.
 
 use std::path::{Path, PathBuf};
 
@@ -94,6 +99,17 @@ fn texts(reference: &ReferenceEngine) -> Vec<String> {
         out.push(chat);
     }
     out
+}
+
+/// The number of families the tier has to check, when the gate names it.
+fn expected_families() -> Option<usize> {
+    std::env::var("TOKTIER_TEST_ARTIFACT_FAMILIES")
+        .ok()
+        .map(|value| {
+            value
+                .parse()
+                .expect("TOKTIER_TEST_ARTIFACT_FAMILIES is a count")
+        })
 }
 
 fn with_special_tokens() -> EncodeOptions {
@@ -199,6 +215,17 @@ fn special_tokens_follow_the_reference_and_run_the_plain_route_where_the_class_a
         }
     }
     eprintln!("checked {checked} (family, policy) pairs: {classes:?}");
+    if let Some(expected) = expected_families() {
+        assert_eq!(
+            classes.len(),
+            expected,
+            "the artifact tier checked {} families, {expected} expected: {:?}",
+            classes.len(),
+            classes.keys().collect::<Vec<_>>()
+        );
+        // Every family on both policies.
+        assert_eq!(checked, 2 * expected);
+    }
     for (family, _) in PREFIX {
         if let Some(class) = classes.get(family) {
             assert_eq!(class, "prefix", "{family}");

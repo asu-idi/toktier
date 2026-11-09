@@ -410,3 +410,88 @@ def test_the_column_is_held_to_the_records_added_token_table() -> None:
     reading["schema"] = "toktier.gpu.native_frontend_parity.v1"
     problems, _notes = forms.parity_problems(reading, (), registry)
     assert any("no segment reached the GPU" in p for p in problems)
+
+
+# -- release readings (S8) ----------------------------------------------------
+
+
+def _complete_row(
+    row: dict[str, Any], arm: str, fingerprints: dict[str, str]
+) -> dict[str, Any]:
+    out = copy.deepcopy(row)
+    out["special_tokens"] = _true_column("identity", int(row["documents"]))
+    out["literal_segments"] = _segments_column(
+        arm, fingerprint=fingerprints[str(row["family"])]
+    )
+    return out
+
+
+def test_a_release_row_needs_both_columns_on_the_facade_surface() -> None:
+    fingerprints = forms.registry_fingerprints(_registry())
+    row = {"family": "deepseek_v3", "documents": 100}
+    problems = forms.release_column_problems(row, arm="cpu")
+    assert sum("a release reading requires it" in p for p in problems) == 2
+    complete = _complete_row(row, "cpu", fingerprints)
+    assert (
+        forms.release_column_problems(
+            complete,
+            arm="cpu",
+            added_frontend_fingerprint=fingerprints["deepseek_v3"],
+        )
+        == []
+    )
+    # A native-route column cannot speak for the prefix rule.
+    complete["special_tokens"]["surface"] = "native_route"
+    problems = forms.release_column_problems(complete, arm="cpu")
+    assert any("taken on the native_route surface" in p for p in problems)
+
+
+def test_require_special_tokens_is_not_met_by_a_native_route_column() -> None:
+    column = _true_column("prefix", 5)
+    column["surface"] = "native_route"
+    rows = [{"family": "f", "documents": 5, "special_tokens": column}]
+    problems, _notes = forms.parity_problems(_reading(rows), ["special_tokens"])
+    assert any("taken on the native_route surface" in p for p in problems)
+    # Without the requirement the column is checked as itself and passes.
+    assert forms.parity_problems(_reading(rows)) == ([], [])
+
+
+def test_the_release_check_requires_the_columns_on_certified_rows(
+    tmp_path: Path,
+) -> None:
+    import generate_registry
+
+    registry_path = ROOT / "tables" / "support_registry.json"
+    # The readings in the tree predate the 0.3.2 columns: refused.
+    shipped = generate_registry.release_reading_problems(registry_path)
+    assert shipped and any(p.startswith("cpu/") for p in shipped)
+    assert any(p.startswith("sm_120/") for p in shipped)
+    fingerprints = forms.registry_fingerprints(_registry())
+    cpu = json.loads(
+        (ROOT / "readings" / "fast_cpu_native_frontend_parity.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    cpu["rows"] = [_complete_row(row, "cpu", fingerprints) for row in cpu["rows"]]
+    cpu_path = tmp_path / "cpu.json"
+    cpu_path.write_text(json.dumps(cpu), encoding="utf-8")
+    gpu_paths: dict[str, Path] = {}
+    for architecture, source in generate_registry.PREBUILT_HARDWARE_READINGS.items():
+        gpu = json.loads(source.read_text(encoding="utf-8"))
+        gpu["rows"] = [_complete_row(row, "gpu", fingerprints) for row in gpu["rows"]]
+        gpu_paths[architecture] = tmp_path / f"{architecture}.json"
+        gpu_paths[architecture].write_text(json.dumps(gpu), encoding="utf-8")
+    assert (
+        generate_registry.release_reading_problems(
+            registry_path, cpu_reading=cpu_path, gpu_readings=gpu_paths
+        )
+        == []
+    )
+    # One GPU row taken on the native route is refused, and named.
+    gpu = json.loads(gpu_paths["sm_89"].read_text(encoding="utf-8"))
+    gpu["rows"][0]["special_tokens"]["surface"] = "native_route"
+    gpu_paths["sm_89"].write_text(json.dumps(gpu), encoding="utf-8")
+    problems = generate_registry.release_reading_problems(
+        registry_path, cpu_reading=cpu_path, gpu_readings=gpu_paths
+    )
+    assert len(problems) == 1 and problems[0].startswith("sm_89/")

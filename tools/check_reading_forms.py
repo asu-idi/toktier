@@ -38,6 +38,13 @@ judged face (``schemas/engine_differential_reading.schema.json``), the
 evidence a fast CPU entry with record-held repair parameters and no
 carry-over rests on: :func:`engine_differential_problems`.
 
+A release reading (``generate_registry.py --release-check``) requires both
+columns on every certified fast CPU row and every GPU parity row, with the
+``special_tokens`` column taken on the facade surface:
+:func:`release_column_problems`. ``--require special_tokens`` asks the
+same of the column: a ``native_route`` column does not satisfy it, since
+the native router does not apply the facade's prefix rule.
+
 Usage::
 
     python tools/check_reading_forms.py parity <reading.json> \
@@ -344,6 +351,46 @@ def column_problems(
     return problems
 
 
+def _surface_problems(family: str, row: Mapping[str, Any]) -> list[str]:
+    """The ``special_tokens`` column of ``row`` has to be the facade's."""
+    column = row.get("special_tokens")
+    if not isinstance(column, Mapping):
+        return []
+    surface = str(column.get("surface", "facade"))
+    if surface == "facade":
+        return []
+    return [
+        f"{family}: special_tokens was taken on the {surface} surface; the "
+        "column has to be the facade's, the only surface that applies the "
+        "prefix rule"
+    ]
+
+
+def release_column_problems(
+    row: Mapping[str, Any],
+    *,
+    arm: str | None = None,
+    added_frontend_fingerprint: str | None = None,
+) -> list[str]:
+    """Problems of a certified row of a release reading (empty: it passes).
+
+    Both 0.3.2 columns are present, the ``special_tokens`` column is the
+    facade's, and every column passes :func:`column_problems`.
+    """
+    family = str(row.get("family", "<unknown>"))
+    problems = [
+        f"{family}: the row carries no {name} column; a release reading "
+        "requires it"
+        for name in COLUMNS
+        if name not in row
+    ]
+    problems += _surface_problems(family, row)
+    problems += column_problems(
+        row, arm=arm, added_frontend_fingerprint=added_frontend_fingerprint
+    )
+    return problems
+
+
 def engine_differential_problems(
     reading: object,
     *,
@@ -529,6 +576,8 @@ def parity_problems(
         for name in sorted(required):
             if name not in row:
                 problems.append(f"{family}: the row carries no {name} column")
+        if "special_tokens" in required:
+            problems += _surface_problems(family, row)
         problems += column_problems(
             row, arm=arm, added_frontend_fingerprint=fingerprints.get(family)
         )

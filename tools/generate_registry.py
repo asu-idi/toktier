@@ -50,7 +50,11 @@ from pathlib import Path
 from typing import Any
 
 from check_reading_forms import column_problems as reading_column_problems
-from check_reading_forms import engine_differential_problems, registry_fingerprints
+from check_reading_forms import (
+    engine_differential_problems,
+    registry_fingerprints,
+    release_column_problems,
+)
 from compute_identity_v2 import source_digest as source_digest_v2
 from engine_core_identity import engine_core_digests
 from native_host_source_identity import source_digest as native_host_source_digest
@@ -1468,6 +1472,71 @@ def release_problems(registry_path: Path) -> list[str]:
     return problems
 
 
+def release_reading_problems(
+    registry_path: Path,
+    *,
+    cpu_reading: Path | None = None,
+    gpu_readings: dict[str, Path] | None = None,
+) -> list[str]:
+    """The 0.3.2 reading columns a release requires (``--release-check``).
+
+    Every row of the CPU native-front-end parity reading whose family the
+    registry certifies on the fast CPU engine, and every row of the GPU
+    parity reading of each certified prebuilt architecture, carries both
+    columns (``special_tokens`` taken on the facade surface, and
+    ``literal_segments``), each passing its checks
+    (:func:`check_reading_forms.release_column_problems`).
+    """
+    document = load_json(registry_path)
+    fingerprints = registry_fingerprints(document)
+    certified_cpu: set[str] = set()
+    certified_devices: set[str] = set()
+    for artifact in document.get("artifacts") or ():
+        if not isinstance(artifact, dict):
+            continue
+        backends = artifact.get("backends") or {}
+        fast = backends.get("fast_cpu") or {}
+        if fast.get("status") == "certified_source":
+            certified_cpu.add(str(artifact.get("family")))
+        gpu = backends.get("gpu") or {}
+        prebuilt = (gpu.get("deliveries") or {}).get("prebuilt") or {}
+        if prebuilt.get("status") == "certified":
+            certified_devices.update(
+                str(item) for item in prebuilt.get("devices") or ()
+            )
+    problems: list[str] = []
+    readings: list[tuple[str, str, Path]] = [
+        ("cpu", "cpu", cpu_reading or REPOSITORY_ROOT / NATIVE_PARITY_RELATIVE)
+    ]
+    configured = (
+        gpu_readings if gpu_readings is not None else PREBUILT_HARDWARE_READINGS
+    )
+    readings += [
+        ("gpu", architecture, configured[architecture])
+        for architecture in sorted(certified_devices & set(configured))
+    ]
+    for arm, label, path in readings:
+        if not path.is_file():
+            problems.append(f"{label}: parity reading is missing ({path})")
+            continue
+        reading = load_json(path)
+        for row in reading.get("rows") or ():
+            if not isinstance(row, dict):
+                continue
+            family = str(row.get("family"))
+            if arm == "cpu" and family not in certified_cpu:
+                continue
+            problems += [
+                f"{label}/{problem}"
+                for problem in release_column_problems(
+                    row,
+                    arm=arm,
+                    added_frontend_fingerprint=fingerprints.get(family),
+                )
+            ]
+    return problems
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Check the shipped support registry table."
@@ -1483,8 +1552,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Release gate: --check plus a refusal of placeholder "
-            "identities, unrecorded table digests, and missing packaged "
-            "tables."
+            "identities, unrecorded table digests, missing packaged "
+            "tables, and parity readings without the 0.3.2 columns on "
+            "their certified rows."
         ),
     )
     parser.add_argument(
@@ -1559,6 +1629,7 @@ def main(argv: list[str] | None = None) -> int:
         problems += packaged_copy_problems(arguments.out)
     if arguments.release_check:
         problems = list(problems) + release_problems(arguments.out)
+        problems += release_reading_problems(arguments.out)
         # The store-fingerprint history table: every row recomputed at its
         # release tag (tools/store_history.py).
         history, history_notes = store_history_problems()

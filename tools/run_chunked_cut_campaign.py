@@ -17,7 +17,7 @@ chunk table would keep short documents in one chunk, which judges nothing).
 Documents outside the length gate are skipped and counted. Any inequality
 is a finding: the document is saved and the process ends with status 3.
 
-Three subcommands:
+Three subcommands (``run`` also takes the rider arms below):
 
 ``run``
     One work unit of the corpus campaign: the files of one shard and,
@@ -38,6 +38,20 @@ Three subcommands:
     may be split over several files, one per family group; the files of
     one unit must report the same document stream and disjoint families,
     and the documents are counted once.
+
+Rider arms (``run --riders special_tokens,literal_segments``,
+``--rider-share``) ride on the documents a unit reads anyway: on a
+subsample chosen by content (the SHA-256 of the document, so the same
+documents whatever the sharding), ``special_tokens`` compares
+``encode(text, add_special_tokens=True)`` with the oracle under the same
+setting, and ``literal_segments`` gives the document a chat shape with the
+face's own added-token literals and compares the plain encode with the
+oracle, recording the execution path and, when the runtime reports them,
+the bytes each engine encoded. The riders leave the four chunked columns
+and the stream digest unchanged; their counters are kept per family under
+``riders`` in the unit JSON, and ``summarize --riders-out`` writes their
+sum as a separate document (``toktier.chunked_cuts_riders.v1``), outside
+the chunked readings.
 
 Document order comes from a content listing, never from scanning a
 directory: a ``parquet`` or ``texts`` source is ``kind:<root>:<listing>``,
@@ -93,7 +107,7 @@ from pathlib import Path
 from typing import Any
 
 TOOL_NAME = "tools/run_chunked_cut_campaign.py"
-TOOL_VERSION = "1.0.0"
+TOOL_VERSION = "1.1.0"
 SHARD_SCHEMA = "toktier.chunked_cuts_shard.v1"
 BATTERY_SCHEMA = "toktier.chunked_cuts_adversarial.v1"
 READINGS_SCHEMA = "toktier.chunked_cuts_campaign.v1"
@@ -385,7 +399,14 @@ def _zero_native() -> dict[str, Any]:
 class Family:
     """One loaded tokenizer, its oracle, and its counters."""
 
-    def __init__(self, name: str, tokenizer: Any, *, native: str) -> None:
+    def __init__(
+        self,
+        name: str,
+        tokenizer: Any,
+        *,
+        native: str,
+        riders: tuple[str, ...] = (),
+    ) -> None:
         import tokenizers
 
         from toktier import chunked
@@ -396,6 +417,20 @@ class Family:
         face = tokenizer._backend.materialized_tokenizer_json()
         self.face_sha256 = hashlib.sha256(face.encode("utf-8")).hexdigest()
         self.oracle = tokenizers.Tokenizer.from_str(face)
+        self.riders: dict[str, dict[str, Any]] = {
+            rider: _zero_rider(rider) for rider in riders
+        }
+        self.literals: list[str] = (
+            sorted(
+                {
+                    str(token.content)
+                    for token in self.oracle.get_added_tokens_decoder().values()
+                    if token.content
+                }
+            )
+            if "literal_segments" in riders
+            else []
+        )
         # The table step is lifted for the tokenizer under judgement; the
         # roster and normalizer steps are not.
         chunked._planner_for(tokenizer, evidence_gate=False)
@@ -528,7 +563,12 @@ class Family:
 
 
 def load_families(
-    names: list[str], *, native: str, native_workers: int | None, policy: str | None
+    names: list[str],
+    *,
+    native: str,
+    native_workers: int | None,
+    policy: str | None,
+    riders: tuple[str, ...] = (),
 ) -> dict[str, Family]:
     """Load every family, lift the table step, and check what the arms need."""
     import toktier
@@ -541,7 +581,7 @@ def load_families(
             if policy is not None:
                 options["policy"] = policy
             tokenizer = toktier.load(name, **options)
-            family = Family(name, tokenizer, native=native)
+            family = Family(name, tokenizer, native=native, riders=riders)
             loaded[name] = family
             if not family.admission.get("admitted"):
                 raise SetupError(
@@ -596,9 +636,18 @@ def family_rows(families: dict[str, Family]) -> dict[str, dict[str, Any]]:
             "admission": family.admission,
             **family.counters,
             "report": family.report(),
+            **({"riders": family.riders} if family.riders else {}),
         }
         for name, family in families.items()
     }
+
+
+def _rider_mismatches(families: dict[str, Family]) -> int:
+    return sum(
+        int(row["mismatches"])
+        for family in families.values()
+        for row in family.riders.values()
+    )
 
 
 def _mismatch_totals(families: dict[str, Family]) -> dict[str, int | None]:
@@ -666,6 +715,8 @@ def run_unit(
     mismatch_dir: Path | None,
     flush: Callable[[Stream, bool, str], None],
     started: float,
+    riders: tuple[str, ...] = (),
+    rider_share: float = 0.0,
 ) -> tuple[Stream, str]:
     """Judge one unit; return the stream facts and why it stopped."""
     stream = Stream()
@@ -683,6 +734,7 @@ def run_unit(
                 stream.docs_skipped = 0
             continue
         k = max(2, -(-length // chunk_chars))
+        ridden = bool(riders) and rider_selected(text, rider_share)
         for family in families.values():
             finding = family.judge(text, k, min_chunk)
             if finding is not None:
@@ -693,6 +745,15 @@ def run_unit(
                     file=sys.stderr,
                     flush=True,
                 )
+            if ridden:
+                for rider_finding in ride(family, text, riders):
+                    save_finding(mismatch_dir, rider_finding)
+                    print(
+                        f"finding: {family.name} {rider_finding['unequal']} "
+                        f"chars={rider_finding['chars']}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
         stream.judged(text)
         if report_every and stream.docs_judged % report_every == 0:
             elapsed = time.time() - started
@@ -728,11 +789,13 @@ def command_run(arguments: argparse.Namespace) -> int:
     sources = select_sources(
         arguments.source, arguments.shard_index, arguments.num_shards
     )
+    riders = _riders(arguments)
     families = load_families(
         names,
         native=arguments.native,
         native_workers=arguments.native_workers,
         policy=arguments.policy,
+        riders=riders,
     )
     out = Path(arguments.out)
     mismatch_dir = Path(arguments.mismatch_dir) if arguments.mismatch_dir else None
@@ -752,6 +815,8 @@ def command_run(arguments: argparse.Namespace) -> int:
         "min_chunk": arguments.min_chunk,
         "native": arguments.native,
         "native_workers": arguments.native_workers,
+        "riders": list(riders),
+        "rider_share": arguments.rider_share if riders else 0.0,
     }
 
     def flush(stream: Stream, final: bool, stopped: str) -> None:
@@ -801,6 +866,8 @@ def command_run(arguments: argparse.Namespace) -> int:
             mismatch_dir=mismatch_dir,
             flush=flush,
             started=started,
+            riders=riders,
+            rider_share=arguments.rider_share,
         )
         flush(stream, True, stopped)
     finally:
@@ -808,6 +875,7 @@ def command_run(arguments: argparse.Namespace) -> int:
             family.close()
     totals = _mismatch_totals(families)
     unequal = sum(value or 0 for value in totals.values())
+    unequal += _rider_mismatches(families)
     elapsed = time.time() - started
     checks = stream.docs_judged * len(families)
     print(
@@ -928,6 +996,186 @@ def command_adversarial(arguments: argparse.Namespace) -> int:
     unequal = sum(value or 0 for value in totals.values())
     print(f"[adversarial] done mismatches={totals} -> {out}", flush=True)
     return STATUS_MISMATCH if unequal else STATUS_OK
+
+
+# -- riders ---------------------------------------------------------------------
+
+#: The rider arms: extra comparisons made on a deterministic subsample of the
+#: documents the corpus pass reads anyway, so they cost no extra corpus IO.
+#: ``special_tokens`` compares ``encode(text, add_special_tokens=True)`` with
+#: the oracle under the same setting; ``literal_segments`` gives the document
+#: a chat shape with the face's own added-token literals and compares the
+#: plain encode of that variant with the oracle. Neither touches the four
+#: chunked columns or the stream digest.
+RIDERS = ("special_tokens", "literal_segments")
+RIDER_SCHEMA = "toktier.chunked_cuts_riders.v1"
+RIDER_COLUMNS = {
+    "special_tokens": "true_vs_oracle",
+    "literal_segments": "chat_vs_oracle",
+}
+
+
+def rider_selected(text: str, share: float) -> bool:
+    """Whether a document is in the rider subsample (by content, not position).
+
+    The first eight bytes of the SHA-256 of its UTF-8 bytes, read as a
+    little-endian fraction of 2**64, below ``share``: the same documents are
+    selected whatever the sharding.
+    """
+    if share <= 0:
+        return False
+    head = hashlib.sha256(text.encode("utf-8")).digest()[:8]
+    return int.from_bytes(head, "little") < share * 2**64
+
+
+def chat_variant(text: str, literals: list[str], seed: str) -> tuple[str, int]:
+    """A chat-shaped variant of ``text`` and the number of literals placed.
+
+    The text is cut into 1-8 turns at seeded character positions and the
+    turns are joined by literals drawn from the face's own added-token
+    table; a literal may also open or close the document, and two may be
+    adjacent. The variant is a function of (text, literals, seed).
+    """
+    import random
+
+    if not literals:
+        return text, 0
+    rng = random.Random(hashlib.sha256(seed.encode("utf-8")).digest())
+    turns = rng.randint(1, 8)
+    cuts = sorted(rng.sample(range(1, len(text)), min(turns - 1, len(text) - 1)))
+    pieces = [text[a:b] for a, b in zip([0, *cuts], [*cuts, len(text)], strict=True)]
+    placed = 0
+    out: list[str] = []
+    if rng.random() < 0.5:
+        out.append(rng.choice(literals))
+        placed += 1
+    for index, piece in enumerate(pieces):
+        out.append(piece)
+        if index < len(pieces) - 1:
+            out.append(rng.choice(literals))
+            placed += 1
+            if rng.random() < 0.25:
+                out.append(rng.choice(literals))
+                placed += 1
+    if rng.random() < 0.5:
+        out.append(rng.choice(literals))
+        placed += 1
+    return "".join(out), placed
+
+
+def _zero_rider(name: str) -> dict[str, Any]:
+    row: dict[str, Any] = {"documents": 0, "mismatches": 0}
+    if name == "special_tokens":
+        row["served_by"] = {}
+    else:
+        row["literals"] = 0
+        row["paths"] = {}
+        row["bytes"] = {"gpu": 0, "fast_cpu": 0, "hf": 0}
+        row["segments_reported"] = 0
+    return row
+
+
+def _execution_view(tokenizer: Any) -> tuple[Any, Any]:
+    """``(path, segments)`` of the request that ran last, when reported."""
+    try:
+        report = tokenizer.explain()
+    except Exception:  # pragma: no cover - a diagnostic read never fails a run
+        return None, None
+    # The routing ledger's last-request record (the facade's full
+    # explanation keeps it under runtime_policy.last_execution).
+    runtime = report.get("runtime_policy") if isinstance(report, dict) else None
+    last = runtime.get("last_execution") if isinstance(runtime, dict) else None
+    if not isinstance(last, dict):
+        return None, None
+    return last.get("path"), last.get("segments")
+
+
+def _special_tokens_view(tokenizer: Any) -> Any:
+    try:
+        report = tokenizer.explain()
+    except Exception:  # pragma: no cover
+        return None
+    block = report.get("special_tokens") if isinstance(report, dict) else None
+    return block.get("served_by") if isinstance(block, dict) else None
+
+
+def ride(
+    family: Any, text: str, riders: tuple[str, ...]
+) -> list[dict[str, Any]]:
+    """Run the rider arms on one document; return the findings."""
+    findings: list[dict[str, Any]] = []
+    counters = family.riders
+    if "special_tokens" in riders:
+        row = counters["special_tokens"]
+        ids = list(family.tokenizer.encode(text, add_special_tokens=True).ids)
+        oracle = [
+            int(i) for i in family.oracle.encode(text, add_special_tokens=True).ids
+        ]
+        served = str(_special_tokens_view(family.tokenizer) or "not_reported")
+        row["documents"] += 1
+        row["served_by"][served] = row["served_by"].get(served, 0) + 1
+        if ids != oracle:
+            row["mismatches"] += 1
+            findings.append(_rider_finding(family.name, "true_vs_oracle", text))
+    if "literal_segments" in riders:
+        row = counters["literal_segments"]
+        variant, placed = chat_variant(
+            text, family.literals, f"{family.name}\0{len(text)}\0{text[:64]}"
+        )
+        ids = list(family.tokenizer.encode(variant, lookup="off").ids)
+        oracle = family.reference(variant)
+        path, segments = _execution_view(family.tokenizer)
+        row["documents"] += 1
+        row["literals"] += placed
+        key = str(path or "not_reported")
+        row["paths"][key] = row["paths"].get(key, 0) + 1
+        if isinstance(segments, dict) and isinstance(segments.get("bytes"), dict):
+            row["segments_reported"] += 1
+            for engine in ("gpu", "fast_cpu", "hf"):
+                row["bytes"][engine] += int(segments["bytes"].get(engine, 0))
+        if ids != oracle:
+            row["mismatches"] += 1
+            findings.append(_rider_finding(family.name, "chat_vs_oracle", variant))
+    return findings
+
+
+def _rider_finding(family: str, column: str, text: str) -> dict[str, Any]:
+    return {
+        "family": family,
+        "unequal": [column],
+        "chars": len(text),
+        "first_difference": None,
+        "text": text,
+    }
+
+
+def merge_riders(units: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Per-family rider counters summed over every unit file that ran them."""
+    merged: dict[str, dict[str, Any]] = {}
+    for unit in units:
+        for name, row in unit["families"].items():
+            for rider, counters in (row.get("riders") or {}).items():
+                target = merged.setdefault(name, {}).setdefault(
+                    rider, _zero_rider(rider)
+                )
+                for key, value in counters.items():
+                    if isinstance(value, dict):
+                        bucket = target.setdefault(key, {})
+                        for inner, count in value.items():
+                            bucket[inner] = int(bucket.get(inner, 0)) + int(count)
+                    else:
+                        target[key] = int(target.get(key, 0)) + int(value)
+    return merged
+
+
+def _riders(arguments: argparse.Namespace) -> tuple[str, ...]:
+    names = tuple(name for name in (arguments.riders or "").split(",") if name)
+    unknown = sorted(set(names) - set(RIDERS))
+    if unknown:
+        raise SetupError(f"unknown rider arm(s): {unknown}; known: {list(RIDERS)}")
+    if names and not 0 < arguments.rider_share <= 1:
+        raise SetupError("--rider-share must be in (0, 1] when riders run")
+    return names
 
 
 # -- summarize ------------------------------------------------------------------
@@ -1278,12 +1526,39 @@ def command_summarize(arguments: argparse.Namespace) -> int:
     out = Path(arguments.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(registry_common.serialise_document(completed))
+    rider_unequal = 0
+    if arguments.riders_out:
+        riders = merge_riders(units)
+        rider_unequal = sum(
+            int(row["mismatches"]) for arms in riders.values() for row in arms.values()
+        )
+        shares = {
+            float(spec.get("rider_share") or 0.0)
+            for spec in unit_specs
+            if spec.get("riders")
+        }
+        rider_document = {
+            "schema": RIDER_SCHEMA,
+            "tool_sha256": tool_digest,
+            "chunked_identity": identity,
+            "fast_cpu_source_digest_v2": arguments.fast_cpu_source_digest_v2,
+            "rider_share": _agree(shares, "rider_share") if shares else 0.0,
+            "units": len(groups),
+            "families": riders,
+        }
+        riders_out = Path(arguments.riders_out)
+        riders_out.parent.mkdir(parents=True, exist_ok=True)
+        riders_out.write_text(
+            json.dumps(rider_document, indent=1, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     unequal = sum(value or 0 for row in rows for value in row["mismatches"].values())
     unequal += sum(
         value or 0
         for row in adversarial["families"]
         for value in row["mismatches"].values()
     )
+    unequal += rider_unequal
     print(
         f"[summarize] {len(units)} files, {len(groups)} units, {len(rows)} families, "
         f"{corpus_docs} documents, mismatches={unequal} -> {out}; validate with "
@@ -1349,6 +1624,17 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--chunk-chars", type=int, default=8_000)
     run.add_argument("--time-budget-s", type=float, default=0.0)
     run.add_argument("--report-every", type=int, default=20_000)
+    run.add_argument(
+        "--riders",
+        default="",
+        help=f"comma-separated rider arms ({', '.join(RIDERS)}); none by default",
+    )
+    run.add_argument(
+        "--rider-share",
+        type=float,
+        default=0.1,
+        help="share of the judged documents the rider arms run on (by content)",
+    )
     _add_judge_arguments(run)
     run.set_defaults(handler=command_run)
 
@@ -1376,6 +1662,11 @@ def build_parser() -> argparse.ArgumentParser:
     summarize.add_argument("--os", default=None)
     summarize.add_argument("--tag", default=None)
     summarize.add_argument("--notes", default="")
+    summarize.add_argument(
+        "--riders-out",
+        default=None,
+        help="write the summed rider counters here (separate from the readings)",
+    )
     summarize.set_defaults(handler=command_summarize)
     return parser
 

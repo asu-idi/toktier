@@ -195,7 +195,7 @@ def test_summary_of_a_family_outside_the_roster_is_refused(tmp_path: Path) -> No
     finally:
         family.close()
     readings = _readings_from_rows(rows)
-    with pytest.raises(GenerationError, match="outside the certified repair roster"):
+    with pytest.raises(GenerationError, match="outside the admission roster"):
         update_chunked_admission.derive(
             readings,
             identity=update_chunked_admission.chunked_identity(),

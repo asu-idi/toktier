@@ -306,3 +306,114 @@ def test_auto_with_an_ordinal_tries_jit_on_that_device(
         assert tokenizer._gpu_device == "cuda:1"
     finally:
         tokenizer.close()
+
+
+# -- neither delivery serves; a delivery already loaded; no device --------------
+
+
+def _install_jit_refused(
+    monkeypatch: pytest.MonkeyPatch, *, devices: tuple[DeviceInfo, ...] = _DEVICES
+) -> list[str]:
+    """Neither delivery serves; the JIT plan carries the toolchain refusal."""
+    _FakeHostProbe.instances = []
+    offered: list[str] = []
+    monkeypatch.setattr(facade_api, "CudaHostProbe", _FakeHostProbe)
+    monkeypatch.setattr(_FakeHostProbe, "devices", lambda self: devices)
+    monkeypatch.setattr(facade_api, "profile_jit_installed", lambda: True)
+
+    def build_plan(snapshot: ProbeSnapshot, *_args: object) -> RoutePlan:
+        chosen = snapshot.kernel_cache.preferred_delivery or "auto"
+        offered.append(chosen)
+        if chosen != "jit":
+            return _plan(False)
+        return RoutePlan(
+            policy=RoutingPolicy.SUPPORTED,
+            backend=BACKEND_REFERENCE,
+            fallback_chain=(BACKEND_REFERENCE,),
+            reasons=(
+                PlanReason(
+                    ReasonCode.R_UNCERTIFIED_ARTIFACT,
+                    BACKEND_GPU,
+                    {
+                        "cause": "toolchain_unverified",
+                        "observed": "nvcc 99.0",
+                        "constraint": "nvcc ==13.0",
+                    },
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(facade_api, "build_plan", build_plan)
+    return offered
+
+
+def test_auto_keeps_the_jit_refusal_when_neither_delivery_serves(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = _install_jit_refused(monkeypatch)
+    with pytest.warns(RuntimeWarning, match="refused uncertified JIT acceleration"):
+        tokenizer = rig.tokenizer()
+    try:
+        assert seen == ["prebuilt", "jit"]
+        assert tokenizer._gpu_delivery == "prebuilt"
+        # The plan reports the prebuilt reasons; the JIT refusal stands beside.
+        assert tokenizer.plan.reasons == _plan(False).reasons
+        runtime = tokenizer.explain()["runtime_policy"]
+        assert isinstance(runtime, dict)
+        assert runtime["gpu_delivery_jit_rejection"] == {
+            "code": "R_UNCERTIFIED_ARTIFACT",
+            "cause": "toolchain_unverified",
+            "observed": "nvcc 99.0",
+            "constraint": "nvcc ==13.0",
+        }
+    finally:
+        tokenizer.close()
+    # A required GPU names the same facts in its refusal.
+    _install_jit_refused(monkeypatch)
+    with pytest.raises(BackendUnavailable, match=r"observed nvcc 99\.0"):
+        rig.tokenizer(device="cuda")
+
+
+def test_auto_reports_no_jit_refusal_when_a_delivery_serves(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install(monkeypatch, serving={"prebuilt"}, jit_installed=True)
+    tokenizer = rig.tokenizer()
+    try:
+        runtime = tokenizer.explain()["runtime_policy"]
+        assert isinstance(runtime, dict)
+        assert runtime["gpu_delivery_jit_rejection"] is None
+    finally:
+        tokenizer.close()
+
+
+@pytest.mark.parametrize("loaded", ["prebuilt", "jit"])
+def test_a_delivery_already_loaded_is_kept(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, loaded: str
+) -> None:
+    """One delivery per process: ``auto`` plans only the loaded one, even
+    when the other one would serve."""
+    from toktier.engine.gpu.loader import KernelLoader
+
+    seen = _install(monkeypatch, serving={"prebuilt", "jit"}, jit_installed=True)
+    monkeypatch.setattr(KernelLoader, "delivery", classmethod(lambda cls: loaded))
+    tokenizer = rig.tokenizer()
+    try:
+        assert seen == [loaded]
+        assert tokenizer._gpu_delivery == loaded
+        assert BACKEND_GPU in tokenizer.plan.fallback_chain
+    finally:
+        tokenizer.close()
+
+
+def test_a_cuda_ordinal_with_no_visible_device_says_so(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install(monkeypatch, serving={"prebuilt"}, jit_installed=False)
+    monkeypatch.setattr(_FakeHostProbe, "devices", lambda self: ())
+    with pytest.raises(BackendUnavailable) as caught:
+        rig.tokenizer(device="cuda:0")
+    message = str(caught.value)
+    assert "no CUDA device is visible to this process" in message
+    assert "[]" not in message
+    assert caught.value.details["visible_devices"] == []

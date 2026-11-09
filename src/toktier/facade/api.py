@@ -616,6 +616,7 @@ class Tokenizer:
             device_kind in ("auto", "cuda")
             and resolved_policy is not RoutingPolicy.REFERENCE
         )
+        self._auto_jit_rejection: PlanReason | None = None
         ordinal_probes: list[OrdinalDeviceProbe] = []
 
         def plan_for(delivery: str) -> tuple[ProbeSnapshot, RoutePlan]:
@@ -652,15 +653,32 @@ class Tokenizer:
                 self._gpu_delivery = loaded
                 self._snapshot, self._plan = plan_for(loaded)
             else:
+                tried: dict[str, tuple[ProbeSnapshot, RoutePlan]] = {}
+
+                def plan_and_keep(delivery: str) -> tuple[ProbeSnapshot, RoutePlan]:
+                    tried[delivery] = plan_for(delivery)
+                    return tried[delivery]
+
                 self._gpu_delivery, (self._snapshot, self._plan) = auto_delivery(
-                    plan_for,
+                    plan_and_keep,
                     lambda built: BACKEND_GPU in built[1].fallback_chain,
                     jit_installed=profile_jit_installed(),
                 )
+                # Neither delivery can serve: the prebuilt plan's reasons
+                # are the ones the plan reports, and the JIT plan's
+                # toolchain refusal (the hint a gpu-jit host needs) is
+                # kept beside them, as 0.3.1 reported it.
+                jit_tried = tried.get("jit")
+                if (
+                    self._gpu_delivery == "prebuilt"
+                    and BACKEND_GPU not in self._plan.fallback_chain
+                    and jit_tried is not None
+                ):
+                    self._auto_jit_rejection = _jit_toolchain_rejection(jit_tried[1])
         jit_rejection = (
             _jit_toolchain_rejection(self._plan)
             if self._gpu_delivery == "jit"
-            else None
+            else self._auto_jit_rejection
         )
         if jit_rejection is not None and device_kind == "auto":
             observed = jit_rejection.detail.get("observed", "unknown")
@@ -699,7 +717,14 @@ class Tokenizer:
                 ]
                 details["requested_ordinal"] = device_ordinal
                 details["visible_devices"] = visible
-                if not any(item["index"] == device_ordinal for item in visible):
+                if not visible:
+                    message = (
+                        f"device={device!r} names CUDA ordinal {device_ordinal}, "
+                        "but no CUDA device is visible to this process: no CUDA "
+                        "driver or runtime was found, or CUDA_VISIBLE_DEVICES "
+                        "hides every device"
+                    )
+                elif not any(item["index"] == device_ordinal for item in visible):
                     message = (
                         f"device={device!r} names CUDA ordinal {device_ordinal}, "
                         "which is not among the visible devices "
@@ -1226,6 +1251,14 @@ class Tokenizer:
             "device": self._device_request,
             "gpu_delivery_request": self._gpu_delivery_request,
             "gpu_delivery_selected": self._gpu_delivery,
+            "gpu_delivery_jit_rejection": (
+                {
+                    "code": self._auto_jit_rejection.code.value,
+                    **dict(self._auto_jit_rejection.detail),
+                }
+                if self._auto_jit_rejection is not None
+                else None
+            ),
             "gpu_min_bytes": self._gpu_min_bytes,
             "execution_counts": (
                 dict(native_stats["execution_counts"])

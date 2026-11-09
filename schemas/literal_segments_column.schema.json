@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toktier:schema:literal-segments-column:1",
+  "title": "toktier parity reading: the added-token literal segmentation column of one family",
+  "description": "Per-family column of a native-front-end parity reading (CPU arm or GPU arm, named by the reading's schema) for documents that hold added-token literals: chat-shaped variants of the parity documents and the literal-dense battery, compared with the reference oracle. literal_class says whether the face is served by the native literal segmenter (served) or keeps the whole-document reference path (unserved). Each entry of entry_points is one measured entry point of the native router (id_route: the ID route; state_route: the session-state route), with per-document path classes, the bytes each engine encoded, and the guard documents (documents the engine guard sent whole to the reference). The vacuity guard is on bytes: on a served face the reference encodes bytes only inside the listed guard documents (segments.bytes.hf == guard_documents.bytes_hf), the guard-document count is bounded, and in the GPU arm some segment bytes reach the GPU (segments.bytes.gpu > 0, with gpu_share reported); otherwise a silent whole-document fallback would read as zero mismatches. added_frontend_fingerprint names the added-token table the reading was taken on and has to equal the registry record's. Checked by tools/check_reading_forms.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["literal_class", "added_frontend_fingerprint", "battery", "entry_points"],
+  "properties": {
+    "literal_class": {"enum": ["served", "unserved"]},
+    "added_frontend_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "battery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generator_sha256", "strings", "mismatches"],
+      "properties": {
+        "generator_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "strings": {"type": "integer", "minimum": 1},
+        "mismatches": {"type": "integer", "minimum": 0}
+      }
+    },
+    "covered_literals": {
+      "description": "Divergence-set literals of carried records covered by the battery (informative).",
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "entry_points": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/entry_point"}
+    }
+  },
+  "$defs": {
+    "count": {"type": "integer", "minimum": 0},
+    "entry_point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry_point", "documents", "mismatches", "paths", "segments", "guard_documents"],
+      "properties": {
+        "entry_point": {"enum": ["id_route", "state_route"]},
+        "documents": {"type": "integer", "minimum": 1},
+        "mismatches": {"$ref": "#/$defs/count"},
+        "paths": {
+          "description": "Per-document path classes; every document is counted once.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gigatoken_segmented", "gpu_segmented", "hf_added_token", "hf_engine_guard"],
+          "properties": {
+            "gigatoken_segmented": {"$ref": "#/$defs/count"},
+            "gpu_segmented": {"$ref": "#/$defs/count"},
+            "hf_added_token": {"$ref": "#/$defs/count"},
+            "hf_engine_guard": {"$ref": "#/$defs/count"}
+          }
+        },
+        "segments": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["literals", "text", "largest_text_bytes", "bytes"],
+          "properties": {
+            "literals": {"$ref": "#/$defs/count"},
+            "text": {"$ref": "#/$defs/count"},
+            "largest_text_bytes": {"$ref": "#/$defs/count"},
+            "bytes": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["gpu", "fast_cpu", "hf"],
+              "properties": {
+                "gpu": {"$ref": "#/$defs/count"},
+                "fast_cpu": {"$ref": "#/$defs/count"},
+                "hf": {"$ref": "#/$defs/count"}
+              }
+            }
+          }
+        },
+        "guard_documents": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["count", "bytes_hf", "bound"],
+          "properties": {
+            "count": {"$ref": "#/$defs/count"},
+            "bytes_hf": {"$ref": "#/$defs/count"},
+            "bound": {"$ref": "#/$defs/count"}
+          }
+        },
+        "gpu_share": {"type": "number", "minimum": 0, "maximum": 1},
+        "gpu_min_bytes": {"$ref": "#/$defs/count"}
+      }
+    }
+  }
+}

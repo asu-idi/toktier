@@ -17,9 +17,23 @@ checks a column has to pass beyond its schema:
     (``evidence_role``). ``loader_true_equal`` is informative: it is
     reported, never a reason to refuse.
 
+``literal_segments`` (``schemas/literal_segments_column.schema.json``)
+    Documents holding added-token literals, per measured entry point of
+    the native router (``id_route``, ``state_route``). The vacuity guard
+    is on bytes: on a served face the reference encodes bytes only inside
+    the listed guard documents, their count is reported and bounded, and
+    in the GPU arm some segment bytes reach the GPU (``gpu_share``
+    reported). An unserved face keeps the whole-document path, so it
+    shows no segmented document. The column names the added-token table
+    it was taken on (``added_frontend_fingerprint``), which a registry
+    check holds to the record's.
+
 Usage::
 
-    python tools/check_reading_forms.py parity <reading.json> [--require special_tokens]
+    python tools/check_reading_forms.py parity <reading.json> \
+        [--require special_tokens] [--require literal_segments] [--registry FILE]
+
+The arm (CPU or GPU) is read from the reading's ``schema``.
 
 The command exits 0 when every present column passes (and every required
 column is present), 1 otherwise, and prints the informative notes.
@@ -38,9 +52,21 @@ from registry_common import GenerationError, load_json, schema_violations
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = REPOSITORY_ROOT / "schemas"
 SPECIAL_TOKENS_SCHEMA = SCHEMAS / "special_tokens_column.schema.json"
+LITERAL_SEGMENTS_SCHEMA = SCHEMAS / "literal_segments_column.schema.json"
 
 #: The per-family columns a parity row may carry, by name.
-COLUMNS = ("special_tokens",)
+COLUMNS = ("special_tokens", "literal_segments")
+
+#: The two arms of the parity readings, by reading schema.
+ARMS = {
+    "toktier.fast_cpu.native_frontend_parity.v1": "cpu",
+    "toktier.gpu.native_frontend_parity.v1": "gpu",
+}
+
+#: Upper bound on guard documents (sent whole to the reference by the
+#: engine guard) as a share of an entry point's documents. Above it the
+#: column speaks mostly about the reference, not about segmentation.
+GUARD_DOCUMENT_SHARE = 0.01
 
 #: What the ``True`` column shows, by post-processor class.
 EVIDENCE_ROLE = {
@@ -148,7 +174,121 @@ def special_tokens_notes(family: str, column: object) -> list[str]:
     ]
 
 
-def column_problems(row: Mapping[str, Any]) -> list[str]:
+def literal_segments_problems(
+    family: str,
+    column: object,
+    *,
+    arm: str | None = None,
+    added_frontend_fingerprint: str | None = None,
+) -> list[str]:
+    """Problems of one family's ``literal_segments`` column (empty: it passes).
+
+    ``arm`` (``cpu`` or ``gpu``) applies the arm's byte rule when given;
+    ``added_frontend_fingerprint`` is the registry record's, when known.
+    """
+    label = f"{family}: literal_segments"
+    problems = _schema_problems(label, column, LITERAL_SEGMENTS_SCHEMA)
+    if problems:
+        return problems
+    assert isinstance(column, Mapping)
+    served = column["literal_class"] == "served"
+    if (
+        added_frontend_fingerprint is not None
+        and column["added_frontend_fingerprint"] != added_frontend_fingerprint
+    ):
+        problems.append(
+            f"{label}: taken on added-token table "
+            f"{column['added_frontend_fingerprint']}, the record names "
+            f"{added_frontend_fingerprint}"
+        )
+    battery = column["battery"]
+    if int(battery["mismatches"]) != 0:
+        problems.append(f"{label}: battery {battery['mismatches']} mismatch(es)")
+    seen: set[str] = set()
+    for entry in column["entry_points"]:
+        name = str(entry["entry_point"])
+        where = f"{label}[{name}]"
+        if name in seen:
+            problems.append(f"{where}: the entry point is listed twice")
+        seen.add(name)
+        documents = int(entry["documents"])
+        paths = entry["paths"]
+        segment_bytes = entry["segments"]["bytes"]
+        guard = entry["guard_documents"]
+        if int(entry["mismatches"]) != 0:
+            problems.append(f"{where}: {entry['mismatches']} mismatch(es)")
+        if sum(int(value) for value in paths.values()) != documents:
+            problems.append(f"{where}: the path classes do not add up to the documents")
+        if int(guard["count"]) != int(paths["hf_engine_guard"]):
+            problems.append(
+                f"{where}: {guard['count']} guard document(s) listed, "
+                f"{paths['hf_engine_guard']} counted as hf_engine_guard"
+            )
+        if int(guard["count"]) > int(guard["bound"]):
+            problems.append(
+                f"{where}: {guard['count']} guard documents exceed the stated "
+                f"bound {guard['bound']}"
+            )
+        if int(guard["bound"]) > max(1, int(documents * GUARD_DOCUMENT_SHARE)):
+            problems.append(
+                f"{where}: the guard-document bound {guard['bound']} is above "
+                f"{GUARD_DOCUMENT_SHARE:.0%} of the documents"
+            )
+        if int(guard["bytes_hf"]) > int(segment_bytes["hf"]):
+            problems.append(
+                f"{where}: guard documents hold more reference bytes than were "
+                "encoded by the reference"
+            )
+        if not served:
+            if int(paths["gigatoken_segmented"]) or int(paths["gpu_segmented"]):
+                problems.append(
+                    f"{where}: an unserved face shows segmented documents; it "
+                    "keeps the whole-document path"
+                )
+            continue
+        if int(paths["hf_added_token"]) != 0:
+            problems.append(
+                f"{where}: {paths['hf_added_token']} document(s) on a served face "
+                "went whole to the reference for a literal"
+            )
+        if int(segment_bytes["hf"]) != int(guard["bytes_hf"]):
+            problems.append(
+                f"{where}: the reference encoded "
+                f"{int(segment_bytes['hf']) - int(guard['bytes_hf'])} byte(s) "
+                "outside the listed guard documents"
+            )
+        if arm == "cpu":
+            if int(segment_bytes["gpu"]) or int(paths["gpu_segmented"]):
+                problems.append(f"{where}: the CPU arm records GPU segments")
+            if int(paths["gigatoken_segmented"]) < 1 or not int(
+                segment_bytes["fast_cpu"]
+            ):
+                problems.append(
+                    f"{where}: no document was segmented on the CPU engine"
+                )
+        elif arm == "gpu":
+            total = sum(int(value) for value in segment_bytes.values())
+            if int(segment_bytes["gpu"]) < 1 or int(paths["gpu_segmented"]) < 1:
+                problems.append(
+                    f"{where}: no segment reached the GPU; the GPU arm would "
+                    "read another engine"
+                )
+            share = entry.get("gpu_share")
+            if share is None:
+                problems.append(f"{where}: the GPU arm reports no gpu_share")
+            elif total and abs(float(share) - int(segment_bytes["gpu"]) / total) > 1e-6:
+                problems.append(f"{where}: gpu_share does not match the bytes")
+    if "id_route" not in seen:
+        problems.append(f"{label}: the ID route is not measured")
+    return problems
+
+
+def column_problems(
+    row: Mapping[str, Any],
+    *,
+    arm: str | None = None,
+    added_frontend_fingerprint: str | None = None,
+) -> list[str]:
     """Problems of every 0.3.2 column a parity row carries."""
     family = str(row.get("family", "<unknown>"))
     documents = row.get("documents")
@@ -158,11 +298,35 @@ def column_problems(row: Mapping[str, Any]) -> list[str]:
         problems += special_tokens_problems(
             family, row["special_tokens"], documents=count
         )
+    if "literal_segments" in row:
+        problems += literal_segments_problems(
+            family,
+            row["literal_segments"],
+            arm=arm,
+            added_frontend_fingerprint=added_frontend_fingerprint,
+        )
     return problems
 
 
+def registry_fingerprints(registry: Mapping[str, Any]) -> dict[str, str]:
+    """``{family: added_frontend_fingerprint}`` of a support registry."""
+    frontends = {
+        str(row.get("added_frontend_id")): str(row.get("added_frontend_fingerprint"))
+        for row in registry.get("added_frontends") or ()
+        if isinstance(row, Mapping)
+    }
+    return {
+        str(artifact.get("family")): frontends[str(artifact.get("added_frontend_id"))]
+        for artifact in registry.get("artifacts") or ()
+        if isinstance(artifact, Mapping)
+        and str(artifact.get("added_frontend_id")) in frontends
+    }
+
+
 def parity_problems(
-    reading: Mapping[str, Any], require: Iterable[str] = ()
+    reading: Mapping[str, Any],
+    require: Iterable[str] = (),
+    registry: Mapping[str, Any] | None = None,
 ) -> tuple[list[str], list[str]]:
     """``(problems, notes)`` of a parity reading's rows and their columns."""
     required = set(require)
@@ -172,6 +336,8 @@ def parity_problems(
     rows = reading.get("rows")
     if not isinstance(rows, list) or not rows:
         return ["the reading has no rows"], []
+    arm = ARMS.get(str(reading.get("schema")))
+    fingerprints = registry_fingerprints(registry) if registry is not None else {}
     problems: list[str] = []
     notes: list[str] = []
     for row in rows:
@@ -182,7 +348,9 @@ def parity_problems(
         for name in sorted(required):
             if name not in row:
                 problems.append(f"{family}: the row carries no {name} column")
-        problems += column_problems(row)
+        problems += column_problems(
+            row, arm=arm, added_frontend_fingerprint=fingerprints.get(family)
+        )
         notes += special_tokens_notes(family, row.get("special_tokens"))
     return problems, notes
 
@@ -199,11 +367,18 @@ def main(argv: list[str] | None = None) -> int:
         choices=COLUMNS,
         help="a column every row must carry (repeatable)",
     )
+    parity.add_argument(
+        "--registry",
+        type=Path,
+        default=REPOSITORY_ROOT / "tables" / "support_registry.json",
+        help="support registry naming each family's added-token table",
+    )
     arguments = parser.parse_args(argv)
     reading = load_json(arguments.reading)
     if not isinstance(reading, dict):
         raise GenerationError(f"{arguments.reading}: not a JSON object")
-    problems, notes = parity_problems(reading, arguments.require)
+    registry = load_json(arguments.registry)
+    problems, notes = parity_problems(reading, arguments.require, registry)
     for note in notes:
         print(note)
     for problem in problems:

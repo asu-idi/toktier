@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from check_reading_forms import column_problems as reading_column_problems
+from check_reading_forms import registry_fingerprints
 from compute_identity_v2 import source_digest as source_digest_v2
 from fast_cpu_source_identity import source_digest
 from registry_common import (
@@ -289,6 +290,7 @@ def _verify_native_reading(
     binding: dict[str, Any],
     loadable: set[str],
     registry_by_family: dict[str, dict[str, Any]],
+    fingerprints: dict[str, str] | None = None,
 ) -> None:
     validation = _require_mapping(binding.get("validation"), label="validation")
     relative = validation.get("native_frontend_parity")
@@ -344,7 +346,11 @@ def _verify_native_reading(
         ):
             raise GenerationError(f"{family}: native-frontend parity did not pass")
         # The 0.3.2 columns, when the row carries them, pass their own checks.
-        problems = reading_column_problems(row)
+        problems = reading_column_problems(
+            row,
+            arm="cpu",
+            added_frontend_fingerprint=(fingerprints or {}).get(family),
+        )
         if problems:
             raise GenerationError(
                 "native-frontend parity column did not pass:\n  "
@@ -418,7 +424,9 @@ def augmented_document(
         completed, binding
     )
     config_digest = _verify_repair_tables(binding, loadable, by_family)
-    _verify_native_reading(binding, loadable, by_family)
+    _verify_native_reading(
+        binding, loadable, by_family, registry_fingerprints(completed)
+    )
 
     certified_entry = {
         "status": "certified_source",

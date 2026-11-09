@@ -213,3 +213,159 @@ def test_the_command_line_reports(tmp_path: Path) -> None:
         [*command, str(path)], check=False, capture_output=True, text=True
     )
     assert result.returncode == 1 and "2 mismatch(es)" in result.stderr
+
+
+# -- literal_segments ---------------------------------------------------------
+
+
+def _registry() -> dict[str, Any]:
+    document: dict[str, Any] = json.loads(
+        (ROOT / "tables" / "support_registry.json").read_text(encoding="utf-8")
+    )
+    return document
+
+
+def _segments_column(
+    arm: str = "cpu", served: bool = True, fingerprint: str = "a" * 64
+) -> dict[str, Any]:
+    gpu_bytes = 600 if arm == "gpu" else 0
+    entry: dict[str, Any] = {
+        "entry_point": "id_route",
+        "documents": 1000,
+        "mismatches": 0,
+        "paths": {
+            "gigatoken_segmented": (990 if arm == "cpu" else 0) if served else 0,
+            "gpu_segmented": (990 if arm == "gpu" else 0) if served else 0,
+            "hf_added_token": 0 if served else 990,
+            "hf_engine_guard": 10,
+        },
+        "segments": {
+            "literals": 5000,
+            "text": 6000,
+            "largest_text_bytes": 70000,
+            "bytes": {"gpu": gpu_bytes, "fast_cpu": 300, "hf": 100},
+        },
+        "guard_documents": {"count": 10, "bytes_hf": 100, "bound": 10},
+    }
+    if arm == "gpu":
+        entry["gpu_share"] = 600 / 1000
+        entry["gpu_min_bytes"] = 65536
+    return {
+        "literal_class": "served" if served else "unserved",
+        "added_frontend_fingerprint": fingerprint,
+        "battery": {"generator_sha256": "b" * 64, "strings": 120000, "mismatches": 0},
+        "entry_points": [entry],
+    }
+
+
+@pytest.mark.parametrize("arm", ["cpu", "gpu"])
+@pytest.mark.parametrize("served", [True, False])
+def test_a_well_formed_segments_column_passes(arm: str, served: bool) -> None:
+    column = _segments_column(arm, served)
+    if not served:
+        column["entry_points"][0]["guard_documents"]["bytes_hf"] = 0
+        column["entry_points"][0]["paths"]["hf_engine_guard"] = 10
+    assert forms.literal_segments_problems("f", column, arm=arm) == []
+
+
+def test_reference_bytes_outside_the_guard_documents_are_refused() -> None:
+    column = _segments_column("cpu")
+    column["entry_points"][0]["segments"]["bytes"]["hf"] = 150
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("50 byte(s) outside the listed guard documents" in p for p in problems)
+
+
+def test_a_whole_document_fallback_on_a_served_face_is_refused() -> None:
+    column = _segments_column("cpu")
+    paths = column["entry_points"][0]["paths"]
+    paths["gigatoken_segmented"] -= 5
+    paths["hf_added_token"] += 5
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("went whole to the reference for a literal" in p for p in problems)
+
+
+def test_the_gpu_arm_needs_bytes_on_the_gpu_and_a_share() -> None:
+    column = _segments_column("gpu")
+    entry = column["entry_points"][0]
+    entry["segments"]["bytes"]["gpu"] = 0
+    entry["paths"]["gpu_segmented"] = 0
+    entry["paths"]["gigatoken_segmented"] = 990
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("no segment reached the GPU" in p for p in problems)
+    column = _segments_column("gpu")
+    del column["entry_points"][0]["gpu_share"]
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("reports no gpu_share" in p for p in problems)
+    column = _segments_column("gpu")
+    column["entry_points"][0]["gpu_share"] = 0.5
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("gpu_share does not match" in p for p in problems)
+
+
+def test_guard_documents_are_counted_and_bounded() -> None:
+    column = _segments_column("cpu")
+    column["entry_points"][0]["guard_documents"]["count"] = 9
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("9 guard document(s) listed, 10 counted" in p for p in problems)
+    column = _segments_column("cpu")
+    guard = column["entry_points"][0]["guard_documents"]
+    guard["bound"] = 50
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("is above 1% of the documents" in p for p in problems)
+    guard["bound"] = 9
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("exceed the stated bound 9" in p for p in problems)
+
+
+def test_an_unserved_face_shows_no_segmented_document() -> None:
+    column = _segments_column("cpu", served=False)
+    paths = column["entry_points"][0]["paths"]
+    paths["hf_added_token"] -= 1
+    paths["gigatoken_segmented"] += 1
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("unserved face shows segmented documents" in p for p in problems)
+
+
+def test_entry_points_counts_and_battery_are_held() -> None:
+    column = _segments_column("cpu")
+    column["entry_points"][0]["entry_point"] = "state_route"
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("the ID route is not measured" in p for p in problems)
+    column = _segments_column("cpu")
+    column["entry_points"].append(copy.deepcopy(column["entry_points"][0]))
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("listed twice" in p for p in problems)
+    column = _segments_column("cpu")
+    column["entry_points"][0]["paths"]["hf_engine_guard"] += 1
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("do not add up" in p for p in problems)
+    column = _segments_column("cpu")
+    column["battery"]["mismatches"] = 3
+    column["entry_points"][0]["mismatches"] = 1
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("battery 3 mismatch" in p for p in problems)
+    assert any("[id_route]: 1 mismatch" in p for p in problems)
+    column = _segments_column("cpu")
+    column["entry_points"][0]["segments"]["bytes"]["gpu"] = 5
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("CPU arm records GPU segments" in p for p in problems)
+
+
+def test_the_column_is_held_to_the_records_added_token_table() -> None:
+    registry = _registry()
+    fingerprints = forms.registry_fingerprints(registry)
+    family = "deepseek_v3"
+    assert len(fingerprints[family]) == 64
+    column = _segments_column("cpu", fingerprint=fingerprints[family])
+    rows = [{"family": family, "documents": 1000, "literal_segments": column}]
+    reading = {"schema": "toktier.fast_cpu.native_frontend_parity.v1", "rows": rows}
+    assert forms.parity_problems(reading, ["literal_segments"], registry) == ([], [])
+    column["added_frontend_fingerprint"] = "c" * 64
+    problems, _notes = forms.parity_problems(reading, (), registry)
+    assert problems and "the record names" in problems[0]
+    # The arm comes from the reading's schema: the same column read as a
+    # GPU reading has no GPU bytes.
+    column["added_frontend_fingerprint"] = fingerprints[family]
+    reading["schema"] = "toktier.gpu.native_frontend_parity.v1"
+    problems, _notes = forms.parity_problems(reading, (), registry)
+    assert any("no segment reached the GPU" in p for p in problems)

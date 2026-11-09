@@ -48,6 +48,7 @@ from pathlib import Path
 from typing import Any
 
 from check_reading_forms import column_problems as reading_column_problems
+from check_reading_forms import registry_fingerprints
 from compute_identity_v2 import source_digest as source_digest_v2
 from native_host_source_identity import source_digest as native_host_source_digest
 from registry_common import (
@@ -487,6 +488,7 @@ def prebuilt_hardware_evidence_problems(registry_path: Path) -> list[str]:
         return [f"prebuilt hardware evidence cannot read shipped identities: {error}"]
 
     problems: list[str] = []
+    fingerprints = registry_fingerprints(document)
     try:
         host_bindings = native_host_bindings()
     except GenerationError as error:
@@ -565,7 +567,12 @@ def prebuilt_hardware_evidence_problems(registry_path: Path) -> list[str]:
             # The 0.3.2 columns (add_special_tokens=True, literal
             # segmentation), when a row carries them, pass their own checks.
             problems += [
-                f"{architecture}/{problem}" for problem in reading_column_problems(row)
+                f"{architecture}/{problem}"
+                for problem in reading_column_problems(
+                    row,
+                    arm="gpu",
+                    added_frontend_fingerprint=fingerprints.get(family),
+                )
             ]
     return problems
 

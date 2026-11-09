@@ -814,6 +814,25 @@ impl LiteralClass {
             .as_ref()
             .map_err(Clone::clone)
             .and_then(|rows| rows_equal_live_table(tokenizer, rows).map(|()| rows));
+        // The overlap reading below (the agreement predicate and the
+        // self-check's prefix / suffix probes) costs about the sum of the
+        // squared literal lengths. Above a bound the face is simply not
+        // served, as in releases without literal segmentation, and repair
+        // is off; no shipped face comes near it (the longest shipped
+        // literal is 36 characters).
+        let rows = rows.and_then(|rows| {
+            let work = rows
+                .iter()
+                .map(|row| row.content.len().saturating_mul(row.content.len()))
+                .fold(0usize, usize::saturating_add);
+            if work > LITERAL_OVERLAP_WORK_BOUND {
+                return Err(format!(
+                    "the added tokens are too long for the construction self-check \
+                     (sum of squared lengths {work} > {LITERAL_OVERLAP_WORK_BOUND})"
+                ));
+            }
+            Ok(rows)
+        });
         let engine_matcher_agrees = rows
             .as_ref()
             .is_ok_and(|rows| matcher_agreement(rows, engine.has_effective_normalizer()));
@@ -932,6 +951,10 @@ const SELF_CHECK_NEIGHBOURS: [&str; 11] = [
     "a", " ", "\n", "1", ".", "<", ">", "|", "\u{e9}", "\u{4e2d}", "\u{301}",
 ];
 const SELF_CHECK_MERGED_BOUND: usize = 100_000;
+/// Bound on the sum of the squared byte lengths of a face's literals, the
+/// cost of its overlap reading: one literal of 8 KiB, or 16,384 literals
+/// of 64 bytes (the shipped faces stay below 1.3e6).
+const LITERAL_OVERLAP_WORK_BOUND: usize = 1 << 26;
 
 /// Compare the native plan with the reference library's
 /// own extraction on a probe set built from the face's table -- each

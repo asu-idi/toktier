@@ -3795,6 +3795,43 @@ mod literal_segment_tests {
         assert_eq!(executions, 4);
     }
 
+    /// Construction cost does not grow with the square of a literal's
+    /// length: a face whose one added token is 100,000 characters long
+    /// builds within a small multiple of a face with a short one (it is
+    /// left unserved, with repair off, above the overlap bound), and its
+    /// ids equal the reference's.
+    #[test]
+    fn a_very_long_literal_does_not_make_construction_quadratic() {
+        let build = |literal: &str| {
+            let json = face_json(TestNormalizer::EmptySequence, &[plain(literal, false)]);
+            let started = std::time::Instant::now();
+            let setup = setup(&json, &[BACKEND_FAST_CPU, BACKEND_REFERENCE], &[0, 0], None);
+            (setup, started.elapsed())
+        };
+        let (_, short) = build("<|im_start|>");
+        let long_literal = format!("q{}w", "z".repeat(99_998));
+        let (setup, long) = build(&long_literal);
+        assert!(
+            long < short * 50 + std::time::Duration::from_secs(10),
+            "construction took {long:?} against {short:?}"
+        );
+        let facts = setup.router.literal_segmentation();
+        assert_eq!(facts["served"], false);
+        assert!(facts["reason"].as_str().unwrap().contains("too long"));
+        assert_eq!(facts["session_repair"], false);
+        for text in [
+            format!("hi {long_literal} there"),
+            "plain text".to_owned(),
+            long_literal.clone(),
+        ] {
+            let routed = setup.router.encode_ids(&text, false).unwrap();
+            assert_eq!(
+                routed.ids,
+                setup.reference.encode_ids(&text, false).unwrap()
+            );
+        }
+    }
+
     /// On a face outside the served class a gate match goes to the
     /// reference even when the reference declines the literal there.
     #[test]

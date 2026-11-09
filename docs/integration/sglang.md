@@ -170,15 +170,15 @@ for a measurement and is otherwise best left at `0`. An explicit
 `AdapterConfig.long_request_encoder` takes precedence over the built-in
 encoder for the same requests.
 
-The parallelism comes from the engine's Rayon worker pool, sized by
-`RAYON_NUM_THREADS` at first use in the tokenizer process; with that
-variable at `1` the chunks are encoded one after another (still exact).
-A deployment that exports `RAYON_NUM_THREADS=1`, a common companion of
-`TOKENIZERS_PARALLELISM=false`, therefore loses the chunk parallelism
-without any message: leave the variable unset in the tokenizer process,
-or set it to the cores you give tokenization, where chunked dispatch is
-wanted.
-The workers are forked lazily on the first batch that needs them, about
+The parallelism comes from the native chunk encoder's own pool, which
+the adapter warms when it wraps a tokenizer and which is otherwise built
+on first use with the parallelism available to the tokenizer process (its
+CPU affinity mask and quota). `RAYON_NUM_THREADS` does not size it, so a
+deployment that exports `RAYON_NUM_THREADS=1`, a common companion of
+`TOKENIZERS_PARALLELISM=false`, keeps the chunk parallelism; to bound it,
+limit the process's CPU affinity. Only the Python chunked path, which runs
+where the native encoder cannot, follows the Rayon thread count.
+The workers are forked lazily on the first call that needs them, about
 20 ms each, once per process.
 
 Each served request is recorded in the timing log with `how: "chunked"`
@@ -299,6 +299,8 @@ provisional in 0.3.0.
 | `TOKTIER_SGLANG_EXPLAIN_EVERY` | `0` | every this many calls, add the last execution path to the timing record; `0` is never |
 | `TOKTIER_SGLANG_CHUNKED_MIN_CHARS` | `0` | hand stateless requests of at least this many characters to `toktier.chunked.encode`; `0` is off |
 | `TOKTIER_SGLANG_CHUNKED_K` | `0` | force the chunk count of that encoder; `0` reads the shipped table |
+| `TOKTIER_SGLANG_DEVICE` | `cpu` | the `device` passed to `toktier.load` / `toktier.from_pretrained`: `cpu`, `auto`, `cuda` or `cuda:N` (a CUDA ordinal among the visible devices); the default keeps the adapter on the CPU path, and the scheduler's workers receive the same value |
+| `TOKTIER_SGLANG_GPU_DELIVERY` | `auto` | the `gpu_delivery` passed with it: `auto` (the shipped prebuilt kernel whenever it can serve, local JIT only when it cannot and the `gpu-jit` extra is installed), `prebuilt` or `jit`; the scheduler's workers receive the same value |
 | `TOKTIER_SGLANG_SCHED_WORKERS` | `0` | the size of the worker pool, a non-negative integer (a negative value is refused); `0` is no pool, and the settings below are read only when it is positive |
 
 | Variable | Default | What it sets |
@@ -465,7 +467,10 @@ installed with `--no-deps` beside SGLang, together with `platformdirs`,
 the one dependency SGLang's own dependencies do not bring; that is no
 longer needed, and `pip install toktier` brings `platformdirs` itself.
 If you want toktier's pinned Fastokens adapter, install
-`toktier-fastokens==0.3.1.2` as well, and keep in mind that it uses the
+`toktier-fastokens==0.3.1.2` as well (the `toktier[fastokens]` extra
+installs it together with `tokenizers==0.22.2`, the version its exact-id
+assurance was judged against; to satisfy that pin pip may move
+`transformers` back to an earlier 5.x release inside toktier's range), and keep in mind that it uses the
 import name `fastokens`, which is also the name of the package SGLang's
 own `fastokens` backend installs. Install one of the two, not both
 (`packaging/fastokens-pinned/README.md`). The adapter's exact-id assurance

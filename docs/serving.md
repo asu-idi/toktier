@@ -107,9 +107,11 @@ different id.
 What decides whether it is worth it:
 
 - **Admission.** Three conditions, all of which must hold. The
-  tokenizer's family and artifact digest have an entry in the certified
-  repair roster (the eleven byte-level BPE artifacts the sync profile
-  was certified on). Its loader face carries no normalizer, the empty
+  tokenizer's family and artifact digest are on the chunk admission
+  roster: the certified repair roster (the eleven byte-level BPE
+  artifacts the sync profile was certified on) and the records carried
+  from one of its artifacts by the cross-artifact carry-over
+  (`deepseek_v4_1_flash`, `mimo_v2_6`). Its loader face carries no normalizer, the empty
   normalizer sequence, or NFC with every added token matched on the
   input text (`normalized: false`), which are the normalizer shapes the
   cut rule reasons about, and none of its added tokens sets `lstrip`,
@@ -170,15 +172,14 @@ What decides whether it is worth it:
   the process's affinity). Its workers are forked lazily on the first
   batch that needs them, at roughly 20 ms per worker, once per process,
   so a serving process should send one long batch at start-up rather
-  than pay that inside a request. The native path has its own pool,
-  described below, and runs its chunks on the same Rayon threads. On
-  either path a process started with `RAYON_NUM_THREADS=1` gets the
-  chunks encoded one after another: still exact, not faster. Deployments
-  often export `RAYON_NUM_THREADS=1` beside
-  `TOKENIZERS_PARALLELISM=false` to keep library thread pools quiet, and
-  that also caps this pool at one worker without any message; where
-  chunk-parallel encode is wanted, leave `RAYON_NUM_THREADS` unset or
-  set it to the number of cores the process may use.
+  than pay that inside a request. A process started with
+  `RAYON_NUM_THREADS=1` gets the Python path's chunks encoded one after
+  another: still exact, not faster. The native path runs its chunks on a
+  pool of its own, described below, which `RAYON_NUM_THREADS` does not
+  size. Deployments often export `RAYON_NUM_THREADS=1` beside
+  `TOKENIZERS_PARALLELISM=false` to keep library thread pools quiet; the
+  native path, which `chunked.encode` takes by default on an admitted
+  tokenizer, keeps its parallelism there.
 - **What it saves.** On the Python path, 1 M-character English prose
   with 16 workers takes 8.6 ms against 26.5 ms serial for the slower of the certified engines
   (3.1x), and 6.9 ms against 9.8 ms for the faster ones (1.4x): the
@@ -226,9 +227,11 @@ concatenated before the ids cross into Python, so the per-chunk Python
 boundary that limits the Python path is gone. A worker is checked out
 for one chunk and returned, so concurrent callers do not share a prefix
 of the pool, and the pool size does not depend on the chunk count. Each
-chunk still passes the engine's guarded full-encode gate, so a chunk
-that holds an added-token literal or trips a guard is encoded by the
-reference on its own. The Rust `toktier` crate reaches the same encoder
+chunk still passes the engine's guarded full-encode gate: a chunk that
+holds an added-token literal is cut at its literals and its text segments
+encoded on the engine, as the router does for a whole document
+([`contracts/routing.md`](contracts/routing.md) Section 5.2), and a chunk
+that trips a guard is encoded by the reference on its own. The Rust `toktier` crate reaches the same encoder
 through `Tokenizer::chunked()`, under the same admission table and with
 the same refusal vocabulary ([`rust-api.md`](rust-api.md)).
 
@@ -256,10 +259,17 @@ certified is refused on both paths alike.
 chunk count, makes the same choice for a stateless core-stream call (no
 `session`, `lookup` omitted or `"off"`, `add_special_tokens=False`).
 
-The pool is forked on first use. `chunked.warm(tokenizer, workers=None,
-text=None)` forks it ahead of the first request, to the Rayon thread
-count when `workers` is omitted, and with a sample `text` runs each new
-worker once so its caches are warm; a serving process should call it at
+The native chunk encoder runs its rows on a process-wide pool of its
+own. The first `chunked.warm(tokenizer, workers=N)` builds that pool with
+`N` threads, a later call with a larger `N` grows it (a smaller one leaves
+it), and without a `warm` call the first chunked call builds it with the
+parallelism available to the process, which honours its CPU affinity mask
+and quota. `RAYON_NUM_THREADS` does not size it. A call made from a thread
+of a Rayon pool the host built stays on that pool, which is how a host
+chooses the pool itself. The workers are forked on first use.
+`chunked.warm(tokenizer, workers=None, text=None)` forks them ahead of the
+first request, to the pool's thread count when `workers` is omitted, and
+with a sample `text` runs each new worker once so its caches are warm; a serving process should call it at
 start-up, together with `chunked.admission(tokenizer)`, because `warm`
 does not run the admission check and the first chunked call would
 otherwise pay for it (the SGLang adapter does both when it wraps a
@@ -284,9 +294,9 @@ its head, for an input at or above the GPU crossover, or, through
 `native=True`, a route without the corrected CPU engine, where
 `native=None` takes the Python path), the input is encoded serially
 through the normal route and the result says `R_CHUNK_ROUTE_NOT_FAST_CPU`. And
-inside a process whose Rayon thread count is 1, such as a worker of the
-SGLang adapter's pool at its default setting, the native chunks run one
-after another, exact and not faster.
+inside a process that may use one core, such as a worker of the SGLang
+adapter's pool pinned to one core, the native chunks run one after
+another, exact and not faster.
 
 ## 4. Process shape
 

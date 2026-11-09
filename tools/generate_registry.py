@@ -19,9 +19,8 @@ has backfilled every table digest; before that the registry carries
 loader comparing a real build against it always closes the accelerated
 path: the failure mode is a refused fast path, never an unbacked one.
 ``--release-check`` refuses to pass while any placeholder, unrecorded
-digest, or missing packaged table remains, or while a row of the
-store-fingerprint history table differs from its recomputation at the
-release tag it names (``tools/store_history.py``).
+digest, or missing packaged table remains, or while a certified row of a
+parity reading lacks the 0.3.2 columns.
 
 Packaged copy: the registry also ships inside the package
 (``src/toktier/routing/tables/support_registry.v1.json``) so installed
@@ -74,7 +73,6 @@ from registry_common import (
 )
 from scan_common import DECLINED, vendored_source_archive
 from source_identity_common import coverage_problems as source_coverage_problems
-from store_history import history_problems as store_history_problems
 from update_fast_cpu_registry import augmented_document
 
 # registry_common puts src/ on sys.path; the kernel identity helpers are
@@ -1665,12 +1663,6 @@ def main(argv: list[str] | None = None) -> int:
     if arguments.release_check:
         problems = list(problems) + release_problems(arguments.out)
         problems += release_reading_problems(arguments.out)
-        # The store-fingerprint history table: every row recomputed at its
-        # release tag (tools/store_history.py).
-        history, history_notes = store_history_problems()
-        problems += history
-        for note in history_notes:
-            print(note)
     for problem in problems:
         print(f"error: {problem}", file=sys.stderr)
     if problems:

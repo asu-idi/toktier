@@ -86,11 +86,8 @@ from .delivery import (
 from .fingerprint import (
     AXIS_SOURCE_V1,
     AXIS_SOURCE_V2,
-    FINGERPRINT_V1_TAG,
     FINGERPRINT_V2_TAG,
-    SourceBinding,
     fingerprint,
-    predecessor_releases,
     repair_parameters_component,
     source_binding,
     stored_fingerprint,
@@ -1804,27 +1801,30 @@ class Tokenizer:
                 gpu_encoder = prepared.engine
                 self._native_gpu_prepared = prepared
             native_key = self._native_store_fingerprint(repair_fast_cpu)
-            self._native_request = _native.NativeRuntime(
-                list(self._plan.fallback_chain),
-                [
-                    self._gpu_min_bytes if backend == BACKEND_GPU else 0
-                    for backend in self._plan.fallback_chain
-                ],
-                reference,
-                fast_encoder,
-                gpu_encoder,
-                repair_fast_cpu,
-                native_key,
-                seal_guard,
-                self._postprocessor_adds_tokens,
-                self._config.diagnostics,
-                (
-                    str(self._store_directory)
-                    if self._store_directory is not None
-                    else None
-                ),
-                self._cache_budget,
-            )
+            try:
+                self._native_request = _native.NativeRuntime(
+                    list(self._plan.fallback_chain),
+                    [
+                        self._gpu_min_bytes if backend == BACKEND_GPU else 0
+                        for backend in self._plan.fallback_chain
+                    ],
+                    reference,
+                    fast_encoder,
+                    gpu_encoder,
+                    repair_fast_cpu,
+                    native_key,
+                    seal_guard,
+                    self._postprocessor_adds_tokens,
+                    self._config.diagnostics,
+                    (
+                        str(self._store_directory)
+                        if self._store_directory is not None
+                        else None
+                    ),
+                    self._cache_budget,
+                )
+            except SessionStateMismatch as error:
+                raise self._foreign_store(error, native_key) from error
             if (
                 self._native_store_written_by is not None
                 and self._native_store_written_by == native_key
@@ -2117,6 +2117,37 @@ class Tokenizer:
             for native_fast_cpu in (False, True)
         )
 
+    def _foreign_store(
+        self, error: SessionStateMismatch, key: bytes
+    ) -> SessionStateMismatch:
+        """The refusal of a store another build or release wrote, said plainly.
+
+        ``error`` is the store's own refusal; when the directory names a
+        fingerprint this process does not write, the refusal says that the
+        store comes from another build or release, that none of its
+        sessions is read, and how to go on. Other refusals (an unreadable
+        or malformed ``meta.json``) are returned unchanged.
+        """
+        if self._store_directory is None:
+            return error
+        stored = stored_fingerprint(self._store_directory)
+        if stored is None or stored == key:
+            return error
+        return SessionStateMismatch(
+            f"the store at {self._store_directory} was written by another "
+            "toktier release or build: its fingerprint is not one this build "
+            "writes, so none of its sessions is read. A store does not carry "
+            "over to a build whose engine or host sources, reference library, "
+            "loader face or repair parameters differ. Remove the directory (it "
+            "is rebuilt on first use) or give this process another store "
+            "directory",
+            # The two keys the errors contract lists for this code.
+            details={
+                "expected_fingerprint": key.hex(),
+                "stored_fingerprint": stored.hex(),
+            },
+        )
+
     def _refuse_native_owned_store(self, python_key: bytes) -> None:
         """Refuse, with its own message, a store this build's native runtime holds.
 
@@ -2133,7 +2164,12 @@ class Tokenizer:
         if stored is None or stored == python_key:
             return
         if stored not in self._native_owned_store_keys():
-            return
+            raise self._foreign_store(
+                SessionStateMismatch(
+                    "the store was written under a different semantic fingerprint"
+                ),
+                python_key,
+            )
         raise SessionStateMismatch(
             "the store is held by this build's native request runtime under "
             "the version-normalized source identity; the Python entry store "
@@ -2149,43 +2185,13 @@ class Tokenizer:
             },
         )
 
-    def _semantic_fingerprint_v1(
-        self, *, native_fast_cpu: bool, fast_cpu_source_digest: str
-    ) -> bytes:
-        """The v1-form fingerprint with one fast CPU digest substituted.
-
-        The preimage earlier releases wrote for a native-owned store,
-        evaluated with this process's own components and the given
-        digest; used only to recognize a predecessor's store.
-        """
-        engine = self._snapshot.fast_cpu_engine
-        return fingerprint(
-            FINGERPRINT_V1_TAG,
-            (
-                self._artifact_sha256,
-                ORACLE_PACKAGE,
-                oracle_version() or "",
-                _ENGINE_ID,
-                _SESSION_SEMVER,
-                BACKEND_FAST_CPU if native_fast_cpu else BACKEND_REFERENCE,
-                "toktier-fast-repair-v1" if native_fast_cpu else "",
-                "",
-                "",
-                engine.version or "",
-                fast_cpu_source_digest,
-                "\x1f".join(engine.build_flags),
-                engine.toolchain or "",
-                engine.config_digest or "",
-            ),
-        )
-
     def _native_store_fingerprint(self, native_fast_cpu: bool) -> bytes:
         """The key the native request runtime opens its store under.
 
-        The current form, unless the store directory already holds a
-        store a listed predecessor release wrote for this same build
-        identity (:func:`toktier.facade.fingerprint.predecessor_releases`);
-        that store is then opened under its own stored value.
+        The current form, unless the store directory already holds the
+        store this same build's Python owner wrote; that store is then
+        opened under its own stored value. A store any other build or
+        release wrote is refused (:meth:`_foreign_store`).
         """
         current = self._semantic_fingerprint(
             None, native_fast_cpu=native_fast_cpu, native_owned=True
@@ -2198,30 +2204,6 @@ class Tokenizer:
         same_build = self._python_owner_store_fingerprint(native_fast_cpu)
         if same_build is not None and stored == same_build:
             return stored
-        binding = self._store_bindings.get("native", {})
-        rows = predecessor_releases(
-            SourceBinding(
-                binding.get("axis", ""),
-                binding.get("fast_cpu", ""),
-                binding.get("native_host", ""),
-            ),
-            artifact_sha256=self._artifact_sha256,
-            loader_face_sha256=self._loader_face_sha256,
-            repair_parameters=repair_parameters_component(
-                family_spec(self.family, self._artifact_sha256)
-            ),
-        )
-        for row in rows:
-            candidate = self._semantic_fingerprint_v1(
-                native_fast_cpu=native_fast_cpu,
-                fast_cpu_source_digest=row.fast_cpu_source_digest,
-            )
-            if candidate == stored:
-                self._store_bindings["native"] = {
-                    **binding,
-                    "opened_as_release": row.release,
-                }
-                return stored
         return current
 
 

@@ -607,10 +607,14 @@ impl Runtime {
                 format!("family {family} has no certified accelerated route on this runtime"),
             ));
         }
-        let postprocessor_adds_tokens = serde_json::from_slice::<serde_json::Value>(&bytes)
-            .ok()
-            .and_then(|document| document.get("post_processor").cloned())
-            .is_some_and(|value| !value.is_null());
+        // How a request with special tokens is served (`RoutePlan::
+        // postprocessor_class`). The router keeps its one constructor
+        // flag: it is set for every class but `identity`, so a `prefix`
+        // artifact asked for special tokens through the router directly
+        // still gets the reference's answer rather than a bare core
+        // stream; the facade sends the flag only for `reference`.
+        let special_tokens = special_token_plan(&bytes, &reference);
+        let postprocessor_adds_tokens = special_tokens.kind != PostprocessorKind::Identity;
         let repair_fast_cpu = fast_cpu.is_some();
         let router = Arc::new(
             NativeRouter::new(
@@ -680,6 +684,9 @@ impl Runtime {
                 Certification::Reference
             },
             reasons,
+            postprocessor_class: special_tokens.kind.word().to_owned(),
+            special_token_prefix: special_tokens.kind.prefix().to_vec(),
+            postprocessor_self_check: special_tokens.self_check,
         };
         Ok(Tokenizer {
             inner: Arc::new(TokenizerInner {
@@ -972,11 +979,15 @@ impl Tokenizer {
                 "offsets with post-processor special tokens are not exposed by Rust API v1",
             ));
         }
-        let routed = self
+        let (router_flag, prefix) = self.special_token_service(options.add_special_tokens);
+        let mut routed = self
             .inner
             .router
-            .encode_ids(text, options.add_special_tokens)
+            .encode_ids(text, router_flag)
             .map_err(|error| Error::new(ErrorCode::BackendExecutionFault, error.to_string()))?;
+        if let Some(prefix) = prefix {
+            routed.ids = prepend(prefix, routed.ids);
+        }
         // Explicitly requested offsets are reconstructed through the
         // one-pass structure-of-arrays bridge and materialized as the
         // public pair layout; values and failure behavior match the
@@ -1018,10 +1029,11 @@ impl Tokenizer {
             ));
         }
         let texts = documents.iter().map(AsRef::as_ref).collect::<Vec<_>>();
+        let (router_flag, prefix) = self.special_token_service(options.add_special_tokens);
         let routed = self
             .inner
             .router
-            .encode_batch_ids(&texts, options.add_special_tokens)
+            .encode_batch_ids(&texts, router_flag)
             .map_err(|error| Error::new(ErrorCode::BackendExecutionFault, error.to_string()))?;
         let rows = routed
             .into_iter()
@@ -1035,10 +1047,31 @@ impl Tokenizer {
                     self.inner.plan.certification,
                     row.reason,
                 );
-                (row.ids, facts)
+                let ids = match prefix {
+                    Some(prefix) => prepend(prefix, row.ids),
+                    None => row.ids,
+                };
+                (ids, facts)
             })
             .collect();
         RaggedEncoding::from_rows(rows)
+    }
+
+    /// How one request's `add_special_tokens` is served: the flag the
+    /// router is called with, and the ids placed before the stream it
+    /// returns. Only the `reference` class sends the flag on; the other
+    /// two take the plain route's core stream, which with the class's
+    /// prefix (empty for `identity`) is the reference's answer
+    /// (`RoutePlan::postprocessor_class`).
+    fn special_token_service(&self, add_special_tokens: bool) -> (bool, Option<&[u32]>) {
+        if !add_special_tokens {
+            return (false, None);
+        }
+        match self.inner.plan.postprocessor_class.as_str() {
+            CLASS_IDENTITY => (false, None),
+            CLASS_PREFIX => (false, Some(self.inner.plan.special_token_prefix.as_slice())),
+            _ => (true, None),
+        }
     }
 
     pub fn decode(&self, ids: impl AsRef<[u32]>, options: DecodeOptions) -> Result<String> {
@@ -1144,6 +1177,205 @@ pub(crate) fn facts_from_routed(
     }
 }
 
+/// The three words of `RoutePlan::postprocessor_class`.
+const CLASS_IDENTITY: &str = "identity";
+const CLASS_PREFIX: &str = "prefix";
+const CLASS_REFERENCE: &str = "reference";
+
+/// What the post-processor of the executed document adds to a single
+/// sequence, as far as this facade serves it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PostprocessorKind {
+    /// Nothing: the reference's answer with special tokens is its core
+    /// stream.
+    Identity,
+    /// Exactly these ids before the core stream.
+    Prefix(Vec<u32>),
+    /// Anything else; the reference engine answers.
+    Reference,
+}
+
+impl PostprocessorKind {
+    fn word(&self) -> &'static str {
+        match self {
+            Self::Identity => CLASS_IDENTITY,
+            Self::Prefix(_) => CLASS_PREFIX,
+            Self::Reference => CLASS_REFERENCE,
+        }
+    }
+
+    fn prefix(&self) -> &[u32] {
+        match self {
+            Self::Prefix(ids) => ids,
+            Self::Identity | Self::Reference => &[],
+        }
+    }
+}
+
+/// The class of one artifact and the outcome of its construction check.
+struct SpecialTokenPlan {
+    kind: PostprocessorKind,
+    self_check: Option<String>,
+}
+
+/// Classify the document's post-processor, then check the class on the
+/// reference engine itself: for every probe text the answer with special
+/// tokens has to be the class's prefix followed by the answer without
+/// them. A probe that answers otherwise (or fails) makes the class
+/// `reference` and is named in the plan.
+fn special_token_plan(bytes: &[u8], reference: &ReferenceEngine) -> SpecialTokenPlan {
+    let kind = serde_json::from_slice::<serde_json::Value>(bytes)
+        .map(|document| classify_postprocessor(&document))
+        .unwrap_or(PostprocessorKind::Reference);
+    if kind == PostprocessorKind::Reference {
+        return SpecialTokenPlan {
+            kind,
+            self_check: None,
+        };
+    }
+    let first_added = reference
+        .added_tokens()
+        .into_iter()
+        .map(|(_, content, _)| content)
+        .find(|content| !content.is_empty());
+    let mut probes = vec![
+        String::new(),
+        "a".to_owned(),
+        "hello world".to_owned(),
+        "caf\u{e9} \u{4e2d}\u{6587} \u{1f600} na\u{ef}ve".to_owned(),
+    ];
+    if let Some(literal) = first_added {
+        probes.push(literal.clone());
+        probes.push(format!("a {literal} b"));
+    }
+    for (index, probe) in probes.iter().enumerate() {
+        let agrees = match (
+            reference.encode_ids(probe, true),
+            reference.encode_ids(probe, false),
+        ) {
+            (Ok(with), Ok(core)) => with == prepend(kind.prefix(), core),
+            _ => false,
+        };
+        if !agrees {
+            return SpecialTokenPlan {
+                kind: PostprocessorKind::Reference,
+                self_check: Some(format!(
+                    "probe {index} ({} bytes) answered otherwise than the {} class on the \
+                     reference engine",
+                    probe.len(),
+                    kind.word()
+                )),
+            };
+        }
+    }
+    SpecialTokenPlan {
+        kind,
+        self_check: None,
+    }
+}
+
+/// The class of a tokenizer document's post-processor.
+///
+/// `identity`: no post-processor, `ByteLevel` (it rewrites offsets
+/// only), or a template whose single-sequence form is the sequence
+/// alone. `prefix`: a template whose single-sequence form is one special
+/// token, looked up by the piece's own id and carrying exactly one id,
+/// followed by the sequence. A `Sequence` of processors is classified
+/// only when its members are `ByteLevel` and at most one template, the
+/// template deciding. Everything else -- suffix or two-sided templates,
+/// more than one special token, other processor types, nested sequences,
+/// a document with truncation or padding -- is `reference`.
+fn classify_postprocessor(document: &serde_json::Value) -> PostprocessorKind {
+    let absent = |key: &str| document.get(key).is_none_or(serde_json::Value::is_null);
+    if !absent("truncation") || !absent("padding") {
+        return PostprocessorKind::Reference;
+    }
+    match document.get("post_processor") {
+        None | Some(serde_json::Value::Null) => PostprocessorKind::Identity,
+        Some(processor) => match processor_type(processor) {
+            Some("Sequence") => {
+                let Some(members) = processor
+                    .get("processors")
+                    .and_then(serde_json::Value::as_array)
+                else {
+                    return PostprocessorKind::Reference;
+                };
+                let mut template = None;
+                for member in members {
+                    match processor_type(member) {
+                        Some("ByteLevel") => {}
+                        Some("TemplateProcessing") if template.is_none() => {
+                            template = Some(classify_template(member));
+                        }
+                        _ => return PostprocessorKind::Reference,
+                    }
+                }
+                template.unwrap_or(PostprocessorKind::Identity)
+            }
+            Some("ByteLevel") => PostprocessorKind::Identity,
+            Some("TemplateProcessing") => classify_template(processor),
+            _ => PostprocessorKind::Reference,
+        },
+    }
+}
+
+fn processor_type(processor: &serde_json::Value) -> Option<&str> {
+    processor.get("type").and_then(serde_json::Value::as_str)
+}
+
+/// The single-sequence form of one `TemplateProcessing`.
+fn classify_template(template: &serde_json::Value) -> PostprocessorKind {
+    let Some(single) = template.get("single").and_then(serde_json::Value::as_array) else {
+        return PostprocessorKind::Reference;
+    };
+    match single.as_slice() {
+        [sequence] if template_piece(sequence, "Sequence") == Some("A") => {
+            PostprocessorKind::Identity
+        }
+        [special, sequence] if template_piece(sequence, "Sequence") == Some("A") => {
+            let Some(key) = template_piece(special, "SpecialToken") else {
+                return PostprocessorKind::Reference;
+            };
+            let ids = template
+                .get("special_tokens")
+                .and_then(|tokens| tokens.get(key))
+                .and_then(|entry| entry.get("ids"))
+                .and_then(serde_json::Value::as_array);
+            match ids.map(Vec::as_slice) {
+                Some([id]) => id
+                    .as_u64()
+                    .and_then(|id| u32::try_from(id).ok())
+                    .map_or(PostprocessorKind::Reference, |id| {
+                        PostprocessorKind::Prefix(vec![id])
+                    }),
+                _ => PostprocessorKind::Reference,
+            }
+        }
+        _ => PostprocessorKind::Reference,
+    }
+}
+
+/// The id of a template piece of the given kind (`{"<kind>": {"id": ...,
+/// "type_id": 0}}` and nothing else), or `None`.
+fn template_piece<'a>(piece: &'a serde_json::Value, kind: &str) -> Option<&'a str> {
+    let object = piece.as_object().filter(|object| object.len() == 1)?;
+    let inner = object.get(kind)?;
+    if inner.get("type_id").and_then(serde_json::Value::as_u64) != Some(0) {
+        return None;
+    }
+    inner.get("id").and_then(serde_json::Value::as_str)
+}
+
+fn prepend(prefix: &[u32], ids: Vec<u32>) -> Vec<u32> {
+    if prefix.is_empty() {
+        return ids;
+    }
+    let mut out = Vec::with_capacity(prefix.len() + ids.len());
+    out.extend_from_slice(prefix);
+    out.extend(ids);
+    out
+}
+
 fn semantic_fingerprint(artifact_sha256: &[u8], fast_cpu: bool) -> [u8; 32] {
     let mut digest = Sha256::new();
     digest.update(b"toktier.rust.fingerprint.v1\0");
@@ -1171,4 +1403,195 @@ fn _assert_send_sync() {
     assert_send_sync::<Runtime>();
     assert_send_sync::<Tokenizer>();
     assert_send_sync::<TokenBuffer>();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{classify_postprocessor, special_token_plan, PostprocessorKind};
+    use serde_json::json;
+    use toktier_routing_core::ReferenceEngine;
+
+    fn template(single: serde_json::Value, special: serde_json::Value) -> serde_json::Value {
+        json!({"type": "TemplateProcessing", "single": single, "pair": [], "special_tokens": special})
+    }
+
+    fn special(id: &str) -> serde_json::Value {
+        json!({"SpecialToken": {"id": id, "type_id": 0}})
+    }
+
+    fn sequence(id: &str) -> serde_json::Value {
+        json!({"Sequence": {"id": id, "type_id": 0}})
+    }
+
+    fn entry(key: &str, ids: serde_json::Value) -> serde_json::Value {
+        json!({key: {"id": key, "ids": ids, "tokens": [key]}})
+    }
+
+    fn classify(post_processor: serde_json::Value) -> PostprocessorKind {
+        classify_postprocessor(&json!({"post_processor": post_processor}))
+    }
+
+    /// The shapes the shipped artifacts carry, and the boundary of each
+    /// class: only a sequence alone or one special token before it is
+    /// served on the plain route; every other shape is the reference's.
+    #[test]
+    fn the_post_processor_classes_follow_the_template_shape() {
+        let bos = || entry("<s>", json!([1]));
+        assert_eq!(
+            classify(serde_json::Value::Null),
+            PostprocessorKind::Identity
+        );
+        assert_eq!(
+            classify_postprocessor(&json!({})),
+            PostprocessorKind::Identity
+        );
+        assert_eq!(
+            classify(json!({"type": "ByteLevel", "trim_offsets": false})),
+            PostprocessorKind::Identity
+        );
+        assert_eq!(
+            classify(template(json!([sequence("A")]), json!({}))),
+            PostprocessorKind::Identity
+        );
+        assert_eq!(
+            classify(template(json!([special("<s>"), sequence("A")]), bos())),
+            PostprocessorKind::Prefix(vec![1])
+        );
+        // The llama shape: ByteLevel then the template.
+        let llama = json!({"type": "Sequence", "processors": [
+            {"type": "ByteLevel"},
+            template(json!([special("<s>"), sequence("A")]), bos()),
+        ]});
+        assert_eq!(classify(llama), PostprocessorKind::Prefix(vec![1]));
+        for refused in [
+            // A suffix, a two-sided template, two special tokens.
+            template(json!([sequence("A"), special("<s>")]), bos()),
+            template(
+                json!([special("<s>"), sequence("A"), special("<s>")]),
+                bos(),
+            ),
+            template(
+                json!([special("<s>"), special("<s>"), sequence("A")]),
+                bos(),
+            ),
+            // The sequence piece repeated, dropped, or another one.
+            template(json!([sequence("A"), sequence("A")]), json!({})),
+            template(json!([special("<s>")]), bos()),
+            template(json!([sequence("B")]), json!({})),
+            // A special token carrying two ids, none, or an id beyond u32.
+            template(
+                json!([special("<s>"), sequence("A")]),
+                entry("<s>", json!([1, 2])),
+            ),
+            template(
+                json!([special("<s>"), sequence("A")]),
+                entry("<s>", json!([])),
+            ),
+            template(
+                json!([special("<s>"), sequence("A")]),
+                entry("<s>", json!([4_294_967_296_u64])),
+            ),
+            // The entry is looked up by the piece's own id, not searched.
+            template(
+                json!([special("<s>"), sequence("A")]),
+                entry("<bos>", json!([1])),
+            ),
+            // A piece with another type id or an extra key.
+            template(
+                json!([{"SpecialToken": {"id": "<s>", "type_id": 1}}, sequence("A")]),
+                bos(),
+            ),
+            template(
+                json!([{"SpecialToken": {"id": "<s>", "type_id": 0}, "x": 1}, sequence("A")]),
+                bos(),
+            ),
+            json!({"type": "BertProcessing", "sep": ["[SEP]", 102], "cls": ["[CLS]", 101]}),
+            json!({"type": "RobertaProcessing"}),
+            json!({"type": "SomethingLater"}),
+            json!({"no_type": true}),
+            // Sequences: a template after another template, a nested
+            // sequence, a member that is not ByteLevel, no member list.
+            json!({"type": "Sequence", "processors": [
+                template(json!([special("<s>"), sequence("A")]), bos()),
+                template(json!([sequence("A")]), json!({})),
+            ]}),
+            json!({"type": "Sequence", "processors": [
+                {"type": "Sequence", "processors": [{"type": "ByteLevel"}]},
+            ]}),
+            json!({"type": "Sequence", "processors": [{"type": "RobertaProcessing"}]}),
+            json!({"type": "Sequence"}),
+        ] {
+            assert_eq!(
+                classify(refused.clone()),
+                PostprocessorKind::Reference,
+                "{refused}"
+            );
+        }
+        // Truncation or padding in the document: the reference answers.
+        for key in ["truncation", "padding"] {
+            assert_eq!(
+                classify_postprocessor(&json!({"post_processor": null, key: {"max_length": 8}})),
+                PostprocessorKind::Reference,
+                "{key}"
+            );
+        }
+    }
+
+    /// A minimal word-level document with the given post-processor.
+    fn word_level(post_processor: serde_json::Value) -> Vec<u8> {
+        serde_json::to_vec(&json!({
+            "version": "1.0",
+            "truncation": null,
+            "padding": null,
+            "added_tokens": [{"id": 0, "content": "<s>", "single_word": false,
+                "lstrip": false, "rstrip": false, "normalized": false, "special": true}],
+            "normalizer": null,
+            "pre_tokenizer": {"type": "Whitespace"},
+            "post_processor": post_processor,
+            "decoder": null,
+            "model": {"type": "WordLevel", "vocab": {"<s>": 0, "a": 1, "b": 2, "[UNK]": 3},
+                "unk_token": "[UNK]"}
+        }))
+        .unwrap()
+    }
+
+    /// The construction check runs the class against the reference engine
+    /// itself: a class the engine agrees with is kept, and the check is
+    /// what would demote a class whose reading of the document were wrong.
+    #[test]
+    fn the_construction_check_keeps_a_class_the_reference_agrees_with() {
+        let bytes = word_level(template(
+            json!([special("<s>"), sequence("A")]),
+            entry("<s>", json!([0])),
+        ));
+        let reference = ReferenceEngine::from_bytes(&bytes).unwrap();
+        let plan = special_token_plan(&bytes, &reference);
+        assert_eq!(plan.kind, PostprocessorKind::Prefix(vec![0]));
+        assert_eq!(plan.self_check, None);
+
+        let bytes = word_level(serde_json::Value::Null);
+        let reference = ReferenceEngine::from_bytes(&bytes).unwrap();
+        let plan = special_token_plan(&bytes, &reference);
+        assert_eq!(plan.kind, PostprocessorKind::Identity);
+        assert_eq!(plan.self_check, None);
+    }
+
+    /// A document whose reading disagrees with the engine executing it is
+    /// demoted, and the plan names the probe. The bytes classified here
+    /// say "nothing is added" while the engine adds a token, which no
+    /// shipped artifact does; the check is what keeps such a pair exact.
+    #[test]
+    fn the_construction_check_demotes_a_class_the_reference_contradicts() {
+        let executed = word_level(template(
+            json!([special("<s>"), sequence("A")]),
+            entry("<s>", json!([0])),
+        ));
+        let reference = ReferenceEngine::from_bytes(&executed).unwrap();
+        let described = word_level(serde_json::Value::Null);
+        let plan = special_token_plan(&described, &reference);
+        assert_eq!(plan.kind, PostprocessorKind::Reference);
+        let named = plan.self_check.expect("the failing probe is named");
+        assert!(named.starts_with("probe 0 "), "{named}");
+        assert!(named.contains("identity class"), "{named}");
+    }
 }

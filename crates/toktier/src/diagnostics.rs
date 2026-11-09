@@ -248,6 +248,29 @@ pub struct RoutePlan {
     pub gpu_min_bytes: u64,
     pub certification: Certification,
     pub reasons: Vec<ReasonCode>,
+    /// How `add_special_tokens` is served for this artifact, read from
+    /// the post-processor of the document the reference engine executes:
+    ///
+    /// - `"identity"`: the post-processor adds nothing to a single
+    ///   sequence (none, `ByteLevel`, or a template that is the sequence
+    ///   alone), so a request with special tokens runs the plain route;
+    /// - `"prefix"`: a template that places one special token before the
+    ///   sequence, so the plain route's core stream is returned behind
+    ///   [`RoutePlan::special_token_prefix`];
+    /// - `"reference"`: any other post-processor, or a construction
+    ///   check that did not hold, so a request with special tokens is
+    ///   encoded by the reference engine (`R_INPUT_POSTPROCESS_ROUTED`).
+    ///
+    /// Added in 0.3.2.
+    pub postprocessor_class: String,
+    /// The ids placed before the core stream when `postprocessor_class`
+    /// is `"prefix"`; empty otherwise. Added in 0.3.2.
+    pub special_token_prefix: Vec<u32>,
+    /// `None` when the construction check of the class held or was not
+    /// needed. Otherwise which probe text answered differently on the
+    /// reference engine (with and without special tokens), the reason the
+    /// class reads `"reference"`. Added in 0.3.2.
+    pub postprocessor_self_check: Option<String>,
 }
 
 /// Facts for one completed encode or append operation.

@@ -553,13 +553,8 @@ impl Runtime {
                         // this machine ran with this build says the two
                         // engines agreed (the key carries the host
                         // toolchain and flags).
-                        gpu_assurance = Some(match built.assurance {
-                            crate::gpu_data::Assurance::Judged if !cap_gpu_label => {
-                                Certification::Certified
-                            }
-                            crate::gpu_data::Assurance::Experimental => Certification::Experimental,
-                            crate::gpu_data::Assurance::Judged
-                            | crate::gpu_data::Assurance::Unjudged => {
+                        let locally_verified =
+                            if gpu_label_reads_local_record(built.assurance, cap_gpu_label) {
                                 let key = crate::verify_local::gpu_key(
                                     &built,
                                     &family,
@@ -567,13 +562,12 @@ impl Runtime {
                                 );
                                 let verified = crate::verify_local::is_locally_verified(&key);
                                 gpu_verification_key = Some(key);
-                                if verified {
-                                    Certification::LocallyVerified
-                                } else {
-                                    Certification::Supported
-                                }
-                            }
-                        });
+                                verified
+                            } else {
+                                false
+                            };
+                        gpu_assurance =
+                            Some(gpu_label(built.assurance, cap_gpu_label, locally_verified));
                         gpu_detail = Some((built.architecture, built.driver_api_version));
                         gpu = Some(built.engine);
                         #[cfg(feature = "jit")]
@@ -1334,6 +1328,46 @@ fn classify_build(reading: &BuildReading) -> BuildState {
     }
 }
 
+/// Whether a built GPU route's label depends on a local verification
+/// record: every assurance but a judged device on an uncapped build, and
+/// an explicit waiver.
+#[cfg(feature = "prebuilt-gpu")]
+fn gpu_label_reads_local_record(assurance: crate::gpu_data::Assurance, cap_label: bool) -> bool {
+    use crate::gpu_data::Assurance;
+    match assurance {
+        Assurance::Judged => cap_label,
+        Assurance::Unjudged => true,
+        Assurance::Experimental => false,
+    }
+}
+
+/// What a built GPU route can be called (T7). A judged device on a build
+/// whose recipe a campaign judged is `Certified`; a capped build (its
+/// toolchain or flags were not judged) never labels above `Supported`,
+/// on a judged device too, and reads `LocallyVerified` when a check this
+/// machine ran with this same build says the two engines agreed; an
+/// unjudged device is labelled the same way; an explicit waiver is
+/// `Experimental`. Pure: the local record is read by the caller.
+#[cfg(feature = "prebuilt-gpu")]
+fn gpu_label(
+    assurance: crate::gpu_data::Assurance,
+    cap_label: bool,
+    locally_verified: bool,
+) -> Certification {
+    use crate::gpu_data::Assurance;
+    match assurance {
+        Assurance::Judged if !cap_label => Certification::Certified,
+        Assurance::Experimental => Certification::Experimental,
+        Assurance::Judged | Assurance::Unjudged => {
+            if locally_verified {
+                Certification::LocallyVerified
+            } else {
+                Certification::Supported
+            }
+        }
+    }
+}
+
 /// The GPU route's build decision.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum GpuBuildDecision {
@@ -1645,6 +1679,55 @@ mod tests {
     use crate::{Certification, Policy, ReasonCode};
     use serde_json::json;
     use toktier_routing_core::ReferenceEngine;
+
+    /// T7's label cap, every cell: judged / unjudged device x capped /
+    /// uncapped build, with and without a local record, plus the waiver.
+    #[cfg(feature = "prebuilt-gpu")]
+    #[test]
+    fn the_gpu_label_cap_holds_in_every_cell() {
+        use super::{gpu_label, gpu_label_reads_local_record};
+        use crate::gpu_data::Assurance;
+        use Assurance::{Experimental as X, Judged as J, Unjudged as U};
+        use Certification::{Certified, Experimental, LocallyVerified as Local, Supported};
+        // (assurance, capped, locally verified) -> label, reads a record
+        let cases = [
+            (J, false, false, Certified, false),
+            (J, false, true, Certified, false),
+            (J, true, false, Supported, true),
+            (J, true, true, Local, true),
+            (U, false, false, Supported, true),
+            (U, false, true, Local, true),
+            (U, true, false, Supported, true),
+            (U, true, true, Local, true),
+            (X, false, false, Experimental, false),
+            (X, true, true, Experimental, false),
+        ];
+        for (assurance, capped, verified, label, reads) in cases {
+            assert_eq!(
+                gpu_label(assurance, capped, verified),
+                label,
+                "{assurance:?} capped={capped} verified={verified}"
+            );
+            assert_eq!(
+                gpu_label_reads_local_record(assurance, capped),
+                reads,
+                "{assurance:?} capped={capped}"
+            );
+        }
+        // A capped build never labels a route `Certified`.
+        for assurance in [
+            Assurance::Judged,
+            Assurance::Unjudged,
+            Assurance::Experimental,
+        ] {
+            for verified in [false, true] {
+                assert_ne!(
+                    gpu_label(assurance, true, verified),
+                    Certification::Certified
+                );
+            }
+        }
+    }
 
     const POLICIES: [Policy; 5] = [
         Policy::Supported,

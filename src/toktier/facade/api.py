@@ -1698,6 +1698,11 @@ class Tokenizer:
                         else None
                     )
                 ),
+                seal_reference=(
+                    self._seal_reference_engine()
+                    if not native_repair and isinstance(repair, GigatokenRepair)
+                    else None
+                ),
                 seal_end_guard_chars=(
                     max(
                         self._seal_end_guard_chars,
@@ -1851,6 +1856,18 @@ class Tokenizer:
             }
             self._native_request = None
         return self._native_request
+
+    def _seal_reference_engine(self) -> object | None:
+        """The native reference engine whose normalizer the seal consults.
+
+        ``None`` when the reference backend has no native handle (an
+        injected test backend); the store then seals nothing on the
+        Python-owned lane rather than decide a boundary on raw characters.
+        """
+        native_reference = getattr(self._backend, "native_engine", None)
+        if not callable(native_reference):
+            return None
+        return cast(object, native_reference())
 
     def _native_repair_encoder(self, reference: object | None = None) -> Any | None:
         """Build the one-call Rust session engine once when certified.

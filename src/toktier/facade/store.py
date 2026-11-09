@@ -39,7 +39,7 @@ from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from .. import records
 from ..errors import SessionStateMismatch, StoreFormatUnsupported, ToktierError
@@ -243,6 +243,7 @@ class EntryStore:
         append_stats: Callable[[], dict[str, object]] | None = None,
         certified_bpe_witness: bool = False,
         bpe_sync_pclass: bytes | None = None,
+        seal_reference: object | None = None,
         seal_end_guard_chars: int = 0,
         native_encoder: object | None = None,
         directory: Path | None = None,
@@ -254,6 +255,10 @@ class EntryStore:
         self._append_stats = append_stats
         self._certified_bpe_witness = certified_bpe_witness
         self._bpe_sync_pclass = bpe_sync_pclass
+        # The face's native reference engine: the boundary probe decides a
+        # seal candidate on the characters its normalizer produces. Without
+        # it a probe on ``bpe_sync_pclass`` certifies nothing (no seal).
+        self._seal_reference = seal_reference
         if type(seal_end_guard_chars) is not int or seal_end_guard_chars < 0:
             raise ValueError("seal_end_guard_chars must be a non-negative integer")
         self._seal_end_guard_chars = seal_end_guard_chars
@@ -295,6 +300,7 @@ class EntryStore:
                     self._append,
                     None,
                     self._bpe_sync_pclass,
+                    cast(Any, self._seal_reference),
                 )
             self._key_id = store.register_fingerprint(
                 self._fingerprint, self._seal_end_guard_chars

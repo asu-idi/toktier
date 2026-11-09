@@ -7,8 +7,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use toktier::{
-    export_bundle, import_bundle, inspect_bundle, ArtifactManager, ArtifactSource, Device,
-    ErrorCode, Revision, Runtime,
+    export_bundle, import_bundle, inspect_bundle, ArtifactManager, ArtifactSource, Backend, Device,
+    ErrorCode, Policy, Revision, Runtime,
 };
 #[cfg(feature = "serving")]
 use toktier::{ServingLimits, ServingPool};
@@ -610,4 +610,83 @@ fn durable_sessions_reopen_bit_exactly_in_a_fresh_runtime() {
     rebuilt.extend_from_slice(patch.replacement_ids());
     assert_eq!(rebuilt, tokenizer.encode(&extended).unwrap().ids());
     assert_eq!(session.snapshot().unwrap().ids(), &rebuilt[..]);
+}
+
+/// A session seal decides its boundary on the characters the reference
+/// reads. The specimen puts a letter that NFC turns into a letter and a
+/// combining mark right before a full stop, at the last boundary under the
+/// seal ceiling; the reference seeds that tail (it is not stable under the
+/// normalizer), and a seal there would assume a piece boundary the
+/// reference does not have. Every answer must equal a fresh encode of the
+/// whole text, in the session and after a reopen in a fresh runtime. Until
+/// the source identities are rebound the corrected CPU engine is admitted
+/// under the experimental policy only, so the test asks for it.
+#[test]
+fn a_session_seal_decides_on_normalized_characters() {
+    let Some(root) = existing_artifact_root() else {
+        return;
+    };
+    let fill = "The committee met on Tuesday and agreed to the plan for the coming year. ";
+    let delta = "One more sentence arrives after the seed. ";
+    let later = " A reopened session continues the text.";
+    for family in ["qwen3_8b", "mimo_v2_6"] {
+        let temporary = tempfile::tempdir().unwrap();
+        let home = temporary.path().join("runtime-home");
+        let build = || {
+            Runtime::builder()
+                .artifact_cache(&root)
+                .device(Device::Cpu)
+                .policy(Policy::Experimental)
+                .home(&home)
+                .build()
+                .unwrap()
+        };
+        assert!(
+            build()
+                .load(family)
+                .unwrap()
+                .plan()
+                .backends
+                .contains(&Backend::FastCpu),
+            "{family}: the corrected CPU engine is not on the route"
+        );
+        for (index, letter) in ["\u{0958}", "\u{095b}", "x"].into_iter().enumerate() {
+            let seed = format!("{}ab {letter}.com{}", fill.repeat(60), "a".repeat(700));
+            let grown = format!("{seed}{delta}{}", fill.repeat(4));
+            let name = format!("seal-{index}");
+            {
+                let runtime = build();
+                let tokenizer = runtime.load(family).unwrap();
+                let mut session = tokenizer.open_session(&name).unwrap();
+                session.seed(&seed).unwrap();
+                session.append(delta).unwrap();
+                assert_eq!(
+                    session.snapshot().unwrap().ids(),
+                    tokenizer.encode(&format!("{seed}{delta}")).unwrap().ids(),
+                    "{family} {letter:?}: first append"
+                );
+                session.append(&fill.repeat(4)).unwrap();
+                assert_eq!(
+                    session.snapshot().unwrap().ids(),
+                    tokenizer.encode(&grown).unwrap().ids(),
+                    "{family} {letter:?}: second append"
+                );
+                session.close().unwrap();
+            }
+            let runtime = build();
+            let tokenizer = runtime.load(family).unwrap();
+            let mut session = tokenizer.open_session(&name).unwrap();
+            assert_eq!(
+                session.snapshot().unwrap().ids(),
+                tokenizer.encode(&grown).unwrap().ids(),
+                "{family} {letter:?}: reopened"
+            );
+            session.append(later).unwrap();
+            assert_eq!(
+                session.snapshot().unwrap().ids(),
+                tokenizer.encode(&format!("{grown}{later}")).unwrap().ids(),
+                "{family} {letter:?}: append after reopen"
+            );
+        }
+    }
 }

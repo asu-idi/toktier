@@ -17,7 +17,7 @@ use toktier_store_core::{
 use serde_json::{json, Value};
 
 use crate::reference::LiteralPiece;
-use crate::{BpeSyncBoundary, ReferenceEngine, ReferenceEngineError};
+use crate::{BpeSyncBoundary, ReferenceEngine, ReferenceEngineError, SealCutRule};
 
 /// Frozen artifact-specific repair parameters.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -312,6 +312,9 @@ pub struct FastCpuEngine {
     tokenizer_json: Box<[u8]>,
     core: OnceLock<Result<FastCpuCore, FastCpuEngineError>>,
     boundary: BpeSyncBoundary,
+    /// The normalization condition every seal candidate also passes
+    /// (`seal_cut.rs`).
+    seal_rule: SealCutRule,
     added_gate: AddedTokenGate,
     /// Whether the engine core's one-pass matcher agrees
     /// with the reference's two extraction passes on this face. When it
@@ -397,12 +400,14 @@ impl FastCpuEngine {
         // Build the literal class (and run the segmenter self-check) now,
         // at construction, rather than inside the first request.
         let matcher_agrees = reference.engine_matcher_agrees();
+        let seal_rule = SealCutRule::for_reference(Arc::clone(&reference));
         let engine = Self {
             spec,
             reference,
             tokenizer_json: tokenizer_json.to_vec().into_boxed_slice(),
             core: OnceLock::new(),
             boundary,
+            seal_rule,
             added_gate,
             matcher_agrees,
             stats: Mutex::new(FastRepairStats::default()),
@@ -1250,33 +1255,37 @@ impl SessionEncoder for FastCpuEngine {
             // element for element (windowed-vs-full property tests).
             return self
                 .boundary
-                .last_boundary_windowed(
+                .last_boundary_windowed_sealed(
+                    &self.seal_rule,
                     tail.text(),
                     tail.text_chars(),
                     tail.n_tokens(),
                     floor_char,
                     ceil_char,
                     toktier_store_core::SPAN_CHECKPOINT_STRIDE,
-                    |lo, hi| tail.span_window(lo, hi),
+                    |lo, hi| {
+                        tail.span_window(lo, hi)
+                            .map_err(|error| EngineError(error.to_string()))
+                    },
                 )
                 .map(|found| {
                     found.map(|cut| BoundaryCut {
                         cut_tokens: cut.cut_tokens,
                         cut_char: cut.cut_char,
                     })
-                })
-                .map_err(|error| EngineError(error.to_string()));
+                });
         }
         Ok(self
             .boundary
-            .last_boundary(
+            .last_boundary_sealed(
+                &self.seal_rule,
                 tail.text(),
                 tail.text_chars(),
                 tail.span_starts(),
                 tail.span_ends(),
                 floor_char,
                 ceil_char,
-            )
+            )?
             .map(|cut| BoundaryCut {
                 cut_tokens: cut.cut_tokens,
                 cut_char: cut.cut_char,

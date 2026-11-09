@@ -66,6 +66,7 @@ class CallbackEncoder:
         append_cb: _AppendCb | None = None,
         boundary_cb: _BoundaryCb | None = None,
         bpe_sync_pclass: bytes | None = None,
+        seal_reference: ReferenceEngine | None = None,
     ) -> None: ...
     @staticmethod
     def native_fast_cpu(

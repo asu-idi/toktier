@@ -22,6 +22,7 @@ mod fast_cpu;
 mod gpu;
 mod reference;
 mod runtime;
+mod seal_cut;
 
 pub use chunked::{
     default_chunk_workers, ChunkEncoder, ChunkPlan, ChunkedIds, NormalizerMode,
@@ -44,6 +45,7 @@ pub use runtime::{
     BACKEND_REFERENCE, R_EXEC_FAULT, R_INPUT_ADDED_TOKEN, R_INPUT_BELOW_GPU_THRESHOLD,
     R_INPUT_GUARD_ROUTED, R_INPUT_POSTPROCESS_ROUTED,
 };
+pub use seal_cut::SealCutRule;
 
 /// Number of Unicode scalar-value slots in the frozen property table.
 pub const N_CODEPOINTS: usize = 0x11_0000;
@@ -335,6 +337,10 @@ impl BpeSyncBoundary {
     /// Span starts must be nondecreasing, as they are for the certified
     /// pre-postprocessor core streams. If a callback violates that premise,
     /// this method returns `None` rather than manufacturing a certificate.
+    ///
+    /// This is the class predicate over the raw characters alone; a session
+    /// seal uses [`Self::last_boundary_sealed`], which adds the face's
+    /// normalization condition.
     pub fn last_boundary(
         &self,
         text: &str,
@@ -344,11 +350,90 @@ impl BpeSyncBoundary {
         floor_char: u64,
         ceil_char: u64,
     ) -> Option<BpeBoundaryCut> {
+        let admitted = self.last_boundary_admitting(
+            text,
+            text_chars,
+            span_starts,
+            span_ends,
+            floor_char,
+            ceil_char,
+            |_cut_char, _cut_byte| Ok::<bool, std::convert::Infallible>(true),
+        );
+        match admitted {
+            Ok(found) => found,
+            Err(never) => match never {},
+        }
+    }
+
+    /// [`Self::last_boundary`] for a session seal: a candidate the class
+    /// predicate accepts must also be admitted by the face's
+    /// [`SealCutRule`]; one that is not is skipped and the search continues
+    /// below it. On a face without an effective normalizer, and on ASCII
+    /// text under NFC, the result is that of [`Self::last_boundary`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn last_boundary_sealed(
+        &self,
+        rule: &SealCutRule,
+        text: &str,
+        text_chars: u32,
+        span_starts: &[u32],
+        span_ends: &[u32],
+        floor_char: u64,
+        ceil_char: u64,
+    ) -> Result<Option<BpeBoundaryCut>, toktier_store_core::EngineError> {
+        if rule.is_closed() {
+            return Ok(None);
+        }
+        if rule.admits_all(text, u64::from(text_chars)) {
+            return Ok(self.last_boundary(
+                text,
+                text_chars,
+                span_starts,
+                span_ends,
+                floor_char,
+                ceil_char,
+            ));
+        }
+        let tail_stable = std::cell::Cell::new(None);
+        self.last_boundary_admitting(
+            text,
+            text_chars,
+            span_starts,
+            span_ends,
+            floor_char,
+            ceil_char,
+            |cut_char, cut_byte| {
+                rule.admits(
+                    self,
+                    text,
+                    u64::from(text_chars),
+                    cut_char,
+                    cut_byte,
+                    &tail_stable,
+                )
+            },
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn last_boundary_admitting<A, E>(
+        &self,
+        text: &str,
+        text_chars: u32,
+        span_starts: &[u32],
+        span_ends: &[u32],
+        floor_char: u64,
+        ceil_char: u64,
+        mut admit: A,
+    ) -> Result<Option<BpeBoundaryCut>, E>
+    where
+        A: FnMut(u64, usize) -> Result<bool, E>,
+    {
         if span_starts.len() != span_ends.len() || span_starts.len() < 2 {
-            return None;
+            return Ok(None);
         }
         if span_starts.windows(2).any(|pair| pair[0] > pair[1]) {
-            return None;
+            return Ok(None);
         }
         let ceiling = ceil_char.min(u64::from(text_chars));
         let mut cursor = ReverseCharCursor::new(text, u64::from(text_chars));
@@ -372,13 +457,17 @@ impl BpeSyncBoundary {
                 // group, so this check considers only the boundary before it.
                 && u64::from(span_ends[group_start - 1]) <= boundary
             {
-                let current = cursor.char_at(boundary)?;
-                let previous = cursor.char_at(boundary - 1)?;
-                if self.accepts(previous, current) {
-                    return Some(BpeBoundaryCut {
+                let Some((current, cut_byte)) = cursor.locate(boundary) else {
+                    return Ok(None);
+                };
+                let Some(previous) = cursor.char_at(boundary - 1) else {
+                    return Ok(None);
+                };
+                if self.accepts(previous, current) && admit(boundary, cut_byte)? {
+                    return Ok(Some(BpeBoundaryCut {
                         cut_tokens: group_start,
                         cut_char: boundary,
-                    });
+                    }));
                 }
             }
             if group_start == 0 {
@@ -386,7 +475,7 @@ impl BpeSyncBoundary {
             }
             right_index = group_start - 1;
         }
-        None
+        Ok(None)
     }
 }
 
@@ -485,6 +574,88 @@ impl BpeSyncBoundary {
     where
         F: FnMut(usize, usize) -> Result<(Vec<u32>, Vec<u32>), E>,
     {
+        self.last_boundary_windowed_admitting(
+            text,
+            text_chars,
+            n_tokens,
+            floor_char,
+            ceil_char,
+            window_tokens,
+            fetch,
+            |_cut_char, _cut_byte| Ok(true),
+        )
+    }
+
+    /// [`Self::last_boundary_windowed`] for a session seal, with the
+    /// face's [`SealCutRule`] applied to every candidate exactly as in
+    /// [`Self::last_boundary_sealed`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn last_boundary_windowed_sealed<F>(
+        &self,
+        rule: &SealCutRule,
+        text: &str,
+        text_chars: u32,
+        n_tokens: usize,
+        floor_char: u64,
+        ceil_char: u64,
+        window_tokens: usize,
+        fetch: F,
+    ) -> Result<Option<BpeBoundaryCut>, toktier_store_core::EngineError>
+    where
+        F: FnMut(usize, usize) -> Result<(Vec<u32>, Vec<u32>), toktier_store_core::EngineError>,
+    {
+        if rule.is_closed() {
+            return Ok(None);
+        }
+        if rule.admits_all(text, u64::from(text_chars)) {
+            return self.last_boundary_windowed(
+                text,
+                text_chars,
+                n_tokens,
+                floor_char,
+                ceil_char,
+                window_tokens,
+                fetch,
+            );
+        }
+        let tail_stable = std::cell::Cell::new(None);
+        self.last_boundary_windowed_admitting(
+            text,
+            text_chars,
+            n_tokens,
+            floor_char,
+            ceil_char,
+            window_tokens,
+            fetch,
+            |cut_char, cut_byte| {
+                rule.admits(
+                    self,
+                    text,
+                    u64::from(text_chars),
+                    cut_char,
+                    cut_byte,
+                    &tail_stable,
+                )
+            },
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn last_boundary_windowed_admitting<F, A, E>(
+        &self,
+        text: &str,
+        text_chars: u32,
+        n_tokens: usize,
+        floor_char: u64,
+        ceil_char: u64,
+        window_tokens: usize,
+        fetch: F,
+        mut admit: A,
+    ) -> Result<Option<BpeBoundaryCut>, E>
+    where
+        F: FnMut(usize, usize) -> Result<(Vec<u32>, Vec<u32>), E>,
+        A: FnMut(u64, usize) -> Result<bool, E>,
+    {
         if n_tokens < 2 {
             return Ok(None);
         }
@@ -520,12 +691,13 @@ impl BpeSyncBoundary {
                 // group, so this check considers only the boundary before it.
                 && u64::from(spans.bounds(group_start - 1).1) <= boundary
             {
-                let (Some(current), Some(previous)) =
-                    (cursor.char_at(boundary), cursor.char_at(boundary - 1))
-                else {
+                let Some((current, cut_byte)) = cursor.locate(boundary) else {
                     return Ok(None);
                 };
-                if self.accepts(previous, current) {
+                let Some(previous) = cursor.char_at(boundary - 1) else {
+                    return Ok(None);
+                };
+                if self.accepts(previous, current) && admit(boundary, cut_byte)? {
                     return Ok(Some(BpeBoundaryCut {
                         cut_tokens: group_start,
                         cut_char: boundary,
@@ -543,36 +715,42 @@ impl BpeSyncBoundary {
 
 /// Monotone reverse character lookup without materializing `Vec<char>`.
 struct ReverseCharCursor<'a> {
-    iter: std::iter::Rev<std::str::Chars<'a>>,
+    iter: std::iter::Rev<std::str::CharIndices<'a>>,
     next_index: u64,
-    cached: Option<(u64, char)>,
+    /// `(character index, character, byte offset)` of the last character read.
+    cached: Option<(u64, char, usize)>,
 }
 
 impl<'a> ReverseCharCursor<'a> {
     fn new(text: &'a str, text_chars: u64) -> Self {
         Self {
-            iter: text.chars().rev(),
+            iter: text.char_indices().rev(),
             next_index: text_chars,
             cached: None,
         }
     }
 
     fn char_at(&mut self, target: u64) -> Option<char> {
-        if let Some((index, value)) = self.cached {
+        self.locate(target).map(|(value, _byte)| value)
+    }
+
+    /// The character at index `target` and the byte offset it starts at.
+    fn locate(&mut self, target: u64) -> Option<(char, usize)> {
+        if let Some((index, value, byte)) = self.cached {
             if index == target {
-                return Some(value);
+                return Some((value, byte));
             }
             if target > index {
                 return None;
             }
         }
         while self.next_index > target {
-            let value = self.iter.next()?;
+            let (byte, value) = self.iter.next()?;
             self.next_index -= 1;
-            self.cached = Some((self.next_index, value));
+            self.cached = Some((self.next_index, value, byte));
         }
         self.cached
-            .and_then(|(index, value)| (index == target).then_some(value))
+            .and_then(|(index, value, byte)| (index == target).then_some((value, byte)))
     }
 }
 

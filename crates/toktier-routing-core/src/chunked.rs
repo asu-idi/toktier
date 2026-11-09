@@ -92,7 +92,7 @@ const QUICK_SCAN: usize = 48;
 const MIN_TEXT_CHARS: usize = 256;
 /// How far the normalization-stability check looks for a stable split
 /// point on each side of a candidate cut.
-const ANCHOR_SCAN: usize = 256;
+pub(crate) const ANCHOR_SCAN: usize = 256;
 /// Probes of the stable-split-point test: a combining mark of canonical
 /// class 230 placed before the character and one of class 1 after it, and
 /// a leading Hangul consonant jamo and syllable.
@@ -396,7 +396,7 @@ impl<'a> CharCursor<'a> {
 }
 
 /// A decoded window of the text in global character coordinates.
-struct Window<'a> {
+pub(crate) struct Window<'a> {
     text: &'a str,
     /// Global character index of `chars[0]`.
     base: usize,
@@ -408,6 +408,51 @@ struct Window<'a> {
 }
 
 impl<'a> Window<'a> {
+    /// The characters `[low, high)` of `text` (global character indices,
+    /// clamped to `total`), located from one known position: character
+    /// `anchor_char` starts at byte `anchor_byte`. The session seal uses
+    /// this to read the neighbourhood of a candidate cut without a forward
+    /// pass over the text before it.
+    pub(crate) fn around(
+        text: &'a str,
+        total: usize,
+        anchor_char: usize,
+        anchor_byte: usize,
+        low: usize,
+        high: usize,
+    ) -> Self {
+        let high = high.min(total).max(anchor_char);
+        let low = low.min(anchor_char);
+        let mut before = text[..anchor_byte]
+            .char_indices()
+            .rev()
+            .take(anchor_char - low)
+            .collect::<Vec<_>>();
+        before.reverse();
+        let after = text[anchor_byte..]
+            .char_indices()
+            .take(high - anchor_char)
+            .map(|(offset, value)| (anchor_byte + offset, value));
+        let mut chars = Vec::with_capacity(high - low);
+        let mut byte_starts = Vec::with_capacity(high - low + 1);
+        for (offset, value) in before.into_iter().chain(after) {
+            chars.push(value);
+            byte_starts.push(offset);
+        }
+        let end = byte_starts
+            .last()
+            .zip(chars.last())
+            .map_or(anchor_byte, |(&last, value)| last + value.len_utf8());
+        byte_starts.push(end);
+        Window {
+            text,
+            base: low,
+            chars,
+            byte_starts,
+            total,
+        }
+    }
+
     fn extract(cursor: &mut CharCursor<'a>, total: usize, low: usize, high: usize) -> Self {
         let high = high.min(total);
         let low = low.min(high);
@@ -465,17 +510,17 @@ impl<'a> Window<'a> {
 /// allows never splits a literal the reference would have matched, and a
 /// window the guard reports untouched holds no literal the reference
 /// would extract.
-struct LiteralGuard {
+pub(crate) struct LiteralGuard {
     matcher: Option<AhoCorasick>,
     /// Character length of each pattern.
     lengths: Vec<usize>,
     count: usize,
     /// Longest literal, in characters.
-    lmax: usize,
+    pub(crate) lmax: usize,
 }
 
 impl LiteralGuard {
-    fn new(literals: &[String]) -> Result<Self, EngineError> {
+    pub(crate) fn new(literals: &[String]) -> Result<Self, EngineError> {
         let mut unique = literals
             .iter()
             .filter(|item| !item.is_empty())
@@ -562,14 +607,32 @@ impl LiteralGuard {
 
 // ------------------------------------------------------------ nfc rule --
 
+/// What the normalization-stability condition says about one cut.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NfcVerdict {
+    /// The cut is also a certified cut of the normalized text.
+    Accept,
+    /// The normalized text does not certify the cut.
+    Reject,
+    /// The condition could not be decided in its bounded neighbourhood:
+    /// no stable split point within `ANCHOR_SCAN` characters on one side,
+    /// or the anchored window touches an added-token literal. The chunk
+    /// planner makes no cut there; the session seal asks a stronger
+    /// question instead (`seal_cut.rs`).
+    Undecided,
+}
+
 /// The normalization-stability condition of an NFC family.
-struct NfcRule {
+///
+/// Shared by the chunk planner (every cut it makes) and the session seal
+/// (every boundary it certifies on a face whose normalizer is NFC).
+pub(crate) struct NfcRule {
     reference: Arc<ReferenceEngine>,
     stable: Box<[AtomicU8]>,
 }
 
 impl NfcRule {
-    fn new(reference: Arc<ReferenceEngine>) -> Self {
+    pub(crate) fn new(reference: Arc<ReferenceEngine>) -> Self {
         let stable = (0..N_CODEPOINTS)
             .map(|_| AtomicU8::new(STABLE_UNKNOWN))
             .collect::<Vec<_>>()
@@ -633,6 +696,20 @@ impl NfcRule {
         window: &Window<'_>,
         position: usize,
     ) -> Result<bool, EngineError> {
+        Ok(self.verdict(boundary, guard, window, position)? == NfcVerdict::Accept)
+    }
+
+    /// The condition at `position` (`1 <= position < total`). `window`
+    /// must hold the characters `[position - ANCHOR_SCAN - lmax - 2,
+    /// position + ANCHOR_SCAN + lmax + 2)` that exist, where `lmax` is the
+    /// guard's longest literal.
+    pub(crate) fn verdict(
+        &self,
+        boundary: &BpeSyncBoundary,
+        guard: &LiteralGuard,
+        window: &Window<'_>,
+        position: usize,
+    ) -> Result<NfcVerdict, EngineError> {
         let total = window.total;
         let around_end = (position + 2).min(total);
         let mut all_stable = true;
@@ -645,7 +722,7 @@ impl NfcRule {
         if all_stable {
             // Stable on both sides and beyond: the cut is its own
             // normalized cut, and the classes are the input classes.
-            return Ok(true);
+            return Ok(NfcVerdict::Accept);
         }
         let floor_index = position.saturating_sub(ANCHOR_SCAN);
         let mut left = position - 1;
@@ -662,7 +739,7 @@ impl NfcRule {
         }
         if !anchored {
             if floor_index > 0 {
-                return Ok(false);
+                return Ok(NfcVerdict::Undecided);
             }
             left = 0; // the start of the text anchors as well
         }
@@ -672,24 +749,28 @@ impl NfcRule {
             right += 1;
         }
         if right == ceiling && ceiling < total {
-            return Ok(false);
+            return Ok(NfcVerdict::Undecided);
         }
         if guard.touches(window, left, right) {
-            return Ok(false);
+            return Ok(NfcVerdict::Undecided);
         }
         let before = self.normalize(window.slice(left, position))?;
         let after = self.normalize(window.slice(position, right))?;
         let (Some(last), Some(first)) = (before.chars().next_back(), after.chars().next()) else {
-            return Ok(false);
+            return Ok(NfcVerdict::Reject);
         };
         let whole = self.normalize(window.slice(left, right))?;
         if whole.len() != before.len() + after.len()
             || !whole.starts_with(&before)
             || !whole.ends_with(&after)
         {
-            return Ok(false);
+            return Ok(NfcVerdict::Reject);
         }
-        Ok(boundary.accepts(last, first))
+        Ok(if boundary.accepts(last, first) {
+            NfcVerdict::Accept
+        } else {
+            NfcVerdict::Reject
+        })
     }
 }
 

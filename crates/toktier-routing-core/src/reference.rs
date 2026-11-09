@@ -208,6 +208,16 @@ impl ReferenceEngine {
         self.has_normalizer() && !self.normalizer_is_identity
     }
 
+    /// Whether the artifact normalizer is exactly `NFC` (not a sequence or
+    /// any other normalizer). The session seal decides its candidates on
+    /// normalized characters only for this shape (`seal_cut.rs`).
+    pub fn normalizer_is_nfc(&self) -> bool {
+        matches!(
+            self.tokenizer.get_normalizer(),
+            Some(tokenizers::normalizers::NormalizerWrapper::NFC(_))
+        )
+    }
+
     /// Apply the artifact normalizer, or return the input unchanged.
     pub fn normalize(&self, text: &str) -> Result<String, ReferenceEngineError> {
         let Some(normalizer) = self.tokenizer.get_normalizer() else {

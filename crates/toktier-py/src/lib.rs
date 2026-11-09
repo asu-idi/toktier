@@ -39,7 +39,8 @@ use toktier_routing_core::{
     default_chunk_workers, BpeSyncBoundary, ChunkedIds, EntryStoreOpenError, FastCpuEngine,
     FastEncodeSource, FastRepairSpec, LiteralMode, LiteralPrefix, NativeEntryStore,
     NativeGpuEngine, NativeGpuOpener, NativeGpuSource, NativePrebuiltGpu, NativePrebuiltGpuConfig,
-    NativeRouter, ReferenceEngine, RouteSelector as CoreRouteSelector, CHUNKED_DEFAULT_SCAN_BUDGET,
+    NativeRouter, ReferenceEngine, RouteSelector as CoreRouteSelector, SealCutRule,
+    CHUNKED_DEFAULT_SCAN_BUDGET,
 };
 use toktier_store_core::{
     AppendReport, BoundaryCut, Encoding, EngineError, KeyId, RecoveryMaterial, SemanticFingerprint,
@@ -704,6 +705,11 @@ impl NativeReferenceEngine {
 /// * `bpe_sync_pclass` -- the frozen 0x110000-byte O/S/L/N/M property
 ///   table. When present, the boundary probe runs directly in Rust and
 ///   `boundary_cb` is only a compatibility fallback.
+/// * `seal_reference` -- the reference engine of the face, whose
+///   normalizer the boundary probe consults (`SealCutRule`). Without it a
+///   probe running on `bpe_sync_pclass` certifies no boundary, so the store
+///   never seals: the probe cannot tell which characters the reference
+///   pre-tokenizer reads.
 /// * `witness_category` -- frozen registry value (u16) matching the
 ///   certificates the callbacks implement.
 #[pyclass(module = "toktier._native")]
@@ -718,6 +724,7 @@ enum EncoderImpl {
         append_cb: Option<Py<PyAny>>,
         boundary_cb: Option<Py<PyAny>>,
         bpe_sync: Option<BpeSyncBoundary>,
+        seal_rule: SealCutRule,
     },
     NativeFastCpu(Arc<FastCpuEngine>),
 }
@@ -730,7 +737,8 @@ impl CallbackEncoder {
         encode_cb,
         append_cb = None,
         boundary_cb = None,
-        bpe_sync_pclass = None
+        bpe_sync_pclass = None,
+        seal_reference = None
     ))]
     fn new(
         witness_category: u16,
@@ -738,6 +746,7 @@ impl CallbackEncoder {
         append_cb: Option<Py<PyAny>>,
         boundary_cb: Option<Py<PyAny>>,
         bpe_sync_pclass: Option<Bound<'_, PyBytes>>,
+        seal_reference: Option<PyRef<'_, NativeReferenceEngine>>,
     ) -> PyResult<Self> {
         let witness = WitnessCategory::from_u16(witness_category)
             .map_err(|_| PyValueError::new_err("unknown witness category"))?;
@@ -752,6 +761,10 @@ impl CallbackEncoder {
                 "a BPE sync table requires the BPE sync witness category",
             ));
         }
+        let seal_rule = match seal_reference {
+            Some(reference) => SealCutRule::for_reference(reference.native()),
+            None => SealCutRule::closed(),
+        };
         Ok(CallbackEncoder {
             inner: EncoderImpl::Python {
                 witness,
@@ -759,6 +772,7 @@ impl CallbackEncoder {
                 append_cb,
                 boundary_cb,
                 bpe_sync,
+                seal_rule,
             },
         })
     }
@@ -1042,6 +1056,7 @@ impl SessionEncoder for CallbackEncoder {
         let EncoderImpl::Python {
             boundary_cb,
             bpe_sync,
+            seal_rule,
             ..
         } = &self.inner
         else {
@@ -1049,14 +1064,15 @@ impl SessionEncoder for CallbackEncoder {
         };
         if let Some(predicate) = bpe_sync {
             return Ok(predicate
-                .last_boundary(
+                .last_boundary_sealed(
+                    seal_rule,
                     tail.text(),
                     tail.text_chars(),
                     tail.span_starts(),
                     tail.span_ends(),
                     floor_char,
                     ceil_char,
-                )
+                )?
                 .map(|cut| BoundaryCut {
                     cut_tokens: cut.cut_tokens,
                     cut_char: cut.cut_char,

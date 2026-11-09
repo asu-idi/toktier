@@ -244,14 +244,22 @@ Four layers with distinct loss semantics, named honestly:
    them to this build: it is refused when the engine or host code
    changes, and not when only the package version does. A store owned by
    the Python entry store, a development build, or a registry that does
-   not bind the pair keys on the exact per-build digests. A store an
-   earlier release wrote in the earlier key form is recognized through
-   the shipped history table
-   (`routing/tables/store_fingerprint_history.v1.json`) when that
-   release's version-normalized pair, loader face and repair parameters
-   equal this build's for the artifact, and is then opened under its own
-   stored key, never rewritten. This describes the Python facade's
-   stores; the Rust crate keys its own stores by its own rule.
+   not bind the pair keys on the exact per-build digests. Within one
+   build, the native request runtime opens a store the Python entry
+   store wrote, under that store's own (exact-build) key, and never
+   rewrites the key. The reverse is refused with a message of its own:
+   the Python entry store does not open a store this build's native
+   request runtime holds, because its own store and repair code is
+   outside the version-normalized identity that key covers (open it from
+   a process whose native request runtime is available, or use another
+   store directory). A store written by another release or build -- for
+   example by 0.3.1 or earlier -- is refused with
+   `SESSION_STATE_MISMATCH` saying so; none of its sessions is read and
+   its bytes are left as they are. Remove the directory (it is rebuilt on
+   first use) or give the process another store directory. Both
+   refusals carry `expected_fingerprint` and `stored_fingerprint` in
+   their `details`. This describes the Python facade's stores; the Rust
+   crate keys its own stores by its own rule.
 2. **Sealed-entry recovery binding** (`entries/<name>.binding`, private
    facade sidecar): store-format v1 intentionally omits stable-prefix
    plaintext. This sidecar stores no plaintext or token IDs; it binds the full
@@ -499,7 +507,10 @@ checks pass. An absent record
 reports ``status: null`` and an empty architecture map: the absence of
 a claim, not a claim of absence. The facade adds ``runtime_policy``
 (requested device/delivery, selected delivery, crossover, execution counts,
-and last route), ``gpu_backend`` (planned/loaded/device/load error), and
+and last route; since 0.3.2 also ``gpu_delivery_jit_rejection``, `null`
+unless `gpu_delivery="auto"` found neither delivery able to serve and the
+JIT plan refused the toolchain, in which case it carries that refusal's
+``code`` and details beside the prebuilt reasons), ``gpu_backend`` (planned/loaded/device/load error), and
 ``state_encode`` (how stored state was seeded). The loaded-process counterpart
 also remains available on the explicit GPU engine
 (``GpuEngine.explain()`` / ``binding_set()``; `docs/gpu-jit.md` Section 9).
@@ -516,8 +527,11 @@ the route's engine. ``runtime_policy.last_execution.path`` then reads
 `gpu_segmented` on a GPU-headed route, and the record carries a ``segments``
 block: ``literals`` and ``text`` (how many pieces of each), ``literal_bytes``,
 ``largest_text_bytes``, and ``bytes`` with the text bytes each engine
-produced (``gpu``, ``fast_cpu``, ``hf``). The block is absent for every
-other document.
+produced (``gpu``, ``fast_cpu``, ``hf``). The block is also carried by a
+document whose path reads `hf_segments_below_crossover` (a route whose
+only backend after the GPU is the reference, every text segment below the
+GPU crossover, so the reference encoded the whole document with
+`R_INPUT_ADDED_TOKEN`), and is absent for every other document.
 
 ``special_tokens`` reports how `add_special_tokens=True` is served
 (Section 2): ``postprocessor_class`` (`identity`, `prefix` or `reference`,
@@ -529,8 +543,10 @@ the document before that check), ``prefix_ids``, ``served_by``
 went to the reference engine. ``store_fingerprint`` reports the key form
 (``domain``) and, per store this tokenizer opened (``native`` or
 ``python``), the identity the key carries: ``axis`` (`source-v2` or
-`source-v1`), ``fast_cpu``, ``native_host``, and ``opened_as_release`` when
-a store an earlier release wrote was opened under its own key. The final-result execution
+`source-v1`), ``fast_cpu`` and ``native_host``; on ``native``,
+``opened_as_owner: "python"`` with ``opened_axis: "source-v1"`` when the
+native request runtime opened the store this build's Python entry store
+wrote, under that store's key. The final-result execution
 count and canonical runtime fallback counter are updated exactly once; the
 static plan remains unchanged.
 

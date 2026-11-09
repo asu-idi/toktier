@@ -156,6 +156,8 @@ It is off by default and switched on with a threshold:
 ```
 TOKTIER_SGLANG_CHUNKED_MIN_CHARS=256000   # characters; 0 (default) = off
 TOKTIER_SGLANG_CHUNKED_K=0                # chunk count; 0 = the shipped table
+TOKTIER_SGLANG_CHUNKED_WORKERS=0          # chunk workers; 0 (default) = see below
+TOKTIER_SGLANG_CHUNKED_WARM=0             # 1 = start them when the tokenizer is wrapped
 ```
 
 Which requests it serves: every request in `off` mode, and a request
@@ -170,16 +172,27 @@ for a measurement and is otherwise best left at `0`. An explicit
 `AdapterConfig.long_request_encoder` takes precedence over the built-in
 encoder for the same requests.
 
-The parallelism comes from the native chunk encoder's own pool, which
-the adapter warms when it wraps a tokenizer and which is otherwise built
-on first use with the parallelism available to the tokenizer process (its
-CPU affinity mask and quota). `RAYON_NUM_THREADS` does not size it, so a
-deployment that exports `RAYON_NUM_THREADS=1`, a common companion of
-`TOKENIZERS_PARALLELISM=false`, keeps the chunk parallelism; to bound it,
-limit the process's CPU affinity. Only the Python chunked path, which runs
-where the native encoder cannot, follows the Rayon thread count.
-The workers are forked lazily on the first call that needs them, about
-20 ms each, once per process.
+The parallelism comes from the native chunk encoder's own pool, which the
+adapter starts with a count of its own: `AdapterConfig.chunked_workers`
+(`TOKTIER_SGLANG_CHUNKED_WORKERS`). Left at `0`, the default, the count is
+`RAYON_NUM_THREADS` when the environment sets it to a positive number (the
+count chunk rows followed before 0.3.2, so a deployment that exports
+`RAYON_NUM_THREADS=1` keeps one chunk worker), and otherwise at most 4,
+fewer when the process's CPU affinity mask holds fewer CPUs. Each worker
+is a thread with a forked engine of a few megabytes, in every process that
+wraps a tokenizer with chunking on, so the adapter does not start one per
+visible CPU unasked; set the variable to choose the count. The adapter
+starts the pool just before its first chunked request, about 20 ms per
+worker, once per process; with `AdapterConfig.chunked_warm`
+(`TOKTIER_SGLANG_CHUNKED_WARM=1`) it starts the pool when it wraps the
+tokenizer instead, so no request pays for it. Either way the pool is
+started only when chunking is configured, the session mode has stateless
+requests (`off` or `contextvar`) and the native encoder serves the
+tokenizer; a start that fails is recorded in the timing log (`kind:
+"chunked_warm"`) and never fails the wrap or the request. The first count
+named in a process sizes its pool and a later, larger one grows it. Only
+the Python chunked path, which runs where the native encoder cannot,
+follows the Rayon thread count.
 
 Each served request is recorded in the timing log with `how: "chunked"`
 and the fields `chunked_k`, `chunk_count` and `chunked_serial_reason`
@@ -299,6 +312,8 @@ provisional in 0.3.0.
 | `TOKTIER_SGLANG_EXPLAIN_EVERY` | `0` | every this many calls, add the last execution path to the timing record; `0` is never |
 | `TOKTIER_SGLANG_CHUNKED_MIN_CHARS` | `0` | hand stateless requests of at least this many characters to `toktier.chunked.encode`; `0` is off |
 | `TOKTIER_SGLANG_CHUNKED_K` | `0` | force the chunk count of that encoder; `0` reads the shipped table |
+| `TOKTIER_SGLANG_CHUNKED_WORKERS` | `0` | the number of chunk workers the adapter starts (threads of the native chunk pool), a non-negative integer; `0` takes `RAYON_NUM_THREADS` when that is set to a positive number, otherwise at most 4 (fewer when the CPU affinity mask holds fewer CPUs) |
+| `TOKTIER_SGLANG_CHUNKED_WARM` | `0` | `1`, `true` or `yes` (any letter case) starts the chunk workers when the tokenizer is wrapped; `0`, `false` or `no` (the default) starts them just before the first chunked request; any other value is refused |
 | `TOKTIER_SGLANG_DEVICE` | `cpu` | the `device` passed to `toktier.load` / `toktier.from_pretrained`: `cpu`, `auto`, `cuda` or `cuda:N` (a CUDA ordinal among the visible devices); the default keeps the adapter on the CPU path, and the scheduler's workers receive the same value |
 | `TOKTIER_SGLANG_GPU_DELIVERY` | `auto` | the `gpu_delivery` passed with it: `auto` (the shipped prebuilt kernel whenever it can serve, local JIT only when it cannot and the `gpu-jit` extra is installed), `prebuilt` or `jit`; the scheduler's workers receive the same value |
 | `TOKTIER_SGLANG_SCHED_WORKERS` | `0` | the size of the worker pool, a non-negative integer (a negative value is refused); `0` is no pool, and the settings below are read only when it is positive |

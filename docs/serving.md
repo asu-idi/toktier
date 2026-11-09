@@ -272,8 +272,9 @@ first request, to the pool's thread count when `workers` is omitted, and
 with a sample `text` runs each new worker once so its caches are warm; a serving process should call it at
 start-up, together with `chunked.admission(tokenizer)`, because `warm`
 does not run the admission check and the first chunked call would
-otherwise pay for it (the SGLang adapter does both when it wraps a
-tokenizer). `chunked.admission(tokenizer)` reports the decision for both
+otherwise pay for it (the SGLang adapter does both, with a worker count of
+its own, before its first chunked request or, when asked, when it wraps a
+tokenizer: `docs/integration/sglang.md`). `chunked.admission(tokenizer)` reports the decision for both
 paths: the admission facts of the `chunked` block above (`admitted`,
 `refusal`, `family`, `normalizer`, `literals`, `evidence_id`,
 `evidence_status`, `evidence_paths`, `loader_face_sha256`,

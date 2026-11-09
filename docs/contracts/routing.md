@@ -150,7 +150,7 @@ that may accompany them is not a machine interface.
 
 | Code | Meaning |
 |---|---|
-| `R_INPUT_ADDED_TOKEN` | Input contains an added-token literal and was routed to the reference frontend path, because its face is outside literal segmentation (below) or a premise of the segmented route failed closed. A literal-bearing input on a face inside literal segmentation is not routed: it runs on the accelerated route by segments and records no reason. Part of the certified pipeline design, not a correctness incident. Since 0.2.8 the literal table every scanning surface reads is the loader face's -- the artifact file's added tokens plus the declared configuration-side ones -- so the router and the execution ledger answer alike about the same input (`docs/contracts/facade.md` Section 5). |
+| `R_INPUT_ADDED_TOKEN` | Input contains an added-token literal and was routed to the reference frontend path, because its face is outside literal segmentation (below), a premise of the segmented route failed closed, or the route's only backend after the GPU is the reference and every text segment is below the GPU crossover (path `hf_segments_below_crossover`). A literal-bearing input on a face inside literal segmentation is not routed: it runs on the accelerated route by segments and records no reason. Part of the certified pipeline design, not a correctness incident. Since 0.2.8 the literal table every scanning surface reads is the loader face's -- the artifact file's added tokens plus the declared configuration-side ones -- so the router and the execution ledger answer alike about the same input (`docs/contracts/facade.md` Section 5). |
 | `R_INPUT_BELOW_GPU_THRESHOLD` | Input is smaller than the configured GPU crossover, so execution starts at the next eligible backend in the immutable fallback chain. This is a normal latency policy, not a fault. |
 | `R_INPUT_GUARD_ROUTED` | A per-input guard premise on an accelerated path could not be proved -- a guarded fast-CPU input, or a state-seed closure/span premise -- so this input was routed to the reference backend. Every event detail identifies the failing `stage`: `engine_guard` for the fast-CPU engine guard, `span_bridge` for the native accelerated state-seed bridge, or `state_encode` for a facade-owned state-encoding guard. |
 | `R_SESSION_NO_SAFE_CUT` | A session append found no certified safe cut point; the accumulated text was fully re-encoded. Correctness preserved by construction. |
@@ -178,15 +178,18 @@ face is outside literal segmentation when one of its added tokens sets
 `lstrip`, `rstrip` or `single_word`, when a literal that matches normalized
 text sits on a face whose normalizer is not the identity, when its
 normalizer is outside the served shapes (none, the empty sequence, NFC), or
-when its post-processor is not one the argument covers; the segmenter's
-self-check at construction keeps a face outside when it disagrees with the
-reference library's extraction. The execution record names the path:
+when its post-processor is not one the argument covers, or when the sum of
+the squared byte lengths of its literals is above 2^26 (the bound on the
+overlap reading at construction; every shipped face is far below it); the
+segmenter's self-check at construction keeps a face outside when it
+disagrees with the reference library's extraction. The execution record names the path:
 
 | `path` | Meaning |
 |---|---|
 | `gigatoken_segmented` | the corrected CPU engine encoded the text segments of a literal-bearing input |
 | `gpu_segmented` | a GPU-headed route encoded the text segments, the GPU taking those at or above the crossover |
-| `hf_added_token` | the input went to the reference engine with `R_INPUT_ADDED_TOKEN` |
+| `hf_added_token` | the input went to the reference engine with `R_INPUT_ADDED_TOKEN`: the face is outside literal segmentation, or a premise of the segmented route failed closed |
+| `hf_segments_below_crossover` | a literal-bearing input of a face inside literal segmentation on a route whose only backend after the GPU is the reference, every text segment below the GPU crossover; the reference encodes the whole input, the record carries the segment facts, and the code is `R_INPUT_ADDED_TOKEN` |
 
 A segmented record carries a `segments` block (`docs/contracts/facade.md`
 Section 5). A text segment that trips a per-input guard -- on a face that

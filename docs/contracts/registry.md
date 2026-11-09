@@ -497,6 +497,60 @@ rules, witness requirements, and chain limits are defined by
 to the original registry/readings records; it does not rewrite or relabel
 those records.
 
+### 5.2 Reading forms checked at release (added in 0.3.2)
+
+`tools/check_reading_forms.py` holds the forms of the readings the
+generator binds, and `tools/generate_registry.py --check` and
+`--release-check` apply them:
+
+- **Parity columns.** A release reading carries the `special_tokens`
+  column (`schemas/special_tokens_column.schema.json`) and the
+  `literal_segments` column (`schemas/literal_segments_column.schema.json`)
+  on every certified fast CPU row and on every GPU parity row.
+  `special_tokens` has to be taken on the facade (`surface` = `facade`;
+  the native router's own column does not stand for it), and
+  `literal_segments.literal_class` has to equal the face's class
+  (`served` for every shipped face). A parity reading that records
+  `engine.source_digest_v2` also carries the per-build
+  `engine.source_digest` the executing extension reported.
+- **The literal segments column.** Each measured entry point (`id_route`
+  required, `state_route` when measured) counts every document once in
+  one of five path classes: `gigatoken_segmented`, `gpu_segmented`,
+  `hf_added_token`, `hf_engine_guard` and `hf_segments_below_crossover`.
+  On a served face `hf_added_token` is 0 (that class is an unserved face
+  or a fail-closed premise), and the reference encodes bytes only inside
+  the listed guard documents and the below-crossover documents
+  (`below_crossover_documents`, with their bytes; GPU arm only, a route
+  whose only backend after the GPU is the reference with every text
+  segment below the crossover). Floors beside the ratios: at least 1,000
+  documents per entry point and 10,000 battery strings; guard documents
+  at most 1 % of the documents (rounded down, so a small reading allows
+  none) and at most 1 % of the segment bytes; on the GPU arm's ID route
+  a GPU byte share of at least 0.5.
+- **The engine differential of a directly judged face**
+  (`schemas/engine_differential_reading.schema.json`). The constructed
+  arm records its comparison window `comparison_l_max` (128) and decides
+  at least 1 % of its strings by the window bound when the face's
+  `effective_l_max` is below 128, and none when it equals 128; the
+  bridging check samples at least 1 % of the corpus, the append replay
+  covers at least 2 % of the corpus documents (and no more than it
+  holds), at most 1 % of the residue documents are answered by the
+  reference, and the corpus character count and oracle version equal
+  the fast CPU binding's (`tools/fast_cpu_binding.json`).
+- **The chunk campaign's rider document**
+  (`schemas/chunked_cuts_riders.schema.json`, written by
+  `tools/run_chunked_cut_campaign.py summarize --riders-out`), checked by
+  `tools/check_reading_forms.py riders`: every family ran every
+  requested arm on at least one document, with zero mismatches, no
+  vacuous `True` document and no path or `served_by` left unreported.
+- **Every form.** A non-finite number or a count above what its
+  container holds is refused, and a reading path in the registry may not
+  hold a `.` or `..` segment.
+
+The wheel check's count of certified fast CPU artifacts is derived from
+`tools/fast_cpu_binding.json` (the roster, the carried records and the
+directly judged records), not written in the check.
+
 ## 6. Root digest (frozen construction)
 
 The support registry, evidence manifests, and sibling mapping carry a

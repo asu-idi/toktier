@@ -670,3 +670,40 @@ def test_session_revision_survives_a_separate_process(
         records.decode_record(path.read_bytes()).session_revision
         for path in sorted((store / "entries").glob("s-*.rec"))
     ] == [written + 1]
+
+
+class _NativeWithoutSession:
+    """A native request runtime that holds no record for the session."""
+
+    def __init__(self) -> None:
+        self.asked: list[str] = []
+
+    def session_revision(self, session_id: str) -> int | None:
+        self.asked.append(session_id)
+        return None
+
+
+def test_revision_before_the_first_write_asks_only_the_native_runtime(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first ``Session.revision`` read on a persistent session whose
+    native request runtime owns the store does not open the Python entry
+    store beside it.
+
+    On a plan that puts the GPU ahead of the fast CPU engine, building the
+    Python entry store at that point asked the fast CPU backend for a live
+    tokenizer the shared native engine had not loaded, and the read raised
+    ``RuntimeError``. The native runtime's answer is the whole answer.
+    """
+    native = _NativeWithoutSession()
+    tokenizer = rig.tokenizer(store=rig.store_path())
+    monkeypatch.setattr(tokenizer, "_native_request_runtime", lambda: native)
+
+    def refuse() -> object:
+        raise AssertionError("the Python entry store was opened")
+
+    monkeypatch.setattr(tokenizer, "_store", refuse)
+    with tokenizer.session(session_id="first") as session:
+        assert session.revision == 0
+    assert tokenizer.store_session_revision("first") is None
+    assert native.asked == ["first", "first"]

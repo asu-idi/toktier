@@ -1351,6 +1351,14 @@ class Tokenizer:
         an encode makes, because a store that has not been opened yet
         cannot truthfully say ``None`` about a session it holds.
 
+        When the native request runtime is built, it owns the store
+        directory and its answer is the whole answer, ``None`` included:
+        the Python entry store serves sessions only when that runtime is
+        absent, so it is not opened beside it (on a plan that puts the GPU
+        ahead of the fast CPU engine, opening it there asked the fast CPU
+        backend for a live tokenizer the shared native engine had not
+        loaded).
+
         A tokenizer with no store directory is unchanged: it holds
         nothing durable, opens nothing, and ``None`` means what it always
         meant.
@@ -1360,9 +1368,7 @@ class Tokenizer:
             if native is None:
                 native = self._native_request_runtime()
             if native is not None:
-                revision = cast("int | None", native.session_revision(session_id))
-                if revision is not None:
-                    return revision
+                return cast("int | None", native.session_revision(session_id))
             store = self._entry_store
             if store is None:
                 store = self._store()

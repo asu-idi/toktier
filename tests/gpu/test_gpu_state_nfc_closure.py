@@ -91,8 +91,18 @@ def _artifact_source(request: pytest.FixtureRequest, family: str) -> dict[str, P
     return {name: directory / name for name in names}
 
 
+@pytest.fixture(params=("experimental", "default"))
+def policy(request: pytest.FixtureRequest) -> str:
+    """The routing policy of the load: ``experimental`` always runs; the
+    default policy runs where this build's identities are bound in the
+    registry (it skips otherwise, see :func:`_load`)."""
+    return str(request.param)
+
+
 @pytest.fixture(params=NFC_FAMILIES)
-def nfc_face(request: pytest.FixtureRequest, tmp_path: Path) -> dict[str, Any]:
+def nfc_face(
+    request: pytest.FixtureRequest, tmp_path: Path, policy: str
+) -> dict[str, Any]:
     _cuda_or_skip()
     import tokenizers
 
@@ -115,6 +125,7 @@ def nfc_face(request: pytest.FixtureRequest, tmp_path: Path) -> dict[str, Any]:
         "config": config,
         "reference": reference,
         "store": tmp_path / "store",
+        "policy": policy,
     }
 
 
@@ -123,20 +134,31 @@ def _load(face: dict[str, Any], crossover: int, persistent: bool = False) -> Any
     from toktier.errors import ToktierError
 
     kwargs: dict[str, Any] = dict(
-        policy="experimental",
         device="cuda",
         gpu_delivery="prebuilt",
         gpu_min_bytes=crossover,
         config=face["config"],
     )
+    if face["policy"] != "default":
+        kwargs["policy"] = face["policy"]
     if persistent:
         kwargs["store"] = str(face["store"])
     try:
         tokenizer = toktier.load(face["family"], **kwargs)
     except ToktierError as error:  # e.g. no prebuilt kernel for this device
+        if face["policy"] == "default":
+            pytest.skip(
+                "the default policy admits no GPU route on this build (its source "
+                f"identities are not bound in the registry): {error}"
+            )
         pytest.skip(f"prebuilt GPU delivery unavailable: {error}")
     if tokenizer.explain().get("fallback_chain") != ["gpu", "fast_cpu", "hf"]:
         tokenizer.close()
+        if face["policy"] == "default":
+            pytest.skip(
+                "the default policy does not plan the [gpu, fast_cpu, hf] chain on "
+                "this build (its source identities are not bound in the registry)"
+            )
         pytest.skip("this face does not plan a [gpu, fast_cpu, hf] chain")
     return tokenizer
 

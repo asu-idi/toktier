@@ -876,7 +876,16 @@ def _cross_artifact_problems(
 def _engine_parity_problems(
     artifact: dict[str, Any], carryover: dict[str, Any]
 ) -> list[str]:
-    """Contract C7 for the fast CPU entry: the recorded parity reading."""
+    """Contract C7 for the fast CPU entry: the recorded parity reading.
+
+    The reading binds the engine it was taken on by the version-normalized
+    identity (``engine.source_digest_v2``, ``tools/compute_identity_v2.py``),
+    which must equal the entry's ``source_digest_v2``: a version bump alone
+    leaves it in force, a change to the engine's sources does not. A
+    reading that records only the per-build identity (``source_digest``,
+    the form written before the version-normalized identity was recorded)
+    is held to the entry's ``source_digest`` as before.
+    """
     family = str(artifact.get("family", "<unknown>"))
     parity = carryover.get("engine_parity")
     if not isinstance(parity, dict):
@@ -904,10 +913,26 @@ def _engine_parity_problems(
         problems.append(f"{family}: engine-parity reading is of another artifact")
     if subject.get("family") != family:
         problems.append(f"{family}: engine-parity reading names another family")
-    if engine.get("source_digest") != fast.get("source_digest"):
+    recorded_v2 = engine.get("source_digest_v2")
+    if recorded_v2 is not None:
+        if recorded_v2 != fast.get("source_digest_v2"):
+            problems.append(
+                f"{family}: engine-parity reading was taken on another "
+                "version-normalized fast CPU engine source identity "
+                f"({recorded_v2}, the entry binds {fast.get('source_digest_v2')})"
+            )
+        recorded_v1 = engine.get("source_digest")
+        if recorded_v1 is not None and not _is_sha256(recorded_v1):
+            problems.append(
+                f"{family}: engine-parity reading records a malformed "
+                "per-build engine identity"
+            )
+    elif engine.get("source_digest") != fast.get("source_digest"):
         problems.append(
             f"{family}: engine-parity reading was taken on another fast CPU "
-            "engine source identity"
+            "engine source identity (it records no source_digest_v2, so it is "
+            "held to the per-build identity; retake it recording "
+            "engine.source_digest_v2)"
         )
     documents = reading.get("documents")
     mismatches = reading.get("mismatches")
@@ -921,6 +946,14 @@ def _engine_parity_problems(
             f"the registry ({parity.get('docs')})"
         )
     return problems
+
+
+def _is_sha256(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
 
 
 def carryover_problems(registry_path: Path) -> list[str]:

@@ -337,3 +337,61 @@ def test_a_carried_record_without_a_parity_reading_is_refused(tree: Path) -> Non
         del _row(document, "mimo_v2_6")["carryover"]["engine_parity"]
 
     assert "has no engine_parity reading" in _problems(_edit_registry(tree, change))
+
+
+# -- C7 binds the version-normalized engine identity -------------------------
+
+
+def _bump_engine_v1(document: dict[str, Any], digest: str) -> None:
+    """What a version bump alone does to the registry: every certified fast
+    CPU entry gets a new per-build ``source_digest`` and keeps its
+    ``source_digest_v2``."""
+    for item in document["artifacts"]:
+        fast = (item.get("backends") or {}).get("fast_cpu") or {}
+        if fast.get("status") == "certified_source":
+            fast["source_digest"] = digest
+
+
+def test_a_parity_reading_bound_by_v2_survives_a_version_bump(tree: Path) -> None:
+    v2 = _row(_document(), "mimo_v2_6")["backends"]["fast_cpu"]["source_digest_v2"]
+
+    def record_v2(reading: dict[str, Any]) -> None:
+        reading["engine"]["source_digest_v2"] = v2
+
+    path = _edit_reading(tree, "mimo_v2_6", "engine_parity", record_v2)
+    assert "mimo_v2_6" not in _problems(path)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    _bump_engine_v1(document, "c" * 64)
+    path.write_text(json.dumps(document), encoding="utf-8")
+    problems = _problems(path)
+    assert "mimo_v2_6: engine-parity" not in problems, problems
+    # The reading without the version-normalized identity is held to the
+    # per-build identity, so the same bump asks for a retake.
+    assert (
+        "deepseek_v4_1_flash: engine-parity reading was taken on another fast CPU"
+        in problems
+    )
+    assert "retake it recording engine.source_digest_v2" in problems
+
+
+def test_a_parity_reading_of_another_v2_is_refused(tree: Path) -> None:
+    def change(reading: dict[str, Any]) -> None:
+        reading["engine"]["source_digest_v2"] = "d" * 64
+
+    path = _edit_reading(tree, "deepseek_v4_1_flash", "engine_parity", change)
+    assert (
+        "deepseek_v4_1_flash: engine-parity reading was taken on another "
+        "version-normalized fast CPU engine source identity"
+    ) in _problems(path)
+
+
+def test_a_parity_reading_without_v2_is_held_to_the_per_build_identity(
+    tree: Path,
+) -> None:
+    def change(reading: dict[str, Any]) -> None:
+        reading["engine"]["source_digest"] = "e" * 64
+
+    path = _edit_reading(tree, "mimo_v2_6", "engine_parity", change)
+    assert "mimo_v2_6: engine-parity reading was taken on another fast CPU" in (
+        _problems(path)
+    )

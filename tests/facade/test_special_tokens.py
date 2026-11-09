@@ -201,6 +201,19 @@ def test_self_check_probes_hold_an_added_token_and_non_ascii_text() -> None:
     assert "" in probes
 
 
+def test_self_check_probes_take_the_first_added_token_in_document_order() -> None:
+    """The same literal the Rust facade probes: document order, not the
+    lowest id, and the first non-empty content."""
+    document = _document(_PREFIX)
+    document["added_tokens"] = [
+        {"id": 9, "content": ""},
+        {"id": 7, "content": "<first_in_document>"},
+        {"id": 1, "content": "<lowest_id>"},
+    ]
+    probes = self_check_probes(document)
+    assert "<first_in_document>" in probes and "<lowest_id>" not in probes
+
+
 def _oracle_encode(document: dict[str, Any]) -> Callable[[str, bool], list[int]]:
     import json
 

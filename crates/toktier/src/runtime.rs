@@ -1489,20 +1489,17 @@ struct SpecialTokenPlan {
 /// them. A probe that answers otherwise (or fails) makes the class
 /// `reference` and is named in the plan.
 fn special_token_plan(bytes: &[u8], reference: &ReferenceEngine) -> SpecialTokenPlan {
-    let kind = serde_json::from_slice::<serde_json::Value>(bytes)
-        .map(|document| classify_postprocessor(&document))
-        .unwrap_or(PostprocessorKind::Reference);
+    let document = serde_json::from_slice::<serde_json::Value>(bytes).ok();
+    let kind = document
+        .as_ref()
+        .map_or(PostprocessorKind::Reference, classify_postprocessor);
     if kind == PostprocessorKind::Reference {
         return SpecialTokenPlan {
             kind,
             self_check: None,
         };
     }
-    let first_added = reference
-        .added_tokens()
-        .into_iter()
-        .map(|(_, content, _)| content)
-        .find(|content| !content.is_empty());
+    let first_added = document.as_ref().and_then(first_added_literal);
     let mut probes = vec![
         String::new(),
         "a".to_owned(),
@@ -1539,13 +1536,27 @@ fn special_token_plan(bytes: &[u8], reference: &ReferenceEngine) -> SpecialToken
     }
 }
 
+/// The face's first added token in document order (the first non-empty
+/// `content` of the document's `added_tokens`), the literal the
+/// construction check probes alone and inside text. The Python facade
+/// takes the same one.
+fn first_added_literal(document: &serde_json::Value) -> Option<String> {
+    document
+        .get("added_tokens")?
+        .as_array()?
+        .iter()
+        .filter_map(|row| row.get("content").and_then(serde_json::Value::as_str))
+        .find(|content| !content.is_empty())
+        .map(str::to_owned)
+}
+
 /// The class of a tokenizer document's post-processor.
 ///
 /// `identity`: no post-processor, `ByteLevel` (it rewrites offsets
 /// only), or a template whose single-sequence form is the sequence
 /// alone. `prefix`: a template whose single-sequence form is one special
-/// token, looked up by the piece's own id and carrying exactly one id,
-/// followed by the sequence. A `Sequence` of processors is classified
+/// token, looked up by the piece's own id, whose entry names that same id
+/// and carries exactly one id, followed by the sequence. A `Sequence` of processors is classified
 /// only when its members are `ByteLevel` and at most one template, the
 /// template deciding. Everything else -- suffix or two-sided templates,
 /// more than one special token, other processor types, nested sequences,
@@ -1601,9 +1612,12 @@ fn classify_template(template: &serde_json::Value) -> PostprocessorKind {
             let Some(key) = template_piece(special, "SpecialToken") else {
                 return PostprocessorKind::Reference;
             };
+            // The entry has to name the piece's own id too (the Python
+            // facade reads the same, narrower shape).
             let ids = template
                 .get("special_tokens")
                 .and_then(|tokens| tokens.get(key))
+                .filter(|entry| entry.get("id").and_then(serde_json::Value::as_str) == Some(key))
                 .and_then(|entry| entry.get("ids"))
                 .and_then(serde_json::Value::as_array);
             match ids.map(Vec::as_slice) {
@@ -2055,6 +2069,48 @@ mod tests {
                 "{key}"
             );
         }
+    }
+
+    /// The entry a special-token piece names has to carry that same id:
+    /// `{"<s>": {"id": "<bos>", "ids": [0]}}` behind the piece `<s>` is
+    /// read as `reference`, as the Python facade reads it (the reference
+    /// library would look the entry up by its key and emit the prefix;
+    /// both readings are exact, the narrower one is the shared one).
+    #[test]
+    fn a_special_token_entry_naming_another_id_is_the_reference_s() {
+        let other = json!({"<s>": {"id": "<bos>", "ids": [0], "tokens": ["<s>"]}});
+        assert_eq!(
+            classify(template(json!([special("<s>"), sequence("A")]), other)),
+            PostprocessorKind::Reference
+        );
+        let same = json!({"<s>": {"id": "<s>", "ids": [0], "tokens": ["<s>"]}});
+        assert_eq!(
+            classify(template(json!([special("<s>"), sequence("A")]), same)),
+            PostprocessorKind::Prefix(vec![0])
+        );
+        let unnamed = json!({"<s>": {"ids": [0], "tokens": ["<s>"]}});
+        assert_eq!(
+            classify(template(json!([special("<s>"), sequence("A")]), unnamed)),
+            PostprocessorKind::Reference
+        );
+    }
+
+    /// The construction check probes the first added token in document
+    /// order, not the lowest id (the Python facade's choice).
+    #[test]
+    fn the_probe_literal_is_the_first_added_token_in_document_order() {
+        use super::first_added_literal;
+        let document = json!({"added_tokens": [
+            {"id": 9, "content": ""},
+            {"id": 7, "content": "<later_id_first_in_document>"},
+            {"id": 1, "content": "<lowest_id>"},
+        ]});
+        assert_eq!(
+            first_added_literal(&document).as_deref(),
+            Some("<later_id_first_in_document>")
+        );
+        assert_eq!(first_added_literal(&json!({"added_tokens": []})), None);
+        assert_eq!(first_added_literal(&json!({})), None);
     }
 
     /// A minimal word-level document with the given post-processor.

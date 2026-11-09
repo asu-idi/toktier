@@ -261,6 +261,57 @@ fn execution_facts_report_the_routing_decision_or_nothing() {
     }
 }
 
+/// Offsets are character spans placed by the tokens' raw byte lengths.
+/// On text the face's normalizer changes, that placement is refused,
+/// including text whose normalized byte length happens to equal its own
+/// (three decomposed accents, then one letter NFC decomposes): the result
+/// is either the reference's offsets or an error, never other offsets.
+#[test]
+fn offsets_are_never_placed_over_text_the_normalizer_changes() {
+    let Some(root) = artifact_root() else {
+        return;
+    };
+    let reference = toktier_routing_core::ReferenceEngine::from_file(
+        root.join("qwen3_8b-b968826d9c46/tokenizer.json"),
+    )
+    .unwrap();
+    let runtime = Runtime::builder()
+        .artifact_cache(&root)
+        .device(Device::Cpu)
+        .build()
+        .unwrap();
+    let tokenizer = runtime.load("qwen3_8b").unwrap();
+    let offsets = toktier::EncodeOptions {
+        add_special_tokens: false,
+        offsets: true,
+    };
+    let body = "The committee met on Tuesday and agreed to the plan. ".repeat(8);
+    let balanced = format!("cafe\u{301} re\u{301}sume\u{301} {body}\u{958} end");
+    assert_ne!(reference.normalize(&balanced).unwrap(), balanced);
+    assert_eq!(
+        reference.normalize(&balanced).unwrap().len(),
+        balanced.len()
+    );
+    let stable = format!("caf\u{e9} r\u{e9}sum\u{e9} {body}end");
+    for (text, refused) in [(&balanced, true), (&stable, false)] {
+        let expected = reference.encode_core(text).unwrap();
+        match tokenizer.encode_with(text, offsets) {
+            Ok(encoded) => {
+                assert!(!refused, "offsets were placed over {text:?}");
+                assert_eq!(encoded.ids(), expected.ids.as_slice());
+                assert_eq!(encoded.offsets().unwrap(), expected.spans.as_slice());
+            }
+            Err(error) => {
+                assert!(refused, "{}", error.message());
+                assert_eq!(error.code(), ErrorCode::BackendExecutionFault);
+            }
+        }
+        // The ids alone are always served.
+        let ids = tokenizer.encode(text).unwrap();
+        assert_eq!(ids.ids(), expected.ids.as_slice());
+    }
+}
+
 #[test]
 fn session_encodings_share_the_store_row_and_survive_mutation_and_drop() {
     let Some(root) = artifact_root() else {

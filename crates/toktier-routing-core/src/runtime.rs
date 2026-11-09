@@ -1110,6 +1110,14 @@ impl NativeRouter {
     /// share one fail-closed decision over the exact row; only the
     /// successful payload representation differs. A rejected row is
     /// re-encoded by the reference (`hf_span_guard`).
+    ///
+    /// The device normalizes its input itself, so its row is the row of
+    /// the normalized text. The byte-length closure alone does not show
+    /// that this is the row of `text`: on a text whose normalizer length
+    /// changes cancel, the row closes and its spans are shifted. A row is
+    /// therefore adopted only when `text` is also stable under the face's
+    /// normalizer (checked after the closure, so a row the closure rejects
+    /// keeps its diagnostic).
     #[allow(clippy::too_many_arguments)]
     fn accept_gpu_state(
         &self,
@@ -1139,7 +1147,12 @@ impl NativeRouter {
                         })
                     })
             }
-        };
+        }
+        .and_then(|payload| {
+            self.reference
+                .require_normalization_stable(text)
+                .map(|()| payload)
+        });
         match accepted {
             Ok(payload) => {
                 let state_encode_path = payload.accelerated_state_encode_path();
@@ -3835,6 +3848,51 @@ mod literal_state_tests {
                 }
             }
         }
+    }
+
+    /// A text that is not stable under NFC although its byte length is:
+    /// three decomposed accents early (one byte shorter each after NFC)
+    /// and one U+0958 late (three bytes longer after NFC). A device row
+    /// of the normalized text closes over it in bytes, and its spans
+    /// would be shifted between the two.
+    fn nfc_balanced(body: &str) -> String {
+        format!("cafe\u{301} re\u{301}sume\u{301} {body} {body} {body} \u{958} end of the text")
+    }
+
+    #[test]
+    fn a_device_row_of_a_text_unstable_under_the_normalizer_is_not_adopted() {
+        let (router, reference) = router(TestNormalizer::Nfc, true);
+        let body = "the committee met on tuesday and agreed to the plan";
+        for text in [
+            nfc_balanced(body),
+            format!("<|im_start|>user\n{}<|im_end|>\n", nfc_balanced(body)),
+        ] {
+            assert_ne!(reference.normalize(&text).unwrap(), text);
+            assert_eq!(reference.normalize(&text).unwrap().len(), text.len());
+            // Lazy seed, then an append.
+            let mut tail = TailState::new();
+            let report = router.append(&mut tail, &text).unwrap();
+            assert_eq!(report.path, "hf_span_guard", "{text:?}");
+            assert_state(&tail, &reference, &text);
+            let delta = " one more sentence arrives after the seed";
+            router.append(&mut tail, delta).unwrap();
+            assert_state(&tail, &reference, &format!("{text}{delta}"));
+            // Materialized state encode.
+            let encoded = router.encode(&text).unwrap();
+            assert_eq!(encoded, reference.encode_core(&text).unwrap());
+            let stats = router.stats();
+            assert_eq!(
+                stats.last_state_encode.as_ref().unwrap()["path"],
+                "hf_span_guard"
+            );
+            assert_eq!(stats.events.last().unwrap().detail["stage"], "span_bridge");
+        }
+        // The NFC-stable control is still adopted from the device.
+        let stable = format!("caf\u{e9} r\u{e9}sum\u{e9} {body} {body} {body} end");
+        let mut tail = TailState::new();
+        let report = router.append(&mut tail, &stable).unwrap();
+        assert_eq!(report.path, "gpu_full");
+        assert_state(&tail, &reference, &stable);
     }
 
     #[test]

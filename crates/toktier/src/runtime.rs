@@ -1021,13 +1021,22 @@ impl Tokenizer {
         // Explicitly requested offsets are reconstructed through the
         // one-pass structure-of-arrays bridge and materialized as the
         // public pair layout; values and failure behavior match the
-        // retained pair bridge exactly.
+        // retained pair bridge exactly. The bridge places tokens by their
+        // raw byte lengths, which locates characters only on text the
+        // face's normalizer leaves unchanged; other text is refused even
+        // when its length changes cancel in bytes.
         let offsets = options
             .offsets
             .then(|| {
                 self.inner
                     .reference
                     .spans_soa_for_ids(text, &routed.ids)
+                    .and_then(|spans| {
+                        self.inner
+                            .reference
+                            .require_normalization_stable(text)
+                            .map(|()| spans)
+                    })
                     .map(|(starts, ends)| starts.into_iter().zip(ends).collect::<Vec<_>>())
             })
             .transpose()

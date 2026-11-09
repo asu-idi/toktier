@@ -352,6 +352,31 @@ impl ReferenceEngine {
         ids_close_over_text(ids, self.raw_byte_lengths_slice()?, text)
     }
 
+    /// Require that `text` is unchanged by this face's normalizer.
+    ///
+    /// The span bridges place a row's tokens over `text` by their raw byte
+    /// lengths. That placement is the row's own only when the row encodes
+    /// `text` itself; a row of the normalized text can still close over
+    /// `text` in bytes when the normalizer's length changes cancel, and its
+    /// spans would then be shifted between the first and the last changed
+    /// character. A caller that adopts a row it did not encode itself from
+    /// verified-stable text runs this check beside the closure check. ASCII
+    /// text is stable under an NFC normalizer and is not normalized here.
+    pub fn require_normalization_stable(&self, text: &str) -> Result<(), ReferenceEngineError> {
+        if !self.has_effective_normalizer()
+            || (text.is_ascii() && matches!(self.document.shape, Ok(NormalizerShape::Nfc)))
+        {
+            return Ok(());
+        }
+        if self.normalize(text)? != text {
+            return Err(ReferenceEngineError::new(
+                "the text is not stable under the artifact normalizer, so token bytes \
+                 do not locate its characters",
+            ));
+        }
+        Ok(())
+    }
+
     /// Build and freeze the raw byte-length table now instead of on the
     /// first span reconstruction, so a construction-time caller pays (and
     /// reports) table initialization instead of hiding it inside the first

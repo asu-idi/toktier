@@ -85,6 +85,29 @@ RIDERS_SCHEMA = SCHEMAS / "chunked_cuts_riders.schema.json"
 #: many strings per face on the frozen build (condition D6b).
 CONSTRUCTED_ARM_MIN_STRINGS = 1_000_000
 
+#: The window bound the constructed arm compares the face's own with: the
+#: roster's standing value. Below it the arm has to show its power: at
+#: least this share of its strings decided by the bound (lane E's dry run
+#: read 10-12 % on the three faces below 128). At it the arm cannot
+#: distinguish the two engines, so the count has to be zero and the face
+#: rests on the roster's standing value.
+CONSTRUCTED_ARM_COMPARISON_L_MAX = 128
+CONSTRUCTED_ARM_DECISIVE_SHARE = 0.01
+
+#: The bridging check re-runs at least this share of the corpus on the
+#: frozen build (the campaign plans exactly 1 %).
+BRIDGING_MIN_SHARE = 0.01
+
+#: The append replay covers at least this share of the corpus documents
+#: (the campaign replays one document in 40, 2.5 %; the floor leaves room
+#: for documents too short to cut).
+APPEND_REPLAY_MIN_SHARE = 0.02
+
+#: On a served face at most this share of the residue documents may go to
+#: the reference for a literal on the frozen build (the literal segmenter
+#: answers them otherwise).
+RESIDUE_REFERENCE_SHARE = 0.01
+
 #: The per-family columns a parity row may carry, by name.
 COLUMNS = ("special_tokens", "literal_segments")
 
@@ -475,13 +498,15 @@ def engine_differential_problems(
     expected_documents: int,
     engine_core: Mapping[str, str],
     frozen_source_digest_v2: str,
+    expected_characters: int | None = None,
 ) -> list[str]:
     """Problems of a directly judged face's engine-differential reading.
 
     ``artifact`` is the registry record (its ``backends.fast_cpu.repair``
     member is the parameter set the reading has to have run with);
-    ``expected_documents`` is the campaign corpus size the roster's own
-    differential covered; ``engine_core`` the tree's
+    ``expected_documents`` and ``expected_characters`` are the campaign
+    corpus the roster's own differential covered
+    (``tools/fast_cpu_binding.json`` ``validation``); ``engine_core`` the tree's
     ``tools/engine_core_identity.py`` digests; ``frozen_source_digest_v2``
     the version-normalized fast CPU identity of the tree, which the arms
     taken on the frozen build have to name.
@@ -525,6 +550,14 @@ def engine_differential_problems(
             f"{label}: corpus of {corpus['documents']} documents, the campaign "
             f"corpus holds {expected_documents}"
         )
+    if (
+        expected_characters is not None
+        and int(corpus["characters"]) != expected_characters
+    ):
+        problems.append(
+            f"{label}: corpus of {corpus['characters']} characters, the campaign "
+            f"corpus holds {expected_characters}"
+        )
     if (int(main["documents"]), int(main["characters"])) != (
         int(corpus["documents"]),
         int(corpus["characters"]),
@@ -546,6 +579,11 @@ def engine_differential_problems(
     append = reading["append_replay"]
     if int(append["mismatches"]) != 0:
         problems.append(f"{label}: append replay {append['mismatches']} mismatch(es)")
+    if int(append["documents"]) < APPEND_REPLAY_MIN_SHARE * int(corpus["documents"]):
+        problems.append(
+            f"{label}: the append replay covered {append['documents']} documents, "
+            f"below {APPEND_REPLAY_MIN_SHARE:.0%} of the corpus"
+        )
     constructed = reading["constructed_arm"]
     if int(constructed["strings"]) < CONSTRUCTED_ARM_MIN_STRINGS:
         problems.append(
@@ -556,10 +594,27 @@ def engine_differential_problems(
         problems.append(
             f"{label}: constructed arm {constructed['mismatches']} mismatch(es)"
         )
-    if int(constructed["threshold_decisive"]) < 1:
+    own_l_max = int(subject["repair"]["effective_l_max"])
+    comparison = int(constructed["comparison_l_max"])
+    decisive = int(constructed["threshold_decisive"])
+    if comparison != CONSTRUCTED_ARM_COMPARISON_L_MAX:
         problems.append(
-            f"{label}: in the constructed arm the window bound decided no outcome, "
-            "so the arm says nothing about effective_l_max"
+            f"{label}: the constructed arm compared with window bound {comparison}, "
+            f"not {CONSTRUCTED_ARM_COMPARISON_L_MAX}"
+        )
+    elif own_l_max < comparison:
+        needed = CONSTRUCTED_ARM_DECISIVE_SHARE * int(constructed["strings"])
+        if decisive < 1 or decisive < needed:
+            problems.append(
+                f"{label}: in the constructed arm the window bound decided "
+                f"{decisive} of {constructed['strings']} outcomes, below "
+                f"{CONSTRUCTED_ARM_DECISIVE_SHARE:.0%}, so the arm says too little "
+                f"about effective_l_max {own_l_max} against {comparison}"
+            )
+    elif own_l_max == comparison and decisive != 0:
+        problems.append(
+            f"{label}: effective_l_max equals the comparison bound {comparison}, "
+            f"yet {decisive} outcome(s) are counted as decided by it"
         )
     supplement = reading["residue_supplement"]
     if int(supplement["documents"]) != int(main["residue"]["count"]):
@@ -574,6 +629,15 @@ def engine_differential_problems(
         supplement["documents"]
     ):
         problems.append(f"{label}: residue-supplement path classes do not add up")
+    if int(supplement["reference_answered"]["count"]) > int(
+        RESIDUE_REFERENCE_SHARE * int(supplement["documents"])
+    ):
+        problems.append(
+            f"{label}: {supplement['reference_answered']['count']} of "
+            f"{supplement['documents']} residue documents went to the reference "
+            f"for a literal on the frozen build, above {RESIDUE_REFERENCE_SHARE:.0%} "
+            "for a served face"
+        )
     if int(supplement_classes["hf_added_token"]) != int(
         supplement["reference_answered"]["count"]
     ):
@@ -590,6 +654,11 @@ def engine_differential_problems(
         problems.append(
             f"{label}: {bridging['path_class_changes_literal_free']} literal-free "
             "document(s) changed path class on the frozen build"
+        )
+    if float(bridging["sample_share"]) < BRIDGING_MIN_SHARE:
+        problems.append(
+            f"{label}: the bridging sample share {bridging['sample_share']} is "
+            f"below {BRIDGING_MIN_SHARE:.0%}"
         )
     planned = float(bridging["sample_share"]) * int(corpus["documents"])
     if abs(int(bridging["documents"]) - planned) > max(1.0, 0.01 * planned):

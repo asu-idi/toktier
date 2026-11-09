@@ -123,11 +123,16 @@
     "constructed_arm": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["strings", "mismatches", "threshold_decisive", "build"],
+      "required": ["strings", "mismatches", "threshold_decisive", "comparison_l_max", "build"],
       "properties": {
         "strings": {"type": "integer", "minimum": 1},
         "mismatches": {"$ref": "#/$defs/count"},
         "threshold_decisive": {"$ref": "#/$defs/count"},
+        "comparison_l_max": {
+          "description": "The window bound of the arm's second engine (128): threshold_decisive counts the strings whose repair outcome differs between the face's effective_l_max and this value.",
+          "type": "integer",
+          "minimum": 1
+        },
         "generator_sha256": {"$ref": "#/$defs/sha256"},
         "build": {"$ref": "#/$defs/build"}
       }

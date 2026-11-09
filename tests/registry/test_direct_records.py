@@ -72,6 +72,7 @@ def _build(v2: str) -> dict[str, Any]:
 
 def _reading(artifact: dict[str, Any]) -> dict[str, Any]:
     documents = int(_load(BINDING)["validation"]["documents"])
+    characters = int(_load(BINDING)["validation"]["characters"])
     v2 = source_digest_v2("fast_cpu")
     residue = 6_000_000
     bridging = documents // 100
@@ -89,13 +90,13 @@ def _reading(artifact: dict[str, Any]) -> dict[str, Any]:
         "corpus": {
             "manifest_sha256": "2" * 64,
             "documents": documents,
-            "characters": 12_000_000_000_000,
+            "characters": characters,
             "oracle_version": "0.22.2",
             "harness_sha256": "3" * 64,
         },
         "main_pass": {
             "documents": documents,
-            "characters": 12_000_000_000_000,
+            "characters": characters,
             "mismatches": 0,
             "path_classes": {
                 "gigatoken_full": documents - residue,
@@ -114,6 +115,7 @@ def _reading(artifact: dict[str, Any]) -> dict[str, Any]:
             "strings": 1_000_000,
             "mismatches": 0,
             "threshold_decisive": 100_000,
+            "comparison_l_max": 128,
             "build": _build(v2),
         },
         "residue_supplement": {
@@ -443,7 +445,37 @@ def test_d3_an_entry_other_than_the_uniform_one_is_refused(tree: Path) -> None:
         ),
         (
             lambda r: r["constructed_arm"].update(threshold_decisive=0),
-            "the window bound decided no outcome",
+            "the window bound decided 0 of 1000000 outcomes",
+        ),
+        (
+            lambda r: r["constructed_arm"].update(threshold_decisive=9_999),
+            "decided 9999 of 1000000 outcomes, below 1%",
+        ),
+        (
+            lambda r: r["constructed_arm"].update(comparison_l_max=64),
+            "compared with window bound 64, not 128",
+        ),
+        (
+            lambda r: r["corpus"].update(characters=r["corpus"]["characters"] - 1)
+            or r["main_pass"].update(characters=r["corpus"]["characters"]),
+            "characters, the campaign corpus holds 12328592579973",
+        ),
+        (
+            lambda r: r["bridging_check"].update(
+                sample_share=0.004, documents=r["bridging_check"]["documents"] * 2 // 5
+            ),
+            "bridging sample share 0.004 is below 1%",
+        ),
+        (
+            lambda r: r["append_replay"].update(documents=1000),
+            "the append replay covered 1000 documents, below 2%",
+        ),
+        (
+            lambda r: r["residue_supplement"]["path_classes"].update(
+                gigatoken_segmented=0, hf_added_token=6_000_000
+            )
+            or r["residue_supplement"]["reference_answered"].update(count=6_000_000),
+            "above 1% for a served face",
         ),
         (
             lambda r: r["bridging_check"]["build"].update(source_digest_v2="8" * 64),
@@ -484,6 +516,23 @@ def test_d5_the_parity_row_and_its_columns_are_required(tree: Path) -> None:
     parity["rows"] = parity["rows"][:-1]
     _dump(parity_path, parity)
     assert any("does not list the face" in p for p in _problems(tree))
+
+
+def test_a_face_at_the_comparison_bound_counts_no_decided_outcome(
+    tree: Path,
+) -> None:
+    """``effective_l_max == 128``: the arm cannot tell the two engines apart,
+    so its count has to be zero (and is accepted at zero)."""
+
+    def at_bound(reading: dict[str, Any]) -> None:
+        reading["subject"]["repair"]["effective_l_max"] = 128
+        reading["constructed_arm"]["threshold_decisive"] = 0
+
+    _edit_reading(tree, at_bound)
+    problems = _problems(tree)
+    assert not any("constructed arm" in p for p in problems), problems
+    _edit_reading(tree, lambda r: r["constructed_arm"].update(threshold_decisive=5))
+    assert any("equals the comparison bound 128" in p for p in _problems(tree))
 
 
 def test_engine_differential_beside_a_carry_over_is_refused(tree: Path) -> None:

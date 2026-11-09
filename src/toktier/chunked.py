@@ -1,9 +1,8 @@
 """Certified chunk-parallel encode for long requests on the CPU route.
 
 A long document is cut at *certified stable boundaries*, the chunks are
-encoded as one batch on the loaded tokenizer (the native batch path runs
-the rows on its worker pool), and the id rows are concatenated. There is
-no overlap, no seam matching and no retry, because a cut is placed only
+encoded in parallel, and the id rows are concatenated. There is no
+overlap, no seam matching and no retry, because a cut is placed only
 where the pre-tokenizer of the certified families cannot carry a
 pre-token across it: the synchronizing-transition predicate the
 session-repair witness already uses (``BpeSyncBoundary`` in the routing
@@ -49,29 +48,45 @@ all of this without any window, which is the common case in prose,
 code and CJK text alike. The normalizer is used for equality only;
 every character class is read from the frozen property table.
 
-Two things this module deliberately is not. It is not a new route: the
-chunks run through the tokenizer's own batch path, so the plan, the
-per-input guards and the fallback ledger apply to each chunk exactly as
-they apply to a whole document (a chunk that trips a guard is routed to
-the reference on its own, which localizes that cost to one chunk). And
-by default it is not a native change: the cut search and the
-concatenation are Python, so the parallelism available is the batch
-worker pool of the native engine -- the Rayon thread count at first use,
-and at most one worker per 64 KiB of payload.
+This module is not a new route: on either path below, each chunk runs
+through the tokenizer's own guarded encode, so the plan, the per-input
+guards and the fallback ledger apply to each chunk exactly as they apply
+to a whole document (a chunk that trips a guard is routed to the
+reference on its own, which localizes that cost to one chunk).
 
-A native counterpart exists (``native=True``, and
-``Tokenizer.encode(..., parallel=...)``): the same plan, position for
-position, computed inside the native runtime, with the chunks encoded on
-a persistent pool of corrected-Gigatoken workers and concatenated there
-(``crates/toktier-routing-core/src/chunked.rs``). Its facts come back in
-``ChunkedEncoding.native_facts``; the counters of this module count both
-paths.
+There are two paths, and they make the same cuts. The native path
+computes the plan inside the native runtime, position for position as
+this module computes it, encodes the chunks on a persistent set of
+corrected-Gigatoken workers and concatenates them there
+(``crates/toktier-routing-core/src/chunked.rs``); its facts come back in
+``ChunkedEncoding.native_facts``. The Python path computes the plan here
+and encodes the chunks as one batch on the loaded tokenizer. The
+``native`` argument of :func:`encode` and :func:`plan` chooses: with
+``None`` (the default) an admitted tokenizer runs on the native path
+whenever it can run here -- the loaded runtime carries the native
+encoder and the route carries the corrected CPU engine it is built on
+(:func:`native_available`) -- and on the Python path otherwise;
+``True`` demands the native path and ``False`` selects the Python one.
+``Tokenizer.encode(..., parallel=...)`` is :func:`encode` with
+``native=None``. The counters of this module count both paths.
+
+The native path runs its rows on a process-wide thread pool of its own.
+:func:`warm` with ``workers=N`` sizes that pool to ``N`` threads (a later
+call naming a larger ``N`` grows it, a smaller one leaves it as it is);
+without a named count the pool is built at first use with the available
+parallelism of the process, which honours the CPU affinity mask and the
+cgroup quota. ``RAYON_NUM_THREADS`` does not size this pool, so a process
+that sets it to ``1`` still encodes chunks in parallel. A call made from
+a thread of a Rayon pool the host runs (``ThreadPool::install`` in Rust)
+stays on that pool. The Python path's batch runs on the native engine's
+batch worker pool instead, which follows the Rayon thread count at first
+use and takes at most one worker per 64 KiB of payload.
 
 Admission is the certified repair roster, narrowed to the normalizers
 this module reasons about, narrowed again to the artifacts whose chunked
 path has recorded evidence. A tokenizer whose family and artifact digest
-have a repair-table entry -- the eleven byte-level BPE artifacts the
-shipped sync profile was certified on -- may be chunked when its loader
+are on the certified repair roster (byte-level BPE artifacts with a
+certified repair entry) may be chunked when its loader
 face carries no normalizer, the empty normalizer sequence, or NFC with
 every added token matched on the input text (``normalized: false``),
 with no added token that sets ``lstrip``, ``rstrip`` or ``single_word``
@@ -98,21 +113,19 @@ counters, and the per-call facts, are read back from
 ``Tokenizer.explain()["chunked"]`` once this module has served the
 tokenizer, or from :func:`stats`.
 
-The table also records the evidence of each path. With ``native=None``
-(the default) an admitted tokenizer runs on the native encoder whenever
-it can run here -- the loaded runtime carries it and the route carries
-the corrected CPU engine it is built on -- and on the Python path
-otherwise. The native path's own evidence level is reported, not
-required: both paths make the same cuts and return the serial ids by
-construction, and a document that cannot be cut is encoded serially.
+The table also records the evidence of each path: every row names the
+paths its evidence covers and the levels recorded for each. The native
+path's own evidence level is reported, not required: both paths make the
+same cuts and return the serial ids by construction, and a document that
+cannot be cut is encoded serially.
 ``native_evidence_label`` in :func:`admission` and :func:`stats` names
 what the row records for the native path:
 ``native_evidence:adversarial_only`` while it holds the adversarial
 battery but not yet the corpus cut comparison (``corpus_only`` and
 ``none`` likewise), and ``None`` once both levels are recorded, with no
-change of code. ``native=True`` demands the native encoder and raises
-when the runtime does not carry it or the tokenizer is not admitted;
-``native=False`` is the Python path.
+change of code. ``native=True`` raises
+when the runtime does not carry the native encoder or the tokenizer is
+not admitted.
 Collecting the evidence a row is made of needs the gate lifted for the
 tokenizer under judgement; the campaign tool does that through the
 private planner constructor, and ``explain()["chunked"]["admission_gate"]``
@@ -1067,7 +1080,13 @@ def warm(
 ) -> int:
     """Fork (and, with ``text``, pre-warm) the native chunk worker pool.
 
-    Returns the pool size. Without the call the pool is forked on first use.
+    ``workers`` also sizes the process-wide thread pool the native path
+    runs its rows on: a count above its present size grows it to that
+    count, a smaller one leaves it as it is; ``None`` keeps the present
+    size, or the available parallelism of the process before the pool
+    exists. ``RAYON_NUM_THREADS`` takes no part. Returns the number of
+    forked workers. Without the call the workers are forked, and the
+    pool built, on first use.
     """
     size: int = _native_runtime(tokenizer).chunked_warm(workers, text)
     return size

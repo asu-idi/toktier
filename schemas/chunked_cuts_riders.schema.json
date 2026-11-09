@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toktier:schema:chunked-cuts-riders:1",
+  "title": "toktier chunk-cut campaign: the rider document",
+  "description": "Per-family sums of the rider arms of the chunk-cut campaign (tools/run_chunked_cut_campaign.py run --riders, summarize --riders-out), a separate document beside the chunked readings. riders names the arms every unit ran; each family carries one counter object per arm. special_tokens: documents encoded with add_special_tokens=True on the facade, compared with the oracle; served_by counts which counter of explain()[\"special_tokens\"][\"requests\"] each call moved (facade, reference, or not_reported when the facade reported none); classes counts the post-processor class reported; vacuous counts the documents of an identity or prefix face that the reference answered. literal_segments: chat-shaped variants with the face's own added-token literals, encoded plainly; paths counts the path the last request reported (not_reported when none), bytes the segment bytes per engine. Checked by tools/check_reading_forms.py riders: mismatches, vacuous and not_reported are 0, and every family ran every requested arm on at least one document.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "tool_sha256", "chunked_identity", "fast_cpu_source_digest_v2", "rider_share", "units", "riders", "families"],
+  "properties": {
+    "schema": {"const": "toktier.chunked_cuts_riders.v1"},
+    "tool_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "chunked_identity": {"type": "string", "minLength": 1},
+    "fast_cpu_source_digest_v2": {"type": ["string", "null"]},
+    "rider_share": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+    "units": {"type": "integer", "minimum": 1},
+    "riders": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["special_tokens", "literal_segments"]}
+    },
+    "families": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "special_tokens": {"$ref": "#/$defs/special_tokens"},
+          "literal_segments": {"$ref": "#/$defs/literal_segments"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "count": {"type": "integer", "minimum": 0},
+    "counts": {"type": "object", "additionalProperties": {"$ref": "#/$defs/count"}},
+    "special_tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documents", "mismatches", "served_by", "classes", "vacuous"],
+      "properties": {
+        "documents": {"$ref": "#/$defs/count"},
+        "mismatches": {"$ref": "#/$defs/count"},
+        "served_by": {"$ref": "#/$defs/counts"},
+        "classes": {"$ref": "#/$defs/counts"},
+        "vacuous": {"$ref": "#/$defs/count"}
+      }
+    },
+    "literal_segments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documents", "mismatches", "literals", "paths", "bytes", "segments_reported"],
+      "properties": {
+        "documents": {"$ref": "#/$defs/count"},
+        "mismatches": {"$ref": "#/$defs/count"},
+        "literals": {"$ref": "#/$defs/count"},
+        "paths": {"$ref": "#/$defs/counts"},
+        "bytes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gpu", "fast_cpu", "hf"],
+          "properties": {
+            "gpu": {"$ref": "#/$defs/count"},
+            "fast_cpu": {"$ref": "#/$defs/count"},
+            "hf": {"$ref": "#/$defs/count"}
+          }
+        },
+        "segments_reported": {"$ref": "#/$defs/count"}
+      }
+    }
+  }
+}

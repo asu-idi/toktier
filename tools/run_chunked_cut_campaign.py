@@ -1581,6 +1581,11 @@ def command_summarize(arguments: argparse.Namespace) -> int:
             for spec in unit_specs
             if spec.get("riders")
         }
+        requested = {
+            tuple(sorted(spec.get("riders") or ()))
+            for spec in unit_specs
+            if spec.get("riders")
+        }
         rider_document = {
             "schema": RIDER_SCHEMA,
             "tool_sha256": tool_digest,
@@ -1588,6 +1593,7 @@ def command_summarize(arguments: argparse.Namespace) -> int:
             "fast_cpu_source_digest_v2": arguments.fast_cpu_source_digest_v2,
             "rider_share": _agree(shares, "rider_share") if shares else 0.0,
             "units": len(groups),
+            "riders": list(_agree(requested, "riders")) if requested else [],
             "families": riders,
         }
         riders_out = Path(arguments.riders_out)
@@ -1596,6 +1602,13 @@ def command_summarize(arguments: argparse.Namespace) -> int:
             json.dumps(rider_document, indent=1, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+        # The rider document passes its own checks (no vacuous or
+        # unreported document, every requested arm run on every family),
+        # or the summary does not pass.
+        forms = importlib.import_module("check_reading_forms")
+        for problem in forms.riders_problems(rider_document):
+            print(f"[summarize] rider document: {problem}", flush=True)
+            rider_unequal += 1
     unequal = sum(value or 0 for row in rows for value in row["mismatches"].values())
     unequal += sum(
         value or 0

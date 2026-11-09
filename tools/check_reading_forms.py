@@ -45,10 +45,18 @@ columns on every certified fast CPU row and every GPU parity row, with the
 same of the column: a ``native_route`` column does not satisfy it, since
 the native router does not apply the facade's prefix rule.
 
+The rider document of the chunk-cut campaign
+(``schemas/chunked_cuts_riders.schema.json``, written by
+``run_chunked_cut_campaign.py summarize --riders-out``) is checked by
+:func:`riders_problems`; ``summarize`` runs that check on the document it
+writes.
+
 Usage::
 
     python tools/check_reading_forms.py parity <reading.json> \
         [--require special_tokens] [--require literal_segments] [--registry FILE]
+    python tools/check_reading_forms.py riders <riders.json> \
+        [--require special_tokens] [--require literal_segments]
 
 The arm (CPU or GPU) is read from the reading's ``schema``.
 
@@ -71,6 +79,7 @@ SCHEMAS = REPOSITORY_ROOT / "schemas"
 SPECIAL_TOKENS_SCHEMA = SCHEMAS / "special_tokens_column.schema.json"
 LITERAL_SEGMENTS_SCHEMA = SCHEMAS / "literal_segments_column.schema.json"
 ENGINE_DIFFERENTIAL_SCHEMA = SCHEMAS / "engine_differential_reading.schema.json"
+RIDERS_SCHEMA = SCHEMAS / "chunked_cuts_riders.schema.json"
 
 #: The constructed arm of an engine differential has to judge at least this
 #: many strings per face on the frozen build (condition D6b).
@@ -89,6 +98,28 @@ ARMS = {
 #: engine guard) as a share of an entry point's documents. Above it the
 #: column speaks mostly about the reference, not about segmentation.
 GUARD_DOCUMENT_SHARE = 0.01
+
+#: Upper bound on the reference bytes of the guard documents as a share of
+#: all bytes an entry point encoded: the document bound alone would admit
+#: a few long guard documents carrying most of the bytes.
+GUARD_BYTE_SHARE = 0.01
+
+#: Absolute floors beside the ratio checks: a column of a handful of
+#: documents passes every ratio. An entry point of the literal_segments
+#: column judges at least this many documents ...
+LITERAL_ENTRY_POINT_MIN_DOCUMENTS = 1_000
+#: ... the literal-dense battery at least this many strings per family
+#: (the battery generator reaches 15,000 to 87,000 strings per family; the
+#: families with the fewest literals set the floor) ...
+LITERAL_BATTERY_MIN_STRINGS = 10_000
+#: ... and in the GPU arm the ID route sends at least this share of its
+#: segment bytes to the GPU (a share near zero would read the CPU engine
+#: under the GPU arm's name).
+GPU_SHARE_FLOOR = 0.5
+
+#: Each rider arm a campaign requested runs on at least this many
+#: documents of every family in the rider document.
+RIDER_MIN_DOCUMENTS = 1
 
 #: The literal class every certified family has in 0.3.2: every face the
 #: registry certifies is served by the native literal segmenter. The
@@ -266,6 +297,11 @@ def literal_segments_problems(
     battery = column["battery"]
     if int(battery["mismatches"]) != 0:
         problems.append(f"{label}: battery {battery['mismatches']} mismatch(es)")
+    if int(battery["strings"]) < LITERAL_BATTERY_MIN_STRINGS:
+        problems.append(
+            f"{label}: the battery judged {battery['strings']} strings, fewer "
+            f"than {LITERAL_BATTERY_MIN_STRINGS}"
+        )
     seen: set[str] = set()
     for entry in column["entry_points"]:
         name = str(entry["entry_point"])
@@ -279,6 +315,17 @@ def literal_segments_problems(
         guard = entry["guard_documents"]
         if int(entry["mismatches"]) != 0:
             problems.append(f"{where}: {entry['mismatches']} mismatch(es)")
+        if documents < LITERAL_ENTRY_POINT_MIN_DOCUMENTS:
+            problems.append(
+                f"{where}: {documents} documents, fewer than "
+                f"{LITERAL_ENTRY_POINT_MIN_DOCUMENTS}"
+            )
+        total_bytes = sum(int(value) for value in segment_bytes.values())
+        if int(guard["bytes_hf"]) > GUARD_BYTE_SHARE * total_bytes:
+            problems.append(
+                f"{where}: guard documents hold {guard['bytes_hf']} of "
+                f"{total_bytes} bytes, above {GUARD_BYTE_SHARE:.0%}"
+            )
         if sum(int(value) for value in paths.values()) != documents:
             problems.append(f"{where}: the path classes do not add up to the documents")
         if int(guard["count"]) != int(paths["hf_engine_guard"]):
@@ -340,6 +387,10 @@ def literal_segments_problems(
                 problems.append(f"{where}: the GPU arm reports no gpu_share")
             elif total and abs(float(share) - int(segment_bytes["gpu"]) / total) > 1e-6:
                 problems.append(f"{where}: gpu_share does not match the bytes")
+            elif name == "id_route" and float(share) < GPU_SHARE_FLOOR:
+                problems.append(
+                    f"{where}: gpu_share {share} is below {GPU_SHARE_FLOOR}"
+                )
     if "id_route" not in seen:
         problems.append(f"{label}: the ID route is not measured")
     return problems
@@ -562,6 +613,69 @@ def engine_differential_problems(
     return problems
 
 
+def riders_problems(document: object, require: Iterable[str] = ()) -> list[str]:
+    """Problems of a chunk-cut campaign's rider document (empty: it passes).
+
+    The document is ``summarize --riders-out``'s
+    (``schemas/chunked_cuts_riders.schema.json``). Every family ran every
+    arm the document names (and every arm in ``require``) on at least
+    :data:`RIDER_MIN_DOCUMENTS` documents; no arm records a mismatch; the
+    ``special_tokens`` arm has no vacuous document (an identity or prefix
+    face answered by the reference) and none whose answering counter the
+    facade did not report; the ``literal_segments`` arm has no document
+    whose path was not reported. Otherwise a corpus-scale reading could
+    say "0 mismatches" with every document answered by the reference.
+    """
+    problems = _schema_problems("riders", document, RIDERS_SCHEMA)
+    if problems:
+        return problems
+    assert isinstance(document, Mapping)
+    requested = set(document["riders"])
+    missing = set(require) - requested
+    if missing:
+        problems.append(f"riders: the campaign did not run {sorted(missing)}")
+    for family, arms in sorted(document["families"].items()):
+        for name in sorted(requested | set(require)):
+            row = arms.get(name)
+            where = f"{family}: rider {name}"
+            if not isinstance(row, Mapping):
+                problems.append(f"{where}: not run")
+                continue
+            documents = int(row["documents"])
+            if documents < RIDER_MIN_DOCUMENTS:
+                problems.append(
+                    f"{where}: {documents} documents, fewer than "
+                    f"{RIDER_MIN_DOCUMENTS}"
+                )
+            if int(row["mismatches"]) != 0:
+                problems.append(f"{where}: {row['mismatches']} mismatch(es)")
+            if name == "special_tokens":
+                if int(row["vacuous"]) != 0:
+                    problems.append(
+                        f"{where}: {row['vacuous']} document(s) of an identity or "
+                        "prefix face were answered by the reference"
+                    )
+                for key in ("served_by", "classes"):
+                    counts = row[key]
+                    if int(counts.get("not_reported", 0)) != 0:
+                        problems.append(
+                            f"{where}: {counts['not_reported']} document(s) with "
+                            f"{key} not reported"
+                        )
+                    if sum(int(value) for value in counts.values()) != documents:
+                        problems.append(f"{where}: {key} does not add up")
+            else:
+                paths = row["paths"]
+                if int(paths.get("not_reported", 0)) != 0:
+                    problems.append(
+                        f"{where}: {paths['not_reported']} document(s) whose path "
+                        "was not reported"
+                    )
+                if sum(int(value) for value in paths.values()) != documents:
+                    problems.append(f"{where}: paths do not add up")
+    return problems
+
+
 def registry_fingerprints(registry: Mapping[str, Any]) -> dict[str, str]:
     """``{family: added_frontend_fingerprint}`` of a support registry."""
     frontends = {
@@ -644,7 +758,28 @@ def main(argv: list[str] | None = None) -> int:
             "family; any: take the column's own value)"
         ),
     )
+    riders = commands.add_parser(
+        "riders", help="check a chunk-cut campaign's rider document"
+    )
+    riders.add_argument("document", type=Path)
+    riders.add_argument(
+        "--require",
+        action="append",
+        default=[],
+        choices=COLUMNS,
+        help="a rider arm the campaign must have run (repeatable)",
+    )
     arguments = parser.parse_args(argv)
+    if arguments.command == "riders":
+        rider_problems = riders_problems(
+            load_json(arguments.document), arguments.require
+        )
+        for problem in rider_problems:
+            print(f"error: {problem}", file=sys.stderr)
+        if rider_problems:
+            return 1
+        print(f"{arguments.document}: rider document passed")
+        return 0
     reading = load_json(arguments.reading)
     if not isinstance(reading, dict):
         raise GenerationError(f"{arguments.reading}: not a JSON object")

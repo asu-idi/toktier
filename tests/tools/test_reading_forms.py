@@ -269,7 +269,7 @@ def _registry() -> dict[str, Any]:
 def _segments_column(
     arm: str = "cpu", served: bool = True, fingerprint: str = "a" * 64
 ) -> dict[str, Any]:
-    gpu_bytes = 600 if arm == "gpu" else 0
+    gpu_bytes = 60000 if arm == "gpu" else 0
     entry: dict[str, Any] = {
         "entry_point": "id_route",
         "documents": 1000,
@@ -284,12 +284,12 @@ def _segments_column(
             "literals": 5000,
             "text": 6000,
             "largest_text_bytes": 70000,
-            "bytes": {"gpu": gpu_bytes, "fast_cpu": 300, "hf": 100},
+            "bytes": {"gpu": gpu_bytes, "fast_cpu": 30000, "hf": 100},
         },
         "guard_documents": {"count": 10, "bytes_hf": 100, "bound": 10},
     }
     if arm == "gpu":
-        entry["gpu_share"] = 600 / 1000
+        entry["gpu_share"] = 60000 / 90100
         entry["gpu_min_bytes"] = 65536
     return {
         "literal_class": "served" if served else "unserved",
@@ -528,6 +528,147 @@ def test_a_self_declared_unserved_class_does_not_pass_where_served_is_expected(
     assert result.returncode == 1 and "the face is 'served'" in result.stderr
     result = subprocess.run(
         [*command, str(path), "--literal-class", "any"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+# -- floors (S10) ---------------------------------------------------------------
+
+
+def test_a_column_of_a_handful_of_documents_does_not_pass_the_ratios() -> None:
+    column = _segments_column("cpu")
+    entry = column["entry_points"][0]
+    entry["documents"] = 2
+    entry["paths"] = {
+        "gigatoken_segmented": 2,
+        "gpu_segmented": 0,
+        "hf_added_token": 0,
+        "hf_engine_guard": 0,
+    }
+    entry["guard_documents"] = {"count": 0, "bytes_hf": 0, "bound": 0}
+    entry["segments"]["bytes"]["hf"] = 0
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("2 documents, fewer than 1000" in p for p in problems)
+    column = _segments_column("cpu")
+    column["battery"]["strings"] = 4
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("battery judged 4 strings" in p for p in problems)
+
+
+def test_guard_documents_are_bounded_in_bytes_too() -> None:
+    column = _segments_column("cpu")
+    entry = column["entry_points"][0]
+    entry["segments"]["bytes"]["hf"] = 20000
+    entry["guard_documents"]["bytes_hf"] = 20000
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("guard documents hold 20000 of 50000 bytes" in p for p in problems)
+
+
+def test_the_gpu_arm_holds_a_gpu_share_floor_on_the_id_route() -> None:
+    column = _segments_column("gpu")
+    entry = column["entry_points"][0]
+    entry["segments"]["bytes"].update(gpu=1000, fast_cpu=89000)
+    entry["gpu_share"] = 1000 / 90100
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("is below 0.5" in p for p in problems)
+    # The state route is held to bytes on the GPU, not to the share floor.
+    entry["entry_point"] = "state_route"
+    column["entry_points"].insert(0, _segments_column("gpu")["entry_points"][0])
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert not any("is below 0.5" in p for p in problems)
+
+
+def _riders_document() -> dict[str, Any]:
+    return {
+        "schema": "toktier.chunked_cuts_riders.v1",
+        "tool_sha256": "c" * 64,
+        "chunked_identity": "sha256:" + "d" * 64,
+        "fast_cpu_source_digest_v2": "e" * 64,
+        "rider_share": 0.05,
+        "units": 3,
+        "riders": ["literal_segments", "special_tokens"],
+        "families": {
+            "qwen3_8b": {
+                "special_tokens": {
+                    "documents": 40,
+                    "mismatches": 0,
+                    "served_by": {"facade": 40},
+                    "classes": {"identity": 40},
+                    "vacuous": 0,
+                },
+                "literal_segments": {
+                    "documents": 40,
+                    "mismatches": 0,
+                    "literals": 120,
+                    "paths": {"gigatoken_segmented": 40},
+                    "bytes": {"gpu": 0, "fast_cpu": 9000, "hf": 0},
+                    "segments_reported": 40,
+                },
+            }
+        },
+    }
+
+
+def test_a_complete_rider_document_passes() -> None:
+    assert forms.riders_problems(_riders_document()) == []
+    assert forms.riders_problems(_riders_document(), ["special_tokens"]) == []
+
+
+@pytest.mark.parametrize(
+    ("change", "named"),
+    [
+        ("vacuous", "answered by the reference"),
+        ("not_reported", "served_by not reported"),
+        ("class_not_reported", "classes not reported"),
+        ("path_not_reported", "path was not reported"),
+        ("no_documents", "0 documents, fewer than 1"),
+        ("arm_missing", "rider literal_segments: not run"),
+        ("mismatch", "1 mismatch"),
+    ],
+)
+def test_the_rider_document_refuses_what_would_read_as_zero_mismatches(
+    change: str, named: str
+) -> None:
+    document = _riders_document()
+    row = document["families"]["qwen3_8b"]
+    special, segments = row["special_tokens"], row["literal_segments"]
+    if change == "vacuous":
+        special.update(vacuous=40, served_by={"reference": 40})
+    elif change == "not_reported":
+        special["served_by"] = {"facade": 39, "not_reported": 1}
+    elif change == "class_not_reported":
+        special["classes"] = {"identity": 39, "not_reported": 1}
+    elif change == "path_not_reported":
+        segments["paths"] = {"gigatoken_segmented": 39, "not_reported": 1}
+    elif change == "no_documents":
+        segments.update(documents=0, paths={}, literals=0, segments_reported=0)
+    elif change == "arm_missing":
+        del row["literal_segments"]
+    else:
+        special["mismatches"] = 1
+    problems = forms.riders_problems(document)
+    assert any(named in p for p in problems), problems
+
+
+def test_the_rider_document_names_a_required_arm_the_campaign_did_not_run(
+    tmp_path: Path,
+) -> None:
+    document = _riders_document()
+    document["riders"] = ["special_tokens"]
+    del document["families"]["qwen3_8b"]["literal_segments"]
+    assert forms.riders_problems(document) == []
+    problems = forms.riders_problems(document, ["literal_segments"])
+    assert any("did not run ['literal_segments']" in p for p in problems)
+    document["extra"] = 1
+    assert any("Additional properties" in p for p in forms.riders_problems(document))
+    path = tmp_path / "riders.json"
+    path.write_text(json.dumps(_riders_document()), encoding="utf-8")
+    command = [sys.executable, str(TOOLS / "check_reading_forms.py"), "riders"]
+    result = subprocess.run(
+        [*command, str(path), "--require", "special_tokens"],
         check=False,
         capture_output=True,
         text=True,

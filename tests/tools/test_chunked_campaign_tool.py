@@ -499,6 +499,69 @@ def test_run_adversarial_and_summarize_end_to_end(
     }
 
 
+def test_summarize_checks_the_rider_document_it_writes(
+    tmp_path: Path, corpus: str, isolated_loader: None
+) -> None:
+    """``summarize --riders-out`` writes the rider document and holds it to
+    ``check_reading_forms.riders_problems``: a document that would read
+    "0 mismatches" with an arm unreported does not pass."""
+    import check_reading_forms
+
+    family = _certified_family()
+    out = tmp_path / "out"
+    run = [
+        "run",
+        "--source",
+        corpus,
+        "--families",
+        family,
+        "--min-chars",
+        "512",
+        "--chunk-chars",
+        "500",
+        "--riders",
+        "special_tokens,literal_segments",
+        "--rider-share",
+        "1",
+        "--out",
+        str(out / "shard_0000.json"),
+        "--tag",
+        "test",
+    ]
+    assert tool.main(run) == tool.STATUS_OK
+    summarize = [
+        "summarize",
+        "--shards",
+        str(out / "shard_*.json"),
+        "--out",
+        str(out / "readings.json"),
+        "--riders-out",
+        str(out / "riders.json"),
+        "--corpus-id",
+        "generated two-document text corpus",
+        "--run-id",
+        "chunked-cuts-riders-test",
+        "--date",
+        "2026-11-09",
+        "--source-commit",
+        "0" * 40,
+        "--expected-units",
+        "1",
+    ]
+    assert tool.main(summarize) == tool.STATUS_OK
+    riders = json.loads((out / "riders.json").read_text(encoding="utf-8"))
+    assert riders["riders"] == ["literal_segments", "special_tokens"]
+    assert check_reading_forms.riders_problems(riders) == []
+    assert riders["families"][family]["special_tokens"]["documents"] == 2
+    # The same shards with one arm's answer unreported: refused.
+    shard_path = out / "shard_0000.json"
+    shard = json.loads(shard_path.read_text(encoding="utf-8"))
+    arm = shard["families"][family]["riders"]["special_tokens"]
+    arm["served_by"] = {"not_reported": arm["documents"]}
+    shard_path.write_text(json.dumps(shard), encoding="utf-8")
+    assert tool.main(summarize) == tool.STATUS_MISMATCH
+
+
 def test_family_groups_of_one_unit_merge_once(
     tmp_path: Path, corpus: str, isolated_loader: None
 ) -> None:

@@ -38,7 +38,10 @@ const SHIPPED: [&str; 15] = [
     "qwen3_8b",
 ];
 
-/// The shipped families outside the certified repair roster.
+/// The shipped families outside the chunked admission roster (the
+/// certified repair roster plus the records carried over from it). The
+/// refusal reason keeps its historical name,
+/// `artifact_not_in_certified_repair_roster`.
 const NON_ROSTER: [&str; 4] = ["hy3", "kimi_k3", "laguna_s_2_1", "ling_3_0_flash"];
 
 fn artifact_root() -> Option<PathBuf> {

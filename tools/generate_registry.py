@@ -1274,6 +1274,46 @@ def carryover_problems(registry_path: Path) -> list[str]:
     return problems
 
 
+def delivery_device_problems(registry_path: Path) -> list[str]:
+    """Per record, the prebuilt delivery judges every device the JIT one does.
+
+    ``gpu_delivery="auto"`` prefers the prebuilt delivery whenever it can
+    serve the device. That choice never trades a judged device for an
+    unjudged one only while, for every record, the devices the prebuilt
+    delivery is judged on include those the JIT delivery is judged on. The
+    shipped registry has this property; this check keeps it an invariant
+    of the data rather than a coincidence of it.
+    """
+    document = load_json(registry_path)
+    problems: list[str] = []
+    for artifact in document.get("artifacts") or ():
+        if not isinstance(artifact, dict):
+            continue
+        gpu = (artifact.get("backends") or {}).get("gpu")
+        deliveries = (gpu.get("deliveries") or {}) if isinstance(gpu, dict) else {}
+        jit = deliveries.get("jit") if isinstance(deliveries, dict) else None
+        prebuilt = deliveries.get("prebuilt") if isinstance(deliveries, dict) else None
+        if not isinstance(jit, dict) or jit.get("status") not in (
+            "certified",
+            "certified_source",
+        ):
+            continue
+        judged_jit = set(jit.get("devices") or ())
+        judged_prebuilt = (
+            set(prebuilt.get("devices") or ())
+            if isinstance(prebuilt, dict) and prebuilt.get("status") == "certified"
+            else set()
+        )
+        missing = judged_jit - judged_prebuilt
+        if missing:
+            problems.append(
+                f"{artifact.get('family')}: the JIT delivery is judged on "
+                f"{sorted(missing)} where the prebuilt delivery is not; "
+                'gpu_delivery="auto" would prefer an unjudged prebuilt image'
+            )
+    return problems
+
+
 def packaged_copy_problems(registry_path: Path) -> list[str]:
     """The installed copy must be byte-identical to the repository copy.
 
@@ -1512,6 +1552,7 @@ def main(argv: list[str] | None = None) -> int:
         problems += rust_api_binding_problems(arguments.out)
         problems += fastokens_binding_problems(arguments.out)
         problems += carryover_problems(arguments.out)
+        problems += delivery_device_problems(arguments.out)
         problems += packaged_copy_problems(arguments.out)
     if arguments.release_check:
         problems = list(problems) + release_problems(arguments.out)

@@ -56,26 +56,11 @@ native delivery must preserve two rules:
 - the list of shipped architectures is therefore short by construction: it
   contains the devices on which verdicts were actually run.
 
-0.3.2, in one place, the three things a GPU-route serving integration waits
-for:
-
-- `gpu_delivery="auto"` selects the shipped prebuilt delivery whenever it can
-  serve the observed architecture (fatbin shipped and verified, an embedded
-  image for the architecture, the native host ready), and JIT only when it
-  cannot and the `gpu-jit` extra is installed. In 0.3.0 an importable `ninja`
-  alone selects JIT, which on a serving host that carries `ninja` for other
-  reasons means a first-request kernel build of tens of seconds
-  (`docs/gpu-jit.md` Section 9);
-- the native front end segments added-token literals on the GPU route instead
-  of handing the whole input to the reference engine;
-- `cuda:N` device selection.
-
-0.3.2: admit the Rust GPU route by source identity under the CPU route's rule,
-and name the real cause in the refusal. In 0.3.0 a build whose reference
-libraries resolve outside their certified reference versions runs the fast CPU
-engine but not the GPU route, except under `Policy::Experimental`, and the
-refusal of an explicitly named CUDA device says the build is not in the
-shipped runtime-build registry (`docs/rust-api.md`).
+A later release: the Rust GPU route on a build whose reference libraries
+resolve outside their certified reference versions. Such a build runs the fast
+CPU engine and, except under `Policy::Experimental`, not the GPU route; a
+build from the judged sources on another compiler or flag recipe already
+admits the GPU route under the default policy (`docs/rust-api.md`).
 
 One question the legacy host leaves open. A process that has loaded one
 kernel delivery and is then asked for the other is refused, and the GPU lane
@@ -110,12 +95,6 @@ worth recording why the correction mattered. The record has carried
 was a path from that field to the Python property, whose lookup did not
 consult the store the certified configurations actually use. No format version
 moved and no stored session was affected.
-
-0.3.2: on a persistent session whose planned route puts the GPU ahead of the
-fast CPU engine, reading `Session.revision` before the first write raises
-`RuntimeError` instead of returning the count (`docs/contracts/api.md` Section
-5.2; 0.2.9 behaves the same, and no id is affected). The fast CPU backend's
-session engine is to set up the reference tokenizer that read needs.
 
 ## Platforms
 
@@ -164,9 +143,6 @@ continues to route to the HF reference implementation. Widening the
 adapter's reach from the eleven families with a repair-table entry to the
 fifteen the evidence covers is later work.
 
-0.3.2: the `fastokens` extra carries its own `tokenizers==0.22.2` constraint,
-or `toktier-fastokens` is judged against the 0.23 line.
-
 ## CPU parallel BPE for long requests
 
 **Shipped in 0.3.0, on both paths** (`toktier.chunked.encode`,
@@ -184,7 +160,8 @@ chunks on its own worker pool and concatenates them before the ids reach
 Python; each call picks the path the admission table allows. The Rust
 `toktier` crate reaches the native encoder through `Tokenizer::chunked()`
 under the same table. Admission
-is the certified repair roster with a normalizer the rule reasons about,
+is the certified repair roster, and the records carried from one of its
+artifacts, with a normalizer the rule reasons about,
 narrowed to the artifacts the admission table the package ships
 certifies, which takes both levels of chunked-path evidence. The SGLang
 adapter can use it for long stateless requests, and its worker pool
@@ -206,41 +183,6 @@ What remains is registered for a later release:
   encoder's pool already has; and per-chunk guard judgement inside a
   plain `encode`, so that an unchunked request only pays reference speed
   for the passage that tripped a guard.
-
-0.3.2: segment the serial fast route at added-token literals the way the
-chunked rows are. Today a prompt that contains an added-token literal, as
-every prompt rendered from a chat template does, goes whole to the
-reference engine on the serial route, so such a request below the chunked
-threshold runs at reference speed; above it the chunked path cuts around
-each literal, encodes the chunk that holds it on the reference engine and
-keeps the fast engine for the other chunks.
-
-0.3.2: size the native chunk pool from the configured worker count. In 0.3.0
-the native chunk encoder runs on the process-wide Rayon pool, so its worker
-count follows `RAYON_NUM_THREADS`, and a process that sets it to `1` gets no
-chunk parallelism (`docs/serving.md` Section 3).
-
-0.3.2: decide whether both faces reject `min_chunk=0`. Both accept it today
-and read it as no lower bound on a chunk's length, which `docs/rust-api.md`
-now says; an earlier text of that contract called it `INVALID_ARGUMENT`.
-
-0.3.2: bring the `toktier.chunked` module docstring up to date. It still
-says that by default the call is not a native change, while the native
-chunk encoder runs by default on the certified rows; `docs/serving.md`
-Section 3 describes the current rule.
-
-0.3.2: add chunked admission rows for the two carried artifacts,
-`deepseek_v4_1_flash` and `mimo_v2_6`. Their cut readings and adversarial
-battery are taken; the table generator first has to accept a carried
-record.
-
-0.3.2: serve the default `add_special_tokens=True` on the corrected CPU
-engine. Today a plain `encode(text)` on an artifact with a post-processor
-is served by the reference backend at reference speed; the ids are
-unaffected. The plan is to classify
-post-processors, so that one which inserts no token takes the fast route,
-and, for the artifacts whose template does insert tokens, to insert them in
-the facade with certified readings for `add_special_tokens=True`.
 
 ## Routing large session deltas to the GPU
 

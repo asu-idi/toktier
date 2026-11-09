@@ -19,7 +19,6 @@ eligible input crosses the configured byte threshold.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import threading
@@ -82,6 +81,12 @@ from .delivery import (
     auto_delivery,
     parse_device,
     profile_jit_installed,
+)
+from .fingerprint import (
+    FINGERPRINT_V2_TAG,
+    fingerprint,
+    repair_parameters_component,
+    source_binding,
 )
 from .special_tokens import SpecialTokenPlan, plan_special_tokens
 from .store import DEFAULT_CACHE_BUDGET_BYTES, EntryStore
@@ -765,6 +770,8 @@ class Tokenizer:
         # facade (``toktier.chunked`` registers one); ``explain()`` appends
         # each under its name.
         self._extra_reports: dict[str, Callable[[], Mapping[str, object]]] = {}
+        # Which source identity each opened store's fingerprint carries.
+        self._store_bindings: dict[str, dict[str, str]] = {}
         self._closed = False
 
     # -- identity ------------------------------------------------------
@@ -1199,6 +1206,13 @@ class Tokenizer:
             report["store"] = native_runtime.store_stats()
         elif self._entry_store is not None:
             report["store"] = self._entry_store.stats()
+        report["store_fingerprint"] = {
+            "domain": FINGERPRINT_V2_TAG.decode("ascii").rstrip("\0"),
+            "owners": {
+                owner: dict(binding)
+                for owner, binding in sorted(self._store_bindings.items())
+            },
+        }
         report["session_repair"] = self._session_repair_report()
         report["runtime_policy"] = {
             "device": self._device_request,
@@ -1756,7 +1770,9 @@ class Tokenizer:
                 fast_encoder,
                 gpu_encoder,
                 repair_fast_cpu,
-                self._semantic_fingerprint(None, native_fast_cpu=repair_fast_cpu),
+                self._semantic_fingerprint(
+                    None, native_fast_cpu=repair_fast_cpu, native_owned=True
+                ),
                 seal_guard,
                 self._postprocessor_adds_tokens,
                 self._config.diagnostics,
@@ -1928,47 +1944,71 @@ class Tokenizer:
         repair: _SessionRepair | None = None,
         *,
         native_fast_cpu: bool = False,
+        native_owned: bool = False,
     ) -> bytes:
         """32-byte identity binding artifact, oracle and engine semantics.
 
         Any component changing produces a different fingerprint, so
         stored sessions from another meaning miss and re-encode instead
-        of being replayed. The preimage is internal to the facade.
+        of being replayed. The preimage is internal to the facade
+        (:mod:`toktier.facade.fingerprint`). ``native_owned`` names a
+        store owned by the native request runtime, which is keyed on the
+        version-normalized source identities when the shipped registry
+        binds them; the Python entry store stays on the build's own
+        digests.
         """
-        digest = hashlib.sha256(b"toktier.facade.fingerprint.v1\0")
+        from ..engine.gpu.native import native_host_build_facts
+
         repair_stats = repair.stats() if repair is not None else {}
-        for component in (
-            self._artifact_sha256,
-            ORACLE_PACKAGE,
-            oracle_version() or "",
-            _ENGINE_ID,
-            _SESSION_SEMVER,
+        engine = self._snapshot.fast_cpu_engine
+        binding = source_binding(
+            native_owned=native_owned,
+            fast_cpu_v1=engine.source_digest,
+            native_host_v1=native_host_build_facts().source_digest,
+        )
+        spec = (
+            family_spec(self.family, self._artifact_sha256)
+            if native_fast_cpu or repair is not None
+            else None
+        )
+        self._store_bindings["native" if native_owned else "python"] = (
+            binding.report()
+        )
+        return fingerprint(
+            FINGERPRINT_V2_TAG,
             (
-                BACKEND_FAST_CPU
-                if native_fast_cpu
-                else (
-                    str(repair_stats.get("backend"))
-                    if repair is not None
-                    else BACKEND_REFERENCE
-                )
+                self._artifact_sha256,
+                self._loader_face_sha256,
+                ORACLE_PACKAGE,
+                oracle_version() or "",
+                _ENGINE_ID,
+                _SESSION_SEMVER,
+                (
+                    BACKEND_FAST_CPU
+                    if native_fast_cpu
+                    else (
+                        str(repair_stats.get("backend"))
+                        if repair is not None
+                        else BACKEND_REFERENCE
+                    )
+                ),
+                (
+                    "toktier-fast-repair-v1"
+                    if native_fast_cpu
+                    else (repair.config_id if repair is not None else "")
+                ),
+                str(repair_stats.get("engine_version") or ""),
+                str(repair_stats.get("engine_digest") or ""),
+                engine.version or "",
+                binding.axis,
+                binding.fast_cpu,
+                binding.native_host,
+                "\x1f".join(engine.build_flags),
+                engine.toolchain or "",
+                engine.config_digest or "",
+                repair_parameters_component(spec),
             ),
-            (
-                "toktier-fast-repair-v1"
-                if native_fast_cpu
-                else (repair.config_id if repair is not None else "")
-            ),
-            str(repair_stats.get("engine_version") or ""),
-            str(repair_stats.get("engine_digest") or ""),
-            self._snapshot.fast_cpu_engine.version or "",
-            self._snapshot.fast_cpu_engine.source_digest or "",
-            "\x1f".join(self._snapshot.fast_cpu_engine.build_flags),
-            self._snapshot.fast_cpu_engine.toolchain or "",
-            self._snapshot.fast_cpu_engine.config_digest or "",
-        ):
-            raw = component.encode("utf-8")
-            digest.update(len(raw).to_bytes(4, "little"))
-            digest.update(raw)
-        return digest.digest()
+        )
 
 
 def from_pretrained(

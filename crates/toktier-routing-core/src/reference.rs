@@ -1821,6 +1821,21 @@ pub(crate) mod test_support {
             const { std::cell::Cell::new(false) };
     }
 
+    /// The merge table of the test faces (`\u{120}` is the byte-level
+    /// space).
+    const FACE_MERGES: &[(&str, &str)] = &[
+        ("t", "h"),
+        ("th", "e"),
+        ("\u{120}", "the"),
+        ("e", "r"),
+        ("i", "n"),
+        ("o", "n"),
+        ("a", "n"),
+        ("\u{120}", "a"),
+        ("l", "o"),
+        ("lo", "r"),
+    ];
+
     /// Normalizer of a test face.
     #[derive(Clone, Copy)]
     pub(crate) enum TestNormalizer {
@@ -1854,8 +1869,18 @@ pub(crate) mod test_support {
             };
             vocab.insert(char::from_u32(codepoint).unwrap().to_string(), byte);
         }
+        // A few merges, so the ids of a text depend on its context: a
+        // segment border placed where the reference has none ("th|e")
+        // changes the ids, which a one-token-per-byte face would hide.
+        let mut merges = Vec::new();
+        for (left, right) in FACE_MERGES {
+            let merged = format!("{left}{right}");
+            let next = u32::try_from(vocab.len()).unwrap();
+            vocab.entry(merged).or_insert(next);
+            merges.push(((*left).to_owned(), (*right).to_owned()));
+        }
         let model = BPE::builder()
-            .vocab_and_merges(vocab, Vec::new())
+            .vocab_and_merges(vocab, merges)
             .build()
             .unwrap();
         let mut tokenizer = Tokenizer::new(model);
@@ -2344,9 +2369,8 @@ mod literal_class_tests {
                 }
             },
         );
-        if let Ok(engine) = ReferenceEngine::from_bytes(&json) {
-            assert!(!engine.literal_segmentation_served());
-            assert!(!engine.engine_matcher_agrees());
-        }
+        let engine = ReferenceEngine::from_bytes(&json).expect("the edited face loads");
+        assert!(!engine.literal_segmentation_served());
+        assert!(!engine.engine_matcher_agrees());
     }
 }

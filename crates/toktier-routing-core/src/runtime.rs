@@ -4070,15 +4070,22 @@ mod literal_state_tests {
                     );
                     assert_state(&tail, &reference, &text);
                     let mut full = text.clone();
+                    let mut paths = Vec::new();
                     for delta in [
                         "<|im_start|>assistant\n",
                         "<thi",
                         "nk>ok</think> done<|im_end|>",
                     ] {
-                        router.append(&mut tail, delta).unwrap();
+                        paths.push(router.append(&mut tail, delta).unwrap().path);
                         full.push_str(delta);
                         assert_state(&tail, &reference, &full);
                     }
+                    // The appends are repaired by the engine, not answered by
+                    // re-encoding the transcript through the reference.
+                    assert!(
+                        paths.iter().all(|path| path == "gigatoken_repair"),
+                        "{paths:?}"
+                    );
                     // Materialized state encode.
                     let encoded = router.encode(&text).unwrap();
                     let expected = reference.encode_core(&text).unwrap();
@@ -4142,6 +4149,45 @@ mod literal_state_tests {
         let report = router.append(&mut tail, &stable).unwrap();
         assert_eq!(report.path, "gpu_full");
         assert_state(&tail, &reference, &stable);
+    }
+
+    /// The two whole-document fallbacks of a GPU-headed, literal-bearing
+    /// document: a small segment the corrected CPU engine's guard refuses
+    /// (`EngineGuard`, on the ID and the state route), and a device row
+    /// of a large segment the span bridge rejects (segmented span guard).
+    #[test]
+    fn segmented_gpu_fallbacks_answer_the_whole_document_on_the_reference() {
+        let (router, reference) = router(TestNormalizer::Nfc, true);
+        let long = "the committee met on tuesday and agreed to the plan for the year";
+        // Engine guard: the small trailing segment is not NFC-stable.
+        let guarded = format!("<|im_start|>user\n{long}<|im_end|>\ne\u{301}t\u{301}");
+        let routed = router.encode_ids(&guarded, false).unwrap();
+        assert_eq!(routed.ids, reference.encode_ids(&guarded, false).unwrap());
+        assert_eq!(routed.backend, BACKEND_REFERENCE);
+        assert_eq!(routed.path.as_deref(), Some("hf_engine_guard"));
+        assert_eq!(routed.reason, Some(R_INPUT_GUARD_ROUTED));
+        let mut tail = TailState::new();
+        let report = router.append(&mut tail, &guarded).unwrap();
+        assert_eq!(report.path, "hf_engine_guard");
+        assert_state(&tail, &reference, &guarded);
+        assert_eq!(
+            router.encode(&guarded).unwrap(),
+            reference.encode_core(&guarded).unwrap()
+        );
+        // Segmented span guard: the large segment is not NFC-stable, the
+        // device row of its normalized text does not close over it.
+        let unstable = format!("<|im_start|>user\ncafe\u{301} {long}<|im_end|>\nok");
+        let routed = router.encode_ids(&unstable, false).unwrap();
+        assert_eq!(routed.ids, reference.encode_ids(&unstable, false).unwrap());
+        assert_eq!(routed.path.as_deref(), Some("gpu_segmented"));
+        let mut tail = TailState::new();
+        let report = router.append(&mut tail, &unstable).unwrap();
+        assert_eq!(report.path, "hf_span_guard");
+        assert_state(&tail, &reference, &unstable);
+        let stats = router.stats();
+        let guard = stats.events.last().unwrap();
+        assert_eq!(guard.code, R_INPUT_GUARD_ROUTED);
+        assert_eq!(guard.detail["stage"], "span_bridge");
     }
 
     #[test]

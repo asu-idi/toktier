@@ -77,6 +77,7 @@ from ..routing.probe import probe
 from ..routing.registry_load import shipped_registry
 from ..routing.registry_view import ArtifactRecord
 from ..session import SessionPatch, SessionUpdate
+from .special_tokens import SpecialTokenPlan, plan_special_tokens
 from .store import DEFAULT_CACHE_BUDGET_BYTES, EntryStore
 
 if TYPE_CHECKING:
@@ -460,9 +461,21 @@ class Session:
         return SessionPatch(replace_from=cut, replacement_ids=tuple(current[cut:]))
 
     def final_ids(self, add_special_tokens: bool = True) -> list[int]:
-        """The read-time view: postprocessor applied over the core stream."""
+        """The read-time view: postprocessor applied over the core stream.
+
+        ``True`` means the post-processor of the reference document. When
+        that post-processor adds nothing or one special-token id in front
+        (:mod:`toktier.facade.special_tokens`) and the session runs on a
+        path with the exact-ID guarantee, the answer is that prefix over
+        the session's own stream, with no encode. Otherwise the text is
+        encoded once more with ``add_special_tokens=True``.
+        """
         if not add_special_tokens:
             return list(self._ids)
+        tokenizer = self._tokenizer
+        special = tokenizer._special_tokens
+        if special.facade_served and tokenizer._session_path_exact():
+            return [*special.prefix_ids, *self._ids]
         return list(
             self._tokenizer.encode(self._text, add_special_tokens=True).ids
         )
@@ -580,7 +593,22 @@ class Tokenizer:
             self._added_router = AddedTokenRouter(_RouteEveryInput())
         else:
             self._added_router = AddedTokenRouter(frontend)
-        self._postprocessor_adds_tokens = document.get("post_processor") is not None
+        # ``add_special_tokens=True`` is the post-processor of this same
+        # document. Faces whose post-processor adds nothing, or exactly one
+        # special-token id in front, are answered by the facade over the
+        # core stream; the classification is confirmed on the reference
+        # engine before it is used (``special_tokens.self_check``).
+        backend = self._backend
+        self._special_tokens: SpecialTokenPlan = plan_special_tokens(
+            document,
+            lambda text, special: backend.encode(text, add_special_tokens=special),
+        )
+        self._special_token_requests = {"facade": 0, "reference": 0}
+        # The router's own answer for a ``True`` that reaches it: anything
+        # but a face whose post-processor adds nothing goes to the
+        # reference. The facade never sends ``True`` for a prefix face, so
+        # this only decides what a stray native call gets: reference ids.
+        self._postprocessor_adds_tokens = self._special_tokens.kind != "identity"
         device_probe = (
             CudaHostProbe(
                 config=self._config,
@@ -818,6 +846,11 @@ class Tokenizer:
         the store. With ``add_special_tokens=True``, omitting
         ``lookup`` selects the plain routed path, while an explicit
         ``session`` or ``lookup="auto"`` raises ``UNSUPPORTED_CONFIG``.
+        ``add_special_tokens=True`` means the post-processor of the
+        reference document (the loader face): when it adds nothing, or
+        one special-token id in front, the core stream runs on the routed
+        path and the facade adds that id; any other post-processor runs
+        on the reference engine (``explain()["special_tokens"]``).
         Under certified and reference policies every variant returns
         the ids a from-scratch reference encode would return; an
         explicitly selected experimental repair backend labels itself
@@ -921,6 +954,15 @@ class Tokenizer:
                     "pre-postprocessor core stream",
                 },
             )
+        if add_special_tokens:
+            special = self._special_tokens
+            if special.facade_served:
+                # The plain routed path with the store bypassed, exactly as
+                # ``True`` always ran; the prefix is the document's own.
+                self._special_token_requests["facade"] += 1
+                core = self._encode_ids(text, lookup="off")
+                return [*special.prefix_ids, *core] if special.prefix_ids else core
+            self._special_token_requests["reference"] += 1
         native = self._native_request_runtime()
         if native is not None:
             native_ids = native.encode(
@@ -967,6 +1009,15 @@ class Tokenizer:
     ) -> list[list[int]]:
         """The body of :meth:`encode_batch`, answering with the engine's rows."""
         self._require_open()
+        if add_special_tokens and self._special_tokens.facade_served:
+            special = self._special_tokens
+            self._special_token_requests["facade"] += len(texts)
+            rows = self._encode_batch_core(texts, add_special_tokens=False)
+            if special.prefix_ids:
+                return [[*special.prefix_ids, *row] for row in rows]
+            return rows
+        if add_special_tokens:
+            self._special_token_requests["reference"] += len(texts)
         native = self._native_request_runtime()
         if native is not None:
             rows = native.encode_batch(
@@ -1179,6 +1230,10 @@ class Tokenizer:
                 ),
             }
         )
+        report["special_tokens"] = {
+            **self._special_tokens.report(),
+            "requests": dict(self._special_token_requests),
+        }
         if self._native_request_guard is not None:
             report["native_request_guard"] = dict(self._native_request_guard)
         for name, provider in self._extra_reports.items():
@@ -1298,6 +1353,18 @@ class Tokenizer:
     def _require_open(self) -> None:
         if self._closed:
             raise RuntimeError("backend is closed")
+
+    def _session_path_exact(self) -> bool:
+        """Whether session streams carry the exact-ID guarantee here.
+
+        False under the experimental policy, and so for the Fastokens
+        repair adapter, which is selectable only there and is declared
+        outside that guarantee.
+        """
+        return (
+            self._repair_backend_request != "fastokens"
+            and self._plan.policy is not RoutingPolicy.EXPERIMENTAL
+        )
 
     def _observe_native_gpu_open(self, native: Any) -> None:
         """Publish the loaded delivery once the deferred open happened.

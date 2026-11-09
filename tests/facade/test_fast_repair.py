@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -31,7 +32,7 @@ from toktier.routing.registry_view import (
     RegistryView,
 )
 
-from .conftest import Rig
+from .conftest import Rig, build_rig, byte_level_document
 
 _ENGINE_VERSION = "0.10.0+toktier.pinned.1"
 _SOURCE_DIGEST = "a" * 64
@@ -491,11 +492,29 @@ def test_added_token_store_seed_reports_the_actual_reference_result(
 
 
 def test_postprocessing_bypass_has_a_distinct_explain_counter(
-    rig: Rig, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A pre-execution capability route is not reported as an engine fault."""
+    """A pre-execution capability route is not reported as an engine fault.
+
+    The face appends a special token, a post-processor the facade does not
+    answer itself, so ``add_special_tokens=True`` keeps the reference route.
+    """
     import tokenizers
 
+    document = byte_level_document()
+    document["post_processor"] = {
+        "type": "TemplateProcessing",
+        "single": [
+            {"Sequence": {"id": "A", "type_id": 0}},
+            {"SpecialToken": {"id": "!", "type_id": 0}},
+        ],
+        "pair": [
+            {"Sequence": {"id": "A", "type_id": 0}},
+            {"Sequence": {"id": "B", "type_id": 1}},
+        ],
+        "special_tokens": {"!": {"id": "!", "ids": [33], "tokens": ["!"]}},
+    }
+    rig = build_rig(tmp_path, document)
     live = tokenizers.Tokenizer.from_file(str(rig.artifact_path))
     engine = _CountingEngine(live)
     backend = _PostprocessingFastBackend(rig.family, engine, live)

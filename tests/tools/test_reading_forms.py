@@ -495,3 +495,41 @@ def test_the_release_check_requires_the_columns_on_certified_rows(
         registry_path, cpu_reading=cpu_path, gpu_readings=gpu_paths
     )
     assert len(problems) == 1 and problems[0].startswith("sm_89/")
+
+
+# -- literal_class is held (S9) ------------------------------------------------
+
+
+def test_a_self_declared_unserved_class_does_not_pass_where_served_is_expected(
+    tmp_path: Path,
+) -> None:
+    column = _segments_column("cpu", served=False)
+    column["entry_points"][0]["guard_documents"]["bytes_hf"] = 0
+    # Taken as itself, an unserved column is consistent ...
+    assert forms.literal_segments_problems("f", column, arm="cpu") == []
+    # ... but a certified face is served in 0.3.2.
+    problems = forms.literal_segments_problems(
+        "f", column, arm="cpu", expected_literal_class="served"
+    )
+    assert any("the face is 'served'" in p for p in problems)
+    fingerprints = forms.registry_fingerprints(_registry())
+    row = _complete_row({"family": "qwen3_8b", "documents": 100}, "cpu", fingerprints)
+    row["literal_segments"] = column
+    column["added_frontend_fingerprint"] = fingerprints["qwen3_8b"]
+    problems = forms.release_column_problems(row, arm="cpu")
+    assert any("the face is 'served'" in p for p in problems)
+    # The command line expects served by default; "any" takes the column.
+    path = tmp_path / "reading.json"
+    path.write_text(json.dumps(_reading([row])), encoding="utf-8")
+    command = [sys.executable, str(TOOLS / "check_reading_forms.py"), "parity"]
+    result = subprocess.run(
+        [*command, str(path)], check=False, capture_output=True, text=True
+    )
+    assert result.returncode == 1 and "the face is 'served'" in result.stderr
+    result = subprocess.run(
+        [*command, str(path), "--literal-class", "any"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr

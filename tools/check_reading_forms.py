@@ -90,6 +90,13 @@ ARMS = {
 #: column speaks mostly about the reference, not about segmentation.
 GUARD_DOCUMENT_SHARE = 0.01
 
+#: The literal class every certified family has in 0.3.2: every face the
+#: registry certifies is served by the native literal segmenter. The
+#: column's own ``literal_class`` is held to it in a release reading (and
+#: by default on the command line), so a face demoted at run time, or a
+#: harness that writes ``unserved``, does not pass as an unserved face.
+EXPECTED_LITERAL_CLASS = "served"
+
 #: What the ``True`` column shows, by post-processor class.
 EVIDENCE_ROLE = {
     "identity": "regression_guard",
@@ -223,11 +230,14 @@ def literal_segments_problems(
     *,
     arm: str | None = None,
     added_frontend_fingerprint: str | None = None,
+    expected_literal_class: str | None = None,
 ) -> list[str]:
     """Problems of one family's ``literal_segments`` column (empty: it passes).
 
     ``arm`` (``cpu`` or ``gpu``) applies the arm's byte rule when given;
-    ``added_frontend_fingerprint`` is the registry record's, when known.
+    ``added_frontend_fingerprint`` is the registry record's, when known;
+    ``expected_literal_class`` is the class the face has to have, when
+    known (the column's own value is otherwise self-declared).
     """
     label = f"{family}: literal_segments"
     problems = _schema_problems(label, column, LITERAL_SEGMENTS_SCHEMA)
@@ -235,6 +245,15 @@ def literal_segments_problems(
         return problems
     assert isinstance(column, Mapping)
     served = column["literal_class"] == "served"
+    if (
+        expected_literal_class is not None
+        and column["literal_class"] != expected_literal_class
+    ):
+        problems.append(
+            f"{label}: the column reads literal_class "
+            f"{column['literal_class']!r}; the face is "
+            f"{expected_literal_class!r}"
+        )
     if (
         added_frontend_fingerprint is not None
         and column["added_frontend_fingerprint"] != added_frontend_fingerprint
@@ -331,6 +350,7 @@ def column_problems(
     *,
     arm: str | None = None,
     added_frontend_fingerprint: str | None = None,
+    expected_literal_class: str | None = None,
 ) -> list[str]:
     """Problems of every 0.3.2 column a parity row carries."""
     family = str(row.get("family", "<unknown>"))
@@ -347,6 +367,7 @@ def column_problems(
             row["literal_segments"],
             arm=arm,
             added_frontend_fingerprint=added_frontend_fingerprint,
+            expected_literal_class=expected_literal_class,
         )
     return problems
 
@@ -375,7 +396,9 @@ def release_column_problems(
     """Problems of a certified row of a release reading (empty: it passes).
 
     Both 0.3.2 columns are present, the ``special_tokens`` column is the
-    facade's, and every column passes :func:`column_problems`.
+    facade's, the ``literal_segments`` column reads the class every
+    certified family has (:data:`EXPECTED_LITERAL_CLASS`), and every
+    column passes :func:`column_problems`.
     """
     family = str(row.get("family", "<unknown>"))
     problems = [
@@ -386,7 +409,10 @@ def release_column_problems(
     ]
     problems += _surface_problems(family, row)
     problems += column_problems(
-        row, arm=arm, added_frontend_fingerprint=added_frontend_fingerprint
+        row,
+        arm=arm,
+        added_frontend_fingerprint=added_frontend_fingerprint,
+        expected_literal_class=EXPECTED_LITERAL_CLASS,
     )
     return problems
 
@@ -555,6 +581,8 @@ def parity_problems(
     reading: Mapping[str, Any],
     require: Iterable[str] = (),
     registry: Mapping[str, Any] | None = None,
+    *,
+    expected_literal_class: str | None = None,
 ) -> tuple[list[str], list[str]]:
     """``(problems, notes)`` of a parity reading's rows and their columns."""
     required = set(require)
@@ -579,7 +607,10 @@ def parity_problems(
         if "special_tokens" in required:
             problems += _surface_problems(family, row)
         problems += column_problems(
-            row, arm=arm, added_frontend_fingerprint=fingerprints.get(family)
+            row,
+            arm=arm,
+            added_frontend_fingerprint=fingerprints.get(family),
+            expected_literal_class=expected_literal_class,
         )
         notes += special_tokens_notes(family, row.get("special_tokens"))
     return problems, notes
@@ -603,12 +634,29 @@ def main(argv: list[str] | None = None) -> int:
         default=REPOSITORY_ROOT / "tables" / "support_registry.json",
         help="support registry naming each family's added-token table",
     )
+    parity.add_argument(
+        "--literal-class",
+        choices=("served", "unserved", "any"),
+        default=EXPECTED_LITERAL_CLASS,
+        help=(
+            "the literal class every literal_segments column must read "
+            f"(default {EXPECTED_LITERAL_CLASS}, the class of every certified "
+            "family; any: take the column's own value)"
+        ),
+    )
     arguments = parser.parse_args(argv)
     reading = load_json(arguments.reading)
     if not isinstance(reading, dict):
         raise GenerationError(f"{arguments.reading}: not a JSON object")
     registry = load_json(arguments.registry)
-    problems, notes = parity_problems(reading, arguments.require, registry)
+    problems, notes = parity_problems(
+        reading,
+        arguments.require,
+        registry,
+        expected_literal_class=(
+            None if arguments.literal_class == "any" else arguments.literal_class
+        ),
+    )
     for note in notes:
         print(note)
     for problem in problems:

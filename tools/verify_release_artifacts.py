@@ -29,11 +29,13 @@ ORACLE_REQUIREMENT = "tokenizers>=0.22.2,<0.24"
 LOADER_REQUIREMENT = "transformers>=4.57.6,<6"
 IDENTITY_SENTINEL_HEX = "73656e74696e656c" * 4
 IDENTITY_SENTINEL_BYTES = bytes.fromhex(IDENTITY_SENTINEL_HEX)
-#: The repository's support registry; the wheel's packaged copy is held to
-#: it (``tools/generate_registry.py --check``), so the count of certified
-#: integrated CPU entries a wheel must carry is read from here rather than
-#: written down beside the tool.
-REPOSITORY_REGISTRY = ROOT / "tables" / "support_registry.json"
+#: The tool-side declaration of the integrated CPU engine. The count of
+#: certified integrated CPU entries a wheel must carry is derived from its
+#: family lists (loadable, carried and direct families), not from the
+#: repository registry: ``tools/generate_registry.py --check`` already
+#: holds the packaged registry byte-identical to that file, so a count read
+#: from it would compare a copy with itself.
+FAST_CPU_BINDING = ROOT / "tools" / "fast_cpu_binding.json"
 
 
 def _fail(message: str) -> NoReturn:
@@ -124,11 +126,27 @@ def certified_cpu_entries(registry: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def expected_certified_cpu_count(path: Path = REPOSITORY_REGISTRY) -> int:
-    """How many certified integrated CPU entries the repository registry holds."""
-    count = len(certified_cpu_entries(json.loads(path.read_bytes())))
+def declared_certified_cpu_families(binding: dict[str, Any]) -> set[str]:
+    """The families the binding declares certified on the integrated engine.
+
+    Loadable families (judged by the differential campaign), families
+    carried from another artifact's record, and families certified by a
+    direct record.
+    """
+    families: set[str] = set()
+    for key in ("loadable_families", "carried_families", "direct_families"):
+        value = binding.get(key) or ()
+        if not isinstance(value, (list, tuple, dict)):
+            _fail(f"fast_cpu_binding.json {key} has an unexpected shape")
+        families.update(str(name) for name in value)
+    return families
+
+
+def expected_certified_cpu_count(path: Path = FAST_CPU_BINDING) -> int:
+    """How many certified integrated CPU entries the binding declares."""
+    count = len(declared_certified_cpu_families(json.loads(path.read_bytes())))
     if count < 1:
-        _fail(f"{path} certifies no integrated CPU artifact")
+        _fail(f"{path} declares no certified integrated CPU family")
     return count
 
 
@@ -140,7 +158,7 @@ def verify_certified_cpu(
     if len(certified_cpu) != expected:
         _fail(
             f"wheel registry certifies {len(certified_cpu)} integrated CPU "
-            f"artifacts; the repository registry certifies {expected}"
+            f"artifacts; tools/fast_cpu_binding.json declares {expected}"
         )
     for entry in certified_cpu:
         if (

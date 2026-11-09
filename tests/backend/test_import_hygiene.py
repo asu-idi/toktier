@@ -32,7 +32,9 @@ FROZEN_ENV = frozenset(
 
 #: Variables outside the frozen set that the package is allowed to read.
 #: Platform conventions only; nothing here can change output.
-ALLOWED_EXTRA_ENV = frozenset({"XDG_CACHE_HOME", "XDG_STATE_HOME"})
+#: ``RAYON_NUM_THREADS`` is read only by the serving adapter's
+#: ``AdapterConfig.from_env``, as the default size of its chunk pool.
+ALLOWED_EXTRA_ENV = frozenset({"XDG_CACHE_HOME", "XDG_STATE_HOME", "RAYON_NUM_THREADS"})
 
 
 def test_no_module_imports_an_accelerator_runtime() -> None:

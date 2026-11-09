@@ -957,6 +957,11 @@ impl ChunkEncoder {
         workers: usize,
         text: Option<&str>,
     ) -> Result<usize, EngineError> {
+        // A count of zero names no worker and no thread: nothing is forked
+        // and the chunk pool is neither built nor grown.
+        if workers == 0 {
+            return Ok(self.forked.load(Ordering::Relaxed));
+        }
         let pool = size_chunk_pool(workers)?;
         let existing = self.forked.load(Ordering::Relaxed);
         if workers > existing {
@@ -1175,6 +1180,10 @@ pub(crate) type ChunkEncoderCell = OnceLock<Result<ChunkEncoder, EngineError>>;
 struct ChunkPool {
     pool: Arc<rayon::ThreadPool>,
     threads: usize,
+    /// The process that started the pool's threads. A process forked
+    /// after the pool exists inherits this slot but not the threads, so
+    /// a pool of another process is never used (see [`live_pool`]).
+    pid: u32,
 }
 
 /// The pool, built on first use or by the first `warm`.
@@ -1193,7 +1202,25 @@ fn build_chunk_pool(threads: usize) -> Result<ChunkPool, EngineError> {
     Ok(ChunkPool {
         pool: Arc::new(pool),
         threads,
+        pid: std::process::id(),
     })
+}
+
+/// The slot's pool when this process started it. A pool inherited across
+/// `fork` has no threads in the child: work installed on it would wait
+/// forever, so the slot is cleared and a fresh pool is built on demand.
+/// The inherited handle is leaked rather than dropped, since dropping it
+/// would signal threads that exist only in the parent.
+fn live_pool(slot: &mut Option<ChunkPool>) -> Option<&ChunkPool> {
+    if slot
+        .as_ref()
+        .is_some_and(|current| current.pid != std::process::id())
+    {
+        if let Some(stale) = slot.take() {
+            std::mem::forget(stale);
+        }
+    }
+    slot.as_ref()
 }
 
 /// A handle to the chunk pool, built at the default size on first use.
@@ -1203,7 +1230,7 @@ fn chunk_pool() -> Result<Arc<rayon::ThreadPool>, EngineError> {
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     #[cfg(test)]
     POOL_REQUESTS.with(|count| count.set(count.get() + 1));
-    if let Some(current) = slot.as_ref() {
+    if let Some(current) = live_pool(&mut slot) {
         return Ok(Arc::clone(&current.pool));
     }
     let built = build_chunk_pool(available_threads())?;
@@ -1219,7 +1246,7 @@ fn size_chunk_pool(workers: usize) -> Result<Arc<rayon::ThreadPool>, EngineError
     let mut slot = CHUNK_POOL
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if let Some(current) = slot.as_ref() {
+    if let Some(current) = live_pool(&mut slot) {
         if current.threads >= workers {
             return Ok(Arc::clone(&current.pool));
         }
@@ -1258,11 +1285,10 @@ thread_local! {
 /// it exists, else the available parallelism of the process.
 /// `RAYON_NUM_THREADS` takes no part.
 pub fn default_chunk_workers() -> usize {
-    CHUNK_POOL
+    let mut slot = CHUNK_POOL
         .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .as_ref()
-        .map_or_else(available_threads, |current| current.threads)
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    live_pool(&mut slot).map_or_else(available_threads, |current| current.threads)
 }
 
 #[cfg(test)]

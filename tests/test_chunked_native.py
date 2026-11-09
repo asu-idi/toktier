@@ -562,3 +562,95 @@ def test_named_workers_parallelize_with_a_single_thread_global_pool(
     expected = _reference(loaded[family])(text)
     digest = hashlib.sha256(json.dumps(expected).encode()).hexdigest()
     assert facts["ids_sha256"] == digest
+
+
+#: A fresh interpreter that checks two facts of the chunk pool's life:
+#: ``warm(workers=0)`` forks nothing and starts no thread, and a process
+#: forked after the pool exists encodes in the child (the child builds
+#: its own pool) instead of waiting on threads that live in the parent.
+_POOL_LIFE_PROBE = r"""
+import json, os, signal, sys
+from pathlib import Path
+import toktier
+from toktier import Config, chunked
+
+family, home, text_path = sys.argv[1:4]
+config = Config(home=Path(home), offline=True)
+tokenizer = toktier.load(family, config=config, device="cpu")
+if "fast_cpu" not in tokenizer.explain()["fallback_chain"]:
+    tokenizer.close()
+    tokenizer = toktier.load(family, config=config, device="cpu", policy="experimental")
+chunked._planner_for(tokenizer, evidence_gate=False)
+text = Path(text_path).read_text(encoding="utf-8")
+serial = list(tokenizer.encode(text, lookup="off").ids)
+
+def chunk_threads():
+    names = []
+    for task in Path("/proc/self/task").iterdir():
+        try:
+            names.append((task / "comm").read_text().strip())
+        except OSError:
+            continue
+    return sum(name.startswith("toktier-chunk") for name in names)
+
+default_before = chunked.admission(tokenizer)["native"]["default_workers"]
+zero = chunked.warm(tokenizer, workers=0)
+default_after = chunked.admission(tokenizer)["native"]["default_workers"]
+after_zero = {"returned": zero, "threads": chunk_threads(),
+              "default_workers": default_after}
+chunked.warm(tokenizer, workers=2)
+parent_equal = list(chunked.encode(tokenizer, text, k=2, native=True).ids) == serial
+pid = os.fork()
+if pid == 0:
+    signal.alarm(120)
+    ok = list(chunked.encode(tokenizer, text, k=2, native=True).ids) == serial
+    os._exit(0 if ok else 3)
+_, status = os.waitpid(pid, 0)
+print(json.dumps({"default_before": default_before, "after_zero": after_zero,
+                  "parent_equal": parent_equal,
+                  "child_status": os.waitstatus_to_exitcode(status)}))
+"""
+
+
+@pytest.mark.skipif(
+    not Path("/proc/self/task").is_dir() or not hasattr(os, "fork"),
+    reason="needs the /proc thread view and fork",
+)
+def test_warm_zero_is_inert_and_a_forked_child_builds_its_own_pool(
+    loaded: dict[str, Tokenizer], tmp_path: Path
+) -> None:
+    """``warm(workers=0)`` names no worker: nothing is forked, no chunk
+    thread starts and the default count is unchanged. A child forked after
+    the pool exists does not inherit a pool without threads: its chunked
+    encode returns the serial ids instead of waiting forever."""
+    present = [name for name in CERTIFIED_FAMILIES if name in loaded]
+    if not present:
+        pytest.skip("no admitted family available under TOKTIER_TEST_ARTIFACTS")
+    family = present[0]
+    source = _artifact_source(family)
+    assert source is not None
+    home = tmp_path / "home"
+    cache = artifact_cache_dir(Config(home=home, offline=True))
+    cache.mkdir(parents=True, exist_ok=True)
+    manifest = ArtifactManifest.load(ARTIFACT_MANIFEST)
+    shutil.copytree(source, cache / manifest.get(family).directory_name)
+    text_path = tmp_path / "text.txt"
+    text = _generated_corpora(200_000)["prose(generated)"]
+    text_path.write_text(text, encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, "-c", _POOL_LIFE_PROBE, family, str(home), str(text_path)],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr[-4000:]
+    facts = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert facts["after_zero"] == {
+        "returned": 0,
+        "threads": 0,
+        "default_workers": facts["default_before"],
+    }, facts
+    assert facts["parent_equal"]
+    # 0: the child's ids equal; 3: they differ; -14 (SIGALRM): it hung.
+    assert facts["child_status"] == 0, facts

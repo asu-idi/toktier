@@ -279,6 +279,7 @@ def _segments_column(
             "gpu_segmented": (990 if arm == "gpu" else 0) if served else 0,
             "hf_added_token": 0 if served else 990,
             "hf_engine_guard": 10,
+            "hf_segments_below_crossover": 0,
         },
         "segments": {
             "literals": 5000,
@@ -313,7 +314,10 @@ def test_reference_bytes_outside_the_guard_documents_are_refused() -> None:
     column = _segments_column("cpu")
     column["entry_points"][0]["segments"]["bytes"]["hf"] = 150
     problems = forms.literal_segments_problems("f", column, arm="cpu")
-    assert any("50 byte(s) outside the listed guard documents" in p for p in problems)
+    assert any(
+        "50 byte(s) outside the listed guard and below-crossover documents" in p
+        for p in problems
+    )
 
 
 def test_a_whole_document_fallback_on_a_served_face_is_refused() -> None:
@@ -341,6 +345,79 @@ def test_the_gpu_arm_needs_bytes_on_the_gpu_and_a_share() -> None:
     column["entry_points"][0]["gpu_share"] = 0.5
     problems = forms.literal_segments_problems("f", column, arm="gpu")
     assert any("gpu_share does not match" in p for p in problems)
+
+
+def _below_crossover(column: dict[str, Any], documents: int, size: int) -> None:
+    """Move ``documents`` GPU-segmented documents of ``size`` bytes each to
+    the below-crossover class: the reference encodes them whole."""
+    entry = column["entry_points"][0]
+    entry["paths"]["gpu_segmented"] -= documents
+    entry["paths"]["hf_segments_below_crossover"] += documents
+    entry["segments"]["bytes"]["gpu"] -= documents * size
+    entry["segments"]["bytes"]["hf"] += documents * size
+    entry["below_crossover_documents"] = {
+        "count": documents,
+        "bytes_hf": documents * size,
+    }
+    total = sum(entry["segments"]["bytes"].values())
+    entry["gpu_share"] = entry["segments"]["bytes"]["gpu"] / total
+
+
+def test_below_crossover_documents_are_their_own_path_class() -> None:
+    column = _segments_column("gpu")
+    _below_crossover(column, 40, 100)
+    assert forms.literal_segments_problems("f", column, arm="gpu") == []
+    # The served-face guard on hf_added_token keeps its meaning: the same
+    # documents counted there are refused.
+    paths = column["entry_points"][0]["paths"]
+    paths["hf_added_token"] += 40
+    paths["hf_segments_below_crossover"] -= 40
+    column["entry_points"][0]["below_crossover_documents"]["count"] = 0
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("went whole to the reference for a literal" in p for p in problems)
+
+
+def test_below_crossover_documents_are_listed_with_their_bytes() -> None:
+    column = _segments_column("gpu")
+    _below_crossover(column, 40, 100)
+    del column["entry_points"][0]["below_crossover_documents"]
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("without below_crossover_documents" in p for p in problems)
+    column = _segments_column("gpu")
+    _below_crossover(column, 40, 100)
+    column["entry_points"][0]["below_crossover_documents"]["count"] = 39
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("39 below-crossover document(s) listed, 40" in p for p in problems)
+    column = _segments_column("gpu")
+    _below_crossover(column, 40, 100)
+    column["entry_points"][0]["below_crossover_documents"]["bytes_hf"] = 3000
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("1000 byte(s) outside the listed guard" in p for p in problems)
+
+
+def test_below_crossover_documents_appear_only_on_a_served_gpu_arm() -> None:
+    column = _segments_column("cpu")
+    entry = column["entry_points"][0]
+    entry["paths"]["gigatoken_segmented"] -= 5
+    entry["paths"]["hf_segments_below_crossover"] = 5
+    entry["segments"]["bytes"]["hf"] += 500
+    entry["below_crossover_documents"] = {"count": 5, "bytes_hf": 500}
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("the CPU arm records GPU segments" in p for p in problems)
+    column = _segments_column("gpu", served=False)
+    entry = column["entry_points"][0]
+    entry["guard_documents"]["bytes_hf"] = 0
+    entry["paths"]["hf_added_token"] -= 5
+    entry["paths"]["hf_segments_below_crossover"] = 5
+    entry["below_crossover_documents"] = {"count": 5, "bytes_hf": 500}
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("unserved face shows segmented documents" in p for p in problems)
+
+
+def test_the_below_crossover_class_is_a_required_key() -> None:
+    column = _segments_column("gpu")
+    del column["entry_points"][0]["paths"]["hf_segments_below_crossover"]
+    assert forms.literal_segments_problems("f", column, arm="gpu")
 
 
 def test_guard_documents_are_counted_and_bounded() -> None:
@@ -547,6 +624,7 @@ def test_a_column_of_a_handful_of_documents_does_not_pass_the_ratios() -> None:
         "gpu_segmented": 0,
         "hf_added_token": 0,
         "hf_engine_guard": 0,
+        "hf_segments_below_crossover": 0,
     }
     entry["guard_documents"] = {"count": 0, "bytes_hf": 0, "bound": 0}
     entry["segments"]["bytes"]["hf"] = 0
@@ -705,6 +783,7 @@ def test_one_guard_document_is_above_one_percent_of_few_documents(
         "gpu_segmented": 0,
         "hf_added_token": 0,
         "hf_engine_guard": 1,
+        "hf_segments_below_crossover": 0,
     }
     entry["guard_documents"] = {"count": 1, "bytes_hf": 100, "bound": 1}
     problems = forms.literal_segments_problems("f", column, arm="cpu")

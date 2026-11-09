@@ -185,6 +185,7 @@ def _parity_row(artifact: dict[str, Any], fingerprint: str) -> dict[str, Any]:
                         "gpu_segmented": 0,
                         "hf_added_token": 0,
                         "hf_engine_guard": 0,
+                        "hf_segments_below_crossover": 0,
                     },
                     "segments": {
                         "literals": 4000,

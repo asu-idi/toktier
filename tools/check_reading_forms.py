@@ -28,10 +28,15 @@ checks a column has to pass beyond its schema:
     is on bytes: on a served face the reference encodes bytes only inside
     the listed guard documents, their count is reported and bounded, and
     in the GPU arm some segment bytes reach the GPU (``gpu_share``
-    reported). An unserved face keeps the whole-document path, so it
-    shows no segmented document. The column names the added-token table
-    it was taken on (``added_frontend_fingerprint``), which a registry
-    check holds to the record's.
+    reported). A served face sends no document whole to the reference for
+    a literal (``hf_added_token`` = 0); the one exception is a class of
+    its own, ``hf_segments_below_crossover`` (GPU arm only: a route whose
+    only backend after the GPU is the reference, every text segment below
+    the crossover), listed with its bytes in ``below_crossover_documents``.
+    An unserved face keeps the whole-document path, so it shows no
+    segmented document and no below-crossover document. The column names
+    the added-token table it was taken on (``added_frontend_fingerprint``),
+    which a registry check holds to the record's.
 
 The module also checks the engine-differential reading of a directly
 judged face (``schemas/engine_differential_reading.schema.json``), the
@@ -364,6 +369,22 @@ def literal_segments_problems(
         paths = entry["paths"]
         segment_bytes = entry["segments"]["bytes"]
         guard = entry["guard_documents"]
+        below_count = int(paths["hf_segments_below_crossover"])
+        below = entry.get("below_crossover_documents")
+        below_bytes = 0
+        if below is not None:
+            below_bytes = int(below["bytes_hf"])
+            if int(below["count"]) != below_count:
+                problems.append(
+                    f"{where}: {below['count']} below-crossover document(s) "
+                    f"listed, {below_count} counted as "
+                    "hf_segments_below_crossover"
+                )
+        elif below_count:
+            problems.append(
+                f"{where}: {below_count} document(s) counted as "
+                "hf_segments_below_crossover without below_crossover_documents"
+            )
         if int(entry["mismatches"]) != 0:
             problems.append(f"{where}: {entry['mismatches']} mismatch(es)")
         if documents < LITERAL_ENTRY_POINT_MIN_DOCUMENTS:
@@ -400,7 +421,11 @@ def literal_segments_problems(
                 "encoded by the reference"
             )
         if not served:
-            if int(paths["gigatoken_segmented"]) or int(paths["gpu_segmented"]):
+            if (
+                int(paths["gigatoken_segmented"])
+                or int(paths["gpu_segmented"])
+                or below_count
+            ):
                 problems.append(
                     f"{where}: an unserved face shows segmented documents; it "
                     "keeps the whole-document path"
@@ -411,14 +436,19 @@ def literal_segments_problems(
                 f"{where}: {paths['hf_added_token']} document(s) on a served face "
                 "went whole to the reference for a literal"
             )
-        if int(segment_bytes["hf"]) != int(guard["bytes_hf"]):
+        listed_hf = int(guard["bytes_hf"]) + below_bytes
+        if int(segment_bytes["hf"]) != listed_hf:
             problems.append(
                 f"{where}: the reference encoded "
-                f"{int(segment_bytes['hf']) - int(guard['bytes_hf'])} byte(s) "
-                "outside the listed guard documents"
+                f"{int(segment_bytes['hf']) - listed_hf} byte(s) "
+                "outside the listed guard and below-crossover documents"
             )
         if arm == "cpu":
-            if int(segment_bytes["gpu"]) or int(paths["gpu_segmented"]):
+            if (
+                int(segment_bytes["gpu"])
+                or int(paths["gpu_segmented"])
+                or below_count
+            ):
                 problems.append(f"{where}: the CPU arm records GPU segments")
             if int(paths["gigatoken_segmented"]) < 1 or not int(
                 segment_bytes["fast_cpu"]

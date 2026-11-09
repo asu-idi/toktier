@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toktier:schema:engine-differential-reading:1",
+  "title": "toktier fast CPU engine differential of one directly judged face",
+  "description": "The full-corpus differential that certifies the corrected CPU engine on a face judged directly, with record-held repair parameters and no carry-over (the registry record's backends.fast_cpu.engine_differential names this reading). main_pass is the engine's full encode of every corpus document against the archived reference digests, taken on a build whose engine core (engine_core) equals the tree's; it records each document's path class and the residue (documents not served as gigatoken_full). append_replay is the seeded-cut session arm on a deterministic subsample; constructed_arm is the arm built so that the repair window's length bound (effective_l_max) decides the outcome (threshold_decisive counts the strings whose outcome differs between the face's value and 128), taken on the frozen build. residue_supplement re-runs the residue on the frozen build in both arms: every early hf_full_added_token document is served by segmentation there or is listed as reference-answered, and hf_full_engine_guard documents are counted. bridging_check re-runs a fixed sample on the frozen build in both arms; path classes of literal-free documents must not change. sensitivity_limit states, per document, what the bridging sample can and cannot resolve about the frozen routing layer. Checked by tools/check_reading_forms.py and tools/generate_registry.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "subject",
+    "engine_core",
+    "build",
+    "corpus",
+    "main_pass",
+    "append_replay",
+    "constructed_arm",
+    "residue_supplement",
+    "bridging_check",
+    "sensitivity_limit"
+  ],
+  "properties": {
+    "schema": {"const": "toktier.fast_cpu.engine_differential.v1"},
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "artifact_sha256",
+        "loader_face_sha256",
+        "repair",
+        "longest_vocabulary_token_chars"
+      ],
+      "properties": {
+        "family": {"type": "string", "minLength": 1},
+        "artifact_sha256": {"$ref": "#/$defs/sha256"},
+        "loader_face_sha256": {"$ref": "#/$defs/sha256"},
+        "class_table_sha256": {"$ref": "#/$defs/sha256"},
+        "repair": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["margin", "effective_l_max", "has_normalizer", "source_table_sha256"],
+          "properties": {
+            "margin": {"type": "integer", "minimum": 1},
+            "effective_l_max": {"type": "integer", "minimum": 1},
+            "has_normalizer": {"type": "boolean"},
+            "source_table_sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "longest_vocabulary_token_chars": {
+          "description": "Length in characters of the longest vocabulary token of the face, as the exporter computed it; effective_l_max must not be below it.",
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "engine_core": {
+      "description": "tools/engine_core_identity.py digests of the build the main pass ran on.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "core_content_sha256",
+        "repair_families_sha256",
+        "repair_pclass_sha256",
+        "engine_patch_sha256"
+      ],
+      "properties": {
+        "core_content_sha256": {"$ref": "#/$defs/sha256"},
+        "repair_families_sha256": {"$ref": "#/$defs/sha256"},
+        "repair_pclass_sha256": {"$ref": "#/$defs/sha256"},
+        "engine_patch_sha256": {"$ref": "#/$defs/sha256"},
+        "git_tree_id": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "build": {"$ref": "#/$defs/build"},
+    "corpus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_sha256", "documents", "characters", "oracle_version", "harness_sha256"],
+      "properties": {
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "documents": {"type": "integer", "minimum": 1},
+        "characters": {"type": "integer", "minimum": 1},
+        "oracle_version": {"type": "string", "minLength": 1},
+        "truncation_rule": {"type": "string"},
+        "containers_sha256": {"$ref": "#/$defs/sha256"},
+        "harness_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "main_pass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documents", "characters", "mismatches", "path_classes", "residue"],
+      "properties": {
+        "documents": {"type": "integer", "minimum": 1},
+        "characters": {"type": "integer", "minimum": 1},
+        "mismatches": {"$ref": "#/$defs/count"},
+        "path_classes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gigatoken_full", "hf_full_added_token", "hf_full_engine_guard"],
+          "properties": {
+            "gigatoken_full": {"$ref": "#/$defs/count"},
+            "hf_full_added_token": {"$ref": "#/$defs/count"},
+            "hf_full_engine_guard": {"$ref": "#/$defs/count"}
+          }
+        },
+        "residue": {"$ref": "#/$defs/listed"}
+      }
+    },
+    "append_replay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documents", "mismatches", "sampling", "threshold_decisive"],
+      "properties": {
+        "documents": {"type": "integer", "minimum": 1},
+        "mismatches": {"$ref": "#/$defs/count"},
+        "sampling": {"type": "string", "minLength": 1},
+        "threshold_decisive": {"$ref": "#/$defs/count"},
+        "repair_paths": {"type": "object", "additionalProperties": {"$ref": "#/$defs/count"}},
+        "retry_histogram": {"type": "object", "additionalProperties": {"$ref": "#/$defs/count"}}
+      }
+    },
+    "constructed_arm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strings", "mismatches", "threshold_decisive", "build"],
+      "properties": {
+        "strings": {"type": "integer", "minimum": 1},
+        "mismatches": {"$ref": "#/$defs/count"},
+        "threshold_decisive": {"$ref": "#/$defs/count"},
+        "generator_sha256": {"$ref": "#/$defs/sha256"},
+        "build": {"$ref": "#/$defs/build"}
+      }
+    },
+    "residue_supplement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documents", "mismatches_full", "mismatches_append", "path_classes", "reference_answered", "build"],
+      "properties": {
+        "documents": {"$ref": "#/$defs/count"},
+        "mismatches_full": {"$ref": "#/$defs/count"},
+        "mismatches_append": {"$ref": "#/$defs/count"},
+        "path_classes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gigatoken_full", "gigatoken_segmented", "hf_added_token", "hf_engine_guard"],
+          "properties": {
+            "gigatoken_full": {"$ref": "#/$defs/count"},
+            "gigatoken_segmented": {"$ref": "#/$defs/count"},
+            "hf_added_token": {"$ref": "#/$defs/count"},
+            "hf_engine_guard": {"$ref": "#/$defs/count"}
+          }
+        },
+        "reference_answered": {"$ref": "#/$defs/listed"},
+        "build": {"$ref": "#/$defs/build"}
+      }
+    },
+    "bridging_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documents", "sample_share", "mismatches_full", "mismatches_append", "path_class_changes_literal_free", "build"],
+      "properties": {
+        "documents": {"type": "integer", "minimum": 1},
+        "sample_share": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "mismatches_full": {"$ref": "#/$defs/count"},
+        "mismatches_append": {"$ref": "#/$defs/count"},
+        "path_class_changes_literal_free": {"$ref": "#/$defs/count"},
+        "build": {"$ref": "#/$defs/build"}
+      }
+    },
+    "sensitivity_limit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["per_document", "statement"],
+      "properties": {
+        "per_document": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "statement": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "count": {"type": "integer", "minimum": 0},
+    "listed": {
+      "description": "A counted list of (file, row) documents, kept beside the reading and named by digest.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "list_sha256"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "list_sha256": {"$ref": "#/$defs/sha256"},
+        "path": {"type": "string"}
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_digest", "source_digest_v2", "build_flags", "toolchain"],
+      "properties": {
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "wheel_sha256": {"$ref": "#/$defs/sha256"},
+        "source_digest": {"$ref": "#/$defs/sha256"},
+        "source_digest_v2": {"$ref": "#/$defs/sha256"},
+        "build_flags": {"type": "array", "items": {"type": "string"}},
+        "toolchain": {"type": "string", "minLength": 1},
+        "platform_tag": {"type": "string"},
+        "entry_point": {"type": "string"}
+      }
+    }
+  }
+}

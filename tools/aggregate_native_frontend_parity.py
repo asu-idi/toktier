@@ -75,8 +75,21 @@ def aggregate_cpu(
     directory: Path, require: tuple[str, ...] = ()
 ) -> dict[str, Any]:
     rows = _rows(directory, "cpu")
-    if len(rows) != 11:
-        raise GenerationError(f"CPU parity requires 11 rows, found {len(rows)}")
+    # The judged roster, plus the families the fast CPU binding judges
+    # directly (each with an engine differential of its own); a directly
+    # judged row carries both 0.3.2 columns.
+    binding = load_json(ROOT / "tools" / "fast_cpu_binding.json")
+    roster = set(binding.get("loadable_families") or ())
+    direct = set(binding.get("direct_families") or {})
+    families = {str(row.get("family")) for row in rows}
+    if families != roster | direct:
+        raise GenerationError(
+            f"CPU parity requires the {len(roster)} roster and {len(direct)} "
+            f"directly judged families, found {sorted(families)}"
+        )
+    for row in rows:
+        if str(row.get("family")) in direct:
+            _columns(row, ("special_tokens", "literal_segments"))
     fact_rows = [row.get("fast_cpu_build_facts") for row in rows]
     if not all(
         isinstance(value, dict) and value == fact_rows[0] for value in fact_rows
@@ -127,8 +140,8 @@ def aggregate_cpu(
             "package": "tokenizers",
             "version": oracle_versions.pop(),
         },
-        "unique_artifacts": 11,
-        "model_families": 12,
+        "unique_artifacts": len(rows),
+        "model_families": 12 + len(direct),
         "documents": sum(int(row["documents"]) for row in rows),
         "characters": sum(int(row["characters"]) for row in rows),
         "mismatches": 0,

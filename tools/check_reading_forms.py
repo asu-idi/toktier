@@ -28,6 +28,11 @@ checks a column has to pass beyond its schema:
     it was taken on (``added_frontend_fingerprint``), which a registry
     check holds to the record's.
 
+The module also checks the engine-differential reading of a directly
+judged face (``schemas/engine_differential_reading.schema.json``), the
+evidence a fast CPU entry with record-held repair parameters and no
+carry-over rests on: :func:`engine_differential_problems`.
+
 Usage::
 
     python tools/check_reading_forms.py parity <reading.json> \
@@ -53,6 +58,11 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = REPOSITORY_ROOT / "schemas"
 SPECIAL_TOKENS_SCHEMA = SCHEMAS / "special_tokens_column.schema.json"
 LITERAL_SEGMENTS_SCHEMA = SCHEMAS / "literal_segments_column.schema.json"
+ENGINE_DIFFERENTIAL_SCHEMA = SCHEMAS / "engine_differential_reading.schema.json"
+
+#: The constructed arm of an engine differential has to judge at least this
+#: many strings per face on the frozen build (condition D6b).
+CONSTRUCTED_ARM_MIN_STRINGS = 1_000_000
 
 #: The per-family columns a parity row may carry, by name.
 COLUMNS = ("special_tokens", "literal_segments")
@@ -305,6 +315,151 @@ def column_problems(
             arm=arm,
             added_frontend_fingerprint=added_frontend_fingerprint,
         )
+    return problems
+
+
+def engine_differential_problems(
+    reading: object,
+    *,
+    artifact: Mapping[str, Any],
+    expected_documents: int,
+    engine_core: Mapping[str, str],
+    frozen_source_digest_v2: str,
+) -> list[str]:
+    """Problems of a directly judged face's engine-differential reading.
+
+    ``artifact`` is the registry record (its ``backends.fast_cpu.repair``
+    member is the parameter set the reading has to have run with);
+    ``expected_documents`` is the campaign corpus size the roster's own
+    differential covered; ``engine_core`` the tree's
+    ``tools/engine_core_identity.py`` digests; ``frozen_source_digest_v2``
+    the version-normalized fast CPU identity of the tree, which the arms
+    taken on the frozen build have to name.
+    """
+    family = str(artifact.get("family", "<unknown>"))
+    label = f"{family}: engine differential"
+    problems = _schema_problems(label, reading, ENGINE_DIFFERENTIAL_SCHEMA)
+    if problems:
+        return problems
+    assert isinstance(reading, Mapping)
+    subject = reading["subject"]
+    for key in ("family", "artifact_sha256", "loader_face_sha256"):
+        if subject[key] != artifact.get(key):
+            problems.append(
+                f"{label}: subject {key} {subject[key]!r} is not the record's "
+                f"{artifact.get(key)!r}"
+            )
+    repair = ((artifact.get("backends") or {}).get("fast_cpu") or {}).get("repair")
+    if subject["repair"] != repair:
+        problems.append(
+            f"{label}: ran with repair parameters {subject['repair']} but the "
+            f"record holds {repair}"
+        )
+    if int(subject["repair"]["effective_l_max"]) < int(
+        subject["longest_vocabulary_token_chars"]
+    ):
+        problems.append(
+            f"{label}: effective_l_max {subject['repair']['effective_l_max']} is "
+            "below the longest vocabulary token "
+            f"({subject['longest_vocabulary_token_chars']} characters)"
+        )
+    for key, value in engine_core.items():
+        if reading["engine_core"].get(key) != value:
+            problems.append(
+                f"{label}: engine core {key} {reading['engine_core'].get(key)} is "
+                f"not the tree's {value}"
+            )
+    corpus, main = reading["corpus"], reading["main_pass"]
+    if int(corpus["documents"]) != expected_documents:
+        problems.append(
+            f"{label}: corpus of {corpus['documents']} documents, the campaign "
+            f"corpus holds {expected_documents}"
+        )
+    if (int(main["documents"]), int(main["characters"])) != (
+        int(corpus["documents"]),
+        int(corpus["characters"]),
+    ):
+        problems.append(f"{label}: the main pass does not cover the corpus")
+    if int(main["mismatches"]) != 0:
+        problems.append(f"{label}: main pass {main['mismatches']} mismatch(es)")
+    classes = main["path_classes"]
+    if sum(int(value) for value in classes.values()) != int(main["documents"]):
+        problems.append(f"{label}: main-pass path classes do not add up")
+    residue = int(classes["hf_full_added_token"]) + int(
+        classes["hf_full_engine_guard"]
+    )
+    if int(main["residue"]["count"]) != residue:
+        problems.append(
+            f"{label}: the residue lists {main['residue']['count']} documents, the "
+            f"path classes leave {residue} not served by the engine"
+        )
+    append = reading["append_replay"]
+    if int(append["mismatches"]) != 0:
+        problems.append(f"{label}: append replay {append['mismatches']} mismatch(es)")
+    constructed = reading["constructed_arm"]
+    if int(constructed["strings"]) < CONSTRUCTED_ARM_MIN_STRINGS:
+        problems.append(
+            f"{label}: the constructed arm judged {constructed['strings']} strings, "
+            f"fewer than {CONSTRUCTED_ARM_MIN_STRINGS}"
+        )
+    if int(constructed["mismatches"]) != 0:
+        problems.append(
+            f"{label}: constructed arm {constructed['mismatches']} mismatch(es)"
+        )
+    if int(constructed["threshold_decisive"]) < 1:
+        problems.append(
+            f"{label}: in the constructed arm the window bound decided no outcome, "
+            "so the arm says nothing about effective_l_max"
+        )
+    supplement = reading["residue_supplement"]
+    if int(supplement["documents"]) != int(main["residue"]["count"]):
+        problems.append(
+            f"{label}: the residue supplement re-ran {supplement['documents']} of "
+            f"{main['residue']['count']} residue documents"
+        )
+    if int(supplement["mismatches_full"]) or int(supplement["mismatches_append"]):
+        problems.append(f"{label}: the residue supplement records mismatches")
+    supplement_classes = supplement["path_classes"]
+    if sum(int(value) for value in supplement_classes.values()) != int(
+        supplement["documents"]
+    ):
+        problems.append(f"{label}: residue-supplement path classes do not add up")
+    if int(supplement_classes["hf_added_token"]) != int(
+        supplement["reference_answered"]["count"]
+    ):
+        problems.append(
+            f"{label}: {supplement_classes['hf_added_token']} residue document(s) "
+            "went to the reference for a literal on the frozen build, "
+            f"{supplement['reference_answered']['count']} are listed as "
+            "reference-answered"
+        )
+    bridging = reading["bridging_check"]
+    if int(bridging["mismatches_full"]) or int(bridging["mismatches_append"]):
+        problems.append(f"{label}: the bridging check records mismatches")
+    if int(bridging["path_class_changes_literal_free"]) != 0:
+        problems.append(
+            f"{label}: {bridging['path_class_changes_literal_free']} literal-free "
+            "document(s) changed path class on the frozen build"
+        )
+    planned = float(bridging["sample_share"]) * int(corpus["documents"])
+    if abs(int(bridging["documents"]) - planned) > max(1.0, 0.01 * planned):
+        problems.append(
+            f"{label}: the bridging check ran {bridging['documents']} documents, "
+            f"its sample share plans {planned:.0f}"
+        )
+    limit = reading["sensitivity_limit"]
+    if float(limit["per_document"]) * int(bridging["documents"]) < 1 - 1e-9:
+        problems.append(
+            f"{label}: the stated sensitivity limit {limit['per_document']} is finer "
+            "than the bridging sample can resolve"
+        )
+    for arm in ("constructed_arm", "residue_supplement", "bridging_check"):
+        recorded = reading[arm]["build"]["source_digest_v2"]
+        if recorded != frozen_source_digest_v2:
+            problems.append(
+                f"{label}: {arm} was taken on fast CPU v2 {recorded}, not the "
+                f"frozen tree's {frozen_source_digest_v2}"
+            )
     return problems
 
 

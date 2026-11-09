@@ -92,5 +92,6 @@
   "carried_families": {
     "deepseek_v4_1_flash": "deepseek_v4_flash",
     "mimo_v2_6": "qwen3_8b"
-  }
+  },
+  "direct_families": {}
 }

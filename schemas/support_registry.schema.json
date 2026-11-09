@@ -474,7 +474,34 @@
               "$ref": "#/$defs/sha256_hex"
             }
           },
-          "description": "Fast CPU repair parameters of a certified artifact that is not in the repair roster (written only beside a cross-artifact carry-over; equal to the anchor's roster row, evidence-carryover.md Section 3.1 C6). Same shape as the examined table's repair block; outside the fast CPU engine's bound source set. source_table_sha256 is provenance of the exported parameter table."
+          "description": "Fast CPU repair parameters of a certified artifact that is not in the repair roster, in one of two forms: carried (beside a cross-artifact carry-over; equal to the anchor's roster row, evidence-carryover.md Section 3.1 C6) or directly judged (no carry-over node; the parameters the face's own engine-differential reading ran with, named by engine_differential). Same shape as the examined table's repair block; outside the fast CPU engine's bound source set. source_table_sha256 is provenance of the exported parameter table."
+        },
+        "engine_differential": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reading",
+            "sha256",
+            "documents",
+            "mismatches"
+          ],
+          "properties": {
+            "reading": {
+              "type": "string",
+              "pattern": "^readings/[A-Za-z0-9_./-]+[.]json$"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256_hex"
+            },
+            "documents": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "mismatches": {
+              "const": 0
+            }
+          },
+          "description": "The full-corpus fast CPU engine differential of a directly judged face (schemas/engine_differential_reading.schema.json): the reading's repository path, its SHA-256, the documents of its main pass and its mismatch count. Present only beside a repair member and without a carry-over node; tools/generate_registry.py checks the reading (conditions D1-D6)."
         },
         "deliveries": {
           "type": "object",
@@ -557,6 +584,18 @@
                 "const": "certified_source"
               }
             }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "engine_differential"
+            ]
+          },
+          "then": {
+            "required": [
+              "repair"
+            ]
           }
         }
       ]

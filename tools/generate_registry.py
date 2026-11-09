@@ -48,8 +48,9 @@ from pathlib import Path
 from typing import Any
 
 from check_reading_forms import column_problems as reading_column_problems
-from check_reading_forms import registry_fingerprints
+from check_reading_forms import engine_differential_problems, registry_fingerprints
 from compute_identity_v2 import source_digest as source_digest_v2
+from engine_core_identity import engine_core_digests
 from native_host_source_identity import source_digest as native_host_source_digest
 from registry_common import (
     PLACEHOLDER_SHA256,
@@ -661,6 +662,12 @@ REPAIR_ROSTER_PATH = (
     / "fast_repair_families.v1.json"
 )
 
+FAST_CPU_BINDING_PATH = REPOSITORY_ROOT / "tools" / "fast_cpu_binding.json"
+EXAMINED_TABLE_RELATIVE = (
+    Path("src") / "toktier" / "routing" / "tables" / "examined_artifacts.v1.json"
+)
+NATIVE_PARITY_RELATIVE = Path("readings") / "fast_cpu_native_frontend_parity.json"
+
 #: The repair parameters a carried record must share with its anchor's
 #: roster row (contract C6). ``source_table_sha256`` is provenance of the
 #: exported table and is not compared: the anchor's row names its own
@@ -961,6 +968,154 @@ def _engine_parity_problems(
     return problems
 
 
+def _direct_record_problems(
+    artifact: dict[str, Any],
+    roster: dict[str, dict[str, Any]],
+    document: dict[str, Any],
+) -> list[str]:
+    """Conditions D1-D6 of a directly judged record (record-held repair).
+
+    A fast CPU entry may hold a ``repair`` member in two forms: carried
+    (beside a cross-artifact carry-over, checked by
+    :func:`_cross_artifact_problems`) and direct, checked here. A direct
+    record holds no carry-over node; its family and artifact are in
+    neither the repair roster nor the examined table (D1); its parameters
+    are the ones its engine-differential reading ran with, and
+    ``effective_l_max`` is not below the face's longest vocabulary token
+    (D2; the exporter's recomputation over the frozen directory is the
+    generation channel's); the rest of the entry is the uniform certified
+    entry (D3; also enforced through ``tools/fast_cpu_binding.json``);
+    the engine-differential reading passes
+    :func:`check_reading_forms.engine_differential_problems` (D4, D6);
+    and the build-bound native-front-end parity reading lists the face
+    with both 0.3.2 columns passing (D5).
+    """
+    family = str(artifact.get("family", "<unknown>"))
+    fast = (artifact.get("backends") or {}).get("fast_cpu") or {}
+    try:
+        binding = load_json(FAST_CPU_BINDING_PATH)
+    except GenerationError as error:
+        return [f"{family}: the fast CPU binding is unreadable: {error}"]
+    direct = binding.get("direct_families") or {}
+    if family not in direct:
+        return [
+            f"{family}: fast CPU repair parameters are recorded without a "
+            "cross-artifact carry-over, and the fast CPU binding does not "
+            "list the family as directly judged"
+        ]
+    problems: list[str] = []
+    # D1
+    if "carryover" in artifact:
+        problems.append(f"{family}: a directly judged record holds no carry-over node")
+    if family in roster or artifact.get("artifact_sha256") in {
+        row.get("artifact_sha256") for row in roster.values()
+    }:
+        problems.append(f"{family}: a directly judged record is in the repair roster")
+    examined_path = REPOSITORY_ROOT / EXAMINED_TABLE_RELATIVE
+    examined = load_json(examined_path) if examined_path.is_file() else {}
+    for row in examined.get("artifacts") or ():
+        if isinstance(row, dict) and (
+            row.get("family") == family
+            or row.get("artifact_sha256") == artifact.get("artifact_sha256")
+        ):
+            problems.append(
+                f"{family}: a directly judged record is in the examined table"
+            )
+    # D3
+    rest = {
+        key: value
+        for key, value in fast.items()
+        if key not in ("repair", "engine_differential")
+    }
+    loadable = set(binding.get("loadable_families") or ())
+    uniform = [
+        (row.get("backends") or {}).get("fast_cpu")
+        for row in document.get("artifacts") or ()
+        if isinstance(row, dict) and row.get("family") in loadable
+    ]
+    if not uniform or rest != uniform[0]:
+        problems.append(
+            f"{family}: the fast CPU entry (without repair and "
+            "engine_differential) is not the uniform certified entry"
+        )
+    # D4, D6
+    node = fast.get("engine_differential")
+    bound = direct[family] if isinstance(direct[family], dict) else {}
+    if not isinstance(node, dict):
+        return [
+            *problems,
+            f"{family}: a directly judged entry names no engine_differential reading",
+        ]
+    if (node.get("reading"), node.get("sha256")) != (
+        bound.get("reading"),
+        bound.get("sha256"),
+    ):
+        problems.append(
+            f"{family}: engine_differential differs from the fast CPU binding"
+        )
+    path = REPOSITORY_ROOT / str(node.get("reading", ""))
+    if not path.is_file():
+        return [*problems, f"{family}: engine-differential reading is missing ({path})"]
+    observed = sha256_of_file(path)
+    if observed != node.get("sha256"):
+        return [
+            *problems,
+            f"{family}: engine-differential reading digest {observed} does not "
+            f"match the recorded {node.get('sha256')}",
+        ]
+    reading = load_json(path)
+    validation = binding.get("validation") or {}
+    problems += engine_differential_problems(
+        reading,
+        artifact=artifact,
+        expected_documents=int(validation.get("documents", -1)),
+        engine_core=engine_core_digests(),
+        frozen_source_digest_v2=source_digest_v2("fast_cpu"),
+    )
+    main = reading.get("main_pass") if isinstance(reading, dict) else None
+    if not isinstance(main, dict) or node.get("documents") != main.get("documents"):
+        problems.append(
+            f"{family}: engine_differential documents differ from the reading"
+        )
+    if node.get("mismatches") != 0:
+        problems.append(f"{family}: engine_differential records mismatches")
+    # D5
+    parity_path = REPOSITORY_ROOT / NATIVE_PARITY_RELATIVE
+    parity = load_json(parity_path) if parity_path.is_file() else {}
+    row = next(
+        (
+            item
+            for item in parity.get("rows") or ()
+            if isinstance(item, dict) and item.get("family") == family
+        ),
+        None,
+    )
+    if row is None:
+        problems.append(
+            f"{family}: the native-front-end parity reading does not list the face"
+        )
+    else:
+        if (
+            row.get("artifact_sha256") != artifact.get("artifact_sha256")
+            or int(row.get("mismatches", -1)) != 0
+            or row.get("full_encode_equal_hf") is not True
+            or row.get("repair_equal_hf") is not True
+        ):
+            problems.append(f"{family}: native-front-end parity row did not pass")
+        for column in ("special_tokens", "literal_segments"):
+            if column not in row:
+                problems.append(
+                    f"{family}: native-front-end parity row carries no {column} "
+                    "column"
+                )
+        problems += reading_column_problems(
+            row,
+            arm="cpu",
+            added_frontend_fingerprint=registry_fingerprints(document).get(family),
+        )
+    return problems
+
+
 def _is_sha256(value: object) -> bool:
     return (
         isinstance(value, str)
@@ -1025,9 +1180,14 @@ def carryover_problems(registry_path: Path) -> list[str]:
         fast = (artifact.get("backends") or {}).get("fast_cpu")
         cross_artifact = is_cross_artifact_carryover(artifact)
         if isinstance(fast, dict) and "repair" in fast and not cross_artifact:
+            # The second admitted form: a directly judged face.
+            problems += _direct_record_problems(artifact, roster, document)
+        if isinstance(fast, dict) and "engine_differential" in fast and (
+            "repair" not in fast or cross_artifact
+        ):
             problems.append(
-                f"{family}: fast CPU repair parameters are recorded without a "
-                "cross-artifact carry-over"
+                f"{family}: engine_differential belongs to the directly judged "
+                "form (record-held repair parameters, no carry-over)"
             )
         if carryover is None:
             continue

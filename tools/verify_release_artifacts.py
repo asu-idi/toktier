@@ -15,7 +15,7 @@ import zipfile
 from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_WHEEL = "toktier-0.3.1-cp310-abi3-manylinux_2_34_x86_64.whl"
@@ -29,6 +29,11 @@ ORACLE_REQUIREMENT = "tokenizers>=0.22.2,<0.24"
 LOADER_REQUIREMENT = "transformers>=4.57.6,<6"
 IDENTITY_SENTINEL_HEX = "73656e74696e656c" * 4
 IDENTITY_SENTINEL_BYTES = bytes.fromhex(IDENTITY_SENTINEL_HEX)
+#: The repository's support registry; the wheel's packaged copy is held to
+#: it (``tools/generate_registry.py --check``), so the count of certified
+#: integrated CPU entries a wheel must carry is read from here rather than
+#: written down beside the tool.
+REPOSITORY_REGISTRY = ROOT / "tables" / "support_registry.json"
 
 
 def _fail(message: str) -> NoReturn:
@@ -107,6 +112,45 @@ def _verify_no_identity_sentinel(
         payload = archive.read(name)
         if sentinel_hex in payload or IDENTITY_SENTINEL_BYTES in payload:
             _fail(f"wheel member {name} contains the sentinel build identity")
+
+
+def certified_cpu_entries(registry: dict[str, Any]) -> list[dict[str, Any]]:
+    """The ``certified_source`` fast CPU entries of a support registry."""
+    return [
+        row["backends"]["fast_cpu"]
+        for row in registry.get("artifacts", [])
+        if row.get("backends", {}).get("fast_cpu", {}).get("status")
+        == "certified_source"
+    ]
+
+
+def expected_certified_cpu_count(path: Path = REPOSITORY_REGISTRY) -> int:
+    """How many certified integrated CPU entries the repository registry holds."""
+    count = len(certified_cpu_entries(json.loads(path.read_bytes())))
+    if count < 1:
+        _fail(f"{path} certifies no integrated CPU artifact")
+    return count
+
+
+def verify_certified_cpu(
+    registry: dict[str, Any], binding: dict[str, Any], expected: int
+) -> None:
+    """The wheel registry's certified CPU entries: their count and identity."""
+    certified_cpu = certified_cpu_entries(registry)
+    if len(certified_cpu) != expected:
+        _fail(
+            f"wheel registry certifies {len(certified_cpu)} integrated CPU "
+            f"artifacts; the repository registry certifies {expected}"
+        )
+    for entry in certified_cpu:
+        if (
+            entry.get("engine_delivery") != "integrated"
+            or entry.get("engine_module") != "toktier._native"
+            or entry.get("source_digest") != binding.get("source_digest")
+            or entry.get("build_flags") != binding.get("build_flags")
+            or entry.get("toolchain") != binding.get("toolchain")
+        ):
+            _fail("wheel registry carries another integrated CPU identity")
 
 
 def _verify_record(archive: zipfile.ZipFile, names: list[str]) -> None:
@@ -188,23 +232,7 @@ def verify(wheel: Path) -> None:
             names, "toktier/routing/tables/support_registry.v1.json"
         )
         registry = json.loads(archive.read(registry_name))
-        certified_cpu = [
-            row["backends"]["fast_cpu"]
-            for row in registry.get("artifacts", [])
-            if row.get("backends", {}).get("fast_cpu", {}).get("status")
-            == "certified_source"
-        ]
-        if len(certified_cpu) != 13:
-            _fail("wheel registry does not certify thirteen integrated CPU artifacts")
-        for entry in certified_cpu:
-            if (
-                entry.get("engine_delivery") != "integrated"
-                or entry.get("engine_module") != "toktier._native"
-                or entry.get("source_digest") != binding.get("source_digest")
-                or entry.get("build_flags") != binding.get("build_flags")
-                or entry.get("toolchain") != binding.get("toolchain")
-            ):
-                _fail("wheel registry carries another integrated CPU identity")
+        verify_certified_cpu(registry, binding, expected_certified_cpu_count())
 
         metadata_name = _one(names, ".dist-info/METADATA")
         verify_metadata(archive.read(metadata_name))

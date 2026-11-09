@@ -117,9 +117,13 @@ CPU route is labelled `CertifiedSource`. Since 0.3.0 a build from the judged
 sources on a compiler or feature recipe no campaign used is admitted to the
 fast CPU route under every policy but `Policy::Reference` and labelled
 `Certification::Supported` (`supported_untested`); the reference route is
-only for a build whose sources do not verify. The GPU route keeps the
-judged-recipe requirement, because a prebuilt fatbin is paired with a judged
-host build.
+only for a build whose sources do not verify. The GPU route follows the same
+rule under `Policy::Supported` and `Policy::RequireAccelerated`: a build from
+the judged sources on another compiler or flag recipe admits it, labelled
+`Certification::Supported` (or `LocallyVerified` with a local record this
+build took), while `Policy::Certified` keeps it to the judged recipe and
+records `ReasonCode::GpuBuildRecipeUnjudged` beside `GpuUncertified`
+("Device and toolchain assurance" below).
 `runtime_build.source_identity_judged` and `runtime_build.recipe_judged`
 report the two axes, and `runtime_build.toolchain_divergence` names the
 compiler that built this binary beside the ones that built the judged
@@ -351,8 +355,13 @@ dependency built with a `CARGO_TARGET_DIR` outside the consumer's tree:
 the lookup can then find this crate's own `Cargo.lock` and read
 `verified` although the consumer compiled another version of a package
 (an `icu_properties` release, for one), so set `TOKTIER_CARGO_LOCK` to the
-consumer's lockfile for the reading that describes the build. A lookup
-that finds the consumer's lockfile in that layout is planned for 0.3.2.
+consumer's lockfile for the reading that describes the build. That
+variable is the way to name the lockfile in these layouts, and no automatic
+lookup is planned: Cargo gives a dependency's build script no fact that
+names the consuming workspace or says whether `--locked` governs the build,
+so the build script cannot find the consumer's lockfile reliably when the
+target directory lies outside the consumer's tree, and cannot tell a
+locked install from an unlocked one.
 Content hashes and origins come from the judged `Cargo.lock`, which travels
 with the crate as well, so the two shipped records cannot hold different
 opinions about one package; a compiled closure naming something that lockfile
@@ -397,12 +406,11 @@ reads `verified`, the fast CPU engine runs, `certified` is `false`,
 `reference_certification_reason` reads `uncertified_reference`, and the
 route is labelled `supported_untested` until the lockfile is aligned, a
 later release certifies the newer version, or `verify-local --engine cpu`
-compares the two engines here. The GPU route keeps the certified-build
-requirement, so on such a build it is admitted only under
-`Policy::Experimental` (`GpuUncertified` among the plan reasons
-otherwise); the refusal message of an explicitly named CUDA device says
-the build is not in the shipped runtime-build registry, where the cause
-is the reference version. When one of this project's own crates
+compares the two engines here. The GPU route is not admitted on such a
+build except under `Policy::Experimental` (`GpuUncertified` among the plan
+reasons otherwise), and the refusal message of an explicitly named CUDA
+device names the cause, a reference library outside its certified
+versions (`uncertified_reference`). When one of this project's own crates
 resolves from another copy or version, `core_closure` reads `mismatched`
 and no accelerated route is admitted. A crate an optional feature brings in
 (`toktier-store-sqlite` under `sqlite`) is compared only when the feature
@@ -417,8 +425,9 @@ What still earns no certificate at all:
   carries, `network` and a CPU-only build without `prebuilt-gpu` among them.
   Since 0.3.0 such a build still admits the fast CPU route, labelled
   `supported_untested`, under every policy but `Policy::Reference` when its
-  sources and its certified core are the judged ones; what it does not earn
-  is the `certified` label;
+  sources and its certified core are the judged ones, and since 0.3.2 the
+  GPU route under `Policy::Supported` and `Policy::RequireAccelerated` with
+  the same label; what it does not earn is the `certified` label;
 - a build whose R0 or R2 packages resolve from somewhere other than the
   judged package -- a `[patch]`, a fork, a mirror, a vendored copy. An
   implementation library from another source is reported in the advisory
@@ -483,8 +492,9 @@ the first one:
 it in a temporary directory, so no lockfile stands above `OUT_DIR`, and a
 registry build deliberately does not read the copy sitting beside its own
 manifest -- comparing a packaged file against itself would answer nothing.
-The installed `toktier-rust` binary is fully usable; it runs the reference
-engine. (`cargo install --locked --path <unpacked crate>` does report
+The installed `toktier-rust` binary is fully usable: its sources are the
+judged ones, so it runs the fast CPU engine, and its GPU route is refused
+(`GpuUncertified`, the closure could not be compared). (`cargo install --locked --path <unpacked crate>` does report
 `verified`, because Cargo then builds under the package's own directory and
 the lockfile it finds there is the one `--locked` actually used.) This is the
 `unlocated` rule rather than the tier rule: no comparison was made at all, so
@@ -505,7 +515,7 @@ are now separate:
 | Assurance | What it says | Reached under |
 |---|---|---|
 | `certified` | The exact configuration appears in the shipped registry and every constraint it binds verifies here. | every policy except `Reference` |
-| `supported_untested` | The engines and digests are the judged ones; the device architecture, the NVCC triple or -- since 0.3.0, for the fast CPU route -- the Rust compiler or feature recipe is one no campaign ran on, and the engine loads and runs here. | `Policy::Supported` (the default); for the fast CPU route, every policy except `Reference` |
+| `supported_untested` | The engines and digests are the judged ones; the device architecture, the NVCC triple or the Rust compiler or feature recipe (since 0.3.0 for the fast CPU route, since 0.3.2 for the GPU route) is one no campaign ran on, and the engine loads and runs here. | `Policy::Supported` (the default); for the fast CPU route, every policy except `Reference`; for the GPU route on another Rust recipe, `Policy::Supported` and `Policy::RequireAccelerated` |
 | `locally_verified` | The same, plus a local check on this machine compared the route with this binary's reference engine and they agreed. | `Policy::Supported` |
 | refused | Something that was bound did not verify: a source digest, a host digest, build flags, the certified core of the closure, or a compiler component anyone can write to. | nothing but an explicit opt-in |
 
@@ -528,6 +538,23 @@ build whose sources do not verify. `runtime_build.toolchain_divergence` names
 both compilers, and `runtime_build.source_identity_judged` says that the
 sources are the judged ones; a build whose sources are not registered stays
 in the last row.
+
+The GPU route joined it in 0.3.2 on the same axis. A build from the judged
+sources, with its sibling crates the judged copies, its closure `verified`
+and its reference libraries at certified versions, but with a rustc or build
+flags no judged row records, admits the GPU route under `Policy::Supported`
+and `Policy::RequireAccelerated`, on a judged device too. Every GPU label on
+such a build is held at `Supported`, or `LocallyVerified` once
+`toktier-rust verify-local --engine gpu` compared the route on this machine
+with this build; the device rules still apply underneath. `Policy::Certified`
+admits the GPU route only on the judged recipe and records
+`ReasonCode::GpuBuildRecipeUnjudged` beside `GpuUncertified`. A reference
+library outside its certified versions, a closure that could not be
+compared (`unlocated`), a sibling crate from another copy and sources no
+judged row records keep the GPU route refused except under
+`Policy::Experimental`, and the refusal of an explicitly named CUDA device
+says which of these held. The prebuilt delivery's own pairing with the
+native host's source digest is checked as before.
 
 The JIT path splits the same way. A source, host or flags mismatch still
 refuses, and so does a world-writable compiler component unless the
@@ -615,8 +642,14 @@ reports what it read.
 What it writes is a record, not a certificate. The record is filed under
 the engine it measured, the device architecture, the delivery, the image
 digest, the compiler triple, the driver, the two source identities, the
-family artifact and the version of the tool that wrote it, so it stops
-applying the moment any of those moves; `--forget` removes it. The
+Rust compiler that built the GPU route's host, the build flags of this
+binary, the family artifact and the version of the tool that wrote it, so
+it stops applying the moment any of those moves; `--forget` removes it. The
+host compiler and the build flags joined the key in 0.3.2, when the GPU
+route began to run on builds whose recipe no campaign judged: a comparison
+made with one build does not speak for another. A record written before
+0.3.2 is filed under a key this release does not look up, so it is ignored,
+and running `verify-local` again files one under the new key. The
 architecture rather than the device index: two devices of one
 architecture share a record, which is what the campaigns measure as
 well. For a JIT product the compiler triple is the NVCC release, build
@@ -674,6 +707,9 @@ fields differ, and these are they:
 | `gpu_min_bytes` | `u64` | The input size at or above which the GPU backend is selected, when one is admitted. Below it execution starts at the next admitted backend, which is the ordinary latency policy rather than a fault. |
 | `certification` | `Certification` | The label of the admitted route: `Certified`, `CertifiedSource`, `Supported`, `LocallyVerified`, `Experimental` or `Reference`. |
 | `reasons` | `Vec<ReasonCode>` | One entry per accelerated option that was considered and not admitted. This is where a build whose closure or device the registry does not judge says so, and what `verify-local` names when it has no accelerated route to compare. |
+| `postprocessor_class` | `String` | How `EncodeOptions::add_special_tokens` is served, read from the post-processor of the document the reference engine executes: `"identity"` (it adds nothing to a single sequence, so the request runs the plain route), `"prefix"` (one special token before the sequence, so the plain route's core stream is returned behind `special_token_prefix`) or `"reference"` (any other post-processor, or a construction check that did not hold, so the request is encoded by the reference engine with `R_INPUT_POSTPROCESS_ROUTED`). Added in 0.3.2. |
+| `special_token_prefix` | `Vec<u32>` | The ids placed before the core stream when `postprocessor_class` is `"prefix"`; empty otherwise. Added in 0.3.2. |
+| `postprocessor_self_check` | `Option<String>` | `None` when the construction check of the class held or was not needed; otherwise which probe text answered differently on the reference engine with and without special tokens, the reason the class reads `"reference"`. Added in 0.3.2. |
 
 The type is `#[non_exhaustive]`, so it is read rather than constructed by
 a consumer, and both plans are immutable for the lifetime of the
@@ -697,6 +733,14 @@ let second: &[u32] = batch.row(1)?;
 # let _ = (token_count, decoded, all_values, row_boundaries, second);
 # Ok::<(), toktier::Error>(())
 ```
+
+`EncodeOptions::add_special_tokens` (on `encode_with` and
+`encode_batch_with`) means the post-processor of the reference document, the
+same definition as the Python facade's (`docs/contracts/facade.md` Section
+2): the plan's `postprocessor_class` says whether the request runs the plain
+route, the plain route behind `special_token_prefix`, or the reference
+engine. The classes and the construction check are the Python facade's, so
+the two faces classify every artifact alike.
 
 `TokenBuffer` is immutable shared ownership of one continuous `u32`
 allocation. Borrowing it is allocation-free; `into_vec()` is an explicit full
@@ -891,16 +935,20 @@ the evidence label is reported as under the table.
 
 **Threads and workers.** The chunks are encoded by corrected-CPU workers
 forked from the engine on first use and kept on a free list;
-`warm(workers, text)` forks them ahead of the first request (the Rayon
-thread count when `workers` is `None`), and `stats().workers` counts
-them. The chunk encodes run as one parallel iteration on the
-process-wide Rayon pool the batch path and the Python native path
-already share, sized by `RAYON_NUM_THREADS` or the CPU count, so one
-setting governs every parallel section of the process and nothing is
-spawned per request. A host that wants the chunks on a pool of its own
-runs the call inside that pool's `install`, which is the documented
-contract of `rayon::ThreadPool::install`; this crate takes no `rayon`
-edge of its own for it. With one thread the chunks run one after
+`warm(workers, text)` forks them ahead of the first request (the chunk
+pool's thread count when `workers` is `None`), and `stats().workers` counts
+them. The chunk encodes run as one parallel iteration on a process-wide
+pool of the routing crate's own, which the Python native path shares: the
+first `warm` builds it with the worker count it names, a later larger count
+grows it, and without a `warm` call the first chunked call builds it with
+the parallelism available to the process (its affinity mask and CPU quota
+honoured). `RAYON_NUM_THREADS` takes no part, so a process that sets it to
+`1` for its other parallel sections still encodes chunks in parallel, and
+nothing is spawned per request. A host that wants the chunks on a pool of
+its own runs the call inside that pool's `install`: a call made from a
+thread that belongs to a Rayon pool runs on that pool, which is the
+documented contract of `rayon::ThreadPool::install`; this crate takes no
+`rayon` edge of its own for it. With one thread the chunks run one after
 another and stay exact.
 
 **Counters.** `stats()` keeps what `toktier.chunked.stats(tokenizer)`

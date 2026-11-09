@@ -360,21 +360,41 @@ ids = tok.encode(long_text).ids
 print(tok.explain()["runtime_policy"])
 ```
 
-`gpu_delivery="prebuilt"` or `gpu_delivery="jit"` overrides automatic profile
-detection, and `gpu_min_bytes=` changes the UTF-8 byte crossover. The explicit
+`gpu_delivery="prebuilt"` or `gpu_delivery="jit"` overrides the automatic
+choice below, and `gpu_min_bytes=` changes the UTF-8 byte crossover. The explicit
 engine below remains available for benchmarking and low-level integration.
 
-With `gpu_delivery="auto"`, an importable `ninja` module is read as the
-`gpu-jit` profile, and the facade then selects the JIT delivery even when the
-shipped prebuilt fatbin covers the device. Serving environments often install
-`ninja` for their own extensions. On such a host the first request at or above
-`gpu_min_bytes` compiles the kernel into the cache directory, which takes tens
-of seconds (about 43 s on an RTX PRO 6000, sm_120). Later calls in that process
-take milliseconds, and later processes reuse the build. `toktier doctor`
-reports the choice as `automatic_gpu_delivery`. To use the shipped prebuilt
-kernel, pass `gpu_delivery="prebuilt"`; to stay on the CPU path, pass
-`device="cpu"`. The SGLang adapter passes `device="cpu"`, and the Rust crate's
-`GpuDelivery::Auto` already prefers the prebuilt delivery.
+With `gpu_delivery="auto"`, the facade takes the shipped prebuilt delivery
+whenever the route plan built with it holds the GPU backend for the
+tokenizer on this machine: the fatbin is shipped and verifies, it carries an
+image for the observed architecture, the native request host is ready, and
+the record admits the device. Local JIT is taken only when prebuilt cannot
+serve and the `gpu-jit` profile is installed (an importable `ninja` is that
+profile's marker) and the plan built with JIT holds the GPU backend;
+otherwise `auto` reads `prebuilt`, so a closed route reports the prebuilt
+reasons. An importable `ninja` alone therefore never moves a host with a
+covered device onto JIT, and the first request at or above `gpu_min_bytes`
+loads the shipped kernel rather than compiling one. A process that has
+already loaded one delivery keeps it, since a second cannot load beside it.
+`toktier doctor`, which has no artifact, answers with the host default
+under the same preference as `automatic_gpu_delivery`, and
+`automatic_gpu_delivery_basis` reads `host_default` to say so: `prebuilt`
+when the shipped fatbin is present and verified, the native request host
+reports its build facts and some observed architecture is admitted under the
+prebuilt statuses; otherwise `jit` when the profile is installed; otherwise
+`prebuilt`. A JIT build, when one is taken, compiles the kernel into the
+cache directory on the first request at or above `gpu_min_bytes`, which
+takes tens of seconds (about 43 s on an RTX PRO 6000, sm_120); later calls
+in that process take milliseconds, and later processes reuse the build. To
+stay on the CPU path, pass `device="cpu"`; `device="cuda:N"` selects one
+card (`docs/contracts/facade.md` Section 1). The SGLang adapter passes
+`device="cpu"` unless `TOKTIER_SGLANG_DEVICE` says otherwise, and the Rust
+crate's `GpuDelivery::Auto` prefers the prebuilt delivery as well.
+
+The preference cannot pick a weaker label than the JIT delivery on the
+device axis while every shipped record's prebuilt judged devices contain
+its JIT judged devices, and the test tier checks that property of the
+shipped data.
 
 When the GPU engine opens is a separate question from which backend runs a
 given input, and both deliveries answer it the same way. Under certified

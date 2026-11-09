@@ -384,3 +384,47 @@ def test_shipped_records_name_the_face_the_pinned_loader_builds(
         checked.append(family)
     if not checked:
         pytest.skip("no packaged artifact available under TOKTIER_TEST_ARTIFACTS")
+
+
+def test_deepseek_v3_true_keeps_the_reference_document_meaning(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """Artifact tier: ``add_special_tokens=True`` on ``deepseek_v3`` is pinned.
+
+    ``True`` returns what the post-processor of the reference document
+    adds, and this document adds nothing: the class is ``identity``, the
+    ids equal the core stream, and ``Session.final_ids()`` equals them.
+    The object a 4.57.x ``transformers`` loader builds adds a leading BOS
+    here; 5.x loaders do not. This test keeps the meaning from moving
+    without a visible edit.
+    """
+    artifacts = _ARTIFACTS
+    if not artifacts:
+        pytest.skip("set TOKTIER_TEST_ARTIFACTS to a directory of local artifacts")
+    assert artifacts is not None
+    from toktier import Config, load
+    from toktier.artifacts.manifest import ArtifactManifest
+    from toktier.artifacts.tables import ARTIFACT_MANIFEST
+    from toktier.paths import artifact_cache_dir
+
+    entry = ArtifactManifest.load(ARTIFACT_MANIFEST).get("deepseek_v3")
+    source = Path(artifacts) / entry.directory_name
+    if not all((source / item.name).is_file() for item in entry.files):
+        pytest.skip("deepseek_v3 is not under TOKTIER_TEST_ARTIFACTS")
+    home = tmp_path_factory.mktemp("pin-deepseek_v3")
+    config = Config(home=home, offline=True)
+    cache = artifact_cache_dir(config)
+    cache.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, cache / entry.directory_name)
+    tokenizer = load("deepseek_v3", config=config, device="cpu")
+    try:
+        ids = list(tokenizer.encode("hello world", add_special_tokens=True).ids)
+        assert ids == [33310, 2058]
+        special = tokenizer.explain()["special_tokens"]
+        assert isinstance(special, dict)
+        assert special["postprocessor_class"] == "identity"
+        assert special["prefix_ids"] == []
+        with tokenizer.session(text="hello world") as session:
+            assert session.final_ids() == ids
+    finally:
+        tokenizer.close()

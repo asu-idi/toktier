@@ -235,3 +235,39 @@ fn offsets_with_special_tokens_are_still_refused() {
         assert_eq!(error.code(), ErrorCode::InvalidArgument, "{family}");
     }
 }
+
+/// `deepseek_v3` keeps the reference document's meaning of
+/// `add_special_tokens`: its post-processor adds nothing, so the class is
+/// `identity` and the ids equal the core stream (a 4.57.x `transformers`
+/// loader would add a leading BOS; 5.x loaders do not). The Rust face has
+/// no `final_ids`; the session's seeded ids stand in for it, since an
+/// `identity` face adds nothing at read time.
+#[test]
+fn deepseek_v3_special_tokens_keep_the_reference_document_meaning() {
+    let Some(root) = artifact_root() else {
+        eprintln!("skip: no artifact root on this host");
+        return;
+    };
+    let Some((family, directory)) = artifacts(&root)
+        .into_iter()
+        .find(|(family, _)| family == "deepseek_v3")
+    else {
+        eprintln!("skip: deepseek_v3 is not under {}", root.display());
+        return;
+    };
+    let runtime = Runtime::builder().device(Device::Cpu).build().unwrap();
+    let tokenizer = runtime.load_local(&family, &directory).unwrap();
+    let plan = tokenizer.plan();
+    assert_eq!(plan.postprocessor_class, "identity");
+    assert!(plan.special_token_prefix.is_empty());
+    let encoded = tokenizer
+        .encode_with("hello world", with_special_tokens())
+        .unwrap();
+    assert_eq!(encoded.ids(), &[33_310, 2_058]);
+    let batch = tokenizer
+        .encode_batch_with(&["hello world"], with_special_tokens())
+        .unwrap();
+    assert_eq!(batch.row(0).unwrap(), &[33_310, 2_058]);
+    let mut session = tokenizer.open_session("pin").unwrap();
+    assert_eq!(session.seed("hello world").unwrap().ids(), encoded.ids());
+}

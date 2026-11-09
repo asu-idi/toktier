@@ -9,10 +9,15 @@ checks a column has to pass beyond its schema:
 
 ``special_tokens`` (``schemas/special_tokens_column.schema.json``)
     ``add_special_tokens=True`` on the same documents as the parity pass.
-    The column is only evidence when the facade answered: on an
-    ``identity`` or ``prefix`` face ``served_by.reference`` has to be
-    zero, or a silent fallback to the reference would read as zero
-    mismatches. On an ``identity`` face the column compares a core stream
+    The column is only evidence when the facade answered. The vacuity
+    guard is judged on the facade surface (``surface`` = ``facade``, the
+    default when absent): there, on an ``identity`` or ``prefix`` face
+    ``served_by.reference`` has to be zero, or a silent fallback to the
+    reference would read as zero mismatches. A column taken on the native
+    router directly (``surface`` = ``native_route``), which does not apply
+    the facade's prefix rule, may be answered by the reference; it is then
+    a reference-route reading and the count is printed as a note. On an
+    ``identity`` face the column compares a core stream
     with a core stream, so it is a regression guard and says so
     (``evidence_role``). ``loader_true_equal`` is informative: it is
     reported, never a reason to refuse.
@@ -109,6 +114,7 @@ def special_tokens_problems(
         return problems
     assert isinstance(column, Mapping)
     kind = str(column["postprocessor_class"])
+    surface = str(column.get("surface", "facade"))
     prefix = list(column["prefix_ids"])
     served = column["served_by"]
     count = int(column["documents"])
@@ -116,7 +122,10 @@ def special_tokens_problems(
         problems.append(f"{label}: a prefix face names exactly one prefix id")
     if kind != "prefix" and prefix:
         problems.append(f"{label}: only a prefix face names prefix ids")
-    if column["evidence_role"] != EVIDENCE_ROLE[kind]:
+    allowed_roles = {EVIDENCE_ROLE[kind]}
+    if surface != "facade" and int(served["reference"]) != 0:
+        allowed_roles.add("reference_route")
+    if column["evidence_role"] not in allowed_roles:
         problems.append(
             f"{label}: on a {kind} face the column is "
             f"{EVIDENCE_ROLE[kind]!r}, not {column['evidence_role']!r}"
@@ -126,7 +135,7 @@ def special_tokens_problems(
                 else ""
             )
         )
-    if kind != "reference" and int(served["reference"]) != 0:
+    if surface == "facade" and kind != "reference" and int(served["reference"]) != 0:
         problems.append(
             f"{label}: {served['reference']} document(s) on a {kind} face were "
             "answered by the reference; the column would compare the reference "
@@ -165,23 +174,40 @@ def special_tokens_problems(
 
 
 def special_tokens_notes(family: str, column: object) -> list[str]:
-    """Informative lines: where the pinned loader's object answers otherwise."""
+    """Informative lines: where the pinned loader's object answers otherwise,
+    and where a column off the facade surface was answered by the reference."""
     if not isinstance(column, Mapping):
         return []
+    notes: list[str] = []
+    served = column.get("served_by")
+    surface = column.get("surface", "facade")
+    if (
+        surface != "facade"
+        and column.get("postprocessor_class") in ("identity", "prefix")
+        and isinstance(served, Mapping)
+        and int(served.get("reference", 0)) != 0
+    ):
+        notes.append(
+            f"note: {family}: on the {surface} surface {served.get('reference')} "
+            "document(s) of the add_special_tokens=True column were answered by "
+            "the reference; the vacuity guard is judged on the facade surface "
+            "only, informative here"
+        )
     loader = column.get("loader_true_equal")
     if not isinstance(loader, Mapping) or loader.get("difference") == "none":
-        return []
+        return notes
     affix = ""
     if loader.get("difference") == "fixed_affix":
         affix = (
             f" (prefix {loader.get('loader_prefix_ids') or []}, "
             f"suffix {loader.get('loader_suffix_ids') or []})"
         )
-    return [
+    notes.append(
         f"note: {family}: the pinned loader's object answers add_special_tokens=True "
         f"differently ({loader.get('difference')}{affix}; "
         f"{loader.get('equal')}/{loader.get('strings')} equal); informative only"
-    ]
+    )
+    return notes
 
 
 def literal_segments_problems(

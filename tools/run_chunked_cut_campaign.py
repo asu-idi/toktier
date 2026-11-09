@@ -1066,7 +1066,15 @@ def chat_variant(text: str, literals: list[str], seed: str) -> tuple[str, int]:
 def _zero_rider(name: str) -> dict[str, Any]:
     row: dict[str, Any] = {"documents": 0, "mismatches": 0}
     if name == "special_tokens":
+        # served_by counts how each document was answered (facade /
+        # reference, read per call from the counters of the facade's
+        # explain()["special_tokens"]["requests"]); classes counts the
+        # post-processor class the facade reported; vacuous counts the
+        # documents of an identity or prefix face that the reference
+        # answered (the facade is the surface the vacuity guard judges).
         row["served_by"] = {}
+        row["classes"] = {}
+        row["vacuous"] = 0
     else:
         row["literals"] = 0
         row["paths"] = {}
@@ -1090,13 +1098,43 @@ def _execution_view(tokenizer: Any) -> tuple[Any, Any]:
     return last.get("path"), last.get("segments")
 
 
-def _special_tokens_view(tokenizer: Any) -> Any:
+def _special_tokens_view(tokenizer: Any) -> tuple[Any, dict[str, int] | None]:
+    """``(postprocessor_class, requests)`` of the facade's ``special_tokens`` block.
+
+    The block is ``explain()["special_tokens"]``: ``postprocessor_class``
+    (``identity`` / ``prefix`` / ``reference``) and ``requests``, the
+    facade's running counts of ``add_special_tokens=True`` requests it
+    answered itself (``facade``) and sent to the reference (``reference``).
+    ``(None, None)`` when the tokenizer reports no such block.
+    """
     try:
         report = tokenizer.explain()
-    except Exception:  # pragma: no cover
-        return None
+    except Exception:  # pragma: no cover - a diagnostic read never fails a run
+        return None, None
     block = report.get("special_tokens") if isinstance(report, dict) else None
-    return block.get("served_by") if isinstance(block, dict) else None
+    if not isinstance(block, dict):
+        return None, None
+    requests = block.get("requests")
+    counts = (
+        {
+            key: int(requests.get(key, 0))
+            for key in ("facade", "reference")
+            if isinstance(requests.get(key, 0), int)
+        }
+        if isinstance(requests, dict)
+        else None
+    )
+    return block.get("postprocessor_class"), counts
+
+
+def _served_by(before: dict[str, int] | None, after: dict[str, int] | None) -> str:
+    """Which counter one call moved: ``facade``, ``reference`` or ``not_reported``."""
+    if before is None or after is None:
+        return "not_reported"
+    moved = [
+        key for key in ("facade", "reference") if after.get(key, 0) > before.get(key, 0)
+    ]
+    return moved[0] if len(moved) == 1 else "not_reported"
 
 
 def ride(
@@ -1107,13 +1145,19 @@ def ride(
     counters = family.riders
     if "special_tokens" in riders:
         row = counters["special_tokens"]
+        _, before = _special_tokens_view(family.tokenizer)
         ids = list(family.tokenizer.encode(text, add_special_tokens=True).ids)
+        kind, after = _special_tokens_view(family.tokenizer)
         oracle = [
             int(i) for i in family.oracle.encode(text, add_special_tokens=True).ids
         ]
-        served = str(_special_tokens_view(family.tokenizer) or "not_reported")
+        served = _served_by(before, after)
+        kind_key = str(kind or "not_reported")
         row["documents"] += 1
         row["served_by"][served] = row["served_by"].get(served, 0) + 1
+        row["classes"][kind_key] = row["classes"].get(kind_key, 0) + 1
+        if kind in ("identity", "prefix") and served == "reference":
+            row["vacuous"] += 1
         if ids != oracle:
             row["mismatches"] += 1
             findings.append(_rider_finding(family.name, "true_vs_oracle", text))

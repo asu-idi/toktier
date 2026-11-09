@@ -67,6 +67,47 @@ def test_a_silent_fallback_to_the_reference_is_refused() -> None:
     )
 
 
+@pytest.mark.parametrize("kind", ["identity", "prefix"])
+def test_the_vacuity_guard_is_judged_on_the_facade_surface_only(kind: str) -> None:
+    # The same reference-answered column: refused on the facade surface
+    # (named, or by default when absent), reported on the native route.
+    column = _true_column(kind)
+    column["served_by"] = {"facade": 0, "reference": 100}
+    for surface in (None, "facade"):
+        if surface is not None:
+            column["surface"] = surface
+        assert any(
+            "answered by the reference" in problem
+            for problem in forms.special_tokens_problems("f", column)
+        )
+    column["surface"] = "native_route"
+    assert forms.special_tokens_problems("f", column) == []
+    column["evidence_role"] = "reference_route"
+    assert forms.special_tokens_problems("f", column) == []
+    notes = forms.special_tokens_notes("f", column)
+    assert len(notes) == 1 and "native_route surface 100 document(s)" in notes[0]
+    assert "judged on the facade surface only" in notes[0]
+    # Off the facade surface, a column the facade answered keeps its role.
+    served = _true_column(kind)
+    served["surface"] = "native_route"
+    assert forms.special_tokens_problems("f", served) == []
+    assert forms.special_tokens_notes("f", served) == []
+    served["evidence_role"] = "reference_route"
+    assert any(
+        "not 'reference_route'" in problem
+        for problem in forms.special_tokens_problems("f", served)
+    )
+    # Mismatches count on every surface, and the surface names are closed.
+    column["mismatches"] = 1
+    assert any(
+        "1 mismatch" in problem
+        for problem in forms.special_tokens_problems("f", column)
+    )
+    column["mismatches"] = 0
+    column["surface"] = "elsewhere"
+    assert forms.special_tokens_problems("f", column)
+
+
 def test_the_identity_column_is_named_a_regression_guard() -> None:
     column = _true_column("identity")
     column["evidence_role"] = "prefix_rule"

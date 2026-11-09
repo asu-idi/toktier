@@ -77,6 +77,12 @@ def test_the_riders_count_and_name_their_findings(
         segments = family.riders["literal_segments"]
         assert special["documents"] == 1 and special["mismatches"] == 0
         assert sum(special["served_by"].values()) == 1
+        # The facade reports the class and moves one request counter per
+        # call (explain()["special_tokens"]): served_by names that counter.
+        assert set(special["served_by"]) <= {"facade", "reference"}
+        assert sum(special["classes"].values()) == 1
+        assert set(special["classes"]) <= {"identity", "prefix", "reference"}
+        assert special["vacuous"] == 0
         assert segments["documents"] == 1 and segments["mismatches"] == 0
         assert sum(segments["paths"].values()) == 1
         # An injected difference is counted and named, column by column.
@@ -130,6 +136,63 @@ def test_riders_leave_the_stream_and_the_chunked_columns_alone(
     assert ridden_row["docs"] == plain_row["docs"] == len(docs)
     assert riders["special_tokens"]["documents"] == len(docs)
     assert riders["literal_segments"]["documents"] == len(docs)
+
+
+class _ReportingTokenizer:
+    """A facade stand-in whose special_tokens block is set by the test."""
+
+    def __init__(self, kind: str, answer: str) -> None:
+        self.kind = kind
+        self.answer = answer
+        self.requests = {"facade": 0, "reference": 0}
+
+    def encode(self, text: str, **_kwargs: Any) -> Any:
+        if self.answer in self.requests:
+            self.requests[self.answer] += 1
+        return argparse.Namespace(ids=[1, 2])
+
+    def explain(self) -> dict[str, Any]:
+        if self.answer == "silent":
+            return {}
+        return {
+            "special_tokens": {
+                "postprocessor_class": self.kind,
+                "served_by": "facade_prefix",
+                "requests": dict(self.requests),
+            }
+        }
+
+
+class _Oracle:
+    def encode(self, _text: str, **_kwargs: Any) -> Any:
+        return argparse.Namespace(ids=[1, 2])
+
+
+@pytest.mark.parametrize(
+    ("kind", "answer", "served", "vacuous"),
+    [
+        ("prefix", "facade", "facade", 0),
+        ("identity", "facade", "facade", 0),
+        ("prefix", "reference", "reference", 1),
+        ("identity", "reference", "reference", 1),
+        ("reference", "reference", "reference", 0),
+        ("prefix", "silent", "not_reported", 0),
+    ],
+)
+def test_the_special_tokens_rider_reads_the_facade_request_counters(
+    kind: str, answer: str, served: str, vacuous: int
+) -> None:
+    family = argparse.Namespace(
+        name="f",
+        tokenizer=_ReportingTokenizer(kind, answer),
+        oracle=_Oracle(),
+        riders={"special_tokens": tool._zero_rider("special_tokens")},
+    )
+    assert tool.ride(family, "text", ("special_tokens",)) == []
+    row = family.riders["special_tokens"]
+    assert row["served_by"] == {served: 1}
+    assert row["classes"] == {(kind if answer != "silent" else "not_reported"): 1}
+    assert row["vacuous"] == vacuous
 
 
 def test_rider_counters_merge_over_units() -> None:

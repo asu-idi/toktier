@@ -439,6 +439,12 @@ impl ReferenceEngine {
             .get_or_init(|| LiteralClass::build(&self.tokenizer, &self.document, self))
     }
 
+    /// Whether the literal class has been built (tests only).
+    #[cfg(test)]
+    pub(crate) fn literal_class_built(&self) -> bool {
+        self.literal_class.get().is_some()
+    }
+
     /// The plain-literal segmenter when this face is in the served class
     /// otherwise `None`.
     pub(crate) fn literal_segmenter(&self) -> Option<&LiteralSegmenter> {

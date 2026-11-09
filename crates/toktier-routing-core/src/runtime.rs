@@ -1536,7 +1536,13 @@ impl NativeRouter {
         // the path string.
         let mut reasons: Vec<Option<&'static str>> = vec![None; texts.len()];
         let mut segments: Vec<Option<SegmentFacts>> = vec![None; texts.len()];
-        let served = self.served_segmenter().is_some();
+        // A reference-only chain never segments, so it does not build the
+        // literal class (with its self-check) inside its first request.
+        let served = self
+            .chain
+            .iter()
+            .any(|backend| *backend != BackendKind::Reference)
+            && self.served_segmenter().is_some();
 
         // Resolve the exact added-token frontend before grouping rows.  The
         // native matcher is only a cheap candidate gate; the reference
@@ -2648,6 +2654,42 @@ mod tests {
                 "error": "ReferenceEngineError",
                 "message": "tokenizer returned unknown id 99",
             }))
+        );
+    }
+
+    /// A reference-only chain builds no literal class: not at
+    /// construction and not inside a single, batch or state request.
+    #[test]
+    fn a_reference_only_chain_never_builds_the_literal_class() {
+        use crate::reference::test_support::{face_json, plain, TestNormalizer};
+        let json = face_json(
+            TestNormalizer::EmptySequence,
+            &[plain("<|im_start|>", false), plain("<|im_end|>", false)],
+        );
+        let reference = Arc::new(ReferenceEngine::from_bytes(&json).unwrap());
+        let router = NativeRouter::new(
+            vec![BACKEND_REFERENCE.to_owned()],
+            vec![0],
+            Arc::clone(&reference),
+            None,
+            false,
+            None,
+            false,
+            true,
+        )
+        .unwrap();
+        let text = "<|im_start|>user\nhello<|im_end|>\n";
+        assert!(!reference.literal_class_built());
+        let rows = router.encode_batch_ids(&[text, "plain"], false).unwrap();
+        assert_eq!(rows[0].ids, reference.encode_ids(text, false).unwrap());
+        assert!(!reference.literal_class_built(), "batch request");
+        let routed = router.encode_ids(text, false).unwrap();
+        assert_eq!(routed.ids, rows[0].ids);
+        let encoded = <NativeRouter as SessionEncoder>::encode(&router, text).unwrap();
+        assert_eq!(encoded.ids, rows[0].ids);
+        assert!(
+            !reference.literal_class_built(),
+            "single and state requests"
         );
     }
 

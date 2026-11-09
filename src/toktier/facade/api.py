@@ -2141,11 +2141,11 @@ class Tokenizer:
             "outside that identity. Open it from a process whose native "
             "request runtime is available (CPU and prebuilt GPU hosts), or "
             "give this process another store directory",
+            # The two keys the errors contract lists for this code; the
+            # message names the reason.
             details={
-                "reason": "native_owned_store_python_reader",
                 "expected_fingerprint": python_key.hex(),
                 "stored_fingerprint": stored.hex(),
-                "stored_axis": AXIS_SOURCE_V2,
             },
         )
 

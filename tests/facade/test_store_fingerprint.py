@@ -498,6 +498,15 @@ def _write_session(tokenizer: Any) -> tuple[int | None, str]:
     return revision, text
 
 
+def _assert_owner_refusal(error: SessionStateMismatch, directory: Path) -> None:
+    """The refused direction: its own message, the two documented details."""
+    assert "held by this build's native request runtime" in str(error)
+    stored = json.loads((directory / "meta.json").read_text())["fingerprint"]
+    assert set(error.details) == {"expected_fingerprint", "stored_fingerprint"}
+    assert error.details["stored_fingerprint"] == stored
+    assert error.details["expected_fingerprint"] != stored
+
+
 def test_the_native_runtime_opens_the_store_this_build_s_python_owner_wrote(
     rig: Rig, monkeypatch: pytest.MonkeyPatch, reference: Any
 ) -> None:
@@ -530,8 +539,7 @@ def test_the_python_owner_refuses_the_store_this_build_s_native_runtime_holds(
     reader = _owner_tokenizer(rig, monkeypatch, document, "python", directory)
     with pytest.raises(SessionStateMismatch, match="native request runtime") as caught:
         reader.encode("hello there and more", session="chat")
-    assert caught.value.details["reason"] == "native_owned_store_python_reader"
-    assert caught.value.details["stored_axis"] == fp.AXIS_SOURCE_V2
+    _assert_owner_refusal(caught.value, directory)
 
 
 def test_an_unbound_build_shares_one_key_between_its_owners(
@@ -584,7 +592,7 @@ def test_the_initialisation_fallback_with_a_persistent_store(
     else:
         with pytest.raises(SessionStateMismatch) as caught:
             reader.encode(text, session="chat")
-        assert caught.value.details["reason"] == "native_owned_store_python_reader"
+        _assert_owner_refusal(caught.value, directory)
     guard = reader.explain()["native_request_guard"]
     assert guard["reason"] == "native_request_initialisation_guard"  # type: ignore[index]
     reader.close()
@@ -612,7 +620,7 @@ def test_the_owner_matrix(
     if refused:
         with pytest.raises(SessionStateMismatch) as caught:
             reader.encode(text, session="chat")
-        assert caught.value.details["reason"] == "native_owned_store_python_reader"
+        _assert_owner_refusal(caught.value, directory)
     else:
         with reader.session(session_id="chat", text=text) as session:
             assert session.revision == revision

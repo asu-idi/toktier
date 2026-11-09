@@ -140,6 +140,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from ..facade.delivery import GPU_DELIVERIES, parse_device
 from .sglang_sched import SchedResult, Scheduler, SchedulerConfig, parse_flag
 
 __all__ = [
@@ -278,6 +279,12 @@ class AdapterConfig:
     ``scheduler`` (a :class:`~toktier.integrations.sglang_sched.
     SchedulerConfig` with ``workers`` > 0) starts the process-pool
     scheduler; ``None`` keeps every encode in this process.
+    ``device`` and ``gpu_delivery`` are passed to ``toktier.load`` /
+    ``toktier.from_pretrained`` as given (``device`` accepts ``"auto"``,
+    ``"cpu"``, ``"cuda"`` and ``"cuda:N"``; ``gpu_delivery`` accepts
+    ``"auto"``, ``"prebuilt"`` and ``"jit"``). The default ``"cpu"`` keeps
+    the adapter on the CPU path. The scheduler's workers receive
+    ``device``; they load with the default ``gpu_delivery``.
     """
 
     family: str | None = None
@@ -298,6 +305,7 @@ class AdapterConfig:
     chunked_min_chars: int = 0
     chunked_k: int = 0
     device: str = "cpu"
+    gpu_delivery: str = "auto"
     identity: str = "require"
     scheduler: SchedulerConfig | None = None
 
@@ -314,6 +322,12 @@ class AdapterConfig:
             raise ValueError("shadow_rate must lie in [0, 1]")
         if self.chunked_min_chars < 0 or self.chunked_k < 0:
             raise ValueError("chunked_min_chars and chunked_k must be non-negative")
+        parse_device(self.device)
+        if self.gpu_delivery not in GPU_DELIVERIES:
+            raise ValueError(
+                f"gpu_delivery must be one of {GPU_DELIVERIES!r}, "
+                f"not {self.gpu_delivery!r}"
+            )
         if self.identity not in _IDENTITY_MODES:
             raise ValueError(
                 "identity must be 'require' (the identity check cannot be "
@@ -332,7 +346,8 @@ class AdapterConfig:
         (``FAMILY``, ``REPO``, ``SESSION_KEY``, ``STORE``, ``SHADOW_RATE``,
         ``SHADOW_DUMP_DIR``, ``TIMING_LOG``, ``STATS_FILE``,
         ``EXPLAIN_EVERY``, ``RID_SEPARATOR``, ``PER_PROCESS_STORE``,
-        ``CHUNKED_MIN_CHARS``, ``CHUNKED_K``, ``IDENTITY``; the last accepts
+        ``CHUNKED_MIN_CHARS``, ``CHUNKED_K``, ``DEVICE``, ``GPU_DELIVERY``,
+        ``IDENTITY``; the last accepts
         only ``require``, and ``PER_PROCESS_STORE`` accepts
         ``1``/``true``/``yes`` and ``0``/``false``/``no`` in any case). An
         invalid value raises ``ValueError``; a numeric value that does not
@@ -390,6 +405,8 @@ class AdapterConfig:
             rid_separator=get("RID_SEPARATOR"),
             chunked_min_chars=whole("CHUNKED_MIN_CHARS", 0),
             chunked_k=whole("CHUNKED_K", 0),
+            device=str(get("DEVICE", "cpu")),
+            gpu_delivery=str(get("GPU_DELIVERY", "auto")),
             identity=identity,
             scheduler=scheduler,
         )
@@ -830,14 +847,24 @@ class SGLangToktierTokenizer:
             store = os.path.join(store, f"pid{os.getpid()}")
         self._store_dir = store
         if self._cfg.family:
-            return toktier.load(self._cfg.family, store=store, device=self._cfg.device)
+            return toktier.load(
+                self._cfg.family,
+                store=store,
+                device=self._cfg.device,
+                gpu_delivery=self._cfg.gpu_delivery,
+            )
         repo = self._cfg.repo_id or getattr(self._hf, "name_or_path", None)
         if not repo:
             raise ValueError(
                 "AdapterConfig.family or repo_id is required when the wrapped "
                 "tokenizer carries no name_or_path"
             )
-        return toktier.from_pretrained(repo, store=store, device=self._cfg.device)
+        return toktier.from_pretrained(
+            repo,
+            store=store,
+            device=self._cfg.device,
+            gpu_delivery=self._cfg.gpu_delivery,
+        )
 
     def _default_shadow_factory(self) -> Any:
         """An independent copy of the supplied tokenizer for the shadow thread.

@@ -141,6 +141,54 @@ def test_config_from_env_maps_names(monkeypatch: pytest.MonkeyPatch) -> None:
     assert AdapterConfig.from_env({}).session_key == "auto"
 
 
+def test_config_device_and_gpu_delivery_from_env_and_checks() -> None:
+    cfg = AdapterConfig.from_env(
+        {"TOKTIER_SGLANG_DEVICE": "cuda:1", "TOKTIER_SGLANG_GPU_DELIVERY": "prebuilt"}
+    )
+    assert (cfg.device, cfg.gpu_delivery) == ("cuda:1", "prebuilt")
+    unset = AdapterConfig.from_env({})
+    assert (unset.device, unset.gpu_delivery) == ("cpu", "auto")
+    for device in ("auto", "cpu", "cuda", "cuda:0"):
+        assert AdapterConfig(device=device).device == device
+    with pytest.raises(ValueError, match="device must be"):
+        AdapterConfig(device="cuda:01")
+    with pytest.raises(ValueError, match="gpu_delivery must be"):
+        AdapterConfig(gpu_delivery="fast")
+    with pytest.raises(ValueError, match="device must be"):
+        AdapterConfig.from_env({"TOKTIER_SGLANG_DEVICE": "gpu"})
+
+
+@pytest.mark.parametrize("family", ["fam_x", None])
+def test_load_passes_device_and_gpu_delivery_through(
+    monkeypatch: pytest.MonkeyPatch, family: str | None
+) -> None:
+    import toktier
+
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def load(name: str, **keywords: object) -> object:
+        calls.append((name, keywords))
+        return object()
+
+    monkeypatch.setattr(toktier, "load", load)
+    monkeypatch.setattr(toktier, "from_pretrained", load)
+    cfg = AdapterConfig(
+        family=family,
+        repo_id="org/repo",
+        device="cuda:2",
+        gpu_delivery="prebuilt",
+        session_key="passthrough",
+    )
+    wrapper = wrap_tokenizer(_StubHf(), cfg)
+    wrapper._load_toktier()
+    assert calls == [
+        (
+            family or "org/repo",
+            {"store": None, "device": "cuda:2", "gpu_delivery": "prebuilt"},
+        )
+    ]
+
+
 def test_special_template_derivation() -> None:
     assert _derive_special_template(_StubHf()) == ([], [], True)
     assert _derive_special_template(_StubHf(bos=1)) == ([1], [], True)

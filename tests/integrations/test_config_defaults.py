@@ -32,6 +32,7 @@ ADAPTER_DEFAULTS: dict[str, object] = {
     "chunked_min_chars": 0,
     "chunked_k": 0,
     "device": "cpu",
+    "gpu_delivery": "auto",
     "identity": "require",
     "scheduler": None,
 }

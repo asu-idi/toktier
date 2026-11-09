@@ -78,14 +78,16 @@
 //! Two pools take part, and they are not the same thing. The chunks are
 //! encoded by corrected-CPU *workers*, forked from the engine on first
 //! use and kept on a free list; [`Chunked::warm`] forks them ahead of the
-//! first request. The chunk encodes run as one parallel iteration on the
-//! process-wide Rayon pool the batch path and the native request path
-//! already share, sized by `RAYON_NUM_THREADS` or the CPU count, so one
-//! setting governs every parallel section of the process and nothing is
-//! spawned per request. A host that wants the chunks on a pool of its own
-//! runs the call inside that pool's `install`: Rayon executes a parallel
-//! iteration started from one of a pool's threads on that pool, which is
-//! the documented contract of `rayon::ThreadPool::install`. This crate
+//! first request. The chunk encodes run as one parallel iteration on a
+//! process-wide pool of the routing crate's own, sized by the largest
+//! worker count [`Chunked::warm`] has named, or by the available
+//! parallelism of the process; `RAYON_NUM_THREADS` takes no part, so a
+//! process that sets it to 1 for its other parallel sections still
+//! encodes chunks in parallel, and nothing is spawned per request. A host
+//! that wants the chunks on a pool of its own runs the call inside that
+//! pool's `install`: a call made from a thread that belongs to a Rayon
+//! pool runs on that pool, which is the documented contract of
+//! `rayon::ThreadPool::install`. This crate
 //! takes no `rayon` edge of its own for it, so the host names the crate
 //! and the snippet is not compiled here:
 //!
@@ -501,7 +503,7 @@ pub struct ChunkedStats {
     /// Corrected-CPU workers forked so far for this tokenizer.
     pub workers: usize,
     /// The worker count [`Chunked::warm`] forks when none is named: the
-    /// Rayon thread count.
+    /// thread count of the chunk pool.
     pub default_workers: usize,
     /// The admission's evidence label ([`Admission::evidence_label`]),
     /// beside the counters it qualifies: `None` when the native path
@@ -684,7 +686,8 @@ impl<'a> Chunked<'a> {
     }
 
     /// Fork the corrected-CPU worker pool ahead of the first request, up
-    /// to `workers` workers (the Rayon thread count when `None`), running
+    /// to `workers` workers (the chunk pool's thread count when `None`;
+    /// a larger count also grows that pool), running
     /// each new worker once over `text` when one is given so its caches
     /// are warm. Returns the pool size. Without the call the pool is
     /// forked on first use.

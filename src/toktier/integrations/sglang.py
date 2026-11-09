@@ -283,8 +283,8 @@ class AdapterConfig:
     ``toktier.from_pretrained`` as given (``device`` accepts ``"auto"``,
     ``"cpu"``, ``"cuda"`` and ``"cuda:N"``; ``gpu_delivery`` accepts
     ``"auto"``, ``"prebuilt"`` and ``"jit"``). The default ``"cpu"`` keeps
-    the adapter on the CPU path. The scheduler's workers receive
-    ``device``; they load with the default ``gpu_delivery``.
+    the adapter on the CPU path. The scheduler's workers receive both and
+    load with the same two values.
     """
 
     family: str | None = None
@@ -830,6 +830,7 @@ class SGLangToktierTokenizer:
                 family=self._cfg.family or self.family,
                 repo_id=self._cfg.repo_id or getattr(self._hf, "name_or_path", None),
                 device=self._cfg.device,
+                gpu_delivery=self._cfg.gpu_delivery,
                 store=store,
                 planner=planner,
             )

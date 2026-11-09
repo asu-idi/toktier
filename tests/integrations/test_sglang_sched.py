@@ -346,6 +346,96 @@ def test_failing_loader_stops_the_pool_start() -> None:
     sched.close()
 
 
+class _RecordingTokenizer:
+    """What the default worker loader returns in the in-process test."""
+
+    def __init__(self) -> None:
+        self.closed = False
+
+    def _encode_ids(self, text: str, **kwargs: Any) -> list[int]:
+        return [ord(ch) for ch in text]
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.parametrize("by", ["family", "repo_id"])
+def test_default_worker_loader_passes_device_and_gpu_delivery(
+    monkeypatch: pytest.MonkeyPatch, by: str
+) -> None:
+    import queue
+
+    import toktier
+    from toktier.integrations import sglang_sched
+
+    seen: list[tuple[str, str, dict[str, Any]]] = []
+
+    def record(kind: str) -> Any:
+        def load(name: str, **kwargs: Any) -> _RecordingTokenizer:
+            seen.append((kind, name, kwargs))
+            return _RecordingTokenizer()
+
+        return load
+
+    monkeypatch.setattr(toktier, "load", record("load"))
+    monkeypatch.setattr(toktier, "from_pretrained", record("from_pretrained"))
+    qin: Any = queue.Queue()
+    qres: Any = queue.Queue()
+    qin.put(("stop",))
+    sglang_sched._worker_main(
+        0,
+        None,
+        None,
+        None,
+        "fam" if by == "family" else None,
+        "org/repo" if by == "repo_id" else None,
+        "cuda:1",
+        None,
+        {},
+        qin,
+        qres,
+        "jit",
+    )
+    assert qres.get_nowait()[0] == "ready"
+    kind = "load" if by == "family" else "from_pretrained"
+    name = "fam" if by == "family" else "org/repo"
+    assert seen == [
+        (kind, name, {"store": None, "device": "cuda:1", "gpu_delivery": "jit"})
+    ]
+
+
+def test_adapter_hands_device_and_gpu_delivery_to_the_scheduler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from toktier.integrations import sglang as adapter
+
+    fake = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
+    seen: list[dict[str, Any]] = []
+
+    class _Recorder:
+        def __init__(self, config: SchedulerConfig, **kwargs: Any) -> None:
+            seen.append(kwargs)
+
+        def start(self) -> None:
+            raise RuntimeError("recorded only")
+
+    monkeypatch.setattr(adapter, "Scheduler", _Recorder)
+    w = wrap_tokenizer(
+        _StubHf(),
+        AdapterConfig(
+            session_key="off",
+            scheduler=_config(),
+            device="cpu",
+            gpu_delivery="prebuilt",
+        ),
+    )
+    assert w.scheduler is None
+    assert len(seen) == 1
+    assert seen[0]["device"] == "cpu" and seen[0]["gpu_delivery"] == "prebuilt"
+    w.close()
+
+
 def test_dead_worker_is_retired_and_its_sessions_rehomed() -> None:
     sched = Scheduler(
         _config(loader="_sched_stub:load_exiting", worker_timeout_s=5.0)

@@ -631,15 +631,21 @@ def _resolve_loader(spec: str) -> Callable[..., Any]:
     return loader
 
 
-def _family_loader(family: str | None, repo_id: str | None, device: str) -> Any:
+def _family_loader(
+    family: str | None, repo_id: str | None, device: str, gpu_delivery: str = "auto"
+) -> Any:
     """The default worker loader: ``toktier.load`` / ``from_pretrained``."""
     import toktier
 
     def load(store: str | None) -> Any:
         if family:
-            return toktier.load(family, store=store, device=device)
+            return toktier.load(
+                family, store=store, device=device, gpu_delivery=gpu_delivery
+            )
         if repo_id:
-            return toktier.from_pretrained(repo_id, store=store, device=device)
+            return toktier.from_pretrained(
+                repo_id, store=store, device=device, gpu_delivery=gpu_delivery
+            )
         raise ValueError("a family or a repo_id is required")
 
     return load
@@ -657,6 +663,7 @@ def _worker_main(
     env: Mapping[str, str],
     qin: Any,
     qres: Any,
+    gpu_delivery: str = "auto",
 ) -> None:
     # The child sets the native libraries' thread-count variables before
     # anything loads them; it writes the environment and never reads it.
@@ -671,7 +678,7 @@ def _worker_main(
         if loader:
             tokenizer = _resolve_loader(loader)(family, store, device)
         else:
-            tokenizer = _family_loader(family, repo_id, device)(store)
+            tokenizer = _family_loader(family, repo_id, device, gpu_delivery)(store)
         encode_ids = getattr(tokenizer, "_encode_ids", None)
         if not callable(encode_ids):
 
@@ -714,9 +721,11 @@ def _worker_main(
 class Scheduler:
     """The pool, the collector thread and the clocks around a :class:`Policy`.
 
-    ``family`` / ``repo_id`` / ``device`` say what each worker loads
-    (``loader`` overrides that with ``"module:attribute"``, a callable
-    ``(family, store, device) -> tokenizer``, for tests; ``loader_path``
+    ``family`` / ``repo_id`` / ``device`` / ``gpu_delivery`` say what each
+    worker loads; ``device`` and ``gpu_delivery`` reach ``toktier.load`` /
+    ``toktier.from_pretrained`` as given (``loader`` overrides that with
+    ``"module:attribute"``, a callable ``(family, store, device) ->
+    tokenizer``, for tests; ``loader_path``
     is prepended to the worker's ``sys.path``). ``store`` is a directory
     under which worker ``i`` keeps its own session store ``w<i>`` (``None``:
     in-memory sessions per worker). ``planner`` is the chunk-span function
@@ -730,6 +739,7 @@ class Scheduler:
         family: str | None = None,
         repo_id: str | None = None,
         device: str = "cpu",
+        gpu_delivery: str = "auto",
         store: str | None = None,
         planner: Callable[[str, int], Sequence[tuple[int, int]]] | None = None,
         loader: str | None = None,
@@ -741,6 +751,7 @@ class Scheduler:
         self.family = family
         self.repo_id = repo_id
         self.device = device
+        self.gpu_delivery = gpu_delivery
         self.store = store
         self.loader = loader if loader is not None else config.loader
         self.loader_path = (
@@ -809,6 +820,7 @@ class Scheduler:
                     env,
                     qin,
                     self._qres,
+                    self.gpu_delivery,
                 ),
                 name=f"toktier-sched-w{wid}",
                 daemon=True,

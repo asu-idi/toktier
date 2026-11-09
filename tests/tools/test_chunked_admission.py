@@ -1,14 +1,16 @@
 """The chunked admission table is what the readings derive, and nothing more.
 
 Offline tier: the shipped table, manifest and readings pass their own
-``--check``; the table is a subset of the certified repair roster; the two
-identities it records are this tree's; a regenerated pair is byte-identical
-to the shipped pair (``generated_by`` excepted); the generator refuses a
-family with a recorded mismatch, an artifact outside the roster, a
-digest that is not the roster's, and a certified row without a recorded
-loader face; ``--release-check`` names every roster
-family without a row rather than inventing one; and the tools-only
-``chunked`` identity stays out of the three build-time identities.
+``--check``; the table is a subset of the admission roster (the certified
+repair roster plus the records carried onto it, selected with the
+predicate the registry generator applies); the two identities it records
+are this tree's; a regenerated pair is byte-identical to the shipped pair
+(``generated_by`` excepted); the generator refuses a family with a
+recorded mismatch, an artifact outside the roster, a digest that is not
+the roster's, and a certified row without a recorded loader face;
+``--release-check`` names every roster family without a row rather than
+inventing one; and the tools-only ``chunked`` identity stays out of the
+three build-time identities.
 """
 
 from __future__ import annotations
@@ -27,6 +29,8 @@ TOOLS = ROOT / "tools"
 sys.path.insert(0, str(TOOLS))
 
 import compute_identity_v2  # noqa: E402
+import generate_registry  # noqa: E402
+import registry_common  # noqa: E402
 import update_chunked_admission as tool  # noqa: E402
 import validate_registry  # noqa: E402
 from registry_common import (  # noqa: E402
@@ -90,7 +94,7 @@ def test_shipped_documents_pass_check() -> None:
 
 def test_table_is_a_roster_subset_bound_to_this_tree() -> None:
     table: dict[str, Any] = load_json(tool.TABLE_PATH)
-    roster = {item.family: item.artifact_sha256 for item in roster_families()}
+    roster = tool._roster()
     rows = table["rows"]
     assert rows, "the shipped table has no rows"
     assert [row["family"] for row in rows] == sorted(row["family"] for row in rows)
@@ -177,10 +181,109 @@ def test_a_family_outside_the_roster_or_with_another_digest_is_refused() -> None
     readings = _readings()
     tampered = copy.deepcopy(readings)
     tampered["families"][0]["family"] = "kimi_k3"
-    with pytest.raises(GenerationError, match="outside the certified repair roster"):
+    with pytest.raises(GenerationError, match="outside the admission roster"):
         _derive(tampered)
     tampered = copy.deepcopy(readings)
     tampered["families"][0]["artifact_sha256"] = "0" * 64
+    with pytest.raises(GenerationError, match="is not the roster artifact"):
+        _derive(tampered)
+
+
+# -- the admission roster: repair roster plus carried records ----------------
+
+
+def _registry() -> dict[str, Any]:
+    registry: dict[str, Any] = load_json(tool.SUPPORT_REGISTRY_PATH)
+    return registry
+
+
+def test_the_roster_is_the_repair_roster_plus_the_carried_records() -> None:
+    registry = _registry()
+    repair = {item.family: item.artifact_sha256 for item in roster_families()}
+    carried = registry_common.carried_repair_records(registry)
+    assert carried, "the shipped registry carries no record onto the roster"
+    assert not set(carried) & set(repair)
+    assert tool._roster() == {**repair, **carried}
+    # The carried records are exactly the records the registry generator
+    # treats as cross-artifact carry-overs holding fast CPU repair
+    # parameters: one shared predicate, not two readings of the node.
+    assert generate_registry.is_cross_artifact_carryover is (
+        registry_common.is_cross_artifact_carryover
+    )
+    expected = {
+        str(artifact["family"])
+        for artifact in registry["artifacts"]
+        if generate_registry.is_cross_artifact_carryover(artifact)
+        and "repair" in ((artifact.get("backends") or {}).get("fast_cpu") or {})
+    }
+    assert set(carried) == expected
+    # A carry-over node of the configuration-side form (no anchor) is not
+    # cross-artifact: such a record is not selected as carried (it may be
+    # a roster row in its own right).
+    config_side = [
+        artifact["family"]
+        for artifact in registry["artifacts"]
+        if isinstance(artifact.get("carryover"), dict)
+        and not registry_common.is_cross_artifact_carryover(artifact)
+    ]
+    assert config_side
+    assert not set(config_side) & set(carried)
+
+
+def test_a_record_held_repair_row_without_a_carry_over_is_not_selected() -> None:
+    """A directly judged face holds ``repair`` with no carry-over node; its
+    evidence is its own, so it does not join the chunked admission roster
+    through this predicate."""
+    registry = copy.deepcopy(_registry())
+    direct = next(
+        artifact
+        for artifact in registry["artifacts"]
+        if "carryover" not in artifact
+        and artifact["family"] not in tool._roster()
+    )
+    direct["backends"]["fast_cpu"] = {
+        "status": "certified_source",
+        "repair": {
+            "margin": 29,
+            "effective_l_max": 33,
+            "has_normalizer": True,
+            "source_table_sha256": "a" * 64,
+        },
+    }
+    assert direct["family"] not in registry_common.carried_repair_records(registry)
+    assert direct["family"] not in tool._roster(registry)
+    # The same record with an anchor-naming node is selected.
+    direct["carryover"] = {"from_family": "qwen3_8b"}
+    assert direct["family"] in tool._roster(registry)
+    # ... and a carried record that names a roster artifact is refused.
+    roster_row = next(iter(roster_families()))
+    direct["artifact_sha256"] = roster_row.artifact_sha256
+    with pytest.raises(GenerationError, match="already in the certified repair"):
+        tool._roster(registry)
+
+
+def test_a_carried_record_with_both_levels_gets_a_certified_row() -> None:
+    readings = _readings()
+    carried = registry_common.carried_repair_records(_registry())
+    family, digest = sorted(carried.items())[0]
+    donor = readings["families"][0]["family"]
+    corpus_row = copy.deepcopy(readings["families"][0])
+    battery_row = copy.deepcopy(
+        readings["adversarial"]["families"][
+            _row_index(readings["adversarial"]["families"], donor)
+        ]
+    )
+    for row in (corpus_row, battery_row):
+        row.update(family=family, artifact_sha256=digest, loader_face_sha256=digest)
+    readings["families"].append(corpus_row)
+    readings["adversarial"]["families"].append(battery_row)
+    table, manifest = _derive(readings)
+    row = next(r for r in table["rows"] if r["family"] == family)
+    assert row["status"] == "certified" and "python" in row["paths"]
+    assert {a["family"] for a in manifest["artifacts"]} >= {family}
+    # The carried record's own artifact, not its anchor's.
+    tampered = copy.deepcopy(readings)
+    tampered["families"][-1]["artifact_sha256"] = "0" * 64
     with pytest.raises(GenerationError, match="is not the roster artifact"):
         _derive(tampered)
 
@@ -357,13 +460,13 @@ def test_a_certified_row_needs_a_recorded_loader_face(tmp_path: Path) -> None:
 def test_release_check_names_the_absent_roster_families(tmp_path: Path) -> None:
     readings = _readings()
     table: dict[str, Any] = load_json(tool.TABLE_PATH)
-    roster = {item.family for item in roster_families()}
+    roster = set(tool._roster())
     present = {row["family"] for row in table["rows"]}
     expected = sorted(roster - present)
     assert tool.absent_families(readings, table) == expected
     result = _run("--release-check")
     for family in expected:
-        assert f"release: {family} is in the certified repair roster" in result.stderr
+        assert f"release: {family} is in the admission roster" in result.stderr
     for row in tool.partial_rows(table):
         assert f"release: {row['family']} has chunked-path evidence" in result.stderr
     if (
@@ -375,9 +478,7 @@ def test_release_check_names_the_absent_roster_families(tmp_path: Path) -> None:
     # A family recorded as not reasoned about is not reported as absent.
     if expected:
         excluded = copy.deepcopy(readings)
-        roster_digest = {
-            item.family: item.artifact_sha256 for item in roster_families()
-        }
+        roster_digest = tool._roster()
         excluded["not_reasoned"] = [
             {
                 "family": expected[0],

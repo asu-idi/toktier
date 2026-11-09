@@ -58,6 +58,45 @@ class GenerationError(Exception):
     """A generator could not produce a document it can stand behind."""
 
 
+def is_cross_artifact_carryover(artifact: Mapping[str, Any]) -> bool:
+    """Whether a registry record holds the cross-artifact carry-over form.
+
+    The form of ``evidence-carryover.md`` Section 3.1: the record's
+    ``carryover`` node names its anchor (``from_artifact_sha256`` or
+    ``from_family``). The configuration-side form (no anchor) is not
+    cross-artifact. This is the one predicate the support-registry
+    generator and the chunked admission tool share, so that both tools
+    select the same records.
+    """
+    carryover = artifact.get("carryover")
+    return isinstance(carryover, Mapping) and (
+        "from_artifact_sha256" in carryover or "from_family" in carryover
+    )
+
+
+def carried_repair_records(registry: Mapping[str, Any]) -> dict[str, str]:
+    """``{family: artifact_sha256}`` of the records carried onto a roster row.
+
+    A record is carried when its ``backends.fast_cpu`` entry holds a
+    ``repair`` member **and** the record holds a cross-artifact
+    carry-over node (:func:`is_cross_artifact_carryover`). Other
+    record-held repair forms (a directly judged face, whose ``repair``
+    member stands without a carry-over node) are not selected: their
+    evidence is their own, not the anchor's.
+    """
+    carried: dict[str, str] = {}
+    for artifact in registry.get("artifacts") or ():
+        if not isinstance(artifact, Mapping):
+            continue
+        fast = (artifact.get("backends") or {}).get("fast_cpu")
+        if not (isinstance(fast, Mapping) and "repair" in fast):
+            continue
+        if not is_cross_artifact_carryover(artifact):
+            continue
+        carried[str(artifact.get("family"))] = str(artifact.get("artifact_sha256"))
+    return carried
+
+
 def canonical_json(value: object) -> bytes:
     """Return the RFC 8785 canonical form of ``value`` as UTF-8 bytes."""
     try:

@@ -58,6 +58,11 @@ from registry_common import (
     verify_file,
     write_document,
 )
+from registry_common import (
+    # Re-exported: the chunked admission tool selects carried records with
+    # this same predicate (one reading of the carry-over node).
+    is_cross_artifact_carryover as is_cross_artifact_carryover,
+)
 from scan_common import DECLINED, vendored_source_archive
 from source_identity_common import coverage_problems as source_coverage_problems
 from update_fast_cpu_registry import augmented_document
@@ -972,9 +977,7 @@ def carryover_problems(registry_path: Path) -> list[str]:
         carryover = artifact.get("carryover")
         declared = artifact.get("config_added_tokens")
         fast = (artifact.get("backends") or {}).get("fast_cpu")
-        cross_artifact = isinstance(carryover, dict) and (
-            "from_artifact_sha256" in carryover or "from_family" in carryover
-        )
+        cross_artifact = is_cross_artifact_carryover(artifact)
         if isinstance(fast, dict) and "repair" in fast and not cross_artifact:
             problems.append(
                 f"{family}: fast CPU repair parameters are recorded without a "

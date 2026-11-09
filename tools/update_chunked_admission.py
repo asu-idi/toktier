@@ -24,11 +24,22 @@ Both are derived from one input, ``readings/chunked_cuts_campaign.json``
 (``schemas/chunked_readings.schema.json``), which the campaign tool
 ``tools/run_chunked_cut_campaign.py summarize`` writes. The derivation is
 total and refuses rather than rounds: a family with any recorded mismatch,
-an artifact digest that differs from the certified repair roster, a
-family outside the roster, or a certified row whose readings recorded no
+an artifact digest that differs from the admission roster, a family
+outside that roster, or a certified row whose readings recorded no
 loader face (``loader_face_sha256``; the run-time admission compares the
 live face with it, and a row without one would be compared with nothing)
 stops generation.
+
+The admission roster is the certified repair roster
+(``src/toktier/repair/tables/fast_repair_families.v1.json``) plus the
+support-registry records carried onto one of its rows: a record whose
+fast CPU entry holds a ``repair`` member and whose ``carryover`` node is
+the cross-artifact form. The carried records are selected with the
+predicate the registry generator applies to the same node
+(``registry_common.carried_repair_records``), so the two tools cannot
+disagree about which records are carried. A record that holds repair
+parameters in another form (a directly judged face, with no carry-over
+node) is not selected.
 
 Two identities bind the table to the sources it speaks about. The
 ``chunked_identity`` (``tools/source_identity_common.py``,
@@ -68,6 +79,7 @@ from registry_common import (
     CHUNKED_READINGS_DOMAIN_TAG,
     EVIDENCE_DOMAIN_TAG,
     GenerationError,
+    carried_repair_records,
     check_regenerated,
     git_commit,
     load_json,
@@ -88,6 +100,7 @@ EVIDENCE_LEVELS = ("adversarial", "corpus")
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 READINGS_PATH = REPOSITORY_ROOT / "readings" / "chunked_cuts_campaign.json"
+SUPPORT_REGISTRY_PATH = REPOSITORY_ROOT / "tables" / "support_registry.json"
 TABLE_PATH = (
     REPOSITORY_ROOT
     / "src"
@@ -161,8 +174,24 @@ def _paths(row: dict[str, Any], label: str) -> tuple[str, ...]:
     return tuple(str(path) for path in paths)
 
 
-def _roster() -> dict[str, str]:
-    return {item.family: item.artifact_sha256 for item in roster_families()}
+def _roster(registry: dict[str, Any] | None = None) -> dict[str, str]:
+    """The admission roster: ``{family: artifact_sha256}``.
+
+    The certified repair roster plus the records carried onto it
+    (module docstring). ``registry`` defaults to the repository's
+    support registry.
+    """
+    roster = {item.family: item.artifact_sha256 for item in roster_families()}
+    document = load_json(SUPPORT_REGISTRY_PATH) if registry is None else registry
+    carried = carried_repair_records(_mapping(document, "registry"))
+    for family, digest in carried.items():
+        if family in roster or digest in roster.values():
+            raise GenerationError(
+                f"{family}: a carried record names a family or artifact that is "
+                "already in the certified repair roster"
+            )
+        roster[family] = digest
+    return roster
 
 
 def _face(row: dict[str, Any], label: str) -> str | None:
@@ -180,8 +209,9 @@ def _family_row(
     family = str(row.get("family"))
     if family not in roster:
         raise GenerationError(
-            f"{label}: {family!r} is outside the certified repair roster, "
-            "which is the roster the chunk-cut rule was certified on"
+            f"{label}: {family!r} is outside the admission roster (the "
+            "certified repair roster and the records carried onto it), which "
+            "is the roster the chunk-cut rule was certified on"
         )
     digest = row.get("artifact_sha256")
     if digest != roster[family]:
@@ -201,6 +231,7 @@ def derive(
     identity: str,
     engine_v2: str,
     generated_by: dict[str, str],
+    registry: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Return ``(admission table, evidence manifest)`` derived from the readings.
 
@@ -211,9 +242,10 @@ def derive(
     plus ``native`` when both levels also judged the native chunked ids
     against the oracle and the Python ids. A row with one level carries
     that as its status and no paths. Any recorded mismatch, anywhere,
-    refuses the whole derivation.
+    refuses the whole derivation. ``registry`` (default: the repository's
+    support registry) supplies the carried records of the roster.
     """
-    roster = _roster()
+    roster = _roster(registry)
     corpus_rows = _rows(readings.get("families"), "families")
     adversarial = _mapping(readings.get("adversarial"), "adversarial")
     adversarial_rows = _rows(adversarial.get("families"), "adversarial.families")
@@ -435,14 +467,18 @@ def partial_rows(table: dict[str, Any]) -> list[dict[str, Any]]:
     return [row for row in table.get("rows", []) if row.get("status") != "certified"]
 
 
-def absent_families(readings: dict[str, Any], table: dict[str, Any]) -> list[str]:
-    """Roster families with neither a table row nor a not-reasoned record."""
+def absent_families(
+    readings: dict[str, Any],
+    table: dict[str, Any],
+    registry: dict[str, Any] | None = None,
+) -> list[str]:
+    """Admission-roster families with neither a table row nor a not-reasoned record."""
     present = {str(row["family"]) for row in table.get("rows", [])}
     excluded = {
         str(row.get("family")) for row in readings.get("not_reasoned", [])
         if isinstance(row, dict)
     }
-    return sorted(set(_roster()) - present - excluded)
+    return sorted(set(_roster(registry)) - present - excluded)
 
 
 def check(
@@ -526,7 +562,7 @@ def check(
         )
     for family in absent_families(readings, table):
         problems.append(
-            f"release: {family} is in the certified repair roster but has no "
+            f"release: {family} is in the admission roster but has no "
             "chunked-path evidence; it is refused at run time"
         )
     return problems

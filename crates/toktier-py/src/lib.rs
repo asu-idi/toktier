@@ -1445,9 +1445,11 @@ impl PyNativeRuntime {
         Ok(output)
     }
 
-    /// Fork the chunk worker pool up to `workers` workers (the Rayon
-    /// thread count when omitted), running each new worker over `text`
-    /// when one is given so its caches are warm. Returns the pool size.
+    /// Fork the chunk worker pool up to `workers` workers (the chunk
+    /// pool's thread count when omitted, see `default_chunk_workers`),
+    /// running each new worker over `text` when one is given so its caches
+    /// are warm; a named count also grows the chunk pool to it. Returns
+    /// the number of workers.
     #[pyo3(signature = (workers = None, text = None))]
     fn chunked_warm(
         &self,

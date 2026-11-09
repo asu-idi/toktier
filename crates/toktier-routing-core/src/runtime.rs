@@ -277,6 +277,10 @@ impl AddedGate {
     }
 }
 
+/// Path of a served face's literal-bearing document on a `[gpu, hf]`
+/// chain whose text segments are all below the GPU crossover.
+const PATH_SEGMENTS_BELOW_CROSSOVER: &str = "hf_segments_below_crossover";
+
 /// The segment work of one GPU-headed, literal-bearing document.
 enum GpuCompose {
     /// Every text segment was encoded; at least one ran on the GPU.
@@ -288,6 +292,13 @@ enum GpuCompose {
     },
     /// The whole document goes to the reference because of its literals.
     AddedTokenReference,
+    /// A served face on a `[gpu, hf]` chain whose text segments are all
+    /// below the crossover: the reference is the backend after the GPU for
+    /// every segment, so it answers the whole document. Recorded under
+    /// `R_INPUT_ADDED_TOKEN` with the path `hf_segments_below_crossover`
+    /// and the segment facts, so it reads apart from an unserved face and
+    /// from a fail-closed case.
+    BelowCrossover(SegmentFacts),
     /// The engine guard refused a segment (its event is recorded): the
     /// whole document goes to the reference.
     EngineGuard {
@@ -956,6 +967,11 @@ impl NativeRouter {
             GpuCompose::AddedTokenReference => {
                 SegmentedGpu::Routed(self.added_token_reference(text, start)?, None)
             }
+            GpuCompose::BelowCrossover(facts) => {
+                let mut routed = self.added_token_reference(text, start)?;
+                routed.path = Some(PATH_SEGMENTS_BELOW_CROSSOVER.to_owned());
+                SegmentedGpu::Routed(routed, Some(facts))
+            }
             GpuCompose::EngineGuard { path, code } => SegmentedGpu::Routed(
                 RoutedIds {
                     ids: self
@@ -994,10 +1010,20 @@ impl NativeRouter {
             LiteralPiece::Literal { .. } => false,
         };
         if !pieces.iter().any(on_gpu) {
-            return Ok(match self.chain[next] {
-                BackendKind::FastCpu => GpuCompose::Continue(None),
-                _ => GpuCompose::AddedTokenReference,
-            });
+            if self.chain[next] == BackendKind::FastCpu {
+                return Ok(GpuCompose::Continue(None));
+            }
+            let mut facts = SegmentFacts::default();
+            for piece in &pieces {
+                match *piece {
+                    LiteralPiece::Literal { start, end, .. } => facts.add_literal(end - start),
+                    LiteralPiece::Text { start, end } => {
+                        facts.add_text(end - start);
+                        facts.hf_bytes += end - start;
+                    }
+                }
+            }
+            return Ok(GpuCompose::BelowCrossover(facts));
         }
         let cell = self.gpu.as_ref().expect("constructor gate");
         let gpu = match cell.engine() {
@@ -1300,6 +1326,31 @@ impl NativeRouter {
                         GpuCompose::AddedTokenReference => {
                             let encoding = self.reference_state(text)?;
                             return Ok(self.added_token_state(encoding, input_bytes, start));
+                        }
+                        GpuCompose::BelowCrossover(facts) => {
+                            let encoding = self.reference_state(text)?;
+                            self.record_event(
+                                R_INPUT_ADDED_TOKEN,
+                                self.chain[start].as_str(),
+                                BACKEND_REFERENCE,
+                                json!({}),
+                            );
+                            self.record_execution_detail(
+                                BACKEND_REFERENCE,
+                                input_bytes,
+                                self.chain[start].as_str(),
+                                Some("state_encode"),
+                                Some(PATH_SEGMENTS_BELOW_CROSSOVER),
+                                Some(facts),
+                            );
+                            self.record_state_encode(
+                                PATH_SEGMENTS_BELOW_CROSSOVER,
+                                json!({"path": PATH_SEGMENTS_BELOW_CROSSOVER}),
+                            );
+                            return Ok((
+                                StatePayload::Soa(encoding),
+                                PATH_SEGMENTS_BELOW_CROSSOVER.to_owned(),
+                            ));
                         }
                         GpuCompose::EngineGuard { path, code: _ } => {
                             let encoding = self.reference_state(text)?;
@@ -3663,8 +3714,36 @@ mod literal_segment_tests {
             routed.ids,
             setup.reference.encode_ids(&small, false).unwrap()
         );
-        assert_eq!(routed.path.as_deref(), Some("hf_added_token"));
+        // Not an unserved face and not a fail-closed case: every segment is
+        // below the crossover and the reference is the next backend. The
+        // path and the segment facts say so; the code stays the literal one.
+        assert_eq!(routed.path.as_deref(), Some("hf_segments_below_crossover"));
         assert_eq!(routed.reason, Some(R_INPUT_ADDED_TOKEN));
+        let stats = setup.router.stats();
+        let last = stats.last_execution.as_ref().unwrap();
+        assert_eq!(last["path"], "hf_segments_below_crossover");
+        assert_eq!(last["executed_backend"], BACKEND_REFERENCE);
+        let facts = segments(&stats);
+        assert!(facts["largest_text_bytes"].as_u64().unwrap() < 48);
+        assert_eq!(facts["bytes"]["gpu"], 0);
+        assert_eq!(facts["bytes"]["fast_cpu"], 0);
+        assert_eq!(
+            facts["bytes"]["hf"].as_u64().unwrap() + facts["literal_bytes"].as_u64().unwrap(),
+            small.len() as u64
+        );
+        // The state route records the same case the same way.
+        let encoded = <NativeRouter as SessionEncoder>::encode(&setup.router, &small).unwrap();
+        assert_eq!(encoded, setup.reference.encode_core(&small).unwrap());
+        let stats = setup.router.stats();
+        assert_eq!(
+            stats.last_state_encode,
+            Some(json!({"path": "hf_segments_below_crossover"}))
+        );
+        assert_eq!(
+            stats.last_execution.as_ref().unwrap()["path"],
+            "hf_segments_below_crossover"
+        );
+        assert!(segments(&stats)["largest_text_bytes"].as_u64().unwrap() < 48);
         let long = "the quick brown fox jumps over the lazy dog ".repeat(2);
         let mixed = chat(&[&long, "short"]);
         let routed = setup.router.encode_ids(&mixed, false).unwrap();

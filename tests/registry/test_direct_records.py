@@ -471,6 +471,24 @@ def test_d3_an_entry_other_than_the_uniform_one_is_refused(tree: Path) -> None:
             "the append replay covered 1000 documents, below 2%",
         ),
         (
+            lambda r: r["corpus"].update(oracle_version="0.0.0"),
+            "judged against tokenizers 0.0.0, the campaign's reference is 0.22.2",
+        ),
+        (
+            lambda r: r["constructed_arm"].update(threshold_decisive=1_000_001),
+            "counts 1000001 decided outcomes of 1000000 strings",
+        ),
+        (
+            lambda r: r["append_replay"].update(
+                documents=r["corpus"]["documents"] + 1
+            ),
+            "more than the corpus holds",
+        ),
+        (
+            lambda r: r["bridging_check"].update(sample_share=float("nan")),
+            "sample_share: not a finite number",
+        ),
+        (
             lambda r: r["residue_supplement"]["path_classes"].update(
                 gigatoken_segmented=0, hf_added_token=6_000_000
             )

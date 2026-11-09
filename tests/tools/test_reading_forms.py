@@ -674,3 +674,48 @@ def test_the_rider_document_names_a_required_arm_the_campaign_did_not_run(
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+# -- codex B-01, B-04 -----------------------------------------------------------
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_a_non_finite_number_is_refused_before_any_rule(value: float) -> None:
+    column = _segments_column("gpu")
+    column["entry_points"][0]["gpu_share"] = value
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("gpu_share: not a finite number" in p for p in problems), problems
+    # The token json.loads accepts reaches the same rule.
+    parsed = json.loads(json.dumps(column))
+    assert forms.literal_segments_problems("f", parsed, arm="gpu")
+    document = _riders_document()
+    document["rider_share"] = value
+    assert any("not a finite number" in p for p in forms.riders_problems(document))
+
+
+@pytest.mark.parametrize("documents", [2, 3, 50, 99])
+def test_one_guard_document_is_above_one_percent_of_few_documents(
+    documents: int,
+) -> None:
+    column = _segments_column("cpu")
+    entry = column["entry_points"][0]
+    entry["documents"] = documents
+    entry["paths"] = {
+        "gigatoken_segmented": documents - 1,
+        "gpu_segmented": 0,
+        "hf_added_token": 0,
+        "hf_engine_guard": 1,
+    }
+    entry["guard_documents"] = {"count": 1, "bytes_hf": 100, "bound": 1}
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("is above 1% of the documents" in p for p in problems), problems
+
+
+def test_the_guard_bound_is_one_percent_of_the_documents() -> None:
+    column = _segments_column("cpu")
+    guard = column["entry_points"][0]["guard_documents"]
+    guard["bound"] = 10
+    assert forms.literal_segments_problems("f", column, arm="cpu") == []
+    guard["bound"] = 11
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("is above 1% of the documents" in p for p in problems)

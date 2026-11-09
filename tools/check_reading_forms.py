@@ -67,6 +67,7 @@ column is present), 1 otherwise, and prints the informative notes.
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -159,9 +160,36 @@ EVIDENCE_ROLE = {
 }
 
 
+def _non_finite(value: object, path: str = "") -> list[str]:
+    """Paths of non-finite numbers (``NaN``, ``Infinity``) inside ``value``.
+
+    ``json.loads`` accepts those tokens and every comparison with ``NaN`` is
+    false, so a bound such as ``minimum`` or ``share < floor`` would let one
+    through; they are refused before any rule reads the document.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return [path or "<root>"]
+    if isinstance(value, Mapping):
+        return [
+            found
+            for key, item in value.items()
+            for found in _non_finite(item, f"{path}/{key}" if path else str(key))
+        ]
+    if isinstance(value, list):
+        return [
+            found
+            for index, item in enumerate(value)
+            for found in _non_finite(item, f"{path}/{index}")
+        ]
+    return []
+
+
 def _schema_problems(label: str, value: object, schema_path: Path) -> list[str]:
     if not isinstance(value, Mapping):
         return [f"{label}: is not an object"]
+    non_finite = _non_finite(value)
+    if non_finite:
+        return [f"{label}: {path}: not a finite number" for path in non_finite]
     return [
         f"{label}: {message}"
         for message in schema_violations(value, load_json(schema_path))
@@ -361,7 +389,7 @@ def literal_segments_problems(
                 f"{where}: {guard['count']} guard documents exceed the stated "
                 f"bound {guard['bound']}"
             )
-        if int(guard["bound"]) > max(1, int(documents * GUARD_DOCUMENT_SHARE)):
+        if int(guard["bound"]) > int(documents * GUARD_DOCUMENT_SHARE):
             problems.append(
                 f"{where}: the guard-document bound {guard['bound']} is above "
                 f"{GUARD_DOCUMENT_SHARE:.0%} of the documents"
@@ -499,6 +527,7 @@ def engine_differential_problems(
     engine_core: Mapping[str, str],
     frozen_source_digest_v2: str,
     expected_characters: int | None = None,
+    expected_oracle_version: str | None = None,
 ) -> list[str]:
     """Problems of a directly judged face's engine-differential reading.
 
@@ -506,7 +535,9 @@ def engine_differential_problems(
     member is the parameter set the reading has to have run with);
     ``expected_documents`` and ``expected_characters`` are the campaign
     corpus the roster's own differential covered
-    (``tools/fast_cpu_binding.json`` ``validation``); ``engine_core`` the tree's
+    (``tools/fast_cpu_binding.json`` ``validation``), and
+    ``expected_oracle_version`` the reference version it was judged against
+    (the binding's ``oracle.tokenizers``); ``engine_core`` the tree's
     ``tools/engine_core_identity.py`` digests; ``frozen_source_digest_v2``
     the version-normalized fast CPU identity of the tree, which the arms
     taken on the frozen build have to name.
@@ -551,6 +582,14 @@ def engine_differential_problems(
             f"corpus holds {expected_documents}"
         )
     if (
+        expected_oracle_version is not None
+        and corpus["oracle_version"] != expected_oracle_version
+    ):
+        problems.append(
+            f"{label}: judged against tokenizers {corpus['oracle_version']}, the "
+            f"campaign's reference is {expected_oracle_version}"
+        )
+    if (
         expected_characters is not None
         and int(corpus["characters"]) != expected_characters
     ):
@@ -579,6 +618,16 @@ def engine_differential_problems(
     append = reading["append_replay"]
     if int(append["mismatches"]) != 0:
         problems.append(f"{label}: append replay {append['mismatches']} mismatch(es)")
+    if int(append["documents"]) > int(corpus["documents"]):
+        problems.append(
+            f"{label}: the append replay counts {append['documents']} documents, "
+            f"more than the corpus holds ({corpus['documents']})"
+        )
+    if int(append["threshold_decisive"]) > int(append["documents"]):
+        problems.append(
+            f"{label}: the append replay counts more decided outcomes than "
+            "documents"
+        )
     if int(append["documents"]) < APPEND_REPLAY_MIN_SHARE * int(corpus["documents"]):
         problems.append(
             f"{label}: the append replay covered {append['documents']} documents, "
@@ -593,6 +642,15 @@ def engine_differential_problems(
     if int(constructed["mismatches"]) != 0:
         problems.append(
             f"{label}: constructed arm {constructed['mismatches']} mismatch(es)"
+        )
+    if int(constructed["threshold_decisive"]) > int(constructed["strings"]):
+        problems.append(
+            f"{label}: the constructed arm counts {constructed['threshold_decisive']} "
+            f"decided outcomes of {constructed['strings']} strings"
+        )
+    if int(constructed["mismatches"]) > int(constructed["strings"]):
+        problems.append(
+            f"{label}: the constructed arm counts more mismatches than strings"
         )
     own_l_max = int(subject["repair"]["effective_l_max"])
     comparison = int(constructed["comparison_l_max"])
@@ -654,6 +712,11 @@ def engine_differential_problems(
         problems.append(
             f"{label}: {bridging['path_class_changes_literal_free']} literal-free "
             "document(s) changed path class on the frozen build"
+        )
+    if int(bridging["documents"]) > int(corpus["documents"]):
+        problems.append(
+            f"{label}: the bridging check counts {bridging['documents']} documents, "
+            f"more than the corpus holds ({corpus['documents']})"
         )
     if float(bridging["sample_share"]) < BRIDGING_MIN_SHARE:
         problems.append(

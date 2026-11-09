@@ -1077,6 +1077,7 @@ def _direct_record_problems(
         artifact=artifact,
         expected_documents=int(validation.get("documents", -1)),
         expected_characters=int(validation.get("characters", -1)),
+        expected_oracle_version=str((binding.get("oracle") or {}).get("tokenizers")),
         engine_core=engine_core_digests(),
         frozen_source_digest_v2=source_digest_v2("fast_cpu"),
     )

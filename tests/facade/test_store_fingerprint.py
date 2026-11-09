@@ -402,3 +402,174 @@ def test_the_python_entry_store_never_consults_the_history(
         )
         == []
     )
+
+
+# -- the two owners of one build ----------------------------------------------
+#
+# On a bound build the native request runtime keys its store on the v2 axis
+# and the Python entry store on the exact build (v1 axis). The native runtime
+# also opens the store this same build's Python owner wrote, under its stored
+# value; the Python owner refuses a store the native runtime holds, with its
+# own message.
+
+_OWNERS = ("native", "python", "python_callback")
+
+
+def _owner_tokenizer(
+    rig: Rig,
+    monkeypatch: pytest.MonkeyPatch,
+    document: dict[str, Any],
+    owner: str,
+    directory: Path,
+) -> Any:
+    tokenizer = rig.tokenizer(store=directory)
+    _bind(monkeypatch, tokenizer, document)
+    if owner != "native":
+        monkeypatch.setattr(
+            tokenizer, "_construct_native_request_runtime", lambda: None
+        )
+    if owner == "python_callback":
+        monkeypatch.setattr(
+            tokenizer, "_native_repair_encoder", lambda reference=None: None
+        )
+    return tokenizer
+
+
+def _bound_document() -> dict[str, Any]:
+    return _registry([(_FC1_NEXT, _FC2)], [(_NH1_NEXT, _NH2)])
+
+
+def _write_session(tokenizer: Any) -> tuple[int | None, str]:
+    text = "hello there"
+    with tokenizer.session(session_id="chat", text=text) as session:
+        session.append(" and more")
+        text += " and more"
+    revision = tokenizer.store_session_revision("chat")
+    tokenizer.close()
+    return revision, text
+
+
+def test_the_native_runtime_opens_the_store_this_build_s_python_owner_wrote(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, reference: Any
+) -> None:
+    document = _bound_document()
+    directory = rig.store_path()
+    writer = _owner_tokenizer(rig, monkeypatch, document, "python", directory)
+    revision, text = _write_session(writer)
+    written = json.loads((directory / "meta.json").read_text())["fingerprint"]
+    reader = _owner_tokenizer(rig, monkeypatch, document, "native", directory)
+    with reader.session(session_id="chat", text=text) as session:
+        assert session.revision == revision
+        session.append(" again")
+        assert list(session.ids) == reference(text + " again")
+    native = reader.explain()["store_fingerprint"]["owners"]["native"]
+    assert native["opened_as_owner"] == "python"
+    assert native["opened_axis"] == fp.AXIS_SOURCE_V1
+    # Opened under the stored value: nothing rewritten.
+    meta = json.loads((directory / "meta.json").read_text())
+    assert meta["fingerprint"] == written
+    reader.close()
+
+
+def test_the_python_owner_refuses_the_store_this_build_s_native_runtime_holds(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    document = _bound_document()
+    directory = rig.store_path()
+    writer = _owner_tokenizer(rig, monkeypatch, document, "native", directory)
+    _write_session(writer)
+    reader = _owner_tokenizer(rig, monkeypatch, document, "python", directory)
+    with pytest.raises(SessionStateMismatch, match="native request runtime") as caught:
+        reader.encode("hello there and more", session="chat")
+    assert caught.value.details["reason"] == "native_owned_store_python_reader"
+    assert caught.value.details["stored_axis"] == fp.AXIS_SOURCE_V2
+
+
+def test_an_unbound_build_shares_one_key_between_its_owners(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, reference: Any
+) -> None:
+    """Nothing bound: one exact-build key, both directions open."""
+    unbound = _registry([(_FC1, _FC2)], [(_NH1, _NH2)])  # not this build's v1
+    directory = rig.store_path()
+    writer = _owner_tokenizer(rig, monkeypatch, unbound, "native", directory)
+    revision, text = _write_session(writer)
+    reader = _owner_tokenizer(rig, monkeypatch, unbound, "python", directory)
+    with reader.session(session_id="chat", text=text) as session:
+        assert session.revision == revision
+        assert list(session.ids) == reference(text)
+    reader.close()
+
+
+class _FailingRuntime:
+    def __init__(self, *_args: Any, **_keywords: Any) -> None:
+        raise RuntimeError("injected: the native request runtime did not start")
+
+
+@pytest.mark.parametrize("writer_owner", ["native", "python"])
+def test_the_initialisation_fallback_with_a_persistent_store(
+    rig: Rig,
+    monkeypatch: pytest.MonkeyPatch,
+    reference: Any,
+    writer_owner: str,
+) -> None:
+    """The facade's own fallback when the native runtime fails to start.
+
+    A store its Python owner wrote is served on the fallback path; a store
+    the native runtime holds is refused there with the specific message
+    (the direction that stays refused), and the guard is recorded.
+    """
+    from toktier import _native
+
+    document = _bound_document()
+    directory = rig.store_path()
+    writer = _owner_tokenizer(rig, monkeypatch, document, writer_owner, directory)
+    revision, text = _write_session(writer)
+    monkeypatch.setattr(_native, "NativeRuntime", _FailingRuntime)
+    reader = rig.tokenizer(store=directory)
+    _bind(monkeypatch, reader, document)
+    if writer_owner == "python":
+        with reader.session(session_id="chat", text=text) as session:
+            assert session.revision == revision
+            session.append(" again")
+            assert list(session.ids) == reference(text + " again")
+    else:
+        with pytest.raises(SessionStateMismatch) as caught:
+            reader.encode(text, session="chat")
+        assert caught.value.details["reason"] == "native_owned_store_python_reader"
+    guard = reader.explain()["native_request_guard"]
+    assert guard["reason"] == "native_request_initialisation_guard"  # type: ignore[index]
+    reader.close()
+
+
+@pytest.mark.parametrize("reader_owner", _OWNERS)
+@pytest.mark.parametrize("writer_owner", _OWNERS)
+def test_the_owner_matrix(
+    rig: Rig,
+    monkeypatch: pytest.MonkeyPatch,
+    reference: Any,
+    writer_owner: str,
+    reader_owner: str,
+) -> None:
+    """Every (writer, reader) owner pair of one bound build either opens --
+    revision kept, ids equal to the reference at every step -- or is
+    refused with the specific message; only the Python owner reading the
+    native runtime's store is refused."""
+    document = _bound_document()
+    directory = rig.store_path()
+    writer = _owner_tokenizer(rig, monkeypatch, document, writer_owner, directory)
+    revision, text = _write_session(writer)
+    reader = _owner_tokenizer(rig, monkeypatch, document, reader_owner, directory)
+    refused = writer_owner == "native" and reader_owner != "native"
+    if refused:
+        with pytest.raises(SessionStateMismatch) as caught:
+            reader.encode(text, session="chat")
+        assert caught.value.details["reason"] == "native_owned_store_python_reader"
+    else:
+        with reader.session(session_id="chat", text=text) as session:
+            assert session.revision == revision
+            assert list(session.ids) == reference(text)
+            for piece in (" reader one", "\n\nreader two " + "y" * 300, " z"):
+                session.append(piece)
+                text += piece
+                assert list(session.ids) == reference(text)
+    reader.close()

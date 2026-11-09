@@ -50,6 +50,7 @@ from ..errors import (
     BackendExecutionFault,
     BackendUnavailable,
     KernelIncompatible,
+    SessionStateMismatch,
     UncertifiedTokenizer,
     UnsupportedConfig,
 )
@@ -83,6 +84,8 @@ from .delivery import (
     profile_jit_installed,
 )
 from .fingerprint import (
+    AXIS_SOURCE_V1,
+    AXIS_SOURCE_V2,
     FINGERPRINT_V1_TAG,
     FINGERPRINT_V2_TAG,
     SourceBinding,
@@ -776,6 +779,7 @@ class Tokenizer:
         self._extra_reports: dict[str, Callable[[], Mapping[str, object]]] = {}
         # Which source identity each opened store's fingerprint carries.
         self._store_bindings: dict[str, dict[str, str]] = {}
+        self._native_store_written_by: bytes | None = None
         self._closed = False
 
     # -- identity ------------------------------------------------------
@@ -1635,10 +1639,12 @@ class Tokenizer:
             )
             repair = None if native_encoder is not None else self._repair_callback()
             native_repair = native_encoder is not None
+            python_key = self._semantic_fingerprint(
+                repair, native_fast_cpu=native_repair
+            )
+            self._refuse_native_owned_store(python_key)
             self._entry_store = EntryStore(
-                fingerprint=self._semantic_fingerprint(
-                    repair, native_fast_cpu=native_repair
-                ),
+                fingerprint=python_key,
                 encode=self._state_encode,
                 append=(
                     self._gigatoken_append
@@ -1764,6 +1770,7 @@ class Tokenizer:
                 )
                 gpu_encoder = prepared.engine
                 self._native_gpu_prepared = prepared
+            native_key = self._native_store_fingerprint(repair_fast_cpu)
             self._native_request = _native.NativeRuntime(
                 list(self._plan.fallback_chain),
                 [
@@ -1774,7 +1781,7 @@ class Tokenizer:
                 fast_encoder,
                 gpu_encoder,
                 repair_fast_cpu,
-                self._native_store_fingerprint(repair_fast_cpu),
+                native_key,
                 seal_guard,
                 self._postprocessor_adds_tokens,
                 self._config.diagnostics,
@@ -1785,6 +1792,17 @@ class Tokenizer:
                 ),
                 self._cache_budget,
             )
+            if (
+                self._native_store_written_by is not None
+                and self._native_store_written_by == native_key
+            ):
+                # Opened: the store this build's Python owner wrote, under
+                # its stored (exact-build) key.
+                self._store_bindings["native"] = {
+                    **self._store_bindings.get("native", {}),
+                    "opened_as_owner": "python",
+                    "opened_axis": AXIS_SOURCE_V1,
+                }
         except (
             BackendExecutionFault,
             KernelIncompatible,
@@ -1947,6 +1965,7 @@ class Tokenizer:
         *,
         native_fast_cpu: bool = False,
         native_owned: bool = False,
+        report_binding: bool = True,
     ) -> bytes:
         """32-byte identity binding artifact, oracle and engine semantics.
 
@@ -1957,7 +1976,9 @@ class Tokenizer:
         store owned by the native request runtime, which is keyed on the
         version-normalized source identities when the shipped registry
         binds them; the Python entry store stays on the build's own
-        digests.
+        digests. ``report_binding=False`` computes the key without
+        recording it under ``explain()["store_fingerprint"]`` (used to
+        recognize a store the other owner of this build wrote).
         """
         from ..engine.gpu.native import native_host_build_facts
 
@@ -1973,9 +1994,10 @@ class Tokenizer:
             if native_fast_cpu or repair is not None
             else None
         )
-        self._store_bindings["native" if native_owned else "python"] = (
-            binding.report()
-        )
+        if report_binding:
+            self._store_bindings["native" if native_owned else "python"] = (
+                binding.report()
+            )
         return fingerprint(
             FINGERPRINT_V2_TAG,
             (
@@ -2012,6 +2034,87 @@ class Tokenizer:
             ),
         )
 
+
+    def _python_owner_store_fingerprint(self, native_fast_cpu: bool) -> bytes | None:
+        """The key this same build's Python owner writes, when it differs.
+
+        The Python entry store keys its stores on this build's exact (v1)
+        digests; the native request runtime of the same build may open
+        such a store under that stored value, because both owners of one
+        build run the same engine, host and repair code. ``None`` when the
+        two owners already share one key (an unbound build). On a match
+        the native runtime is constructed with the stored value, and
+        ``explain()`` names the owner that wrote the store once the
+        runtime has opened it.
+        """
+        native_binding = self._store_bindings.get("native", {})
+        if native_binding.get("axis") != AXIS_SOURCE_V2:
+            return None
+        key = self._semantic_fingerprint(
+            None,
+            native_fast_cpu=native_fast_cpu,
+            native_owned=False,
+            report_binding=False,
+        )
+        self._native_store_written_by = key
+        return key
+
+    def _native_owned_store_keys(self) -> tuple[bytes, ...]:
+        """Keys this build's native request runtime writes on a bound axis.
+
+        Empty on an unbound build (both owners then share one key). Used
+        only to name why the Python entry store refuses such a store.
+        """
+        from ..engine.gpu.native import native_host_build_facts
+
+        binding = source_binding(
+            native_owned=True,
+            fast_cpu_v1=self._snapshot.fast_cpu_engine.source_digest,
+            native_host_v1=native_host_build_facts().source_digest,
+        )
+        if binding.axis != AXIS_SOURCE_V2:
+            return ()
+        return tuple(
+            self._semantic_fingerprint(
+                None,
+                native_fast_cpu=native_fast_cpu,
+                native_owned=True,
+                report_binding=False,
+            )
+            for native_fast_cpu in (False, True)
+        )
+
+    def _refuse_native_owned_store(self, python_key: bytes) -> None:
+        """Refuse, with its own message, a store this build's native runtime holds.
+
+        A Python-owned process does not adopt a store keyed on the
+        version-normalized source identity: that identity covers the
+        native engine and host, not the Python store and repair code, so
+        records written here could later be read by another release's
+        native runtime that shares the key. The generic fingerprint check
+        refuses such a store anyway; this names the reason.
+        """
+        if self._store_directory is None:
+            return
+        stored = stored_fingerprint(self._store_directory)
+        if stored is None or stored == python_key:
+            return
+        if stored not in self._native_owned_store_keys():
+            return
+        raise SessionStateMismatch(
+            "the store is held by this build's native request runtime under "
+            "the version-normalized source identity; the Python entry store "
+            "does not open it, because its own store and repair code is "
+            "outside that identity. Open it from a process whose native "
+            "request runtime is available (CPU and prebuilt GPU hosts), or "
+            "give this process another store directory",
+            details={
+                "reason": "native_owned_store_python_reader",
+                "expected_fingerprint": python_key.hex(),
+                "stored_fingerprint": stored.hex(),
+                "stored_axis": AXIS_SOURCE_V2,
+            },
+        )
 
     def _semantic_fingerprint_v1(
         self, *, native_fast_cpu: bool, fast_cpu_source_digest: str
@@ -2059,6 +2162,9 @@ class Tokenizer:
         stored = stored_fingerprint(self._store_directory)
         if stored is None or stored == current:
             return current
+        same_build = self._python_owner_store_fingerprint(native_fast_cpu)
+        if same_build is not None and stored == same_build:
+            return stored
         binding = self._store_bindings.get("native", {})
         rows = predecessor_releases(
             SourceBinding(

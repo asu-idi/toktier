@@ -44,7 +44,12 @@ Usage::
 
     python tools/check_loader_face_alignment.py
     python tools/check_loader_face_alignment.py --loaderless-dir <dir>
-    python tools/check_loader_face_alignment.py --fingerprints
+    python tools/check_loader_face_alignment.py --fingerprints [--cache-dir DIR]
+
+``--cache-dir`` names the toktier cache directory (the one that holds
+``artifacts/``) the checks read; without it the default offline
+resolution applies. Every reading names the artifact cache it read
+(``artifact_cache``), so a gate log shows where a skip comes from.
 """
 
 from __future__ import annotations
@@ -105,17 +110,29 @@ def _loader(root: Path) -> Any:
     )
 
 
-def check_family(family: str) -> tuple[int, dict[str, object]]:
-    from toktier import Config, load
+def _offline_cache(cache_dir: Path | None) -> tuple[Any, Path]:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from registry_common import offline_artifact_cache
+
+    return offline_artifact_cache(cache_dir)
+
+
+def check_family(
+    family: str, cache_dir: Path | None = None
+) -> tuple[int, dict[str, object]]:
+    from toktier import load
     from toktier.artifacts import ArtifactManifest
     from toktier.artifacts.tables import ARTIFACT_MANIFEST
-    from toktier.paths import artifact_cache_dir
 
-    config = Config(offline=True)
+    config, cache = _offline_cache(cache_dir)
     manifest = ArtifactManifest.load(ARTIFACT_MANIFEST)
     entry = manifest.get(family)
-    root = artifact_cache_dir(config) / entry.directory_name
-    reading: dict[str, object] = {"family": family, "root": str(root)}
+    root = cache / entry.directory_name
+    reading: dict[str, object] = {
+        "family": family,
+        "artifact_cache": str(cache),
+        "root": str(root),
+    }
     if not (root / "tokenizer.json").is_file() or not (
         root / "tokenizer_config.json"
     ).is_file():
@@ -205,7 +222,9 @@ def check_loaderless(root: Path) -> tuple[int, dict[str, object]]:
     return (1 if mismatches else 0), reading
 
 
-def check_fingerprints() -> tuple[int, dict[str, object]]:
+def check_fingerprints(
+    cache_dir: Path | None = None,
+) -> tuple[int, dict[str, object]]:
     """Recompute the capability ids of every cached family on the face.
 
     The registry records the values a maintainer run computed; this
@@ -217,7 +236,6 @@ def check_fingerprints() -> tuple[int, dict[str, object]]:
     from artifact_identity import added_frontend_fingerprint, pipeline_fingerprint
     from update_loader_face_registry import loader_face_text
 
-    from toktier import Config
     from toktier.artifacts import ArtifactManifest
     from toktier.artifacts.tables import ARTIFACT_MANIFEST
     from toktier.backends.loader_face import (
@@ -225,7 +243,6 @@ def check_fingerprints() -> tuple[int, dict[str, object]]:
         load_live_tokenizer,
         loader_face_sha256,
     )
-    from toktier.paths import artifact_cache_dir
     from toktier.routing.tables import SUPPORT_REGISTRY
 
     registry = json.loads(SUPPORT_REGISTRY.read_text(encoding="utf-8"))
@@ -237,9 +254,8 @@ def check_fingerprints() -> tuple[int, dict[str, object]]:
         row["added_frontend_id"]: row["added_frontend_fingerprint"]
         for row in registry["added_frontends"]
     }
-    config = Config(offline=True)
+    _config, cache = _offline_cache(cache_dir)
     manifest = ArtifactManifest.load(ARTIFACT_MANIFEST)
-    cache = artifact_cache_dir(config)
 
     checked: list[str] = []
     absent: list[str] = []
@@ -276,6 +292,7 @@ def check_fingerprints() -> tuple[int, dict[str, object]]:
             checked.append(family)
 
     reading: dict[str, object] = {
+        "artifact_cache": str(cache),
         "checked": checked,
         "absent": absent,
         "mismatches": mismatches,
@@ -307,9 +324,18 @@ def main(argv: list[str] | None = None) -> int:
             "on the loader face and compare them with the shipped registry."
         ),
     )
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=None,
+        help=(
+            "toktier cache directory holding artifacts/ (default: the offline "
+            "default resolution)"
+        ),
+    )
     arguments = parser.parse_args(argv)
     codes = []
-    code, reading = check_family(arguments.family)
+    code, reading = check_family(arguments.family, arguments.cache_dir)
     codes.append(code)
     print(json.dumps(reading, ensure_ascii=False))
     if arguments.loaderless_dir is not None:
@@ -317,7 +343,7 @@ def main(argv: list[str] | None = None) -> int:
         codes.append(code)
         print(json.dumps(reading, ensure_ascii=False))
     if arguments.fingerprints:
-        code, reading = check_fingerprints()
+        code, reading = check_fingerprints(arguments.cache_dir)
         codes.append(code)
         print(json.dumps(reading, ensure_ascii=False))
     if 1 in codes:

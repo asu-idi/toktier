@@ -43,10 +43,16 @@ runs either way. ``tools/check_loader_face_alignment.py
 loader-face gate. After writing, ``tools/sync_rust_package_data.py``
 carries the packaged copy into the Rust crate's data payload.
 
+The artifacts are read from the default offline cache
+(``Config(offline=True)``), or from ``--cache-dir`` (the toktier cache
+directory that holds ``artifacts/``) when given; the ``--check`` reading
+names the artifact cache it read (``artifact_cache``), so a gate log
+shows where an ``absent`` list comes from.
+
 Usage::
 
     python tools/update_loader_face_registry.py
-    python tools/update_loader_face_registry.py --check
+    python tools/update_loader_face_registry.py --check [--cache-dir DIR]
 """
 
 from __future__ import annotations
@@ -64,6 +70,7 @@ from registry_common import (
     REGISTRY_DOMAIN_TAG,
     GenerationError,
     load_json,
+    offline_artifact_cache,
     schema_violations,
     serialise_document,
     with_root_digest,
@@ -158,24 +165,24 @@ def loader_face_text(root: Path) -> str:
 
 
 def observed_loader_faces(
-    registry: dict[str, Any],
+    registry: dict[str, Any], cache: Path | None = None
 ) -> tuple[dict[str, str], list[str]]:
     """Digest of the face of every registry artifact cached on this machine.
 
     Returns the digests by family and the families whose artifact is not
     cached. A cached artifact whose file digest is not the one the
     registry records is refused: the face would belong to other bytes.
+    ``cache`` is the artifact cache to read (default: the offline
+    default, :func:`registry_common.offline_artifact_cache`).
     """
-    from toktier import Config
     from toktier.artifacts import ArtifactManifest
     from toktier.artifacts.tables import ARTIFACT_MANIFEST
     from toktier.backends.loader_face import loader_face_sha256
     from toktier.backends.protocol import TOKENIZER_FILE
-    from toktier.paths import artifact_cache_dir
 
-    config = Config(offline=True)
     manifest = ArtifactManifest.load(ARTIFACT_MANIFEST)
-    cache = artifact_cache_dir(config)
+    if cache is None:
+        _config, cache = offline_artifact_cache()
     observed: dict[str, str] = {}
     absent: list[str] = []
     for row in registry.get("artifacts", []):
@@ -264,6 +271,15 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="recompute the digests from the cached artifacts and compare",
     )
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=None,
+        help=(
+            "toktier cache directory holding artifacts/ (default: the offline "
+            "default resolution)"
+        ),
+    )
     arguments = parser.parse_args(argv)
 
     pinned = pinned_loader_version()
@@ -278,7 +294,8 @@ def main(argv: list[str] | None = None) -> int:
     registry = load_json(DEFAULT_REGISTRY)
     if not isinstance(registry, dict):
         raise GenerationError("support registry is not a JSON object")
-    observed, absent = observed_loader_faces(registry)
+    _config, cache = offline_artifact_cache(arguments.cache_dir)
+    observed, absent = observed_loader_faces(registry, cache)
 
     if arguments.check:
         # The copies are compared first: that needs no cached artifact, so
@@ -288,6 +305,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {problem}", file=sys.stderr)
         problems = check_problems(registry, observed)
         reading = {
+            "artifact_cache": str(cache),
             "checked": sorted(observed),
             "absent": absent,
             "problems": problems + copies,
@@ -301,8 +319,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if absent:
         raise GenerationError(
-            "cannot record the loader face of artifacts that are not cached "
-            "here: " + ", ".join(absent)
+            f"cannot record the loader face of artifacts that are not cached "
+            f"under {cache}: " + ", ".join(absent)
         )
     generated = augmented_document(registry, observed)
     violations = schema_violations(generated, load_json(SCHEMA_PATH))

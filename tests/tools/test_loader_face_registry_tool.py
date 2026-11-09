@@ -174,7 +174,9 @@ def test_check_compares_the_copies_before_counting_uncached_artifacts(
     monkeypatch.setattr(tool, "DEFAULT_REGISTRY", repository)
     monkeypatch.setattr(tool, "PACKAGED_REGISTRY", packaged)
     monkeypatch.setattr(tool, "installed_loader_version", tool.pinned_loader_version)
-    monkeypatch.setattr(tool, "observed_loader_faces", lambda _registry: ({}, ["a"]))
+    monkeypatch.setattr(
+        tool, "observed_loader_faces", lambda _registry, _cache=None: ({}, ["a"])
+    )
 
     assert tool.copy_problems(registry) == []
     assert tool.main(["--check"]) == tool.ABSENT
@@ -189,3 +191,28 @@ def test_check_compares_the_copies_before_counting_uncached_artifacts(
     reading = json.loads(captured.out)
     assert reading["absent"] == ["a"]
     assert reading["problems"] == [f"{packaged} is not the serialised registry"]
+    # The reading names the artifact cache it read; --cache-dir sets it.
+    cache_dir = tmp_path / "toktier-cache"
+    capsys.readouterr()
+    assert tool.main(["--check", "--cache-dir", str(cache_dir)]) == 1
+    reading = json.loads(capsys.readouterr().out)
+    assert reading["artifact_cache"] == str(cache_dir / "artifacts")
+
+
+def test_the_alignment_gate_reads_the_named_cache_and_says_so(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``check_loader_face_alignment.py --cache-dir`` reads the artifacts
+    under that directory; on an empty cache every reading names it and the
+    gate answers the not-concluded status, not a pass."""
+    import check_loader_face_alignment as alignment
+
+    cache_dir = tmp_path / "empty-cache"
+    code = alignment.main(["--fingerprints", "--cache-dir", str(cache_dir)])
+    assert code == alignment.ABSENT
+    readings = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert len(readings) == 2
+    for reading in readings:
+        assert reading["artifact_cache"] == str(cache_dir / "artifacts")
+    assert readings[0]["skipped"] == "artifact or sidecar not cached"
+    assert readings[1]["checked"] == [] and readings[1]["absent"]

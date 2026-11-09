@@ -58,6 +58,26 @@ class GenerationError(Exception):
     """A generator could not produce a document it can stand behind."""
 
 
+def offline_artifact_cache(cache_dir: Path | None = None) -> tuple[Any, Path]:
+    """The offline configuration and artifact cache a gate tool reads.
+
+    With ``cache_dir`` (the toktier cache directory, the one that holds
+    ``artifacts/``), that directory is used; otherwise the default
+    ``Config(offline=True)`` resolution applies, as before. The caller
+    reports the returned path in its reading, so a gate log shows which
+    cache a check consulted.
+    """
+    from toktier import Config
+    from toktier.paths import artifact_cache_dir
+
+    config = (
+        Config(offline=True)
+        if cache_dir is None
+        else Config(offline=True, cache_dir=Path(cache_dir))
+    )
+    return config, artifact_cache_dir(config)
+
+
 def is_cross_artifact_carryover(artifact: Mapping[str, Any]) -> bool:
     """Whether a registry record holds the cross-artifact carry-over form.
 

@@ -3,7 +3,10 @@
 set -eu
 
 root=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
-venv_dir=$(mktemp -d /tmp/toktier-packaging-smoke.XXXXXX)
+# The scratch venv (and the wheel built when none is given) goes under
+# TMPDIR when it is set, so a host whose /tmp is small can point it at a
+# larger disk; /tmp otherwise.
+venv_dir=$(mktemp -d "${TMPDIR:-/tmp}/toktier-packaging-smoke.XXXXXX")
 trap 'rm -rf "$venv_dir"' 0 HUP INT TERM
 
 wheel=${1:-}

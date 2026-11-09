@@ -5,26 +5,32 @@
 pub enum Policy {
     /// Everything [`Policy::Certified`] admits, and in addition a device
     /// or compiler toolchain the certification campaigns have not judged,
-    /// as long as the shipped kernel loads and runs on it and the build
-    /// itself is the judged one. Such a route is labelled
-    /// [`Certification::Supported`] rather than certified, and
-    /// [`Certification::LocallyVerified`] once a local check has compared
-    /// it against the reference engine on this machine.
+    /// as long as the shipped kernel loads and runs on it. Since 0.3.2
+    /// this includes, for the GPU route, a build from the judged sources
+    /// whose Rust compiler or build flags no judged row records. Such a
+    /// route is labelled [`Certification::Supported`] rather than
+    /// certified, and [`Certification::LocallyVerified`] once a local
+    /// check has compared it against the reference engine on this machine
+    /// with this build.
     ///
     /// The default since 0.2.6. What it does **not** admit is any
-    /// disagreement inside the certified core: a build that is not the
-    /// judged one, a fatbin that does not match its digest, or a
-    /// world-writable compiler component still routes to the reference
-    /// engine.
+    /// disagreement inside the certified core: sources that are not the
+    /// judged ones, a sibling crate that is not the judged copy or a
+    /// dependency closure that could not be compared, a reference library
+    /// outside its certified versions (for the GPU route), a fatbin that
+    /// does not match its digest, or a world-writable compiler component
+    /// still routes to the reference engine.
     #[default]
     Supported,
     /// Admit only evidence-bound accelerated routes; fall back exactly.
-    /// Unchanged in meaning for the GPU route: a device architecture or
-    /// an NVCC triple the registry has not judged is not eligible here.
-    /// Since 0.3.0 the fast CPU route is admitted by its source identity
-    /// under this policy too, labelled [`Certification::Supported`] when
-    /// the Rust compiler or feature recipe is not a judged one; only a
-    /// build whose sources do not verify routes to the reference engine.
+    /// For the GPU route: a device architecture or an NVCC triple the
+    /// registry has not judged is not eligible here, and neither is a
+    /// build whose Rust compiler or build flags are not a judged recipe
+    /// ([`ReasonCode::GpuBuildRecipeUnjudged`]). Since 0.3.0 the fast CPU
+    /// route is admitted by its source identity under this policy too,
+    /// labelled [`Certification::Supported`] when the Rust compiler or
+    /// feature recipe is not a judged one; only a build whose sources do
+    /// not verify routes to the reference engine.
     Certified,
     /// Force the frozen Hugging Face reference implementation.
     Reference,
@@ -144,6 +150,13 @@ pub enum ReasonCode {
     /// is not certified for one, or the artifact has no eligible GPU
     /// identity.
     GpuUncertified,
+    /// A GPU route was wanted under [`Policy::Certified`] on a build
+    /// whose source identities are judged and whose toolchain or build
+    /// flags no judged row records. That policy admits the GPU route only
+    /// on the judged recipe; [`Policy::Supported`] runs it labelled
+    /// [`Certification::Supported`]. Recorded beside
+    /// [`ReasonCode::GpuUncertified`]. Added in 0.3.2.
+    GpuBuildRecipeUnjudged,
     /// The fast CPU route was refused: no certified repair row for this
     /// artifact, or an engine status, artifact or source binding that
     /// does not match the registry. Since 0.3.0 the compiler is not part
@@ -222,7 +235,9 @@ pub enum Certification {
     /// An unjudged device is admitted under [`Policy::Supported`] and
     /// routed to the reference engine under `Policy::Certified`; an
     /// unjudged compiler or recipe for the fast CPU route is admitted
-    /// under every policy but `Policy::Reference`. The fast CPU route of
+    /// under every policy but `Policy::Reference`, and for the GPU route
+    /// (since 0.3.2) under `Policy::Supported` and
+    /// `Policy::RequireAccelerated`, on a judged device too. The fast CPU route of
     /// an examined artifact carries this label too, on every build: the
     /// engine is the judged one and the artifact's added-token table is
     /// not one a campaign has judged ([`ReasonCode::ExaminedArtifact`]).
@@ -341,7 +356,10 @@ pub struct RuntimeBuildFacts {
     /// `dependency_advisory`; they do not decide this field. Since 0.3.0
     /// this is not the only state that admits the fast CPU route:
     /// `source_identity_judged` with the core verified admits it under
-    /// `Policy::Supported` as `Certification::Supported`.
+    /// `Policy::Supported` as `Certification::Supported`. Since 0.3.2 the
+    /// same holds for the GPU route under `Policy::Supported` and
+    /// `Policy::RequireAccelerated` when, in addition, every reference
+    /// library is at a certified version and the closure is `verified`.
     pub certified: bool,
     /// `true` when the three source identities of this build -- the
     /// facade, the fast CPU engine and the native host -- are those of

@@ -460,14 +460,28 @@ impl Runtime {
         let wants_gpu = !matches!(self.inner.config.device, Device::Cpu)
             && !matches!(self.inner.config.gpu_delivery, GpuDelivery::Disabled)
             && self.inner.config.policy != Policy::Reference;
-        if wants_gpu && !accelerated_build_allowed {
+        // The GPU route by build standing (`gpu_build_decision`): the
+        // judged recipe as before, and since 0.3.2 the judged sources on
+        // a toolchain or flags no campaign used, under the policies that
+        // admit an unjudged device, labelled at most `Supported`.
+        let gpu_build = gpu_build_decision(
+            classify_build(&BuildReading::of(&self.inner.registry)),
+            policy,
+        );
+        #[allow(unused_variables)]
+        let cap_gpu_label = matches!(gpu_build, GpuBuildDecision::Admit { cap_label: true });
+        if let (
+            true,
+            GpuBuildDecision::Refuse {
+                reasons: why,
+                message,
+            },
+        ) = (wants_gpu, &gpu_build)
+        {
             if matches!(self.inner.config.device, Device::Cuda(_)) {
-                return Err(Error::new(
-                    ErrorCode::UncertifiedRuntime,
-                    "this Rust build is not present in the shipped runtime-build registry; use a registered release build or explicitly select Policy::Experimental",
-                ));
+                return Err(Error::new(ErrorCode::UncertifiedRuntime, message.clone()));
             }
-            reasons.push(ReasonCode::GpuUncertified);
+            reasons.extend(why.iter().cloned());
         } else if wants_gpu {
             #[cfg(feature = "prebuilt-gpu")]
             {
@@ -532,13 +546,20 @@ impl Runtime {
                 match built {
                     Ok((built, _maybe_facts)) => {
                         // What this route can be called. A judged device
-                        // is certified as before; an unjudged one is
+                        // on the judged recipe is certified as before; an
+                        // unjudged device, or any device on a build whose
+                        // toolchain or flags no campaign judged, is
                         // supported, and locally verified when a check
-                        // this machine ran says the two engines agreed.
+                        // this machine ran with this build says the two
+                        // engines agreed (the key carries the host
+                        // toolchain and flags).
                         gpu_assurance = Some(match built.assurance {
-                            crate::gpu_data::Assurance::Judged => Certification::Certified,
+                            crate::gpu_data::Assurance::Judged if !cap_gpu_label => {
+                                Certification::Certified
+                            }
                             crate::gpu_data::Assurance::Experimental => Certification::Experimental,
-                            crate::gpu_data::Assurance::Unjudged => {
+                            crate::gpu_data::Assurance::Judged
+                            | crate::gpu_data::Assurance::Unjudged => {
                                 let key = crate::verify_local::gpu_key(
                                     &built,
                                     &family,
@@ -561,11 +582,16 @@ impl Runtime {
                         }
                     }
                     Err(error) if matches!(self.inner.config.device, Device::Auto) => {
-                        reasons.push(if error.code() == ErrorCode::UncertifiedTokenizer {
-                            ReasonCode::GpuUncertified
-                        } else {
-                            ReasonCode::GpuUnavailable
-                        });
+                        reasons.push(
+                            if matches!(
+                                error.code(),
+                                ErrorCode::UncertifiedTokenizer | ErrorCode::UncertifiedRuntime
+                            ) {
+                                ReasonCode::GpuUncertified
+                            } else {
+                                ReasonCode::GpuUnavailable
+                            },
+                        );
                     }
                     Err(error) => return Err(error),
                 }
@@ -676,12 +702,16 @@ impl Runtime {
                 Certification::Experimental
             } else if self.inner.config.policy == Policy::Reference {
                 Certification::Reference
-            } else if let Some(assurance) = gpu_assurance {
-                assurance
-            } else if let Some(certification) = fast_cpu_certification {
-                certification
             } else {
-                Certification::Reference
+                // A routed result can be produced by either accelerated
+                // engine, so the plan carries the weaker of the two
+                // labels; between equals the GPU's is kept.
+                match (gpu_assurance, fast_cpu_certification) {
+                    (Some(gpu), Some(cpu)) if label_rank(cpu) < label_rank(gpu) => cpu,
+                    (Some(gpu), _) => gpu,
+                    (None, Some(cpu)) => cpu,
+                    (None, None) => Certification::Reference,
+                }
             },
             reasons,
             postprocessor_class: special_tokens.kind.word().to_owned(),
@@ -1177,6 +1207,189 @@ pub(crate) fn facts_from_routed(
     }
 }
 
+/// Strength order of the route labels, for "the weaker of two".
+fn label_rank(label: Certification) -> u8 {
+    match label {
+        Certification::Certified | Certification::CertifiedSource => 4,
+        Certification::LocallyVerified => 3,
+        Certification::Supported => 2,
+        Certification::Experimental => 1,
+        _ => 0,
+    }
+}
+
+/// The facts about this build that decide whether it may run a GPU
+/// route, read once from the shipped register and the build script.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BuildReading {
+    /// The judged recipe: judged sources, toolchain and flags, closure
+    /// verified, reference libraries certified.
+    recipe_certified: bool,
+    /// The three source identities are those of a judged row.
+    sources_judged: bool,
+    /// `verified`, `unlocated: ...` or `mismatched: ...`.
+    core_closure: String,
+    /// `Some("uncertified_reference")` when a reference library is
+    /// outside its certified versions.
+    reference_reason: Option<String>,
+    toolchain_divergence: Option<String>,
+    flag_divergence: Option<String>,
+}
+
+impl BuildReading {
+    fn of(registry: &Registry) -> Self {
+        Self {
+            recipe_certified: registry.rust_api_build_certified(),
+            sources_judged: registry.rust_api_build_standing().source_identity_judged,
+            core_closure: crate::behavior_version::core_closure().to_owned(),
+            reference_reason: crate::behavior_version::reference_certification_reason()
+                .map(str::to_owned),
+            toolchain_divergence: registry.rust_api_toolchain_divergence(),
+            flag_divergence: registry.rust_api_build_flag_divergence(),
+        }
+    }
+}
+
+/// Where a build stands for the GPU route. The four states between the
+/// judged recipe and unjudged sources are named one by one; since 0.3.2
+/// the first two of them are admitted under the policies that admit an
+/// unjudged device, and the last two are not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum BuildState {
+    /// Judged sources, toolchain and flags; closure verified; reference
+    /// libraries certified.
+    JudgedRecipe,
+    /// (a) the judged sources, closure and reference libraries, on a
+    /// toolchain no judged row records for them;
+    OtherToolchain { divergence: String },
+    /// (b) the same with build flags or a feature list no judged row
+    /// records (a development profile included), with or without (a).
+    OtherFlags { divergence: String },
+    /// (c) the judged sources with a reference library outside its
+    /// certified versions (`uncertified_reference`);
+    UncertifiedReference,
+    /// (d) the judged sources with a closure that could not be compared
+    /// for want of a governing lockfile (`unlocated`);
+    UnlocatedClosure { closure: String },
+    /// A sibling crate resolved from another copy or version.
+    ClosureMismatched { closure: String },
+    /// No judged row records these three source identities.
+    SourcesUnjudged,
+}
+
+fn classify_build(reading: &BuildReading) -> BuildState {
+    if reading.recipe_certified {
+        return BuildState::JudgedRecipe;
+    }
+    if !reading.sources_judged {
+        return BuildState::SourcesUnjudged;
+    }
+    if reading.core_closure.starts_with("unlocated") {
+        return BuildState::UnlocatedClosure {
+            closure: reading.core_closure.clone(),
+        };
+    }
+    if reading.core_closure != "verified" {
+        return BuildState::ClosureMismatched {
+            closure: reading.core_closure.clone(),
+        };
+    }
+    if reading.reference_reason.is_some() {
+        return BuildState::UncertifiedReference;
+    }
+    match (&reading.flag_divergence, &reading.toolchain_divergence) {
+        (Some(flags), _) => BuildState::OtherFlags {
+            divergence: flags.clone(),
+        },
+        (None, Some(toolchain)) => BuildState::OtherToolchain {
+            divergence: toolchain.clone(),
+        },
+        // Neither axis alone differs, yet no judged row records the pair
+        // this build carries: a recipe that is not a judged one.
+        (None, None) => BuildState::OtherFlags {
+            divergence: format!(
+                "no judged row records the toolchain `{}` together with the build flags of \
+                 this build",
+                env!("TOKTIER_RUST_API_TOOLCHAIN")
+            ),
+        },
+    }
+}
+
+/// The GPU route's build decision.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum GpuBuildDecision {
+    /// Admitted; `cap_label` holds every GPU label at `Supported` (or
+    /// `LocallyVerified` with a local record taken by this build).
+    Admit { cap_label: bool },
+    /// Refused: the reasons a `Device::Auto` plan records, and the
+    /// message a `Device::Cuda` request fails with.
+    Refuse {
+        reasons: Vec<ReasonCode>,
+        message: String,
+    },
+}
+
+fn gpu_build_decision(state: BuildState, policy: Policy) -> GpuBuildDecision {
+    let digests = format!(
+        "rust_api {}, fast_cpu {}, native_host {}",
+        env!("TOKTIER_RUST_API_SOURCE_SHA256"),
+        env!("TOKTIER_RUST_API_FAST_CPU_SOURCE_SHA256"),
+        env!("TOKTIER_RUST_API_NATIVE_HOST_SOURCE_SHA256"),
+    );
+    let refuse = |reasons: Vec<ReasonCode>, why: String| GpuBuildDecision::Refuse {
+        reasons,
+        message: format!(
+            "the GPU route is not admitted for this Rust build: {why}. Runtime::doctor() \
+             reports the build's standing; a registered release build, or an explicit \
+             Policy::Experimental, runs it"
+        ),
+    };
+    match state {
+        BuildState::JudgedRecipe => GpuBuildDecision::Admit { cap_label: false },
+        _ if policy == Policy::Experimental => GpuBuildDecision::Admit { cap_label: false },
+        BuildState::OtherToolchain { .. } | BuildState::OtherFlags { .. }
+            if policy.admits_unjudged_device() =>
+        {
+            GpuBuildDecision::Admit { cap_label: true }
+        }
+        BuildState::OtherToolchain { divergence } | BuildState::OtherFlags { divergence } => {
+            refuse(
+                vec![
+                    ReasonCode::GpuUncertified,
+                    ReasonCode::GpuBuildRecipeUnjudged,
+                ],
+                format!(
+                    "its sources are judged and its recipe is not ({divergence}); policy \
+                     {policy:?} admits the GPU route only on the judged recipe, \
+                     Policy::Supported runs it labelled supported"
+                ),
+            )
+        }
+        BuildState::UncertifiedReference => refuse(
+            vec![ReasonCode::GpuUncertified],
+            "a reference library of this build is outside its certified versions \
+             (uncertified_reference)"
+                .to_owned(),
+        ),
+        BuildState::UnlocatedClosure { closure } => refuse(
+            vec![ReasonCode::GpuUncertified],
+            format!("its dependency closure could not be compared ({closure})"),
+        ),
+        BuildState::ClosureMismatched { closure } => refuse(
+            vec![ReasonCode::GpuUncertified],
+            format!("a sibling crate is not the judged copy ({closure})"),
+        ),
+        BuildState::SourcesUnjudged => refuse(
+            vec![ReasonCode::GpuUncertified],
+            format!(
+                "no judged row of the shipped runtime-build registry records its source \
+                 identities ({digests})"
+            ),
+        ),
+    }
+}
+
 /// The three words of `RoutePlan::postprocessor_class`.
 const CLASS_IDENTITY: &str = "identity";
 const CLASS_PREFIX: &str = "prefix";
@@ -1407,9 +1620,215 @@ fn _assert_send_sync() {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_postprocessor, special_token_plan, PostprocessorKind};
+    use super::{
+        classify_build, classify_postprocessor, gpu_build_decision, label_rank, special_token_plan,
+        BuildReading, BuildState, GpuBuildDecision, PostprocessorKind,
+    };
+    use crate::{Certification, Policy, ReasonCode};
     use serde_json::json;
     use toktier_routing_core::ReferenceEngine;
+
+    const POLICIES: [Policy; 5] = [
+        Policy::Supported,
+        Policy::Certified,
+        Policy::Reference,
+        Policy::RequireAccelerated,
+        Policy::Experimental,
+    ];
+
+    /// The judged recipe: every axis the register binds agrees.
+    fn judged() -> BuildReading {
+        BuildReading {
+            recipe_certified: true,
+            sources_judged: true,
+            core_closure: "verified".to_owned(),
+            reference_reason: None,
+            toolchain_divergence: None,
+            flag_divergence: None,
+        }
+    }
+
+    /// The judged sources, with one axis moved by `change`.
+    fn moved(change: impl FnOnce(&mut BuildReading)) -> BuildReading {
+        let mut reading = judged();
+        reading.recipe_certified = false;
+        change(&mut reading);
+        reading
+    }
+
+    fn admitted(decision: &GpuBuildDecision) -> Option<bool> {
+        match decision {
+            GpuBuildDecision::Admit { cap_label } => Some(*cap_label),
+            GpuBuildDecision::Refuse { .. } => None,
+        }
+    }
+
+    /// The judged recipe runs the GPU route under every policy (the
+    /// device rules then apply as before), uncapped.
+    #[test]
+    fn the_judged_recipe_admits_the_gpu_route_as_before() {
+        assert_eq!(classify_build(&judged()), BuildState::JudgedRecipe);
+        for policy in POLICIES {
+            assert_eq!(
+                admitted(&gpu_build_decision(BuildState::JudgedRecipe, policy)),
+                Some(false),
+                "{policy:?}"
+            );
+        }
+    }
+
+    /// One widened state's decision under each policy: admitted and
+    /// capped under the two policies that admit an unjudged device,
+    /// refused under `Certified` with the named reason, uncapped under
+    /// `Experimental` (which labels the whole plan experimental).
+    fn assert_widened(state: BuildState) {
+        for policy in POLICIES {
+            let decision = gpu_build_decision(state.clone(), policy);
+            match policy {
+                Policy::Supported | Policy::RequireAccelerated => {
+                    assert_eq!(admitted(&decision), Some(true), "{state:?} {policy:?}");
+                }
+                Policy::Experimental => {
+                    assert_eq!(admitted(&decision), Some(false), "{state:?} {policy:?}");
+                }
+                _ => {
+                    let GpuBuildDecision::Refuse { reasons, message } = decision else {
+                        panic!("{state:?} admitted under {policy:?}");
+                    };
+                    assert_eq!(
+                        reasons,
+                        vec![
+                            ReasonCode::GpuUncertified,
+                            ReasonCode::GpuBuildRecipeUnjudged
+                        ]
+                    );
+                    assert!(message.contains("recipe is not"), "{message}");
+                    assert!(message.contains("doctor()"), "{message}");
+                }
+            }
+        }
+    }
+
+    /// One state that is not widened: refused under every policy but
+    /// `Experimental`, the message naming the axis.
+    fn assert_not_widened(state: BuildState, axis: &str) {
+        for policy in POLICIES {
+            let decision = gpu_build_decision(state.clone(), policy);
+            if policy == Policy::Experimental {
+                assert_eq!(admitted(&decision), Some(false), "{state:?}");
+                continue;
+            }
+            let GpuBuildDecision::Refuse { reasons, message } = decision else {
+                panic!("{state:?} admitted under {policy:?}");
+            };
+            assert_eq!(reasons, vec![ReasonCode::GpuUncertified], "{state:?}");
+            assert!(message.contains(axis), "{state:?}: {message}");
+            assert!(message.contains("doctor()"), "{message}");
+        }
+    }
+
+    /// (a) another Rust compiler.
+    #[test]
+    fn state_a_another_toolchain_is_admitted_capped_outside_certified() {
+        let reading = moved(|reading| {
+            reading.toolchain_divergence = Some("rustc 1.94.0 is not judged".to_owned());
+        });
+        let state = classify_build(&reading);
+        assert!(
+            matches!(state, BuildState::OtherToolchain { .. }),
+            "{state:?}"
+        );
+        assert_widened(state);
+    }
+
+    /// (b) other build flags or features, a development profile included,
+    /// alone or with (a).
+    #[test]
+    fn state_b_other_flags_are_admitted_capped_outside_certified() {
+        for toolchain in [None, Some("rustc 1.94.0 is not judged".to_owned())] {
+            let reading = moved(|reading| {
+                reading.flag_divergence = Some("profile=dev is not judged".to_owned());
+                reading.toolchain_divergence = toolchain;
+            });
+            let state = classify_build(&reading);
+            assert!(matches!(state, BuildState::OtherFlags { .. }), "{state:?}");
+            assert_widened(state);
+        }
+        // Neither axis alone, yet not a judged pair: still a recipe state.
+        let state = classify_build(&moved(|_| {}));
+        assert!(matches!(state, BuildState::OtherFlags { .. }), "{state:?}");
+        assert_widened(state);
+    }
+
+    /// (c) a reference library outside its certified versions: not
+    /// widened, whatever the recipe.
+    #[test]
+    fn state_c_uncertified_reference_is_not_widened() {
+        for flags in [None, Some("profile=dev".to_owned())] {
+            let reading = moved(|reading| {
+                reading.reference_reason = Some("uncertified_reference".to_owned());
+                reading.flag_divergence = flags;
+            });
+            let state = classify_build(&reading);
+            assert_eq!(state, BuildState::UncertifiedReference);
+            assert_not_widened(state, "uncertified_reference");
+        }
+    }
+
+    /// (d) a closure that could not be compared: not widened, though the
+    /// fast CPU route admits it.
+    #[test]
+    fn state_d_unlocated_closure_is_not_widened() {
+        let reading = moved(|reading| {
+            reading.core_closure = "unlocated: no governing lockfile".to_owned();
+        });
+        let state = classify_build(&reading);
+        assert!(
+            matches!(state, BuildState::UnlocatedClosure { .. }),
+            "{state:?}"
+        );
+        assert_not_widened(state, "could not be compared");
+    }
+
+    /// Outside the four states: a mismatched sibling and unjudged sources
+    /// stay refused, and the refusal names the digests.
+    #[test]
+    fn unjudged_sources_and_a_mismatched_closure_stay_refused() {
+        let state = classify_build(&moved(|reading| {
+            reading.core_closure = "mismatched: toktier-store-core 0.0.1".to_owned();
+        }));
+        assert!(
+            matches!(state, BuildState::ClosureMismatched { .. }),
+            "{state:?}"
+        );
+        assert_not_widened(state, "judged copy");
+        let state = classify_build(&moved(|reading| reading.sources_judged = false));
+        assert_eq!(state, BuildState::SourcesUnjudged);
+        assert_not_widened(state, env!("TOKTIER_RUST_API_SOURCE_SHA256"));
+        assert_not_widened(
+            BuildState::SourcesUnjudged,
+            env!("TOKTIER_RUST_API_NATIVE_HOST_SOURCE_SHA256"),
+        );
+    }
+
+    /// The plan carries the weaker label of the two engines.
+    #[test]
+    fn labels_are_ordered_from_certified_to_experimental() {
+        let order = [
+            Certification::Certified,
+            Certification::LocallyVerified,
+            Certification::Supported,
+            Certification::Experimental,
+            Certification::Reference,
+        ];
+        for pair in order.windows(2) {
+            assert!(label_rank(pair[0]) > label_rank(pair[1]), "{pair:?}");
+        }
+        assert_eq!(
+            label_rank(Certification::Certified),
+            label_rank(Certification::CertifiedSource)
+        );
+    }
 
     fn template(single: serde_json::Value, special: serde_json::Value) -> serde_json::Value {
         json!({"type": "TemplateProcessing", "single": single, "pair": [], "special_tokens": special})

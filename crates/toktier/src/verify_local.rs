@@ -53,8 +53,16 @@ pub(crate) struct VerificationKey {
     /// The digest of the image that ran: the shipped fatbin, or the JIT
     /// product.
     pub image_digest: Option<String>,
-    /// The compiler triple a JIT product was built with.
+    /// The compiler triple a JIT product was built with; for the CPU
+    /// route, the Rust compiler that built this binary.
     pub toolchain: Option<String>,
+    /// The Rust compiler that built the host of a GPU route. Since 0.3.2
+    /// a GPU route runs on builds whose compiler no campaign judged, and a
+    /// comparison made with one host build does not speak for another's.
+    pub host_toolchain: Option<String>,
+    /// The build flags of this binary, for the same reason, on both
+    /// routes. Added in 0.3.2.
+    pub build_flags: Vec<String>,
     /// The CUDA driver API version the device was opened with.
     pub driver_api_version: Option<i32>,
     /// The two source identities that decide what code ran.
@@ -307,6 +315,8 @@ pub(crate) fn gpu_key(
         // well as under its source digest: the same source through
         // another compiler is another product.
         toolchain: built.toolchain.clone(),
+        host_toolchain: Some(env!("TOKTIER_RUST_API_TOOLCHAIN").to_owned()),
+        build_flags: build_flags(),
         driver_api_version: Some(built.driver_api_version),
         native_host_source_digest: env!("TOKTIER_RUST_API_NATIVE_HOST_SOURCE_SHA256").to_owned(),
         rust_api_source_digest: env!("TOKTIER_RUST_API_SOURCE_SHA256").to_owned(),
@@ -316,10 +326,18 @@ pub(crate) fn gpu_key(
     }
 }
 
+/// The build flags of this binary, as the build script recorded them.
+fn build_flags() -> Vec<String> {
+    env!("TOKTIER_RUST_API_BUILD_FLAGS")
+        .split('\x1f')
+        .map(str::to_owned)
+        .collect()
+}
+
 /// The key the CPU fast path is filed under on this machine.
 ///
-/// Filed under the Rust compiler that built this binary as well as
-/// under its source digests: since 0.3.0 the fast CPU engine is admitted
+/// Filed under the Rust compiler and build flags that built this binary
+/// as well as under its source digests: since 0.3.0 the fast CPU engine is admitted
 /// on compilers no campaign judged, and a comparison made with one
 /// compiler's output does not speak for another's.
 pub(crate) fn cpu_key(family: &str, artifact_sha256: &str) -> VerificationKey {
@@ -329,6 +347,8 @@ pub(crate) fn cpu_key(family: &str, artifact_sha256: &str) -> VerificationKey {
         delivery: None,
         image_digest: None,
         toolchain: Some(env!("TOKTIER_RUST_API_TOOLCHAIN").to_owned()),
+        host_toolchain: None,
+        build_flags: build_flags(),
         driver_api_version: None,
         native_host_source_digest: env!("TOKTIER_RUST_API_NATIVE_HOST_SOURCE_SHA256").to_owned(),
         rust_api_source_digest: env!("TOKTIER_RUST_API_SOURCE_SHA256").to_owned(),
@@ -458,6 +478,8 @@ mod tests {
             delivery: Some("prebuilt".to_owned()),
             image_digest: Some("aaaa".to_owned()),
             toolchain: None,
+            host_toolchain: Some("rustc 1.93.1".to_owned()),
+            build_flags: vec!["profile=release".to_owned()],
             driver_api_version: Some(13_000),
             native_host_source_digest: "bbbb".to_owned(),
             rust_api_source_digest: "cccc".to_owned(),
@@ -480,6 +502,8 @@ mod tests {
             Box::new(|key| key.delivery = Some("jit".to_owned())),
             Box::new(|key| key.image_digest = Some("ffff".to_owned())),
             Box::new(|key| key.toolchain = Some("13.0".to_owned())),
+            Box::new(|key| key.host_toolchain = Some("rustc 1.94.0".to_owned())),
+            Box::new(|key| key.build_flags = vec!["profile=dev".to_owned()]),
             Box::new(|key| key.driver_api_version = Some(13_010)),
             Box::new(|key| key.native_host_source_digest = "0000".to_owned()),
             Box::new(|key| key.rust_api_source_digest = "0000".to_owned()),

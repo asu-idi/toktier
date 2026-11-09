@@ -383,7 +383,7 @@ impl JitCompiler {
             return Err(Error::new(
                 ErrorCode::UncertifiedJit,
                 format!(
-                    "NVCC {} {} on {architecture} is not a judged pair: {}. The source, the Rust host and the build flags are the judged ones, so Policy::Supported compiles here and labels the route supported; policy {policy:?} admits only judged pairs and no cache was created",
+                    "NVCC {} {} on {architecture} is not a judged pair: {}. The CUDA source, the Rust CUDA host source and the NVCC flags are the judged ones, so Policy::Supported compiles here and labels the route supported; policy {policy:?} admits only judged pairs and no cache was created",
                     compiler.release, compiler.build,
                     axes.refusal(unsafe_component)
                 ),

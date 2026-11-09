@@ -19,11 +19,15 @@ equivalence with the Python planner, not about certification.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import random
 import shutil
+import subprocess
+import sys
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
@@ -443,3 +447,114 @@ def test_gpu_headed_chain_above_the_crossover_is_serial_by_name(
         assert list(encoded.ids) == _reference(tokenizer)(text)
     finally:
         tokenizer.close()
+
+
+#: Run in a fresh interpreter with ``RAYON_NUM_THREADS=1``: load the family
+#: from the prepared home, name a worker count through ``warm``, encode on
+#: the native path, and report the chunk-pool threads seen in
+#: ``/proc/self/task`` and, per call, whether its rows overlapped in time:
+#: rows run one after another take at least ``max + (rows - 1) * min`` of
+#: the per-row times, so an encode phase shorter than that had two rows
+#: running at once.
+_POOL_PROBE = r"""
+import hashlib, json, os, sys
+from pathlib import Path
+import toktier
+from toktier import Config, chunked
+
+family, home, text_path = sys.argv[1:4]
+workers = int(sys.argv[4])
+config = Config(home=Path(home), offline=True)
+tokenizer = toktier.load(family, config=config, device="cpu")
+chain = tokenizer.explain()["fallback_chain"]
+if "fast_cpu" not in chain:
+    tokenizer.close()
+    tokenizer = toktier.load(family, config=config, device="cpu", policy="experimental")
+chunked._planner_for(tokenizer, evidence_gate=False)
+text = Path(text_path).read_text(encoding="utf-8")
+default_before = chunked.admission(tokenizer)["native"]["default_workers"]
+size = chunked.warm(tokenizer, workers=workers)
+default_after = chunked.admission(tokenizer)["native"]["default_workers"]
+serial = list(tokenizer.encode(text, lookup="off").ids)
+chunk_counts = []
+overlapped = []
+for _ in range(4):
+    encoded = chunked.encode(tokenizer, text, k=workers, native=True)
+    assert list(encoded.ids) == serial
+    chunk_counts.append(encoded.chunks)
+    facts = encoded.native_facts
+    rows = encoded.chunks
+    floor = facts["worker_ns_max"] + (rows - 1) * facts["worker_ns_min"]
+    overlapped.append(facts["encode_ns"] < floor)
+threads = {}
+for task in Path("/proc/self/task").iterdir():
+    try:
+        name = (task / "comm").read_text().strip()
+        fields = (task / "stat").read_text().rsplit(")", 1)[1].split()
+    except OSError:
+        continue
+    if name.startswith("toktier-chunk"):
+        threads[name] = int(fields[11]) + int(fields[12])
+print(json.dumps({
+    "rayon_env": os.environ.get("RAYON_NUM_THREADS"),
+    "default_before": default_before,
+    "default_after": default_after,
+    "warm_size": size,
+    "chunks": chunk_counts,
+    "overlapped": overlapped,
+    "threads": threads,
+    "ids_sha256": hashlib.sha256(json.dumps(serial).encode()).hexdigest(),
+}))
+"""
+
+
+@pytest.mark.skipif(
+    not Path("/proc/self/task").is_dir(), reason="needs the /proc thread view"
+)
+def test_named_workers_parallelize_with_a_single_thread_global_pool(
+    loaded: dict[str, Tokenizer], tmp_path: Path
+) -> None:
+    """The chunk pool does not follow ``RAYON_NUM_THREADS``: with the global
+    Rayon pool at one thread, ``warm(workers=N)`` builds an N-thread chunk
+    pool, the rows of a chunked encode run at once, and the ids still equal
+    the oracle's."""
+    present = [name for name in CERTIFIED_FAMILIES if name in loaded]
+    if not present:
+        pytest.skip("no admitted family available under TOKTIER_TEST_ARTIFACTS")
+    family = present[0]
+    source = _artifact_source(family)
+    assert source is not None
+    home = tmp_path / "home"
+    config = Config(home=home, offline=True)
+    cache = artifact_cache_dir(config)
+    cache.mkdir(parents=True, exist_ok=True)
+    manifest = ArtifactManifest.load(ARTIFACT_MANIFEST)
+    shutil.copytree(source, cache / manifest.get(family).directory_name)
+    text = _generated_corpora(1_200_000)["prose(generated)"]
+    text_path = tmp_path / "text.txt"
+    text_path.write_text(text, encoding="utf-8")
+    affinity = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else 1
+    workers = affinity + 2
+    env = dict(os.environ, RAYON_NUM_THREADS="1")
+    argv = [sys.executable, "-c", _POOL_PROBE, family, str(home), str(text_path)]
+    completed = subprocess.run(
+        [*argv, str(workers)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr[-4000:]
+    facts = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert facts["rayon_env"] == "1"
+    assert 1 <= facts["default_before"] <= max(affinity, 1)
+    assert facts["warm_size"] >= workers
+    assert facts["default_after"] == workers
+    assert min(facts["chunks"]) >= 2
+    threads = facts["threads"]
+    assert len(threads) == workers, threads
+    assert any(facts["overlapped"]), facts
+    expected = _reference(loaded[family])(text)
+    digest = hashlib.sha256(json.dumps(expected).encode()).hexdigest()
+    assert facts["ids_sha256"] == digest

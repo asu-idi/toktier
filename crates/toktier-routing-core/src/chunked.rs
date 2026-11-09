@@ -52,8 +52,12 @@
 //! its own, which localizes that cost to one chunk. Workers are checked
 //! out of a free list per chunk (no prefix interlock between concurrent
 //! calls, and no coupling between the worker count and the chunk count);
-//! the pool is forked and optionally pre-warmed once, on request or at
-//! first use.
+//! the workers are forked and optionally pre-warmed once, on request or
+//! at first use. The rows run on a process-wide thread pool of this
+//! module's own, sized by `warm` or by the available parallelism and
+//! independent of `RAYON_NUM_THREADS`; a call made from a thread of
+//! another Rayon pool runs on that pool instead (see
+//! [`default_chunk_workers`]).
 //!
 //! Source text in this repository is ASCII, so every non-ASCII character
 //! named below is written as an escape.
@@ -941,25 +945,34 @@ impl ChunkEncoder {
     /// Ensure at least `workers` forked workers exist, and run each new one
     /// over `text` so its caches are warm before the first request.
     /// Returns the number of workers in the pool.
+    ///
+    /// `workers` also names the thread count of the process-wide chunk
+    /// pool (see [`default_chunk_workers`]): a count above the pool's
+    /// present size rebuilds it at that size, a smaller one leaves it as
+    /// it is. The forks run on that pool, so a process whose global Rayon
+    /// pool has one thread still warms in parallel.
     pub fn warm(
         &self,
         engine: &FastCpuEngine,
         workers: usize,
         text: Option<&str>,
     ) -> Result<usize, EngineError> {
+        let pool = size_chunk_pool(workers)?;
         let existing = self.forked.load(Ordering::Relaxed);
         if workers > existing {
-            let fresh = (existing..workers)
-                .into_par_iter()
-                .map(|_| {
-                    let mut worker = engine.fork_worker()?;
-                    if let Some(text) = text {
-                        let mut out = Vec::new();
-                        worker.encode_with_added_tokens_flat(text.as_bytes(), &mut out);
-                    }
-                    Ok(worker)
-                })
-                .collect::<Result<Vec<_>, EngineError>>()?;
+            let fresh = on_chunk_pool(&pool, || {
+                (existing..workers)
+                    .into_par_iter()
+                    .map(|_| {
+                        let mut worker = engine.fork_worker()?;
+                        if let Some(text) = text {
+                            let mut out = Vec::new();
+                            worker.encode_with_added_tokens_flat(text.as_bytes(), &mut out);
+                        }
+                        Ok(worker)
+                    })
+                    .collect::<Result<Vec<_>, EngineError>>()
+            })?;
             self.forked.fetch_add(fresh.len(), Ordering::Relaxed);
             self.free
                 .lock()
@@ -1034,18 +1047,20 @@ impl FastCpuEngine {
         let plan_ns = started.elapsed().as_nanos() as u64;
 
         let encode_started = Instant::now();
-        let rows = plan
-            .byte_spans
-            .par_iter()
-            .map(|&(low, high)| {
-                let row_started = Instant::now();
-                let (mut worker, cold) = encoder.checkout(self)?;
-                let outcome = self.full_ids_with_source(&text[low..high], &mut worker);
-                encoder.checkin(worker);
-                let (ids, source) = outcome?;
-                Ok((ids, source, row_started.elapsed().as_nanos() as u64, cold))
-            })
-            .collect::<Result<Vec<_>, EngineError>>()?;
+        let pool = chunk_pool()?;
+        let rows = on_chunk_pool(&pool, || {
+            plan.byte_spans
+                .par_iter()
+                .map(|&(low, high)| {
+                    let row_started = Instant::now();
+                    let (mut worker, cold) = encoder.checkout(self)?;
+                    let outcome = self.full_ids_with_source(&text[low..high], &mut worker);
+                    encoder.checkin(worker);
+                    let (ids, source) = outcome?;
+                    Ok((ids, source, row_started.elapsed().as_nanos() as u64, cold))
+                })
+                .collect::<Result<Vec<_>, EngineError>>()
+        })?;
         let encode_ns = encode_started.elapsed().as_nanos() as u64;
 
         let concat_started = Instant::now();
@@ -1131,10 +1146,108 @@ impl FastCpuEngine {
 /// The once-cell type the engine holds for its chunk encoder.
 pub(crate) type ChunkEncoderCell = OnceLock<Result<ChunkEncoder, EngineError>>;
 
-/// The worker count the pool is sized to when the caller names none: the
-/// Rayon thread count, which bounds the rows in flight at once.
+// ------------------------------------------------------------------
+// The chunk pool.
+//
+// Chunk rows run on one process-wide Rayon pool of their own rather than
+// on the global pool, so the parallelism a caller configures does not
+// depend on `RAYON_NUM_THREADS` (a common companion of serving stacks,
+// often set to 1). The pool is built by the first `warm(workers = N)`
+// with `N` threads, or by the first chunked call with as many threads as
+// the process may run at once (`std::thread::available_parallelism`,
+// which honours the CPU affinity mask and the cgroup quota); a later
+// `warm` naming a larger `N` rebuilds it at `N`. With `P` threads, a call
+// runs at most `min(rows, P)` rows at once. A call made from a thread
+// that already belongs to a Rayon pool keeps running on that pool, which
+// is the documented `ThreadPool::install` contract a host relies on to
+// choose the pool; only a call from any other thread uses the chunk pool.
+//
+// Rebuilding the pool at a larger size swaps the shared handle; a call
+// already in flight holds its own handle to the previous pool, which
+// finishes that call and is released after it. Scheduling is all the
+// pool decides: the rows and their order are those of the plan, so the
+// ids do not depend on `P`.
+// ------------------------------------------------------------------
+
+/// The process-wide chunk pool and the count it was built with.
+struct ChunkPool {
+    pool: Arc<rayon::ThreadPool>,
+    threads: usize,
+}
+
+/// The pool, built on first use or by the first `warm`.
+static CHUNK_POOL: Mutex<Option<ChunkPool>> = Mutex::new(None);
+
+fn available_threads() -> usize {
+    std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
+}
+
+fn build_chunk_pool(threads: usize) -> Result<ChunkPool, EngineError> {
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .thread_name(|index| format!("toktier-chunk-{index}"))
+        .build()
+        .map_err(|error| EngineError(format!("could not start the chunk pool: {error}")))?;
+    Ok(ChunkPool {
+        pool: Arc::new(pool),
+        threads,
+    })
+}
+
+/// A handle to the chunk pool, built at the default size on first use.
+fn chunk_pool() -> Result<Arc<rayon::ThreadPool>, EngineError> {
+    let mut slot = CHUNK_POOL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(current) = slot.as_ref() {
+        return Ok(Arc::clone(&current.pool));
+    }
+    let built = build_chunk_pool(available_threads())?;
+    let handle = Arc::clone(&built.pool);
+    *slot = Some(built);
+    Ok(handle)
+}
+
+/// Make sure the pool has at least `workers` threads (building it at that
+/// size when it does not exist yet); returns a handle to the pool after the change.
+fn size_chunk_pool(workers: usize) -> Result<Arc<rayon::ThreadPool>, EngineError> {
+    let workers = workers.max(1);
+    let mut slot = CHUNK_POOL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(current) = slot.as_ref() {
+        if current.threads >= workers {
+            return Ok(Arc::clone(&current.pool));
+        }
+    }
+    let built = build_chunk_pool(workers)?;
+    let handle = Arc::clone(&built.pool);
+    // The previous pool, if any, is dropped here only as far as this slot
+    // is concerned: calls in flight keep their own handle to it.
+    *slot = Some(built);
+    Ok(handle)
+}
+
+/// Run `work` on the chunk pool, or in place when the calling thread
+/// already belongs to a Rayon pool (the caller's pool then runs it).
+fn on_chunk_pool<T: Send>(pool: &rayon::ThreadPool, work: impl FnOnce() -> T + Send) -> T {
+    if rayon::current_thread_index().is_some() {
+        work()
+    } else {
+        pool.install(work)
+    }
+}
+
+/// The thread count of the chunk pool, which is also the worker count
+/// `warm` forks when the caller names none: the size the pool has once
+/// it exists, else the available parallelism of the process.
+/// `RAYON_NUM_THREADS` takes no part.
 pub fn default_chunk_workers() -> usize {
-    rayon::current_num_threads().max(1)
+    CHUNK_POOL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .as_ref()
+        .map_or_else(available_threads, |current| current.threads)
 }
 
 #[cfg(test)]
@@ -1749,5 +1862,98 @@ mod tests {
             encoder.worker_count(),
             "every worker is back on the free list"
         );
+    }
+
+    /// Every one of `parties` items waits until all of them have started
+    /// (or ten seconds have passed); true when the rendezvous completed,
+    /// which needs `parties` threads running at once.
+    fn rendezvous(parties: usize) -> Vec<bool> {
+        let arrived = AtomicUsize::new(0);
+        (0..parties)
+            .into_par_iter()
+            .map(|_| {
+                arrived.fetch_add(1, Ordering::SeqCst);
+                let deadline = Instant::now() + std::time::Duration::from_secs(10);
+                while arrived.load(Ordering::SeqCst) < parties {
+                    if Instant::now() > deadline {
+                        return false;
+                    }
+                    std::thread::yield_now();
+                }
+                true
+            })
+            .collect()
+    }
+
+    #[test]
+    fn chunk_pool_runs_named_workers_at_once_whatever_the_global_pool() {
+        // Called from a plain thread: the rows run on the chunk pool, which
+        // `size_chunk_pool` grew to at least four threads whatever size the
+        // global pool has, and four rows meet at once.
+        let pool = size_chunk_pool(4).unwrap();
+        assert!(default_chunk_workers() >= 4);
+        let threads = on_chunk_pool(&pool, rayon::current_num_threads);
+        assert!(threads >= 4, "chunk pool has {threads} threads");
+        let met = std::thread::spawn(move || on_chunk_pool(&pool, || rendezvous(4)))
+            .join()
+            .unwrap();
+        assert!(
+            met.iter().all(|&ok| ok),
+            "four rows did not run at once: {met:?}"
+        );
+        // A smaller count never shrinks the pool.
+        size_chunk_pool(1).unwrap();
+        assert!(default_chunk_workers() >= 4);
+    }
+
+    #[test]
+    fn a_call_from_a_host_pool_stays_on_the_host_pool() {
+        let host = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .unwrap();
+        let seen = host.install(|| {
+            let pool = chunk_pool().unwrap();
+            on_chunk_pool(&pool, || {
+                (0..4usize)
+                    .into_par_iter()
+                    .map(|_| {
+                        (
+                            rayon::current_num_threads(),
+                            std::thread::current().name().map(str::to_owned),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+        });
+        for (threads, name) in seen {
+            assert_eq!(threads, 1);
+            assert!(!name.unwrap_or_default().starts_with("toktier-chunk"));
+        }
+    }
+
+    #[test]
+    fn ids_do_not_depend_on_the_pool_size() {
+        // P = 1, 2, k and more than k, each through a host pool of that
+        // size (the call keeps the caller's pool), and the chunk pool.
+        let fast = engine(false, &[]);
+        let text = prose(60_000, 23);
+        let expected = fast.encode_ids(&text).unwrap();
+        let k = 6usize;
+        for threads in [1usize, 2, k, k + 3] {
+            let host = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap();
+            let encoded = host
+                .install(|| fast.chunked_encode_ids(&text, k, None, CHUNKED_DEFAULT_SCAN_BUDGET))
+                .unwrap();
+            assert!(encoded.chunks >= 2, "P = {threads}: no cut");
+            assert_eq!(encoded.ids, expected, "P = {threads}");
+        }
+        let encoded = fast
+            .chunked_encode_ids(&text, k, None, CHUNKED_DEFAULT_SCAN_BUDGET)
+            .unwrap();
+        assert_eq!(encoded.ids, expected, "chunk pool");
     }
 }

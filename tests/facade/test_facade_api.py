@@ -30,17 +30,9 @@ from toktier.routing.probe import DeviceInfo, ProbeSnapshot
 from .conftest import Rig, build_rig
 
 
-def test_gpu_delivery_profile_detection_and_explicit_override(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(facade_api, "_module_present", lambda _name: False)
-    assert facade_api._resolve_gpu_delivery("auto") == "prebuilt"
-    monkeypatch.setattr(facade_api, "_module_present", lambda _name: True)
-    assert facade_api._resolve_gpu_delivery("auto") == "jit"
-    assert facade_api._resolve_gpu_delivery("prebuilt") == "prebuilt"
-    assert facade_api._resolve_gpu_delivery("jit") == "jit"
+def test_gpu_delivery_values_are_checked(rig: Rig) -> None:
     with pytest.raises(ValueError, match="gpu_delivery must be"):
-        facade_api._resolve_gpu_delivery("unknown")
+        rig.tokenizer(gpu_delivery="unknown")
 
 
 def _unjudged_jit_plan() -> RoutePlan:
@@ -65,11 +57,10 @@ def _unjudged_jit_plan() -> RoutePlan:
 def test_auto_device_warns_with_explicit_unjudged_jit_remedy(
     rig: Rig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(facade_api, "_resolve_gpu_delivery", lambda _value: "jit")
     monkeypatch.setattr(facade_api, "build_plan", lambda *_args: _unjudged_jit_plan())
 
     with pytest.warns(RuntimeWarning, match="--accept-uncertified-jit") as caught:
-        tokenizer = rig.tokenizer()
+        tokenizer = rig.tokenizer(gpu_delivery="jit")
     try:
         message = str(caught[0].message)
         assert "CUDA 13.0 / torch 2.11.0+cu130" in message
@@ -87,11 +78,10 @@ def test_auto_device_warns_with_explicit_unjudged_jit_remedy(
 def test_cuda_device_failure_carries_unjudged_jit_remedy(
     rig: Rig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(facade_api, "_resolve_gpu_delivery", lambda _value: "jit")
     monkeypatch.setattr(facade_api, "build_plan", lambda *_args: _unjudged_jit_plan())
 
     with pytest.raises(BackendUnavailable) as caught:
-        rig.tokenizer(device="cuda")
+        rig.tokenizer(device="cuda", gpu_delivery="jit")
 
     remedy = "toktier gpu compile tiny_bytes --accept-uncertified-jit"
     assert caught.value.details["remedy"] == remedy

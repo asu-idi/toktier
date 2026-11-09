@@ -406,6 +406,7 @@ def test_doctor_human(
         "torch_available: true\n"
         "ninja_available: false\n"
         "automatic_gpu_delivery: prebuilt\n"
+        "automatic_gpu_delivery_basis: host_default\n"
         "automatic_gpu_min_bytes: 65536\n"
         "automatic_gpu_candidate: true\n"
         "automatic_routing_policy: supported\n"
@@ -542,6 +543,7 @@ def test_doctor_json(
         "torch_available": True,
         "ninja_available": False,
         "automatic_gpu_delivery": "prebuilt",
+        "automatic_gpu_delivery_basis": "host_default",
         "automatic_gpu_min_bytes": 65536,
         "automatic_gpu_candidate": True,
         "automatic_routing_policy": "supported",
@@ -630,7 +632,7 @@ def test_doctor_certification_follows_the_selected_jit_delivery(
     monkeypatch.setenv("TOKTIER_OFFLINE", "1")
     monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
     _set_doctor_probes(monkeypatch)
-    _set_module_lookup(monkeypatch, {"torch", "transformers", "ninja"})
+    _select_jit_profile(monkeypatch)
 
     exit_code = cli.main(["doctor", "--json"])
 
@@ -641,6 +643,29 @@ def test_doctor_certification_follows_the_selected_jit_delivery(
         "sm_120": "certified_source",
         "sm_80": "uncertified",
     }
+
+
+def test_doctor_prefers_prebuilt_when_the_jit_profile_is_also_installed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``ninja`` alone no longer selects JIT: a host the shipped prebuilt
+    kernel can serve keeps it, so the first request compiles nothing."""
+    monkeypatch.setenv("TOKTIER_HOME", str(tmp_path / "toktier-home"))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.2.3")
+    _set_doctor_probes(monkeypatch)
+    _set_module_lookup(monkeypatch, {"torch", "transformers", "ninja"})
+
+    exit_code = cli.main(["doctor", "--json"])
+
+    report = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert report["ninja_available"] is True
+    assert report["automatic_gpu_delivery"] == "prebuilt"
+    assert report["automatic_gpu_delivery_basis"] == "host_default"
+    assert report["prebuilt_fatbin_available"] is True
 
 
 def _set_certified_oracle_versions(
@@ -705,8 +730,14 @@ def test_doctor_judges_the_installed_oracle_against_the_certified_set(
 
 
 def _select_jit_profile(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make ninja importable, which is what selects the JIT delivery."""
+    """Install the ``gpu-jit`` profile on a host prebuilt cannot serve.
+
+    ``auto`` prefers the shipped prebuilt kernel whenever it can serve, so
+    the JIT delivery is the host default only when it cannot: here the
+    fatbin is absent from the installation and ``ninja`` is importable.
+    """
     _set_module_lookup(monkeypatch, {"torch", "transformers", "ninja"})
+    monkeypatch.setattr(cli, "_prebuilt_facts", lambda: (False, None))
 
 
 def test_doctor_reports_a_judged_jit_toolchain_as_eligible(

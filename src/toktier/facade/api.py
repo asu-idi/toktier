@@ -27,7 +27,6 @@ import warnings
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from importlib.util import find_spec
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 from uuid import uuid4
@@ -73,10 +72,11 @@ from ..routing.execute import RoutedExecutor
 from ..routing.explain import build_explanation
 from ..routing.plan import assessments_for
 from ..routing.plan import plan as build_plan
-from ..routing.probe import probe
+from ..routing.probe import ProbeSnapshot, probe
 from ..routing.registry_load import shipped_registry
 from ..routing.registry_view import ArtifactRecord
 from ..session import SessionPatch, SessionUpdate
+from .delivery import GPU_DELIVERIES, auto_delivery, profile_jit_installed
 from .special_tokens import SpecialTokenPlan, plan_special_tokens
 from .store import DEFAULT_CACHE_BUDGET_BYTES, EntryStore
 
@@ -96,7 +96,7 @@ _SESSION_SEMVER = "1"
 _LOOKUP_VALUES = (None, "auto", "off")
 _REPAIR_BACKENDS = ("auto", "reference", "fastokens")
 _DEVICES = ("auto", "cpu", "cuda")
-_GPU_DELIVERIES = ("auto", "prebuilt", "jit")
+_GPU_DELIVERIES = GPU_DELIVERIES
 _ACCELERATED_STATE_ENCODE_PATHS = {
     "materialized": "accelerated_with_reconstructed_spans",
     "lazy_seed": "accelerated_with_lazy_span_checkpoints",
@@ -137,25 +137,13 @@ def _config_added_tokens_claim(
     return {"sha256": None, "count": 0}
 
 
-def _module_present(name: str) -> bool:
-    try:
-        return find_spec(name) is not None
-    except (ImportError, ValueError):
-        return False
-
-
-def _resolve_gpu_delivery(requested: str) -> str:
-    """Resolve an installation profile to one concrete lazy delivery."""
+def _check_gpu_delivery(requested: str) -> str:
+    """Validate a ``gpu_delivery`` argument."""
     if requested not in _GPU_DELIVERIES:
         raise ValueError(
             f"gpu_delivery must be one of {_GPU_DELIVERIES!r}, not {requested!r}"
         )
-    if requested != "auto":
-        return requested
-    # Extras do not leave a runtime flag in Python package metadata. Ninja
-    # is intentionally unique to ``gpu-jit`` and therefore serves as its
-    # profile marker; ``gpu`` has torch but not ninja and selects prebuilt.
-    return "jit" if _module_present("ninja") else "prebuilt"
+    return requested
 
 
 def _jit_toolchain_rejection(route_plan: RoutePlan) -> PlanReason | None:
@@ -510,8 +498,7 @@ class Tokenizer:
             raise ValueError("gpu_min_bytes must be a non-negative integer")
         self._config = config if config is not None else Config.resolve()
         self._device_request = device
-        self._gpu_delivery_request = gpu_delivery
-        self._gpu_delivery = _resolve_gpu_delivery(gpu_delivery)
+        self._gpu_delivery_request = _check_gpu_delivery(gpu_delivery)
         self._gpu_min_bytes = gpu_min_bytes
         resolved_policy = (
             RoutingPolicy.coerce(policy)
@@ -609,25 +596,47 @@ class Tokenizer:
         # reference. The facade never sends ``True`` for a prefix face, so
         # this only decides what a stray native call gets: reference ids.
         self._postprocessor_adds_tokens = self._special_tokens.kind != "identity"
-        device_probe = (
-            CudaHostProbe(
-                config=self._config,
-                delivery=self._gpu_delivery,
-            )
-            if device in ("auto", "cuda")
+        probes_devices = (
+            device in ("auto", "cuda")
             and resolved_policy is not RoutingPolicy.REFERENCE
-            else None
         )
-        self._snapshot = probe(
-            family=entry.family,
-            registry=self._registry,
-            artifact_sha256=self._artifact_sha256,
-            device_probe=device_probe,
-            loader_face_sha256=self._loader_face_sha256,
-        )
-        self._plan = build_plan(
-            self._snapshot, resolved_policy, self._registry, self._config
-        )
+
+        def plan_for(delivery: str) -> tuple[ProbeSnapshot, RoutePlan]:
+            device_probe: Any = None
+            if probes_devices:
+                device_probe = CudaHostProbe(config=self._config, delivery=delivery)
+            snapshot = probe(
+                family=entry.family,
+                registry=self._registry,
+                artifact_sha256=self._artifact_sha256,
+                device_probe=device_probe,
+                loader_face_sha256=self._loader_face_sha256,
+            )
+            return snapshot, build_plan(
+                snapshot, resolved_policy, self._registry, self._config
+            )
+
+        if gpu_delivery != "auto":
+            self._gpu_delivery = gpu_delivery
+            self._snapshot, self._plan = plan_for(gpu_delivery)
+        elif not probes_devices:
+            # Nothing is probed, so there is no delivery to prefer.
+            self._gpu_delivery = "prebuilt"
+            self._snapshot, self._plan = plan_for("prebuilt")
+        else:
+            from ..engine.gpu.loader import KernelLoader
+
+            loaded = KernelLoader.delivery()
+            if loaded in ("prebuilt", "jit"):
+                # One delivery per process: keep the one already loaded.
+                self._gpu_delivery = loaded
+                self._snapshot, self._plan = plan_for(loaded)
+            else:
+                self._gpu_delivery, (self._snapshot, self._plan) = auto_delivery(
+                    plan_for,
+                    lambda built: BACKEND_GPU in built[1].fallback_chain,
+                    jit_installed=profile_jit_installed(),
+                )
         jit_rejection = (
             _jit_toolchain_rejection(self._plan)
             if self._gpu_delivery == "jit"
@@ -2013,8 +2022,9 @@ def load(
     selects a certified GPU for inputs at least ``gpu_min_bytes`` long
     and the certified CPU path below that boundary; ``"cpu"`` disables
     GPU adoption and ``"cuda"`` requires it. ``gpu_delivery="auto"``
-    maps the ``gpu`` installation profile to prebuilt delivery and the
-    ``gpu-jit`` profile to local JIT. The
+    takes the prebuilt delivery whenever it can serve this tokenizer,
+    local JIT only when prebuilt cannot and the ``gpu-jit`` profile is
+    installed (:mod:`toktier.facade.delivery`). The
     ``repair_backend="fastokens"`` is an explicit experimental full-session
     re-encode path and requires ``policy="experimental"``; it carries no
     exact-ID guarantee. The remaining keywords inject a configuration,

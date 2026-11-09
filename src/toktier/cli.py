@@ -542,26 +542,47 @@ def _doctor_report(
     ninja_available = importlib.util.find_spec("ninja") is not None
     tokenizers_version = _installed_version("tokenizers")
     transformers_version = _installed_version("transformers")
-    automatic_delivery = "jit" if ninja_available else "prebuilt"
     from .engine.gpu.host_probe import CudaHostProbe
+    from .facade.delivery import host_default_delivery
     from .policy import BACKEND_GPU
     from .routing.registry_load import shipped_registry
+    from .routing.registry_view import STATUS_CERTIFIED, STATUS_CERTIFIED_SOURCE
 
-    device_probe = CudaHostProbe(config=config, delivery=automatic_delivery)
+    # The device inventory does not depend on the delivery; it is read
+    # once, before the delivery is chosen.
+    device_probe = CudaHostProbe(config=config, delivery="prebuilt")
     probed_devices = device_probe.devices()
     driver_version = device_probe.driver_version()
-    delivery_statuses = shipped_registry().shared_delivery_architecture_statuses(
-        BACKEND_GPU, automatic_delivery
-    )
     observed_architectures = dict.fromkeys(
         device.architecture for device in probed_devices
+    )
+    # ``gpu_delivery="auto"`` prefers prebuilt whenever it can serve. With
+    # no artifact named, this is the host default under that preference: a
+    # verified shipped fatbin, a native request host that reports its build
+    # facts, and an observed architecture the prebuilt statuses admit; JIT
+    # only when those do not hold and the ``gpu-jit`` profile is installed.
+    # A family's own resolution (``explain()``) can differ from it.
+    automatic_delivery = host_default_delivery(
+        prebuilt_available=prebuilt_available,
+        native_host_ready=(
+            native_host.source_digest is not None
+            and bool(native_host.build_flags)
+            and native_host.toolchain is not None
+        ),
+        observed_architectures=observed_architectures,
+        prebuilt_statuses=shipped_registry().shared_delivery_architecture_statuses(
+            BACKEND_GPU, "prebuilt"
+        ),
+        admitted_statuses=(STATUS_CERTIFIED, STATUS_CERTIFIED_SOURCE),
+        jit_installed=ninja_available,
+    )
+    delivery_statuses = shipped_registry().shared_delivery_architecture_statuses(
+        BACKEND_GPU, automatic_delivery
     )
     architecture_certification = {
         architecture: delivery_statuses.get(architecture, "uncertified")
         for architecture in observed_architectures
     }
-    from .routing.registry_view import STATUS_CERTIFIED, STATUS_CERTIFIED_SOURCE
-
     # The planner admits the delivery when *some* observed architecture is
     # in its judged list, so the same "any" rule applies here.
     architecture_admitted = any(
@@ -765,6 +786,9 @@ def _doctor_report(
         "torch_available": torch_available,
         "ninja_available": ninja_available,
         "automatic_gpu_delivery": automatic_delivery,
+        # The answer above is this host's default, read without an
+        # artifact; a family's own plan reports its delivery in explain().
+        "automatic_gpu_delivery_basis": "host_default",
         "automatic_gpu_min_bytes": DEFAULT_GPU_MIN_BYTES,
         # Installation-level: torch present and the GPU not disabled.
         # ``automatic_gpu_eligible`` is the full judgement.

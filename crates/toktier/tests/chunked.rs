@@ -650,6 +650,97 @@ fn experimental_lifts_the_table_and_chunked_ids_equal_the_serial_encode() {
     }
 }
 
+/// The two certified records whose fast CPU entry carries its repair
+/// parameters across artifacts, each with the roster family it carries
+/// them from.
+const CARRIED: [(&str, &str); 2] = [
+    ("deepseek_v4_1_flash", "deepseek_v4_flash"),
+    ("mimo_v2_6", "qwen3_8b"),
+];
+
+/// A carried record joins the repair lookup on this face, so its
+/// admission passes the roster and structural steps and is decided by the
+/// shipped table exactly as a roster family's is: without a row it is
+/// refused for want of evidence, and with a certified row on the same
+/// face it is admitted. Nothing on this face names the two families, so a
+/// table that carries their rows admits them with no change here; until
+/// then the table step is the only refusal, which `Policy::Experimental`
+/// lifts, and the chunked ids then equal the reference engine's.
+#[test]
+fn carried_records_reach_the_table_step_like_roster_families() {
+    let rows = table();
+    let text = generated(300_000, 11);
+    let mut checked = 0;
+    for (family, anchor) in CARRIED {
+        let Some(tokenizer) = load(family, Policy::default()) else {
+            continue;
+        };
+        checked += 1;
+        let admission = tokenizer.chunked().admission().unwrap();
+        assert_eq!(admission.gate, AdmissionGate::EvidenceTable);
+        assert_ne!(
+            admission.refusal.as_deref(),
+            Some("artifact_not_in_certified_repair_roster"),
+            "{family}: a carried record is on the repair lookup"
+        );
+        assert!(admission.literals > 0, "{family} has added tokens");
+        let row = rows.get(family);
+        assert_eq!(
+            admission.refusal,
+            expected_table_refusal(row, &admission.artifact_sha256),
+            "{family}"
+        );
+        assert_eq!(admission.evidence_label, expected_label(row), "{family}");
+        assert_eq!(
+            admission.evidence_id.as_deref(),
+            row.and_then(|row| row["evidence_id"].as_str()),
+            "{family}"
+        );
+        assert_eq!(admission.admitted, admission.refusal.is_none(), "{family}");
+        eprintln!(
+            "{family}: default policy admitted={} refusal={:?} row={}",
+            admission.admitted,
+            admission.refusal,
+            row.is_some()
+        );
+        // The structural facts are those of the family the parameters
+        // are carried from.
+        if let Some(anchor) = load(anchor, Policy::default()) {
+            assert_eq!(
+                admission.normalizer,
+                anchor.chunked().admission().unwrap().normalizer,
+                "{family}"
+            );
+        }
+
+        let Some(lifted) = load(family, Policy::Experimental) else {
+            continue;
+        };
+        let chunked = lifted.chunked();
+        let admission = chunked.admission().unwrap();
+        assert_eq!(admission.gate, AdmissionGate::LiftedByExperimentalPolicy);
+        assert!(admission.admitted, "{family}: {:?}", admission.refusal);
+        if !admission.cpu_route {
+            eprintln!("skip {family}: no corrected CPU route under Policy::Experimental");
+            continue;
+        }
+        let encoded = chunked
+            .encode(&text, &ChunkOptions::default().k(4))
+            .unwrap();
+        assert_eq!(encoded.serial_reason, None, "{family}");
+        assert!(encoded.chunks >= 2, "{family}");
+        let reference = load(family, Policy::Reference).unwrap();
+        assert_eq!(
+            encoded.ids(),
+            reference.encode(&text).unwrap().ids(),
+            "{family}: the reference engine"
+        );
+    }
+    if checked == 0 {
+        eprintln!("skip: no carried record's artifact on this host");
+    }
+}
+
 #[test]
 fn a_reference_route_encodes_serially_and_names_the_missing_engine() {
     let Some(tokenizer) = load("qwen3_8b", Policy::Reference) else {

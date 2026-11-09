@@ -200,25 +200,74 @@ def test_loader_face_and_repair_parameters_are_bound(
     assert fp.repair_parameters_component(None) == "none"
 
 
+def _planner_binds_this_build(tokenizer: Any) -> bool:
+    """The planner's own answer, independent of the store binder.
+
+    True when the executing fast CPU engine verifies against an eligible
+    fast CPU entry of the shipped registry (plan check 9: no
+    ``R_ENGINE_BINDING_MISMATCH`` axis) and the native host verifies
+    against an eligible prebuilt delivery (no ``host_source`` mismatch of
+    check 13).
+    """
+    from toktier.engine.gpu.native import native_host_build_facts
+    from toktier.policy import BACKEND_FAST_CPU, BACKEND_GPU
+    from toktier.routing.plan import (
+        fast_cpu_binding_mismatches,
+        prebuilt_host_binding_mismatches,
+    )
+    from toktier.routing.registry_load import shipped_registry
+
+    registry = shipped_registry()
+    engine = tokenizer._snapshot.fast_cpu_engine
+    fast_cpu = any(
+        not fast_cpu_binding_mismatches(entry, engine)
+        for entry in registry.eligible_entries(BACKEND_FAST_CPU)
+    )
+    host = native_host_build_facts()
+    host_bound = any(
+        entry.for_delivery("prebuilt").status in {"certified", "certified_source"}
+        and entry.for_delivery("prebuilt").host_source_digest is not None
+        and not any(
+            axis == "host_source"
+            for axis, _code, _detail in prebuilt_host_binding_mismatches(
+                entry.for_delivery("prebuilt"),
+                host_source_digest=host.source_digest,
+                host_build_flags=host.build_flags,
+                host_toolchain=host.toolchain,
+                driver_version=None,
+            )
+        )
+        for entry in registry.eligible_entries(BACKEND_GPU)
+    )
+    return fast_cpu and host_bound
+
+
 def test_this_build_binds_the_shipped_v2_pair(rig: Rig) -> None:
     """On a build whose digests the shipped registry records, the native
-    store carries the registry's v2 pair, and ``explain()`` says so."""
+    store carries the registry's v2 pair, and ``explain()`` says so.
+
+    Whether this build is bound is decided by the planner's own binding
+    checks, not by the function under test: on a build the planner
+    certifies by binding, a binder answering ``None`` fails here.
+    """
     from toktier.engine.gpu.native import native_host_build_facts
 
     document = fp.shipped_registry_document()
     tokenizer = rig.tokenizer(store=rig.store_path())
     tokenizer.encode("hello world", session="s")
     owners = tokenizer.explain()["store_fingerprint"]["owners"]  # type: ignore[index]
+    if not _planner_binds_this_build(tokenizer):
+        # A development build between a source change and the rebind of
+        # the registry: the planner binds nothing either, which the axis
+        # tests cover.
+        pytest.skip("the planner does not bind this build's source digests")
+        return
     pair = fp.bound_source_v2(
         document,
         fast_cpu_v1=tokenizer._snapshot.fast_cpu_engine.source_digest,
         native_host_v1=native_host_build_facts().source_digest,
     )
-    if pair is None:
-        # A development build between a source change and the rebind of
-        # the registry: nothing is bound, which the axis tests cover.
-        pytest.skip("this build's source digests are not the registry's")
-        return
+    assert pair is not None, "the planner binds this build; the store binder does not"
     assert owners["native"] == {
         "axis": fp.AXIS_SOURCE_V2,
         "fast_cpu": pair[0],

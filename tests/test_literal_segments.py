@@ -55,7 +55,8 @@ CPU_ENGINE_FAMILIES = (
 _BODIES = (
     "Hello there, could you summarise the plan for next week?",
     "Sure. The plan has three steps: 1) gather data, 2) fit, 3) report.",
-    "caf\u00e9 \u4e2d\u6587 \u0928\u092e\u0938\u094d\u0924\u0947 na\u00efve r\u00e9sum\u00e9",
+    "caf\u00e9 \u4e2d\u6587 \u0928\u092e\u0938\u094d\u0924\u0947 "
+    "na\u00efve r\u00e9sum\u00e9",
     "def f(x):\n    return x * 2  # doubled\n",
     "   leading and trailing spaces   ",
 )

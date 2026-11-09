@@ -83,10 +83,14 @@ from .delivery import (
     profile_jit_installed,
 )
 from .fingerprint import (
+    FINGERPRINT_V1_TAG,
     FINGERPRINT_V2_TAG,
+    SourceBinding,
     fingerprint,
+    predecessor_releases,
     repair_parameters_component,
     source_binding,
+    stored_fingerprint,
 )
 from .special_tokens import SpecialTokenPlan, plan_special_tokens
 from .store import DEFAULT_CACHE_BUDGET_BYTES, EntryStore
@@ -1770,9 +1774,7 @@ class Tokenizer:
                 fast_encoder,
                 gpu_encoder,
                 repair_fast_cpu,
-                self._semantic_fingerprint(
-                    None, native_fast_cpu=repair_fast_cpu, native_owned=True
-                ),
+                self._native_store_fingerprint(repair_fast_cpu),
                 seal_guard,
                 self._postprocessor_adds_tokens,
                 self._config.diagnostics,
@@ -2009,6 +2011,79 @@ class Tokenizer:
                 repair_parameters_component(spec),
             ),
         )
+
+
+    def _semantic_fingerprint_v1(
+        self, *, native_fast_cpu: bool, fast_cpu_source_digest: str
+    ) -> bytes:
+        """The v1-form fingerprint with one fast CPU digest substituted.
+
+        The preimage earlier releases wrote for a native-owned store,
+        evaluated with this process's own components and the given
+        digest; used only to recognize a predecessor's store.
+        """
+        engine = self._snapshot.fast_cpu_engine
+        return fingerprint(
+            FINGERPRINT_V1_TAG,
+            (
+                self._artifact_sha256,
+                ORACLE_PACKAGE,
+                oracle_version() or "",
+                _ENGINE_ID,
+                _SESSION_SEMVER,
+                BACKEND_FAST_CPU if native_fast_cpu else BACKEND_REFERENCE,
+                "toktier-fast-repair-v1" if native_fast_cpu else "",
+                "",
+                "",
+                engine.version or "",
+                fast_cpu_source_digest,
+                "\x1f".join(engine.build_flags),
+                engine.toolchain or "",
+                engine.config_digest or "",
+            ),
+        )
+
+    def _native_store_fingerprint(self, native_fast_cpu: bool) -> bytes:
+        """The key the native request runtime opens its store under.
+
+        The current form, unless the store directory already holds a
+        store a listed predecessor release wrote for this same build
+        identity (:func:`toktier.facade.fingerprint.predecessor_releases`);
+        that store is then opened under its own stored value.
+        """
+        current = self._semantic_fingerprint(
+            None, native_fast_cpu=native_fast_cpu, native_owned=True
+        )
+        if self._store_directory is None:
+            return current
+        stored = stored_fingerprint(self._store_directory)
+        if stored is None or stored == current:
+            return current
+        binding = self._store_bindings.get("native", {})
+        rows = predecessor_releases(
+            SourceBinding(
+                binding.get("axis", ""),
+                binding.get("fast_cpu", ""),
+                binding.get("native_host", ""),
+            ),
+            artifact_sha256=self._artifact_sha256,
+            loader_face_sha256=self._loader_face_sha256,
+            repair_parameters=repair_parameters_component(
+                family_spec(self.family, self._artifact_sha256)
+            ),
+        )
+        for row in rows:
+            candidate = self._semantic_fingerprint_v1(
+                native_fast_cpu=native_fast_cpu,
+                fast_cpu_source_digest=row.fast_cpu_source_digest,
+            )
+            if candidate == stored:
+                self._store_bindings["native"] = {
+                    **binding,
+                    "opened_as_release": row.release,
+                }
+                return stored
+        return current
 
 
 def from_pretrained(

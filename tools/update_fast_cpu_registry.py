@@ -17,6 +17,7 @@ import zlib
 from pathlib import Path
 from typing import Any
 
+from check_reading_forms import column_problems as reading_column_problems
 from compute_identity_v2 import source_digest as source_digest_v2
 from fast_cpu_source_identity import source_digest
 from registry_common import (
@@ -342,6 +343,13 @@ def _verify_native_reading(
             or int(row.get("mismatches", -1)) != 0
         ):
             raise GenerationError(f"{family}: native-frontend parity did not pass")
+        # The 0.3.2 columns, when the row carries them, pass their own checks.
+        problems = reading_column_problems(row)
+        if problems:
+            raise GenerationError(
+                "native-frontend parity column did not pass:\n  "
+                + "\n  ".join(problems)
+            )
 
 
 def _carried_repair(row: dict[str, Any], anchor: str) -> dict[str, Any]:

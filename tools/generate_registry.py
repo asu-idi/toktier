@@ -47,6 +47,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from check_reading_forms import column_problems as reading_column_problems
 from compute_identity_v2 import source_digest as source_digest_v2
 from native_host_source_identity import source_digest as native_host_source_digest
 from registry_common import (
@@ -561,6 +562,11 @@ def prebuilt_hardware_evidence_problems(registry_path: Path) -> list[str]:
                 problems.append(
                     f"{architecture}/{family}: hardware parity row did not pass"
                 )
+            # The 0.3.2 columns (add_special_tokens=True, literal
+            # segmentation), when a row carries them, pass their own checks.
+            problems += [
+                f"{architecture}/{problem}" for problem in reading_column_problems(row)
+            ]
     return problems
 
 

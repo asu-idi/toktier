@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toktier:schema:special-tokens-column:1",
+  "title": "toktier parity reading: the add_special_tokens=True column of one family",
+  "description": "Per-family column of a native-front-end parity reading (CPU or GPU) for add_special_tokens=True. It compares Tokenizer.encode(t, add_special_tokens=True).ids with the reference oracle on the same documents as the parity pass. add_special_tokens=True means the post-processor of the reference document the reference route executes (the loader face). postprocessor_class is the facade's classification of that post-processor: identity (no token is inserted), prefix (one special-token id before the core stream) or reference (any other form, served by the reference route). served_by counts how each document was answered; on an identity or prefix face every document has to be answered by the facade (served_by.reference == 0), otherwise a silent fallback to the reference would read as zero mismatches. evidence_role states what the column shows: on an identity face it compares a core stream with a core stream and is a regression guard, not new evidence (regression_guard); on a prefix face it is evidence for the prefix rule (prefix_rule). loader_true_equal is informative and not a gate: the pinned loader's own object compared with the reference document under add_special_tokens=True on a few thousand strings. Checked by tools/check_reading_forms.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "postprocessor_class",
+    "prefix_ids",
+    "documents",
+    "mismatches",
+    "served_by",
+    "evidence_role"
+  ],
+  "properties": {
+    "postprocessor_class": {"enum": ["identity", "prefix", "reference"]},
+    "prefix_ids": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+      "maxItems": 1
+    },
+    "documents": {"type": "integer", "minimum": 1},
+    "mismatches": {"type": "integer", "minimum": 0},
+    "served_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["facade", "reference"],
+      "properties": {
+        "facade": {"type": "integer", "minimum": 0},
+        "reference": {"type": "integer", "minimum": 0}
+      }
+    },
+    "evidence_role": {"enum": ["regression_guard", "prefix_rule", "reference_route"]},
+    "loader_true_equal": {
+      "description": "Informative, not a gate: the pinned loader's object against the reference document under add_special_tokens=True.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["loader", "strings", "equal", "difference"],
+      "properties": {
+        "loader": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["package", "version"],
+          "properties": {
+            "package": {"type": "string", "minLength": 1},
+            "version": {"type": "string", "minLength": 1}
+          }
+        },
+        "strings": {"type": "integer", "minimum": 0},
+        "equal": {"type": "integer", "minimum": 0},
+        "difference": {
+          "description": "none: equal on every string; fixed_affix: the loader adds the same prefix and suffix ids around the reference ids on every string; other: any other difference; not_built: the pinned loader cannot build its object for this family.",
+          "enum": ["none", "fixed_affix", "other", "not_built"]
+        },
+        "loader_prefix_ids": {
+          "type": "array",
+          "items": {"type": "integer", "minimum": 0}
+        },
+        "loader_suffix_ids": {
+          "type": "array",
+          "items": {"type": "integer", "minimum": 0}
+        },
+        "note": {"type": "string"}
+      }
+    }
+  }
+}

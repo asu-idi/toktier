@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from check_reading_forms import COLUMNS, column_problems
 from compute_identity_v2 import source_digest as source_digest_v2
 from registry_common import GenerationError, load_json
 
@@ -19,6 +20,25 @@ ROOT = Path(__file__).resolve().parents[1]
 #: consumed: an aggregation over a short roster would otherwise produce a
 #: well-formed document that only fails much later.
 GPU_FAMILIES = 21
+
+
+def _columns(row: dict[str, Any], require: tuple[str, ...]) -> dict[str, Any]:
+    """The 0.3.2 columns of one family row, checked, to carry into the output.
+
+    A column the family row carries passes its checks
+    (``tools/check_reading_forms.py``) or the aggregation stops; a column
+    named in ``require`` has to be present.
+    """
+    family = str(row.get("family"))
+    for name in require:
+        if name not in row:
+            raise GenerationError(f"{family}: the family row carries no {name} column")
+    problems = column_problems(row)
+    if problems:
+        raise GenerationError(
+            "native-front-end column did not pass:\n  " + "\n  ".join(problems)
+        )
+    return {name: row[name] for name in COLUMNS if name in row}
 
 
 def _rows(directory: Path, backend: str) -> list[dict[str, Any]]:
@@ -51,7 +71,9 @@ def _write(path: Path, document: dict[str, Any]) -> None:
     )
 
 
-def aggregate_cpu(directory: Path) -> dict[str, Any]:
+def aggregate_cpu(
+    directory: Path, require: tuple[str, ...] = ()
+) -> dict[str, Any]:
     rows = _rows(directory, "cpu")
     if len(rows) != 11:
         raise GenerationError(f"CPU parity requires 11 rows, found {len(rows)}")
@@ -86,6 +108,7 @@ def aggregate_cpu(directory: Path) -> dict[str, Any]:
                 "mismatches": 0,
                 "full_encode_equal_hf": True,
                 "repair_equal_hf": True,
+                **_columns(row, require),
             }
         )
     return {
@@ -125,7 +148,7 @@ GPU_SCALES = ("full", "spot")
 
 
 def aggregate_gpu(
-    directory: Path, architecture: str, scale: str
+    directory: Path, architecture: str, scale: str, require: tuple[str, ...] = ()
 ) -> dict[str, Any]:
     from toktier.kernels.bindings import bare_sha256
     from toktier.kernels.prebuilt import (
@@ -180,6 +203,7 @@ def aggregate_gpu(
             "all_ids_equal_hf": True,
             "one_python_to_rust_call_per_batch": True,
             "gil_released": True,
+            **_columns(row, require),
         }
         for row in rows
     ]
@@ -218,13 +242,21 @@ def main() -> int:
         help="what this GPU reading covers; required for GPU aggregation",
     )
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--require-column",
+        action="append",
+        default=[],
+        choices=COLUMNS,
+        help="a 0.3.2 column every family row must carry (repeatable)",
+    )
     arguments = parser.parse_args()
+    require = tuple(arguments.require_column)
     if arguments.backend == "cpu":
         if arguments.architecture is not None:
             raise GenerationError("--architecture is only valid for GPU readings")
         if arguments.scale is not None:
             raise GenerationError("--scale is only valid for GPU readings")
-        document = aggregate_cpu(arguments.input_dir)
+        document = aggregate_cpu(arguments.input_dir, require)
     else:
         # The architectures the shipped fatbin carries a native image
         # for. An aggregation for anything else would have no
@@ -241,7 +273,7 @@ def main() -> int:
                 "says it on its own"
             )
         document = aggregate_gpu(
-            arguments.input_dir, arguments.architecture, arguments.scale
+            arguments.input_dir, arguments.architecture, arguments.scale, require
         )
     _write(arguments.out, document)
     print(f"wrote {arguments.out}: {len(document['rows'])} rows, zero divergence")

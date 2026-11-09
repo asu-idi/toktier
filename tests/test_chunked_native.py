@@ -493,8 +493,10 @@ for task in Path("/proc/self/task").iterdir():
         fields = (task / "stat").read_text().rsplit(")", 1)[1].split()
     except OSError:
         continue
+    # Keyed by thread id: Linux keeps 15 bytes of a thread name, so
+    # "toktier-chunk-10" and "toktier-chunk-1" read the same.
     if name.startswith("toktier-chunk"):
-        threads[name] = int(fields[11]) + int(fields[12])
+        threads[task.name] = int(fields[11]) + int(fields[12])
 print(json.dumps({
     "rayon_env": os.environ.get("RAYON_NUM_THREADS"),
     "default_before": default_before,
@@ -534,7 +536,9 @@ def test_named_workers_parallelize_with_a_single_thread_global_pool(
     text_path = tmp_path / "text.txt"
     text_path.write_text(text, encoding="utf-8")
     affinity = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else 1
-    workers = affinity + 2
+    # At least 12, so the pool holds thread names that the kernel
+    # truncates to the same 15 bytes, whatever this host's CPU count.
+    workers = max(affinity + 2, 12)
     env = dict(os.environ, RAYON_NUM_THREADS="1")
     argv = [sys.executable, "-c", _POOL_PROBE, family, str(home), str(text_path)]
     completed = subprocess.run(

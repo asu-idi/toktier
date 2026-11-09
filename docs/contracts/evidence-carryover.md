@@ -218,7 +218,14 @@ pinned loader:
   over the new artifact's own face, on a specimen set that includes
   documents holding the divergence literals); for a certified prebuilt GPU
   delivery it is the per-family row the hardware readings already require
-  of every certified family.
+  of every certified family. The fast CPU reading binds the engine it was
+  taken on by the version-normalized source identity (`source_digest_v2`,
+  Section 2) when it records one, and is then held to the entry's
+  `source_digest_v2`: a release that moves only the package version leaves
+  it in force, and a change to the engine's sources requires it to be
+  taken again. A reading that records only the per-build digest is held to
+  the entry's `source_digest`, and the check's refusal says to take it again
+  recording the normalized identity.
 
 The `config_added_tokens` member, when present, describes the new face as it
 does for any record; the cross-artifact check does not compare its `count`

@@ -305,11 +305,38 @@ the table when its artifact is certified and joins this registry.
 A certified record whose artifact is not in the fast CPU repair roster
 carries its repair parameters in this registry, in the `repair` member of
 its `backends.fast_cpu` entry (`margin`, `effective_l_max`,
-`has_normalizer`, `source_table_sha256`). The member is written only beside
-a cross-artifact carry-over (`evidence-carryover.md` Section 3.1), whose
-condition C6 requires the parameters to equal the anchor's roster row. Like
-the examined table, the member sits outside the fast CPU engine's bound
-source set, and the engine binding of the entry is the anchor's.
+`has_normalizer`, `source_table_sha256`). Like the examined table, the
+member sits outside the fast CPU engine's bound source set. It takes one of
+two forms, and a record holds exactly one of them:
+
+- **Carried.** The member stands beside a cross-artifact carry-over
+  (`evidence-carryover.md` Section 3.1), whose condition C6 requires the
+  parameters to equal the anchor's roster row; the engine binding of the
+  entry is the anchor's.
+- **Directly judged.** The record has no `carryover` node, its artifact is
+  neither in the roster nor in the examined table, and the entry carries an
+  `engine_differential` member beside `repair`: the path, SHA-256, document
+  count and mismatch count of a full-corpus engine differential of the
+  artifact's own face (`schemas/engine_differential_reading.schema.json`).
+  The entry is the uniform certified fast CPU entry plus those two members.
+  `tools/generate_registry.py --check` refuses the record unless the
+  reading ran with the recorded parameters (with `effective_l_max` not
+  below the artifact's longest vocabulary token), names the engine-core
+  digests (`tools/engine_core_identity.py`: the vendored engine crate by
+  content, the two repair tables and the engine patch), covers the campaign
+  corpus with zero mismatches in every arm -- the main pass with its
+  per-document path classes and residue, the append replay, a constructed
+  arm on which the window bound decides outcomes, and a residue supplement
+  and bridging check taken on the frozen build and naming the tree's
+  version-normalized fast CPU identity -- and the native-front-end parity
+  reading carries the family with its `special_tokens` and
+  `literal_segments` columns. In `tools/fast_cpu_binding.json` such a family
+  is listed under `direct_families` with its reading's path and SHA-256,
+  and the roster, its count and the binding's `lineage` and `validation`
+  blocks are unchanged by it.
+
+The chunk admission roster (`docs/serving.md` Section 3) takes the roster
+and the carried records, and not a directly judged one.
 
 Driver and CUDA runtime versions are environment facts rather than
 certificate premises, and are reported as such on both faces. Where a

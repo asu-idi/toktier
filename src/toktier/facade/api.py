@@ -76,7 +76,13 @@ from ..routing.probe import ProbeSnapshot, probe
 from ..routing.registry_load import shipped_registry
 from ..routing.registry_view import ArtifactRecord
 from ..session import SessionPatch, SessionUpdate
-from .delivery import GPU_DELIVERIES, auto_delivery, profile_jit_installed
+from .delivery import (
+    GPU_DELIVERIES,
+    OrdinalDeviceProbe,
+    auto_delivery,
+    parse_device,
+    profile_jit_installed,
+)
 from .special_tokens import SpecialTokenPlan, plan_special_tokens
 from .store import DEFAULT_CACHE_BUDGET_BYTES, EntryStore
 
@@ -95,7 +101,6 @@ _SESSION_SEMVER = "1"
 
 _LOOKUP_VALUES = (None, "auto", "off")
 _REPAIR_BACKENDS = ("auto", "reference", "fastokens")
-_DEVICES = ("auto", "cpu", "cuda")
 _GPU_DELIVERIES = GPU_DELIVERIES
 _ACCELERATED_STATE_ENCODE_PATHS = {
     "materialized": "accelerated_with_reconstructed_spans",
@@ -492,8 +497,7 @@ class Tokenizer:
         gpu_delivery: str = "auto",
         gpu_min_bytes: int = DEFAULT_GPU_MIN_BYTES,
     ) -> None:
-        if device not in _DEVICES:
-            raise ValueError(f"device must be one of {_DEVICES!r}, not {device!r}")
+        device_kind, device_ordinal = parse_device(device)
         if type(gpu_min_bytes) is not int or gpu_min_bytes < 0:
             raise ValueError("gpu_min_bytes must be a non-negative integer")
         self._config = config if config is not None else Config.resolve()
@@ -597,14 +601,18 @@ class Tokenizer:
         # this only decides what a stray native call gets: reference ids.
         self._postprocessor_adds_tokens = self._special_tokens.kind != "identity"
         probes_devices = (
-            device in ("auto", "cuda")
+            device_kind in ("auto", "cuda")
             and resolved_policy is not RoutingPolicy.REFERENCE
         )
+        ordinal_probes: list[OrdinalDeviceProbe] = []
 
         def plan_for(delivery: str) -> tuple[ProbeSnapshot, RoutePlan]:
             device_probe: Any = None
             if probes_devices:
                 device_probe = CudaHostProbe(config=self._config, delivery=delivery)
+                if device_ordinal is not None:
+                    device_probe = OrdinalDeviceProbe(device_probe, device_ordinal)
+                    ordinal_probes.append(device_probe)
             snapshot = probe(
                 family=entry.family,
                 registry=self._registry,
@@ -642,7 +650,7 @@ class Tokenizer:
             if self._gpu_delivery == "jit"
             else None
         )
-        if jit_rejection is not None and device == "auto":
+        if jit_rejection is not None and device_kind == "auto":
             observed = jit_rejection.detail.get("observed", "unknown")
             constraint = jit_rejection.detail.get("constraint", "unknown")
             warnings.warn(
@@ -654,7 +662,7 @@ class Tokenizer:
                 RuntimeWarning,
                 stacklevel=2,
             )
-        if device == "cuda" and self._plan.backend != BACKEND_GPU:
+        if device_kind == "cuda" and self._plan.backend != BACKEND_GPU:
             reason = next(
                 (item for item in self._plan.reasons if item.backend == BACKEND_GPU),
                 None,
@@ -665,9 +673,28 @@ class Tokenizer:
                 "reason": dict(reason.detail) if reason else {},
             }
             message = (
-                "device='cuda' requires an eligible GPU route, but the "
+                f"device={device!r} requires an eligible GPU route, but the "
                 "certified planner closed it"
             )
+            if device_ordinal is not None and ordinal_probes:
+                visible = [
+                    {
+                        "index": item.index,
+                        "name": item.name,
+                        "architecture": item.architecture,
+                    }
+                    for item in ordinal_probes[-1].visible_devices()
+                ]
+                details["requested_ordinal"] = device_ordinal
+                details["visible_devices"] = visible
+                if not any(item["index"] == device_ordinal for item in visible):
+                    message = (
+                        f"device={device!r} names CUDA ordinal {device_ordinal}, "
+                        "which is not among the visible devices "
+                        f"{[item['index'] for item in visible]}"
+                    )
+                else:
+                    message += f" for CUDA ordinal {device_ordinal}"
             if jit_rejection is not None:
                 # The facts the refusal rests on belong in the message,
                 # not only in ``details``: a reader who sees only the
@@ -2021,10 +2048,14 @@ def load(
     cache: deleting it loses sessions). ``device="auto"`` (the default)
     selects a certified GPU for inputs at least ``gpu_min_bytes`` long
     and the certified CPU path below that boundary; ``"cpu"`` disables
-    GPU adoption and ``"cuda"`` requires it. ``gpu_delivery="auto"``
-    takes the prebuilt delivery whenever it can serve this tokenizer,
-    local JIT only when prebuilt cannot and the ``gpu-jit`` profile is
-    installed (:mod:`toktier.facade.delivery`). The
+    GPU adoption, ``"cuda"`` requires it, and ``"cuda:N"`` requires it on
+    CUDA ordinal ``N`` among the visible devices (the index the CUDA
+    runtime reports, which matches the system tool's numbering only when
+    the device order is pinned to bus order), judging the route on that
+    device alone. ``gpu_delivery="auto"`` takes the prebuilt delivery
+    whenever it can serve this tokenizer, local JIT only when prebuilt
+    cannot and the ``gpu-jit`` profile is installed
+    (:mod:`toktier.facade.delivery`). The
     ``repair_backend="fastokens"`` is an explicit experimental full-session
     re-encode path and requires ``policy="experimental"``; it carries no
     exact-ID guarantee. The remaining keywords inject a configuration,

@@ -1,4 +1,4 @@
-"""``gpu_delivery="auto"`` prefers prebuilt whenever it can serve.
+"""``gpu_delivery="auto"`` prefers prebuilt; ``device="cuda:N"`` names one card.
 
 The planner is replaced by a stand-in that opens the GPU route for a
 chosen set of deliveries and architectures, so each case states exactly
@@ -12,6 +12,7 @@ from typing import Any, ClassVar
 
 import pytest
 
+from toktier.errors import BackendUnavailable
 from toktier.facade import api as facade_api
 from toktier.facade import delivery
 from toktier.policy import (
@@ -210,3 +211,98 @@ def test_shipped_prebuilt_judged_devices_cover_the_jit_judged_devices() -> None:
         ]
     }
     assert delivery.prebuilt_covers_jit_devices(synthetic) == ["f: ['sm_61']"]
+
+
+# -- device="cuda:N" -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("value", "parsed"),
+    [
+        ("auto", ("auto", None)),
+        ("cpu", ("cpu", None)),
+        ("cuda", ("cuda", None)),
+        ("cuda:0", ("cuda", 0)),
+        ("cuda:7", ("cuda", 7)),
+        ("cuda:12", ("cuda", 12)),
+    ],
+)
+def test_device_values_parse(value: str, parsed: tuple[str, int | None]) -> None:
+    assert delivery.parse_device(value) == parsed
+
+
+@pytest.mark.parametrize(
+    "value", ["cuda:", "cuda:01", "cuda:-1", "cuda:1.0", "cuda: 1", "gpu", "CUDA", 0]
+)
+def test_device_values_outside_the_grammar_are_refused(rig: Rig, value: object) -> None:
+    with pytest.raises(ValueError, match="device must be"):
+        delivery.parse_device(value)
+    with pytest.raises(ValueError, match="device must be"):
+        rig.tokenizer(device=value)
+
+
+def test_cuda_ordinal_plans_on_that_device_alone(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install(
+        monkeypatch,
+        serving={"prebuilt"},
+        architectures={"sm_120"},
+        jit_installed=False,
+    )
+    tokenizer = rig.tokenizer(device="cuda:1")
+    try:
+        assert [device.index for device in tokenizer._snapshot.devices] == [1]
+        assert tokenizer._gpu_device == "cuda:1"
+        assert tokenizer.plan.backend == BACKEND_GPU
+        key = tokenizer.verification_key("gpu")
+        assert key is not None and key.architecture == "sm_120"
+    finally:
+        tokenizer.close()
+
+
+def test_cuda_ordinal_is_not_admitted_by_another_card(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Card 1 qualifies, card 0 does not: ``cuda:0`` is refused."""
+    _install(
+        monkeypatch,
+        serving={"prebuilt"},
+        architectures={"sm_120"},
+        jit_installed=False,
+    )
+    with pytest.raises(BackendUnavailable) as caught:
+        rig.tokenizer(device="cuda:0")
+    details = caught.value.details
+    assert details["requested_ordinal"] == 0
+    assert [item["index"] for item in details["visible_devices"]] == [0, 1]
+    assert details["reason_code"] == "R_UNCERTIFIED_ARTIFACT"
+    assert "cuda:0" in str(caught.value)
+
+
+def test_cuda_ordinal_that_is_not_visible_is_named(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install(monkeypatch, serving={"prebuilt"}, jit_installed=False)
+    with pytest.raises(BackendUnavailable) as caught:
+        rig.tokenizer(device="cuda:5")
+    assert "not among the visible devices [0, 1]" in str(caught.value)
+    assert caught.value.details["requested_ordinal"] == 5
+
+
+def test_auto_with_an_ordinal_tries_jit_on_that_device(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = _install(
+        monkeypatch,
+        serving={"jit"},
+        architectures={"sm_120"},
+        jit_installed=True,
+    )
+    tokenizer = rig.tokenizer(device="cuda:1")
+    try:
+        assert seen == ["prebuilt", "jit"]
+        assert tokenizer._gpu_delivery == "jit"
+        assert tokenizer._gpu_device == "cuda:1"
+    finally:
+        tokenizer.close()

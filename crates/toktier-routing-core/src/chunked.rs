@@ -960,19 +960,22 @@ impl ChunkEncoder {
         let pool = size_chunk_pool(workers)?;
         let existing = self.forked.load(Ordering::Relaxed);
         if workers > existing {
-            let fresh = on_chunk_pool(&pool, || {
-                (existing..workers)
-                    .into_par_iter()
-                    .map(|_| {
-                        let mut worker = engine.fork_worker()?;
-                        if let Some(text) = text {
-                            let mut out = Vec::new();
-                            worker.encode_with_added_tokens_flat(text.as_bytes(), &mut out);
-                        }
-                        Ok(worker)
-                    })
-                    .collect::<Result<Vec<_>, EngineError>>()
-            })?;
+            let fresh = on_chunk_pool(
+                || Ok(pool),
+                || {
+                    (existing..workers)
+                        .into_par_iter()
+                        .map(|_| {
+                            let mut worker = engine.fork_worker()?;
+                            if let Some(text) = text {
+                                let mut out = Vec::new();
+                                worker.encode_with_added_tokens_flat(text.as_bytes(), &mut out);
+                            }
+                            Ok(worker)
+                        })
+                        .collect::<Result<Vec<_>, EngineError>>()
+                },
+            )??;
             self.forked.fetch_add(fresh.len(), Ordering::Relaxed);
             self.free
                 .lock()
@@ -1047,8 +1050,7 @@ impl FastCpuEngine {
         let plan_ns = started.elapsed().as_nanos() as u64;
 
         let encode_started = Instant::now();
-        let pool = chunk_pool()?;
-        let rows = on_chunk_pool(&pool, || {
+        let rows = on_chunk_pool(chunk_pool, || {
             plan.byte_spans
                 .par_iter()
                 .map(|&(low, high)| {
@@ -1060,7 +1062,7 @@ impl FastCpuEngine {
                     Ok((ids, source, row_started.elapsed().as_nanos() as u64, cold))
                 })
                 .collect::<Result<Vec<_>, EngineError>>()
-        })?;
+        })??;
         let encode_ns = encode_started.elapsed().as_nanos() as u64;
 
         let concat_started = Instant::now();
@@ -1199,6 +1201,8 @@ fn chunk_pool() -> Result<Arc<rayon::ThreadPool>, EngineError> {
     let mut slot = CHUNK_POOL
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
+    #[cfg(test)]
+    POOL_REQUESTS.with(|count| count.set(count.get() + 1));
     if let Some(current) = slot.as_ref() {
         return Ok(Arc::clone(&current.pool));
     }
@@ -1229,13 +1233,24 @@ fn size_chunk_pool(workers: usize) -> Result<Arc<rayon::ThreadPool>, EngineError
 }
 
 /// Run `work` on the chunk pool, or in place when the calling thread
-/// already belongs to a Rayon pool (the caller's pool then runs it).
-fn on_chunk_pool<T: Send>(pool: &rayon::ThreadPool, work: impl FnOnce() -> T + Send) -> T {
+/// already belongs to a Rayon pool (the caller's pool then runs it). The
+/// chunk pool is asked for only on the first branch, so a call from a
+/// host pool neither builds it nor fails when it cannot be built.
+fn on_chunk_pool<T: Send>(
+    pool: impl FnOnce() -> Result<Arc<rayon::ThreadPool>, EngineError>,
+    work: impl FnOnce() -> T + Send,
+) -> Result<T, EngineError> {
     if rayon::current_thread_index().is_some() {
-        work()
+        Ok(work())
     } else {
-        pool.install(work)
+        Ok(pool()?.install(work))
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Requests for the default chunk pool made on this thread (tests).
+    static POOL_REQUESTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// The thread count of the chunk pool, which is also the worker count
@@ -1894,10 +1909,12 @@ mod tests {
         // global pool has, and four rows meet at once.
         let pool = size_chunk_pool(4).unwrap();
         assert!(default_chunk_workers() >= 4);
-        let threads = on_chunk_pool(&pool, rayon::current_num_threads);
+        let handle = Arc::clone(&pool);
+        let threads = on_chunk_pool(|| Ok(handle), rayon::current_num_threads).unwrap();
         assert!(threads >= 4, "chunk pool has {threads} threads");
-        let met = std::thread::spawn(move || on_chunk_pool(&pool, || rendezvous(4)))
+        let met = std::thread::spawn(move || on_chunk_pool(|| Ok(pool), || rendezvous(4)))
             .join()
+            .unwrap()
             .unwrap();
         assert!(
             met.iter().all(|&ok| ok),
@@ -1915,8 +1932,7 @@ mod tests {
             .build()
             .unwrap();
         let seen = host.install(|| {
-            let pool = chunk_pool().unwrap();
-            on_chunk_pool(&pool, || {
+            on_chunk_pool(chunk_pool, || {
                 (0..4usize)
                     .into_par_iter()
                     .map(|_| {
@@ -1927,11 +1943,47 @@ mod tests {
                     })
                     .collect::<Vec<_>>()
             })
+            .unwrap()
         });
         for (threads, name) in seen {
             assert_eq!(threads, 1);
             assert!(!name.unwrap_or_default().starts_with("toktier-chunk"));
         }
+    }
+
+    /// A chunked call made from a host pool's thread runs there and does
+    /// not ask for (so neither builds nor waits on) the chunk pool; a call
+    /// from a plain thread does.
+    #[test]
+    fn a_chunked_call_from_a_host_pool_never_asks_for_the_chunk_pool() {
+        let fast = engine(false, &[]);
+        let text = prose(60_000, 29);
+        let expected = fast.encode_ids(&text).unwrap();
+        let host = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .unwrap();
+        let (encoded, requests) = host.install(|| {
+            POOL_REQUESTS.with(|count| count.set(0));
+            let encoded = fast
+                .chunked_encode_ids(&text, 4, None, CHUNKED_DEFAULT_SCAN_BUDGET)
+                .unwrap();
+            (encoded, POOL_REQUESTS.with(std::cell::Cell::get))
+        });
+        assert!(encoded.chunks >= 2, "no cut");
+        assert_eq!(encoded.ids, expected);
+        assert_eq!(requests, 0, "the host-pool call asked for the chunk pool");
+        let (encoded, requests) = std::thread::spawn(move || {
+            POOL_REQUESTS.with(|count| count.set(0));
+            let encoded = fast
+                .chunked_encode_ids(&text, 4, None, CHUNKED_DEFAULT_SCAN_BUDGET)
+                .unwrap();
+            (encoded, POOL_REQUESTS.with(std::cell::Cell::get))
+        })
+        .join()
+        .unwrap();
+        assert_eq!(encoded.ids, expected);
+        assert_eq!(requests, 1);
     }
 
     #[test]

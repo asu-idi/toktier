@@ -6,16 +6,20 @@ of the ``toktier.errors`` classes -- caught by ``toktier.ToktierError``,
 carrying the frozen ``.code``, and exposing ``.details`` as a read-only
 mapping, exactly like a Python-raised error.
 
-The extension is built from ``crates/toktier-py``. Set ``TOKTIER_PY_SO``
-to point at a prebuilt shared object; otherwise an existing
-``target/{debug,release}`` build is used. The module skips cleanly when
-neither is present: building here would fold a minutes-long ``cargo
-build`` into a routine pytest run, so the build stays an explicit,
-visible step (``cargo build -p toktier-py``).
+The extension is built from ``crates/toktier-py``. The shared object is
+located in this order: ``TOKTIER_PY_SO`` when set; the extension of the
+installed package (``toktier/_native`` with an extension-module suffix,
+on the import path -- an editable install places it in this tree's
+``src/toktier``); an existing ``target/{debug,release}`` build. The
+module skips cleanly when none is present: building here would fold a
+minutes-long ``cargo build`` into a routine pytest run, so the build
+stays an explicit, visible step (``maturin develop`` or ``cargo build -p
+toktier-py``).
 """
 
 from __future__ import annotations
 
+import importlib.machinery
 import importlib.util
 import os
 import sys
@@ -38,9 +42,28 @@ if str(REPOSITORY_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT / "src"))
 
 
+def _installed_extension() -> Path | None:
+    """The ``toktier._native`` extension of the package on the import path.
+
+    Found by file name, without importing the package: the first
+    ``toktier`` directory on ``sys.path`` that holds a ``_native`` file
+    with one of this interpreter's extension-module suffixes.
+    """
+    for entry in sys.path:
+        package = Path(entry or ".") / "toktier"
+        for suffix in importlib.machinery.EXTENSION_SUFFIXES:
+            candidate = package / f"_native{suffix}"
+            if candidate.is_file():
+                return candidate
+    return None
+
+
 def _shared_object() -> Path:
     if _SO_OVERRIDE:
         return Path(_SO_OVERRIDE)
+    installed = _installed_extension()
+    if installed is not None:
+        return installed
     candidates = [
         REPOSITORY_ROOT / "target/debug/lib_native.so",
         REPOSITORY_ROOT / "target/release/lib_native.so",
@@ -52,8 +75,8 @@ def _shared_object() -> Path:
     # minutes-long step on a cold checkout. Build the extension
     # explicitly (cargo build -p toktier-py) or set TOKTIER_PY_SO.
     message = (
-        "toktier._native is not prebuilt; run `cargo build -p toktier-py` "
-        "or set TOKTIER_PY_SO to a shared object"
+        "toktier._native is not prebuilt or installed; run `maturin develop` "
+        "or `cargo build -p toktier-py`, or set TOKTIER_PY_SO to a shared object"
     )
     pytest.skip(message)
     raise RuntimeError(message)  # pragma: no cover - skip always raises
@@ -62,6 +85,15 @@ def _shared_object() -> Path:
 @pytest.fixture(scope="session")
 def native_module() -> ModuleType:
     shared_object = _shared_object()
+    # The installed extension may already be imported in this process; a
+    # second initialization of the same shared object is refused by the
+    # binding, so the loaded module is reused.
+    loaded = sys.modules.get("toktier._native")
+    loaded_file = getattr(loaded, "__file__", None)
+    if loaded is not None and loaded_file is not None and (
+        Path(loaded_file).resolve() == shared_object.resolve()
+    ):
+        return loaded
     spec = importlib.util.spec_from_file_location("toktier._native", shared_object)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

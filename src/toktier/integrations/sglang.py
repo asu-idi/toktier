@@ -99,7 +99,13 @@ without a key in ``"contextvar"`` mode -- and that is at least that many
 characters long is encoded through ``toktier.chunked.encode``
 (certified chunk-parallel encode on the CPU route, ``docs/integration/
 sglang.md``). The default leaves it off; ``TOKTIER_SGLANG_CHUNKED_K`` forces
-the chunk count (``0`` reads the shipped table).
+the chunk count (``0`` reads the shipped table). The native chunk pool the
+encoder runs on is sized by ``AdapterConfig.chunked_workers``
+(``TOKTIER_SGLANG_CHUNKED_WORKERS``; by default ``RAYON_NUM_THREADS`` when
+the environment sets it, otherwise at most
+``DEFAULT_CHUNK_WORKERS_CAP`` threads) and is started on the first chunked
+request, or when the tokenizer is wrapped if
+``TOKTIER_SGLANG_CHUNKED_WARM`` asks for it.
 
 Threading: SGLang serializes tokenizer calls (event loop, or the single
 thread of ``AsyncDynamicbatchTokenizer``); the wrapper adds a lock anyway
@@ -242,6 +248,24 @@ def _parse_int(
     return number
 
 
+#: The most chunk workers a wrapper starts when no count is configured and
+#: the environment sets no ``RAYON_NUM_THREADS``. Each worker holds a
+#: forked engine (several MB before its caches grow) and a thread, in
+#: every process that wraps a tokenizer with chunking on.
+DEFAULT_CHUNK_WORKERS_CAP = 4
+
+
+def default_chunk_workers() -> int:
+    """The chunk worker count of a wrapper that configures none:
+    ``DEFAULT_CHUNK_WORKERS_CAP``, or fewer when the process may run on
+    fewer CPUs (its affinity mask)."""
+    try:
+        cpus = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        cpus = os.cpu_count() or 1
+    return max(1, min(DEFAULT_CHUNK_WORKERS_CAP, cpus))
+
+
 def _parse_float(variable: str, value: str | None, default: float) -> float:
     if value is None or value == "":
         return default
@@ -268,7 +292,14 @@ class AdapterConfig:
     single-threaded route. ``chunked_min_chars`` (``0`` = off) enables the
     shipped chunk-parallel encoder for stateless inputs at least that long,
     and ``chunked_k`` forces its chunk count (``0`` reads the shipped table);
-    an explicit ``long_request_encoder`` takes precedence over it. Stateless
+    an explicit ``long_request_encoder`` takes precedence over it.
+    ``chunked_workers`` is the number of chunk workers (and threads of the
+    process-wide native chunk pool) the wrapper starts; ``0`` takes
+    :func:`default_chunk_workers` (``from_env`` reads ``RAYON_NUM_THREADS``
+    into it when that is set, the count the pool followed before it had
+    its own). The pool is started on the first chunked request, or when
+    the tokenizer is wrapped with ``chunked_warm``. The first count named
+    in a process sizes its pool; a later, larger one grows it. Stateless
     means: every request in ``"off"`` mode, and a request without a key in
     ``"contextvar"`` mode (which otherwise takes content lookup).
     ``identity`` is always ``"require"``: the wrapper accelerates only when
@@ -304,6 +335,8 @@ class AdapterConfig:
     long_request_min_chars: int = 1 << 30
     chunked_min_chars: int = 0
     chunked_k: int = 0
+    chunked_workers: int = 0
+    chunked_warm: bool = False
     device: str = "cpu"
     gpu_delivery: str = "auto"
     identity: str = "require"
@@ -320,8 +353,10 @@ class AdapterConfig:
             )
         if not 0.0 <= self.shadow_rate <= 1.0:
             raise ValueError("shadow_rate must lie in [0, 1]")
-        if self.chunked_min_chars < 0 or self.chunked_k < 0:
-            raise ValueError("chunked_min_chars and chunked_k must be non-negative")
+        if self.chunked_min_chars < 0 or self.chunked_k < 0 or self.chunked_workers < 0:
+            raise ValueError(
+                "chunked_min_chars, chunked_k and chunked_workers must be non-negative"
+            )
         parse_device(self.device)
         if self.gpu_delivery not in GPU_DELIVERIES:
             raise ValueError(
@@ -346,10 +381,13 @@ class AdapterConfig:
         (``FAMILY``, ``REPO``, ``SESSION_KEY``, ``STORE``, ``SHADOW_RATE``,
         ``SHADOW_DUMP_DIR``, ``TIMING_LOG``, ``STATS_FILE``,
         ``EXPLAIN_EVERY``, ``RID_SEPARATOR``, ``PER_PROCESS_STORE``,
-        ``CHUNKED_MIN_CHARS``, ``CHUNKED_K``, ``DEVICE``, ``GPU_DELIVERY``,
+        ``CHUNKED_MIN_CHARS``, ``CHUNKED_K``, ``CHUNKED_WORKERS``,
+        ``CHUNKED_WARM``, ``DEVICE``, ``GPU_DELIVERY``,
         ``IDENTITY``; the last accepts
-        only ``require``, and ``PER_PROCESS_STORE`` accepts
-        ``1``/``true``/``yes`` and ``0``/``false``/``no`` in any case). An
+        only ``require``, and ``PER_PROCESS_STORE`` and ``CHUNKED_WARM`` accept
+        ``1``/``true``/``yes`` and ``0``/``false``/``no`` in any case). With
+        ``CHUNKED_WORKERS`` unset or ``0``, a positive ``RAYON_NUM_THREADS``
+        in the same mapping is taken as the chunk worker count. An
         invalid value raises ``ValueError``; a numeric value that does not
         parse, an on/off value outside that set and a negative
         ``SCHED_WORKERS`` are refused with a message that starts with the
@@ -381,6 +419,11 @@ class AdapterConfig:
                 f"{_ENV_PREFIX}IDENTITY must be unset or 'require'; the identity "
                 f"check cannot be turned off (got {identity!r})"
             )
+        chunk_workers = whole("CHUNKED_WORKERS", 0, non_negative=True)
+        if chunk_workers == 0:
+            rayon = e.get("RAYON_NUM_THREADS")
+            if rayon is not None and rayon.strip().isdigit() and int(rayon) > 0:
+                chunk_workers = int(rayon)
         scheduler: SchedulerConfig | None = None
         if whole("SCHED_WORKERS", 0, non_negative=True) > 0:
             scheduler = SchedulerConfig.from_env(e)
@@ -405,6 +448,10 @@ class AdapterConfig:
             rid_separator=get("RID_SEPARATOR"),
             chunked_min_chars=whole("CHUNKED_MIN_CHARS", 0),
             chunked_k=whole("CHUNKED_K", 0),
+            chunked_workers=chunk_workers,
+            chunked_warm=parse_flag(
+                _ENV_PREFIX + "CHUNKED_WARM", e.get(_ENV_PREFIX + "CHUNKED_WARM"), False
+            ),
             device=str(get("DEVICE", "cpu")),
             gpu_delivery=str(get("GPU_DELIVERY", "auto")),
             identity=identity,
@@ -678,6 +725,8 @@ class SGLangToktierTokenizer:
             hf_tokenizer
         )
         self._tok: Any = None
+        self._chunk_workers = self._cfg.chunked_workers or default_chunk_workers()
+        self._chunk_pool_started = False
         self._store_dir: str | None = None
         self._identity: dict[str, Any] = {
             "status": "skipped",
@@ -756,6 +805,8 @@ class SGLangToktierTokenizer:
                 "hf_class": type(hf_tokenizer).__name__,
                 "chunked_min_chars": self._cfg.chunked_min_chars,
                 "chunked_k": self._cfg.chunked_k,
+                "chunked_workers": self._chunk_workers,
+                "chunked_warm": self._cfg.chunked_warm,
                 "scheduler": (
                     None if self._sched is None else self._sched.stats()["policy"]
                 ),
@@ -765,31 +816,38 @@ class SGLangToktierTokenizer:
 
     # -- construction helpers ------------------------------------------
 
-    def _warm_chunk_encoder(self) -> None:
-        """Start the native chunk worker pool now, not on the first long request.
+    def _warm_chunk_encoder(self, *, eager: bool = True) -> None:
+        """Start the native chunk worker pool with the configured count.
 
+        Called when the tokenizer is wrapped (``eager``, only with
+        ``chunked_warm``) and otherwise before the first chunked request.
         Only where the chunked route can run the native encoder: chunking
         is configured (``chunked_min_chars`` > 0), the session mode has
         stateless requests (``off`` or ``contextvar``), the wrapper serves
         through toktier, and ``toktier.chunked`` would select the native
         encoder for this tokenizer (``native_by_default``). The pool takes
-        the default worker count, the one ``chunked.encode`` uses. A warm
-        that raises is recorded in the timing log and never fails the wrap;
-        the pool is then forked on first use, as before.
+        ``chunked_workers`` workers (:func:`default_chunk_workers` when it
+        is 0), so it never starts one thread per visible CPU unasked. A
+        warm that raises is recorded in the timing log and never fails the
+        wrap or the request; it is tried once.
         """
+        if eager and not self._cfg.chunked_warm:
+            return
         if (
-            self._tok is None
+            self._chunk_pool_started
+            or self._tok is None
             or self._cfg.chunked_min_chars <= 0
             or self._mode not in ("off", "contextvar")
         ):
             return
+        self._chunk_pool_started = True
         started = time.perf_counter()
         try:
             from toktier import chunked
 
             if not chunked.admission(self._tok).get("native_by_default"):
                 return
-            size = chunked.warm(self._tok)
+            size = chunked.warm(self._tok, workers=self._chunk_workers)
         except Exception as ex:
             self._record(
                 {"kind": "chunked_warm", "error": f"{type(ex).__name__}: {ex}"[:300]}
@@ -799,6 +857,7 @@ class SGLangToktierTokenizer:
             {
                 "kind": "chunked_warm",
                 "workers": size,
+                "eager": eager,
                 "ms": round((time.perf_counter() - started) * 1000.0, 3),
             }
         )
@@ -1176,6 +1235,7 @@ class SGLangToktierTokenizer:
             ):
                 from toktier import chunked
 
+                self._warm_chunk_encoder(eager=False)
                 encoded = chunked.encode(self._tok, text, k=self._cfg.chunked_k or None)
                 core = list(encoded.ids)
                 how = "chunked"

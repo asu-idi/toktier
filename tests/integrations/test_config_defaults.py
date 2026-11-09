@@ -31,6 +31,8 @@ ADAPTER_DEFAULTS: dict[str, object] = {
     "long_request_min_chars": 1 << 30,
     "chunked_min_chars": 0,
     "chunked_k": 0,
+    "chunked_workers": 0,
+    "chunked_warm": False,
     "device": "cpu",
     "gpu_delivery": "auto",
     "identity": "require",

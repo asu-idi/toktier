@@ -29,6 +29,7 @@ from toktier.artifacts.manifest import ArtifactManifest
 from toktier.artifacts.tables import ARTIFACT_MANIFEST
 from toktier.integrations import sglang_sched
 from toktier.integrations.sglang import (
+    DEFAULT_CHUNK_WORKERS_CAP,
     SESSION_KEY,
     AdapterConfig,
     SGLangToktierTokenizer,
@@ -37,6 +38,7 @@ from toktier.integrations.sglang import (
     bind_session_key,
     check_core_identity,
     check_manager_shape,
+    default_chunk_workers,
     session_key_from_request,
     wrap_tokenizer,
 )
@@ -450,6 +452,7 @@ _ADAPTER_INTEGERS = (
     "TOKTIER_SGLANG_EXPLAIN_EVERY",
     "TOKTIER_SGLANG_CHUNKED_MIN_CHARS",
     "TOKTIER_SGLANG_CHUNKED_K",
+    "TOKTIER_SGLANG_CHUNKED_WORKERS",
 )
 _SCHED_INTEGERS = (
     "TOKTIER_SGLANG_SCHED_CHUNK_MIN_CHARS",
@@ -636,7 +639,7 @@ def test_chunked_serves_long_stateless_requests_only(
     assert seen == []
 
 
-def test_wrap_warms_the_chunk_encoder_once_when_chunking_is_on(
+def test_the_chunk_pool_starts_on_the_first_chunked_request_with_a_bounded_count(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake = _FakeToktier()
@@ -644,31 +647,84 @@ def test_wrap_warms_the_chunk_encoder_once_when_chunking_is_on(
     monkeypatch.setattr(
         "toktier.chunked.admission", lambda tok: {"native_by_default": True}
     )
-    warmed: list[object] = []
+    monkeypatch.setattr(
+        "toktier.chunked.encode",
+        lambda tok, text, *, k=None: _Chunked(text, k),
+    )
+    warmed: list[int | None] = []
 
     def warm(
         tok: object, *, workers: int | None = None, text: str | None = None
     ) -> int:
-        warmed.append(tok)
-        return 2
+        assert tok is fake
+        warmed.append(workers)
+        return workers or 0
 
     monkeypatch.setattr("toktier.chunked.warm", warm)
-    wrap_tokenizer(_StubHf(), AdapterConfig(session_key="off", chunked_min_chars=10))
-    assert warmed == [fake]
-    # Chunking off: nothing is started at wrap time.
+    # Lazy by default: nothing at wrap time, one start before the first
+    # chunked request, none after; the count is bounded, never "every CPU".
+    w = wrap_tokenizer(
+        _StubHf(), AdapterConfig(session_key="off", chunked_min_chars=10)
+    )
+    assert warmed == []
+    w.encode("short", add_special_tokens=False)
+    assert warmed == []
+    w.encode("x" * 20, add_special_tokens=False)
+    w.encode("y" * 20, add_special_tokens=False)
+    assert warmed == [default_chunk_workers()]
+    assert 1 <= (warmed[0] or 0) <= DEFAULT_CHUNK_WORKERS_CAP
+    # A configured count, started when the tokenizer is wrapped.
     warmed.clear()
-    wrap_tokenizer(_StubHf(), AdapterConfig(session_key="off"))
+    wrap_tokenizer(
+        _StubHf(),
+        AdapterConfig(
+            session_key="off",
+            chunked_min_chars=10,
+            chunked_workers=6,
+            chunked_warm=True,
+        ),
+    )
+    assert warmed == [6]
+    # Chunking off: nothing is started, eagerly or later.
+    warmed.clear()
+    w = wrap_tokenizer(_StubHf(), AdapterConfig(session_key="off", chunked_warm=True))
+    w.encode("x" * 20, add_special_tokens=False)
     assert warmed == []
 
-    # A warm that raises never fails the wrap; the wrapper serves as before.
+    # A start that raises never fails the wrap or the request.
     def failing_warm(tok: object, **kwargs: object) -> int:
         raise RuntimeError("no pool")
 
     monkeypatch.setattr("toktier.chunked.warm", failing_warm)
     w = wrap_tokenizer(
-        _StubHf(), AdapterConfig(session_key="off", chunked_min_chars=10)
+        _StubHf(),
+        AdapterConfig(session_key="off", chunked_min_chars=10, chunked_warm=True),
     )
     assert w.encode("ab", add_special_tokens=False) == [97, 98]
+    assert w.encode("x" * 20, add_special_tokens=False) == [ord("x")] * 20
+
+
+def test_chunk_worker_count_follows_the_environment_as_before() -> None:
+    assert AdapterConfig.from_env({}).chunked_workers == 0
+    assert AdapterConfig.from_env({}).chunked_warm is False
+    # RAYON_NUM_THREADS sized the chunk rows before the pool had its own
+    # count; it is still the default when set.
+    assert AdapterConfig.from_env({"RAYON_NUM_THREADS": "1"}).chunked_workers == 1
+    assert AdapterConfig.from_env({"RAYON_NUM_THREADS": "3"}).chunked_workers == 3
+    assert AdapterConfig.from_env({"RAYON_NUM_THREADS": "x"}).chunked_workers == 0
+    explicit = AdapterConfig.from_env(
+        {
+            "RAYON_NUM_THREADS": "1",
+            "TOKTIER_SGLANG_CHUNKED_WORKERS": "8",
+            "TOKTIER_SGLANG_CHUNKED_WARM": "yes",
+        }
+    )
+    assert explicit.chunked_workers == 8 and explicit.chunked_warm is True
+    with pytest.raises(ValueError):
+        AdapterConfig(chunked_workers=-1)
+    with pytest.raises(ValueError, match="TOKTIER_SGLANG_CHUNKED_WARM"):
+        AdapterConfig.from_env({"TOKTIER_SGLANG_CHUNKED_WARM": "maybe"})
+    assert 1 <= default_chunk_workers() <= DEFAULT_CHUNK_WORKERS_CAP
 
 
 def test_explicit_long_request_encoder_takes_precedence(

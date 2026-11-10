@@ -292,11 +292,12 @@ the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
 ## Quick start
 
 Install with `pip install toktier`; GPU options are described in
-[Install](#install). On a GPU host where `ninja` is importable, the default
-`gpu_delivery="auto"` selects the JIT delivery, so the first long request
-compiles the kernel for tens of seconds; pass `gpu_delivery="prebuilt"` to use
-the shipped kernel or `device="cpu"` to stay on the CPU route
-([GPU delivery](#gpu-delivery)).
+[Install](#install). On a GPU host the default `gpu_delivery="auto"` uses the
+shipped prebuilt kernel whenever it can serve the tokenizer there, and compiles
+the kernel locally (JIT) only when prebuilt cannot and the `gpu-jit` extra is
+installed; an importable `ninja` alone does not select JIT. Pass
+`gpu_delivery="jit"` to compile locally, or `device="cpu"` to stay on the CPU
+route ([GPU delivery](#gpu-delivery)).
 
 ```python
 import toktier
@@ -566,13 +567,13 @@ mirrors, imports, exports, and runs from a verified cache.
 |---|---|---|
 | `toktier` | Corrected Gigatoken full CPU encode and session repair, HF fallback, persistent store, routing, and CLI | Linux x86_64 with glibc 2.34+, CPython 3.10+; requires `tokenizers>=0.22.2,<0.24` and `transformers>=4.57.6,<6` (the certified reference versions are the registry's; see [Correctness and evidence](#correctness-and-evidence)) |
 | `toktier[gpu]` | Strict superset of `toktier`; automatic 64 KiB crossover to the shipped multi-architecture CUDA fatbin | NVIDIA GPU, driver 580.65.06+, `torch`; no compiler or first-use build |
-| `toktier[gpu-jit]` | Same CPU/GPU routing as `toktier[gpu]`; compiles the certified kernel source locally | judged NVCC / torch-runtime CUDA / PyTorch triple, `torch`, `ninja`; first-use compilation |
+| `toktier[gpu-jit]` | Same CPU/GPU routing as `toktier[gpu]`; compiles the certified kernel source locally | judged NVCC / torch-runtime CUDA / PyTorch triple, `torch`, `ninja`; compiles on first use only when JIT delivery is selected |
 
 The `fastokens` extra adds an explicit experimental adapter
 ([Experimental: the pinned Fastokens adapter](#experimental-the-pinned-fastokens-adapter)),
 and its exact-id assurance (`certified_pinned`) holds with `tokenizers==0.22.2`,
-the version it was judged against, so install the two together with
-`pip install "toktier[fastokens]" "tokenizers==0.22.2"`; with another installed
+the version it was judged against, which `pip install "toktier[fastokens]"`
+installs with it since 0.3.2; with another installed
 `tokenizers` the adapter reports `oracle_mismatch` and no exact-id guarantee,
 and the default routes are unaffected.
 
@@ -676,9 +677,10 @@ release decision.
 The prebuilt fatbin contains `sm_75/80/86/89/90/100/120` images and a
 `compute_75` PTX fallback. Its binary-digest-bound certificate covers
 `sm_80`, `sm_89`, `sm_90` and `sm_120`; the other embedded architectures are marked `experimental`. With
-the default facade, `toktier[gpu]` selects this prebuilt delivery and
-`toktier[gpu-jit]` selects JIT from the detected profile; an explicit
-`gpu_delivery=` argument can override that detection. Under prebuilt delivery,
+the default facade, `gpu_delivery="auto"` takes this prebuilt delivery
+whenever it can serve, under `toktier[gpu]` and `toktier[gpu-jit]` alike;
+`toktier[gpu-jit]` adds the JIT delivery for a host prebuilt cannot serve, or
+for an explicit `gpu_delivery="jit"`. Under prebuilt delivery,
 the GPU engine opens lazily on the first request that routes to the GPU at or
 above the crossover, so `explain()["gpu_backend"]["loaded"]` stays `false`
 while only short requests have run; the crossover decides per input which
@@ -832,8 +834,8 @@ includes the upstream wheel and, usually, a build from the sdist produced on
 another host or with another toolchain. A build with an identical digest reads
 exactly as the published one does. The exact-id assurance (`certified_pinned`)
 holds with `tokenizers==0.22.2`, the version the pinned build was judged
-against, so install the two together with
-`pip install "toktier[fastokens]" "tokenizers==0.22.2"`; with another installed
+against, which `pip install "toktier[fastokens]"` installs with it since
+0.3.2; with another installed
 `tokenizers` the adapter reports `oracle_mismatch` and no exact-id guarantee,
 and the default routes are unaffected. The pinned distribution keeps the upstream
 import name, so having both installed is not recommended: they share the files
@@ -930,8 +932,9 @@ audit records behind this document and does not ship inside the package.
 A focused end-to-end rerun through the historical public session API is
 kept in
 [`readings/fast_cpu_focused_parity.json`](readings/fast_cpu_focused_parity.json).
-The executing one-call Rust front end is separately checked, across the 11
-CPU-fast artifacts of the campaign, in
+The executing one-call Rust front end is separately checked across the 15
+fast-CPU artifacts of the roster and the directly judged records (16 model
+families), in
 [`readings/fast_cpu_native_frontend_parity.json`](readings/fast_cpu_native_frontend_parity.json).
 
 Three status values keep evidence and runtime behavior distinct:
@@ -1098,7 +1101,7 @@ layers together.
 
 ## Documentation
 
-- [`docs/releases/v0.3.1.md`](docs/releases/v0.3.1.md) — release notes for this version.
+- [`docs/releases/v0.3.2.md`](docs/releases/v0.3.2.md) — release notes for this version.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — layers, routing, and store format.
 - [`docs/serving.md`](docs/serving.md) — which encode call for which request shape, patch-only appends, and chunk-parallel encode for long requests.
 - [`docs/integration/sglang.md`](docs/integration/sglang.md) — using toktier as an SGLang tokenizer backend.

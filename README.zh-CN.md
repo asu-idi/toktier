@@ -229,10 +229,11 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 
 ## 快速开始
 
-运行 `pip install toktier` 即可安装；GPU 选项见[安装](#安装)。在可以导入
-`ninja` 的 GPU 主机上，默认的 `gpu_delivery="auto"` 会选择 JIT 交付，于是首个
-长请求要先现场编译 kernel，耗时数十秒；传入 `gpu_delivery="prebuilt"` 可使用随包
-kernel，传入 `device="cpu"` 则留在 CPU 路由上（见 [GPU 交付](#gpu-交付)）。
+运行 `pip install toktier` 即可安装；GPU 选项见[安装](#安装)。在 GPU 主机上，默认的
+`gpu_delivery="auto"` 只要随包的预编译 kernel 能在本机服务该 tokenizer 就使用它；只有
+预编译交付无法服务且装了 `gpu-jit` extra 时，才在本机编译 kernel（JIT）。仅能导入
+`ninja` 不会选择 JIT。传入 `gpu_delivery="jit"` 可在本机编译，传入 `device="cpu"`
+则留在 CPU 路由上（见 [GPU 交付](#gpu-交付)）。
 
 ```python
 import toktier
@@ -481,12 +482,12 @@ Python 包不受 Rust crate feature 的影响，仍通过 `huggingface-hub`
 |---|---|---|
 | `toktier` | 修正版 Gigatoken CPU 全量编码与会话 repair、HF fallback、持久化 store、路由和 CLI | Linux x86_64、glibc 2.34+、CPython 3.10+；要求 `tokenizers>=0.22.2,<0.24` 与 `transformers>=4.57.6,<6`（已认证的参考版本以注册表为准，见[正确性与证据](#正确性与证据)） |
 | `toktier[gpu]` | `toktier` 的严格超集；通过 64 KiB crossover 自动路由到随包的多架构 CUDA fatbin | NVIDIA GPU、驱动版本 580.65.06+、`torch`；无需编译器，首次使用不编译 |
-| `toktier[gpu-jit]` | CPU/GPU 路由与 `toktier[gpu]` 相同；在本机编译认证 kernel 源码 | 经评审的 NVCC / torch-runtime CUDA / PyTorch 三元组、`torch`、`ninja`；首次使用需要编译 |
+| `toktier[gpu-jit]` | CPU/GPU 路由与 `toktier[gpu]` 相同；在本机编译认证 kernel 源码 | 经评审的 NVCC / torch-runtime CUDA / PyTorch 三元组、`torch`、`ninja`；只有选中 JIT 交付时才在首次使用时编译 |
 
 `fastokens` extra 提供一个需显式选择的实验性适配器（见下文“实验性：钉住的
 Fastokens 适配器”一节），其精确 id 保证（`certified_pinned`）以
-`tokenizers==0.22.2` 为前提，即该构建评判时所用的版本，因此请两者一起安装：
-`pip install "toktier[fastokens]" "tokenizers==0.22.2"`；装的是其他
+`tokenizers==0.22.2` 为前提，即该构建评判时所用的版本；自 0.3.2 起
+`pip install "toktier[fastokens]"` 会一并安装该版本。装的是其他
 `tokenizers` 时，适配器报告 `oracle_mismatch`、不给精确 id 保证，默认路由不受影响。
 
 两个 GPU extras 都会引入 `torch` 及其 CUDA wheel，请预留空间：全新的
@@ -559,8 +560,8 @@ Rust-API 覆盖集计算哈希；`--show-diff` 会逐行打印归一化后的内
 
 [来源与构建记录](packaging/fast_cpu/README.md)中固定了上游 commit、补丁、Unicode
 数据、编译器和发布参数。运行中的扩展会报告经过域分隔的源码摘要、精确 Rust
-工具链和构建参数；注册表会在启用路由前，将这些信息与 repair 配置、参考实现和
-tokenizer 工件一并验证。核心 wheel 还包含 Gigatoken 的 MIT 许可证、TokTier
+工具链和构建参数；注册表会在启用路由前，将源码摘要与 repair 配置、参考实现和
+tokenizer 工件一并验证，并另行报告工具链与构建参数是否为经过判定的构建配置。核心 wheel 还包含 Gigatoken 的 MIT 许可证、TokTier
 修改声明、依赖 SBOM 和依赖许可证合集。
 
 TokTier 当前只发布 ABI3 Linux x86-64 wheel，不发布 sdist。从带 tag 的源码用另一套
@@ -574,8 +575,8 @@ TokTier 当前只发布 ABI3 Linux x86-64 wheel，不发布 sdist。从带 tag �
 预编译 fatbin 包含 `sm_75/80/86/89/90/100/120` 镜像以及
 `compute_75` PTX fallback。绑定二进制摘要的认证覆盖
 `sm_80`、`sm_89`、`sm_90` 与 `sm_120`；其他随包架构标记为 `experimental`。使用默认 facade 时，
-`toktier[gpu]` 选择预编译交付，`toktier[gpu-jit]` 则根据检测到的配置选择
-JIT；显式 `gpu_delivery=` 参数可覆盖该检测结果。预编译交付下，GPU 引擎按需
+无论装的是 `toktier[gpu]` 还是 `toktier[gpu-jit]`，`gpu_delivery="auto"` 只要预编译交付能服务就使用它；
+`toktier[gpu-jit]` 另外提供 JIT 交付，供预编译无法服务的主机或显式的 `gpu_delivery="jit"` 使用。预编译交付下，GPU 引擎按需
 初始化：只有首个路由到 GPU（达到或超过 crossover）的请求才会触发加载，因此
 在只跑过短请求的情况下，`explain()["gpu_backend"]["loaded"]` 会保持 `false`；crossover 仍会
 逐个输入决定实际由哪个后端执行。JIT 交付继续使用 Python 主机端，其 GPU 后端
@@ -684,8 +685,8 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 
 末级目录名仍沿用 crate 自身的命名：工件与 Python 产品同名并列，JIT 产物放在
 `jit-rust`，与 Python 的 `kernels` 目录有意区分，因为两者存放的东西不同。
-若三个根目录均未设置，持久化会话会直接报错，而不会自行选择位置——
-状态不是缓存。参见 [`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)。
+若无法解析出持久化状态目录（三个根目录与默认的用户主目录都不可用），持久化会话会
+直接报错，而不会自行选择位置——状态不是缓存。参见 [`docs/rust-lifecycle.md`](docs/rust-lifecycle.md)。
 
 ### 实验性：钉住的 Fastokens 适配器
 
@@ -711,7 +712,7 @@ Unicode 守卫作用下改由参考实现回答。这里比较的是引擎摘要
 还是从 sdist 自行构建的 wheel（换一台主机或一套工具链通常就会得到不同摘要）——
 就会报告 `false`；如果其摘要与已发布 wheel 完全相同，读数也相同。
 精确 id 保证（`certified_pinned`）以 `tokenizers==0.22.2` 为前提，即钉住构建评判时
-所用的版本，因此请两者一起安装：`pip install "toktier[fastokens]" "tokenizers==0.22.2"`；
+所用的版本；自 0.3.2 起 `pip install "toktier[fastokens]"` 会一并安装该版本。
 装的是其他 `tokenizers` 时，适配器报告 `oracle_mismatch`、不给精确 id 保证，默认路由
 不受影响。
 钉住分发沿用上游的 import 名，因此不建议两者同时安装：它们共用 `import
@@ -782,11 +783,12 @@ WordPiece；不同 family 可以共用同一工件）、**17 个具备 CPU 快�
 [`evidence/evidence_manifest_super_vl_2026_11.json`](evidence/evidence_manifest_super_vl_2026_11.json)
 和 [`tables/support_registry.json`](tables/support_registry.json)。随版本提供的
 逐工件测量记录覆盖 68,920,281,468 次检查；早期归档阶段覆盖其余
-3,280,031,861 次，两者相加得到上面的总数。经由既有的公开会话 API 做的
+3,280,031,861 次，两者相加得到上面的总数。随版本提供的是逐工件汇总；逐文档的比对明细
+保存在审计记录中，不随包发布。经由既有的公开会话 API 做的
 一次针对性端到端复验，记录在
 [`readings/fast_cpu_focused_parity.json`](readings/fast_cpu_focused_parity.json)；
-实际执行的单次调用 Rust 前端则在战役判定的 11 个支持 CPU 快速路径的工件上另行
-检查，记录在
+实际执行的单次调用 Rust 前端则在 15 个走快速 CPU 路径的工件（roster 工件与直接判定的
+记录，16 个模型家族）上另行检查，记录在
 [`readings/fast_cpu_native_frontend_parity.json`](readings/fast_cpu_native_frontend_parity.json)。
 
 三个状态用于区分证据与运行时行为：
@@ -794,7 +796,7 @@ WordPiece；不同 family 可以共用同一工件）、**17 个具备 CPU 快�
 | 状态 | 含义 |
 |---|---|
 | `certified` | 证据绑定精确工件与加速二进制；预编译 GPU 交付还绑定 Rust 主机端的源码摘要、精确 rustc 与发布构建信息。 |
-| `certified_source` | 证据绑定源码、构建输入与工具链；集成 CPU 引擎和本机 GPU JIT 使用此状态。 |
+| `certified_source` | 证据绑定源码、构建输入与工具链；集成 CPU 引擎和本机 GPU JIT 使用此状态。自 0.3.0 起 CPU 引擎的构建配置只报告、不作为准入条件。 |
 | `reference-only` | 不采用加速路径，运行 HF `tokenizers`。 |
 
 这些是经验性差分结果，并非对所有可能输入的证明。针对每个请求的检查和参考
@@ -932,7 +934,7 @@ span，涵盖 normalization、pre-tokenization、merge 和 added-token 处理；
 
 ## 文档
 
-- [`docs/releases/v0.3.1.md`](docs/releases/v0.3.1.md) — 本版本发布说明（英文）。
+- [`docs/releases/v0.3.2.md`](docs/releases/v0.3.2.md) — 本版本发布说明（英文）。
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — 分层、路由与 store 格式。
 - [`docs/serving.md`](docs/serving.md) — 各类请求该用哪种 encode 调用、只返回差量的会话追加，以及长请求的分块并行编码。
 - [`docs/integration/sglang.md`](docs/integration/sglang.md) — 把 toktier 用作 SGLang 的 tokenizer 后端。

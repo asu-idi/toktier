@@ -355,8 +355,9 @@ batch shape.
 The normal entry point is automatic. With `toktier[gpu]`, an eligible
 cold/plain input of at least 64 KiB executes on the shipped prebuilt kernel;
 smaller inputs and session appends execute on the corrected Gigatoken CPU
-path. With `toktier[gpu-jit]`, the routing semantics are identical and only
-kernel delivery changes to a local JIT build:
+path. With `toktier[gpu-jit]` the routing is identical and `auto` still
+takes the prebuilt kernel where it can serve; the local JIT build is used
+where prebuilt cannot serve, or when `gpu_delivery="jit"` asks for it:
 
 ```python
 import toktier

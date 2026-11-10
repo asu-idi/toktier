@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the exact, single-wheel artifact set allowed for release 0.3.1."""
+"""Verify the exact, single-wheel artifact set allowed for release 0.3.2."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_WHEEL = "toktier-0.3.1-cp310-abi3-manylinux_2_34_x86_64.whl"
+EXPECTED_WHEEL = "toktier-0.3.2-cp310-abi3-manylinux_2_34_x86_64.whl"
 #: The base requirements on the oracle and the loader, as the wheel has to
 #: state them. The oracle range admits the releases the registry may
 #: certify as reference versions (its ``certified_versions`` is the

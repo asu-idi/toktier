@@ -6,7 +6,7 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:a6c1c8c4abeca0ab645de51661122b66263083c509df800b6f66110edb976ea9",
+  "root_digest": "sha256:cfdac70f78d4874ea11736caadcecad2500ce60c92251822778d433ec6cb1a1e",
   "oracles": [
     {
       "oracle_id": "tokenizers",
@@ -1101,13 +1101,31 @@
           }
         },
         "fast_cpu": {
-          "status": "unsupported",
+          "status": "certified_source",
+          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "build_flags": [
+            "profile=release",
+            "opt-level=3",
+            "target=x86_64-unknown-linux-gnu",
+            "rustflags=",
+            "pyo3=abi3-py310+extension-module"
+          ],
+          "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
           "engine": "gigatoken",
           "engine_version": "0.10.0+toktier.pinned.1",
           "engine_delivery": "integrated",
           "engine_module": "toktier._native",
+          "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+          "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
-          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
+          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
+          "repair": {
+            "margin": 29,
+            "effective_l_max": 33,
+            "has_normalizer": true,
+            "source_table_sha256": "aaa934b6fd13a56a2921f3d4e761984669f3b9ad860a95589ec58c70d67d4cd1"
+          }
         }
       },
       "loader_face_sha256": "ff67615de6e6ee073a20bd1fe3a776053e821573f4ae566aeb8e9d43de801201"
@@ -2088,13 +2106,31 @@
           }
         },
         "fast_cpu": {
-          "status": "unsupported",
+          "status": "certified_source",
+          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "build_flags": [
+            "profile=release",
+            "opt-level=3",
+            "target=x86_64-unknown-linux-gnu",
+            "rustflags=",
+            "pyo3=abi3-py310+extension-module"
+          ],
+          "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
           "engine": "gigatoken",
           "engine_version": "0.10.0+toktier.pinned.1",
           "engine_delivery": "integrated",
           "engine_module": "toktier._native",
+          "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+          "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
-          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
+          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
+          "repair": {
+            "margin": 33,
+            "effective_l_max": 113,
+            "has_normalizer": false,
+            "source_table_sha256": "4c62ff8699a631ec60bf4d334c7f7f2deda25fe4dccc2f76a4dc858b7fae2e8d"
+          }
         }
       },
       "loader_face_sha256": "ac2f41ef2444dec82fdc90e334f80543f298535005fe78aec7e8311ef86f84d0"
@@ -2326,13 +2362,31 @@
           }
         },
         "fast_cpu": {
-          "status": "unsupported",
+          "status": "certified_source",
+          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "build_flags": [
+            "profile=release",
+            "opt-level=3",
+            "target=x86_64-unknown-linux-gnu",
+            "rustflags=",
+            "pyo3=abi3-py310+extension-module"
+          ],
+          "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
           "engine": "gigatoken",
           "engine_version": "0.10.0+toktier.pinned.1",
           "engine_delivery": "integrated",
           "engine_module": "toktier._native",
+          "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+          "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
-          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
+          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
+          "repair": {
+            "margin": 18,
+            "effective_l_max": 76,
+            "has_normalizer": false,
+            "source_table_sha256": "c0653c288fb29adc064eec3ee9d0f62d3d19bbda8fce569f15e1577866d9da14"
+          }
         }
       },
       "loader_face_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299"
@@ -2841,13 +2895,31 @@
           }
         },
         "fast_cpu": {
-          "status": "unsupported",
+          "status": "certified_source",
+          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "build_flags": [
+            "profile=release",
+            "opt-level=3",
+            "target=x86_64-unknown-linux-gnu",
+            "rustflags=",
+            "pyo3=abi3-py310+extension-module"
+          ],
+          "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
           "engine": "gigatoken",
           "engine_version": "0.10.0+toktier.pinned.1",
           "engine_delivery": "integrated",
           "engine_module": "toktier._native",
+          "engine_unicode_data": "NFC: unicode-normalization-alignments 0.1.12 (Unicode 9.0.0); properties: icu4x-datagen --ucd-tag 16.0.0 --icuexport-tag release-77-1 (Unicode 16.0.0)",
+          "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
-          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853"
+          "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
+          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
+          "repair": {
+            "margin": 23,
+            "effective_l_max": 128,
+            "has_normalizer": true,
+            "source_table_sha256": "2d9fdf68706e86bda932c43620e39d5548674410570aa18a209dc325b7655914"
+          }
         }
       },
       "loader_face_sha256": "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0"

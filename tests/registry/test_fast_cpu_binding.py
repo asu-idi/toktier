@@ -57,22 +57,25 @@ def test_fast_cpu_registry_counts_unique_artifacts_without_inflation() -> None:
     assert judged == set(loadable)
     carried = binding["carried_families"]
     assert isinstance(carried, dict)
+    direct = binding["direct_families"]
+    assert isinstance(direct, dict)
+    # Record-held repair members: the carried records and the directly
+    # judged faces (no carry-over node, judged by an engine differential of
+    # their own).
     assert {family for family, entry in entries.items() if "repair" in entry} == set(
         carried
-    )
+    ) | set(direct)
     assert set(carried.values()) <= judged
-    assert {
+    # The unsupported entries are exactly the rejected families: the four
+    # engine refusals, plus any registered face withdrawn back to the
+    # reference route (moved from direct_families to rejected_families).
+    rejected = binding["rejected_families"]
+    assert isinstance(rejected, dict)
+    unsupported = {
         family for family, status in states.items() if status == "unsupported"
-    } == {
-        "hy3",
-        "hy4",
-        "kimi_k3",
-        "laguna_s_2_1",
-        "ling_3_0_flash",
-        "muse_spark",
-        "nemotron_super_vl",
-        "step5_preview",
     }
+    assert unsupported == set(rejected) & set(states)
+    assert {"hy3", "kimi_k3", "laguna_s_2_1", "ling_3_0_flash"} <= unsupported
 
     inherited = coverage["exact_artifact_inheritance"]
     assert isinstance(inherited, dict)
@@ -196,12 +199,16 @@ def test_fast_cpu_binding_classes_partition_the_registry() -> None:
     rejected = set(rejected_map)
     carried = binding["carried_families"]
     assert isinstance(carried, dict)
+    direct_map = binding["direct_families"]
+    assert isinstance(direct_map, dict)
+    direct = set(direct_map)
     assert not loadable & rejected
     assert not set(carried) & (loadable | rejected)
+    assert not direct & (loadable | rejected | set(carried))
     artifacts = registry["artifacts"]
     assert isinstance(artifacts, list)
     shipped = {row["family"] for row in artifacts if isinstance(row, dict)}
-    assert shipped == loadable | (rejected & shipped) | set(carried)
+    assert shipped == loadable | (rejected & shipped) | set(carried) | direct
     coverage = binding["coverage"]
     assert isinstance(coverage, dict)
     assert coverage["unique_tokenizer_artifacts"] == len(loadable) == 11

@@ -5,11 +5,12 @@ carried one: a face judged directly, with no carry-over node, certified by
 a full-corpus engine differential of its own
 (``schemas/engine_differential_reading.schema.json``) and named in
 ``tools/fast_cpu_binding.json`` under ``direct_families``. The shipped
-registry holds no such record yet; these tests build one on a copy of the
-shipped files (family ``hy4`` with its derived parameters) and require
-the binding tool to produce the entry and the release check
-(``carryover_problems``, conditions D1-D6) to accept it, then refuse each
-change that breaks a condition.
+registry registers four such faces before their readings exist (pending:
+the binding names each reading's path with no digest). These tests
+complete one of them on a copy of the shipped files (family ``hy4`` with
+its derived parameters) and require the binding tool to produce the entry
+and the release check (``carryover_problems``, conditions D1-D6) to
+accept it, then refuse each change that breaks a condition.
 """
 
 from __future__ import annotations
@@ -233,8 +234,8 @@ def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     _dump(tmp_path / "tables" / "support_registry.json", document)
 
     binding = _load(BINDING)
-    del binding["rejected_families"][FAMILY]
-    binding["direct_families"] = {FAMILY: {"reading": READING, "sha256": digest}}
+    binding["rejected_families"].pop(FAMILY, None)
+    binding["direct_families"][FAMILY] = {"reading": READING, "sha256": digest}
     _dump(tmp_path / "tools" / "fast_cpu_binding.json", binding)
 
     parity_path = tmp_path / "readings" / "fast_cpu_native_frontend_parity.json"
@@ -295,19 +296,97 @@ def _edit_reading(tree: Path, change: Callable[[dict[str, Any]], None]) -> None:
 # -- positive ---------------------------------------------------------------
 
 
-def test_the_shipped_registry_holds_no_direct_record() -> None:
+#: The four faces registered before their readings exist, with the repair
+#: parameters the exporter derives over each frozen directory (lane P0-a).
+REGISTERED = {
+    "hy4": (
+        29,
+        33,
+        True,
+        "aaa934b6fd13a56a2921f3d4e761984669f3b9ad860a95589ec58c70d67d4cd1",
+    ),
+    "step5_preview": (
+        23,
+        128,
+        True,
+        "2d9fdf68706e86bda932c43620e39d5548674410570aa18a209dc325b7655914",
+    ),
+    "muse_spark": (
+        33,
+        113,
+        False,
+        "4c62ff8699a631ec60bf4d334c7f7f2deda25fe4dccc2f76a4dc858b7fae2e8d",
+    ),
+    "nemotron_super_vl": (
+        18,
+        76,
+        False,
+        "c0653c288fb29adc064eec3ee9d0f62d3d19bbda8fce569f15e1577866d9da14",
+    ),
+}
+
+
+def _pending_problem(problem: str) -> bool:
+    """A problem the release check names for a registered, pending face."""
+    return problem.split(":")[0] in REGISTERED and (
+        "reading is pending" in problem
+        or "parity reading does not list the face" in problem
+    )
+
+
+def test_the_shipped_registry_registers_pending_direct_faces() -> None:
+    """Each registered face holds its derived parameters and waits for its
+    reading. A face withdrawn before the release (back to rejected_families,
+    its entry back to the unsupported one) simply leaves this set."""
     binding = _load(BINDING)
-    assert binding.get("direct_families", {}) == {}
-    for artifact in _load(SHIPPED)["artifacts"]:
-        assert "engine_differential" not in (
-            artifact["backends"].get("fast_cpu") or {}
-        )
+    document = _load(SHIPPED)
+    registered = set(binding["direct_families"])
+    assert registered and registered <= set(REGISTERED)
+    uniform = _row(document, "deepseek_v3")["backends"]["fast_cpu"]
+    for family in sorted(registered):
+        margin, l_max, normalizer, table = REGISTERED[family]
+        assert binding["direct_families"][family] == {
+            "reading": f"readings/fast_cpu_engine_differential_{family}.json",
+            "sha256": None,
+        }
+        assert family not in binding["rejected_families"]
+        artifact = _row(document, family)
+        assert "carryover" not in artifact
+        assert artifact["backends"]["fast_cpu"] == {
+            **uniform,
+            "repair": {
+                "margin": margin,
+                "effective_l_max": l_max,
+                "has_normalizer": normalizer,
+                "source_table_sha256": table,
+            },
+        }
+    assert update_fast_cpu_registry.pending_direct_families(binding) == {
+        family: f"readings/fast_cpu_engine_differential_{family}.json"
+        for family in registered
+    }
+    # Each is refused by name until its reading is recorded, and nothing
+    # else is refused.
+    problems = generate_registry.carryover_problems(SHIPPED)
+    for family in registered:
+        assert any(
+            p.startswith(f"{family}: the engine-differential reading is pending")
+            for p in problems
+        ), problems
+    assert all(_pending_problem(p) for p in problems), problems
 
 
 def test_a_directly_judged_record_passes(tree: Path) -> None:
     assert _problems(tree) == []
-    # ... and the release check of the whole copy is otherwise unchanged.
-    assert generate_registry.carryover_problems(_registry(tree)) == []
+    # ... and the release check of the whole copy names only the pending
+    # readings (and parity rows) of the other registered faces.
+    others = [
+        problem
+        for problem in generate_registry.carryover_problems(_registry(tree))
+        if not problem.startswith(FAMILY)
+    ]
+    assert others
+    assert all(_pending_problem(p) for p in others), others
 
 
 def test_the_binding_tool_produces_the_direct_entry(tree: Path) -> None:
@@ -661,9 +740,7 @@ def test_the_binding_tool_writes_a_pending_face_without_engine_differential(
     _dump(parity_path, parity)
     binding = _load(tree / "tools" / "fast_cpu_binding.json")
     _writer_without_identity(monkeypatch, binding)
-    assert update_fast_cpu_registry.pending_direct_families(binding) == {
-        FAMILY: READING
-    }
+    assert update_fast_cpu_registry.pending_direct_families(binding)[FAMILY] == READING
     document = _load(_registry(tree))
     generated = update_fast_cpu_registry.augmented_document(document, binding)
     entry = _row(generated, FAMILY)["backends"]["fast_cpu"]

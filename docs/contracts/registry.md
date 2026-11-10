@@ -337,7 +337,10 @@ two forms, and a record holds exactly one of them:
   is listed with the reading's path and `"sha256": null` (pending); its
   entry holds `repair` without `engine_differential`, and the check refuses
   the record, naming the pending reading, until the reading is committed and
-  its digest recorded in both places.
+  its digest recorded in both places. A registered face is withdrawn by data
+  alone: it moves back to `rejected_families` with a reason, its `repair`
+  member is dropped, and the binding tool writes the unsupported entry again;
+  no file of a source identity changes, so no engine identity moves.
 
 The chunk admission roster (`docs/serving.md` Section 3) takes the roster
 and the carried records, and not a directly judged one.

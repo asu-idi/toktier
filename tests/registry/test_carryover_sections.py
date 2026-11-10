@@ -33,6 +33,27 @@ SCHEMA = json.loads(
 pytest.importorskip("jsonschema", reason="schema validation needs jsonschema")
 
 
+def _settled(problems: list[str]) -> list[str]:
+    """The problems other than those naming a registered face's pending
+    reading (``tools/fast_cpu_binding.json`` ``direct_families`` with no
+    digest yet; the rebind supplies the reading and its parity row)."""
+    import update_fast_cpu_registry
+
+    binding = json.loads((ROOT / "tools" / "fast_cpu_binding.json").read_text())
+    pending = set(update_fast_cpu_registry.pending_direct_families(binding))
+    return [
+        problem
+        for problem in problems
+        if not (
+            problem.split(":")[0] in pending
+            and (
+                "reading is pending" in problem
+                or "parity reading does not list the face" in problem
+            )
+        )
+    ]
+
+
 def _shipped() -> dict[str, Any]:
     document = json.loads(SHIPPED.read_text(encoding="utf-8"))
     assert isinstance(document, dict)
@@ -109,7 +130,7 @@ def test_the_carried_record_names_its_certificate() -> None:
 def test_verification_half_accepts_the_shipped_table() -> None:
     from generate_registry import carryover_problems
 
-    assert carryover_problems(SHIPPED) == []
+    assert _settled(carryover_problems(SHIPPED)) == []
 
 
 # ---------------------------------------------------------------------

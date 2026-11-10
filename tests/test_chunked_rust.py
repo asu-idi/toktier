@@ -53,6 +53,7 @@ from .test_chunked import (
     _ARTIFACTS,
     REPO_ROOT,
     TABLE_ROWS,
+    _admission_roster,
     _artifact_source,
     _generated_corpora,
     _reference,
@@ -69,6 +70,16 @@ CARRIED: frozenset[str] = frozenset(item.family for item in carried_families())
 ROSTER: frozenset[str] = (
     frozenset(item.family for item in roster_families()) | CARRIED
 )
+#: The carried records that a cross-artifact carry-over node certifies
+#: (family -> artifact digest), on the chunked admission roster as the
+#: admission tool builds it, and the directly judged faces: carried
+#: records that hold repair parameters without a carry-over node.
+CARRIED_OVER: dict[str, str] = {
+    family: digest
+    for family, digest in sorted(_admission_roster())
+    if family not in {item.family for item in roster_families()}
+}
+DIRECT_FACES: frozenset[str] = CARRIED - frozenset(CARRIED_OVER)
 
 #: The structural refusals the native encoder itself answers with; the
 #: Rust face reports them verbatim, as the Python face does.
@@ -161,27 +172,89 @@ def _expected_rust_refusal(
     return None
 
 
-def test_carried_families_are_refused_alike_for_want_of_an_admission_row(
+def test_admission_rows_are_the_roster_and_the_carried_over_records() -> None:
+    """The shipped admission table holds one certified row for each roster
+    artifact and each record carried over onto one of its rows, and none
+    for a directly judged face. Read from the data, without artifacts."""
+    roster = {item.family: item.artifact_sha256 for item in roster_families()}
+    assert CARRIED_OVER and DIRECT_FACES
+    assert set(CARRIED_OVER) | set(DIRECT_FACES) == CARRIED
+    assert set(TABLE_ROWS) == set(roster) | set(CARRIED_OVER)
+    for family, digest in {**roster, **CARRIED_OVER}.items():
+        row = TABLE_ROWS[family]
+        assert row["artifact_sha256"] == digest, family
+        assert row["status"] == "certified", family
+    for family in DIRECT_FACES:
+        assert family not in TABLE_ROWS, family
+
+
+def test_carried_over_records_are_admitted_alike_on_their_admission_rows(
     rust_example: Path, tmp_path_factory: pytest.TempPathFactory
 ) -> None:
-    """A carried family passes the roster step and has no admission row."""
+    """A record carried over onto a roster row passes the roster step and
+    is admitted on its own certified row, by both faces alike."""
     checked = 0
-    for family in sorted(CARRIED):
+    for family, digest in sorted(CARRIED_OVER.items()):
         if not _artifact_source(family):
             continue
-        assert family not in TABLE_ROWS, family
+        row = TABLE_ROWS[family]
+        assert row["status"] == "certified", family
+        native_levels = list(row["evidence"]["native"])
         report = _run(rust_example, family, "--policy", "supported", "--chars", "300")
+        rust = report["admission"]
         tokenizer = load_isolated(family, tmp_path_factory)
         try:
             python = chunked.admission(tokenizer)
         finally:
             tokenizer.close()
-        assert report["admission"]["refusal"] == "artifact_without_chunked_evidence"
-        assert python["refusal"] == "artifact_without_chunked_evidence"
+        assert rust["family"] == family == python["family"]
+        assert rust["artifact_sha256"] == digest == row["artifact_sha256"], family
+        assert rust["gate"] == "EvidenceTable"
+        assert python["admission_gate"] == "evidence_table"
+        assert rust["admitted"] is True and rust["refusal"] is None, (family, rust)
+        assert python["refusal"] is None, (family, python)
+        assert rust["evidence_id"] == python["evidence_id"] == row["evidence_id"]
+        assert rust["native_evidence"] == native_levels, family
+        assert rust["evidence_status"] == _native_status(native_levels), family
+        assert python["evidence_paths"] == list(row["paths"]), family
         assert report["encode"]["equal_to_serial"] is True, family
+        print(f"{family}: admitted on its row by both faces")
         checked += 1
     if not checked:
-        pytest.skip("no carried family is available under TOKTIER_TEST_ARTIFACTS")
+        pytest.skip("no carried-over record is available under TOKTIER_TEST_ARTIFACTS")
+
+
+def test_direct_faces_are_refused_alike_for_want_of_an_admission_row(
+    rust_example: Path, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """A directly judged face holds repair parameters, so it passes the
+    roster step, and has no admission row: both faces refuse it with the
+    same typed reason and encode it serially."""
+    checked = 0
+    for family in sorted(DIRECT_FACES):
+        if not _artifact_source(family):
+            continue
+        assert family not in TABLE_ROWS, family
+        report = _run(rust_example, family, "--policy", "supported", "--chars", "300")
+        rust = report["admission"]
+        tokenizer = load_isolated(family, tmp_path_factory)
+        try:
+            python = chunked.admission(tokenizer)
+        finally:
+            tokenizer.close()
+        assert rust["gate"] == "EvidenceTable"
+        assert rust["admitted"] is False, (family, rust)
+        assert rust["refusal"] == "artifact_without_chunked_evidence", (family, rust)
+        assert python["refusal"] == "artifact_without_chunked_evidence", family
+        encode = report["encode"]
+        assert encode["serial_reason"] == "R_CHUNK_FAMILY_UNSUPPORTED", family
+        assert report["plan"] is None
+        assert rust["refusal"] in report["plan_error"], family
+        assert encode["equal_to_serial"] is True, family
+        print(f"{family}: refused by both faces for want of an admission row")
+        checked += 1
+    if not checked:
+        pytest.skip("no directly judged face is available under TOKTIER_TEST_ARTIFACTS")
 
 
 def test_rust_admission_refusals_equal_the_python_ones(

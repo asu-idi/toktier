@@ -3,19 +3,20 @@
   "schema_version": 1,
   "generated_by": {
     "tool": "tools/run_chunked_cut_campaign.py",
-    "tool_version": "1.0.0",
-    "source_commit": "98cd71b52aa73140d66e8056c8a1af7dc849a0c1",
-    "generated_at": "2026-11-08T13:32:41Z"
+    "tool_version": "1.1.0",
+    "source_commit": "1084186c5f9fe99ff6e7e4e3c148d6f4c417a025",
+    "generated_at": "2026-11-10T16:14:46Z"
   },
   "campaign": {
-    "run_id": "chunked-cuts-20261108",
-    "date": "2026-11-08",
-    "tag": null
+    "run_id": "chunked-cuts-032",
+    "date": "2026-11-10",
+    "tag": "rc32"
   },
-  "tool_sha256": "7cb1a473a287482fe1a4a6683580a450a3dd708b81a7c82a78f244435b82308c",
-  "chunked_identity": "sha256:a3da80d03fd46140936abfedd54edbc17ad3d6d14f8e885f8aee195adac19c21",
-  "fast_cpu_source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
-  "fast_cpu_source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
+  "tool_sha256": "8e9c5600fd3d742306cd3919066812073c3fd506fb7bc2d1d6c04cc3deff5bbd",
+  "chunked_identity": "sha256:ec4641ebc35f5bf9847268ccb0d7ae62a1fbdf85cc31cd39949577d4922ea700",
+  "fast_cpu_source_digest": "707e566699bd4ee67c26d5696f3840a4c325e2d93e3a7a68ea625f0831aef22a",
+  "fast_cpu_source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
+  "policy": "experimental",
   "toktier_version": "0.3.1",
   "tokenizers": "0.22.2",
   "transformers": "4.57.6",
@@ -25,40 +26,102 @@
     "sc003",
     "sc004",
     "sc005",
-    "sc007",
-    "sc008",
-    "sc018",
-    "sc019",
-    "sc022",
-    "sc024",
-    "sc025",
-    "sc028",
+    "sc016",
     "sc030",
-    "sc032",
-    "sc043",
+    "sc031",
+    "sc035",
+    "sc046",
+    "sc048",
+    "sc049",
     "sc059",
-    "sc061",
-    "sc062",
-    "sc075",
-    "sc076",
-    "sc078",
-    "sc079",
-    "sc086",
-    "sc087",
+    "sc066",
+    "sc068",
+    "sc070",
+    "sc077",
+    "sc081",
+    "sc082",
     "sc088",
-    "sc090",
     "sc091",
     "sc092",
-    "sc093",
-    "sc095",
-    "sc110",
-    "sc111"
+    "sc097",
+    "sc100",
+    "sc103",
+    "sc109",
+    "sc111",
+    "scc009",
+    "scc011",
+    "scc056",
+    "scc057",
+    "scc058",
+    "scg029"
   ],
   "job_ids": [
-    "727783",
-    "729033"
+    "882487",
+    "884224",
+    "889894",
+    "890948",
+    "891277",
+    "891402",
+    "891403",
+    "891404",
+    "891405",
+    "891406",
+    "891407",
+    "891637",
+    "891638",
+    "891768",
+    "891769",
+    "891866",
+    "891867",
+    "891868",
+    "892483",
+    "892616",
+    "892617",
+    "892618",
+    "892619",
+    "892620",
+    "892856",
+    "892857",
+    "892990",
+    "892991",
+    "892992",
+    "892993",
+    "892994",
+    "894177",
+    "894178",
+    "894408",
+    "894409",
+    "894491",
+    "894630",
+    "894631",
+    "894632",
+    "902796",
+    "904234",
+    "905555",
+    "909748",
+    "911150",
+    "911151",
+    "911152",
+    "911153",
+    "911154",
+    "911155",
+    "917017",
+    "917018",
+    "917019",
+    "917020",
+    "917021",
+    "917022",
+    "917023",
+    "917024",
+    "917025",
+    "917058",
+    "917332",
+    "917333",
+    "917607",
+    "917815",
+    "918576"
   ],
-  "core_hours": 1104.8,
+  "core_hours": 1606.0,
   "k_rule": {
     "rule": "max(2, ceil(chars / chunk_chars))",
     "chunk_chars": 8000,
@@ -107,6 +170,43 @@
         "serial_fallbacks": 35,
         "serial_reasons": {
           "R_CHUNK_NO_CUT": 35
+        },
+        "plan_disagreements": 0
+      },
+      "mismatches": {
+        "python_vs_oracle": 0,
+        "native_vs_oracle": 0,
+        "python_vs_native": 0,
+        "serial_vs_oracle": 0
+      }
+    },
+    {
+      "family": "deepseek_v4_1_flash",
+      "artifact_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+      "loader_face_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+      "normalizer": "none",
+      "paths": [
+        "python",
+        "native"
+      ],
+      "docs": 102400000,
+      "chars": 380330377958,
+      "tokens": 73955684551,
+      "chunks": 207595482,
+      "chunked_docs": 102399964,
+      "cut_misses": 39,
+      "literal_rejects": 237,
+      "norm_rejects": 0,
+      "serial_fallbacks": 36,
+      "serial_reasons": {
+        "R_CHUNK_NO_CUT": 36
+      },
+      "native": {
+        "chunks": 207595482,
+        "chunked_docs": 102399964,
+        "serial_fallbacks": 36,
+        "serial_reasons": {
+          "R_CHUNK_NO_CUT": 36
         },
         "plan_disagreements": 0
       },
@@ -255,6 +355,43 @@
         "serial_fallbacks": 35,
         "serial_reasons": {
           "R_CHUNK_NO_CUT": 35
+        },
+        "plan_disagreements": 0
+      },
+      "mismatches": {
+        "python_vs_oracle": 0,
+        "native_vs_oracle": 0,
+        "python_vs_native": 0,
+        "serial_vs_oracle": 0
+      }
+    },
+    {
+      "family": "mimo_v2_6",
+      "artifact_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+      "loader_face_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+      "normalizer": "nfc",
+      "paths": [
+        "python",
+        "native"
+      ],
+      "docs": 102400000,
+      "chars": 380330377958,
+      "tokens": 75621085874,
+      "chunks": 207595482,
+      "chunked_docs": 102399964,
+      "cut_misses": 39,
+      "literal_rejects": 250,
+      "norm_rejects": 4,
+      "serial_fallbacks": 36,
+      "serial_reasons": {
+        "R_CHUNK_NO_CUT": 36
+      },
+      "native": {
+        "chunks": 207595482,
+        "chunked_docs": 102399964,
+        "serial_fallbacks": 36,
+        "serial_reasons": {
+          "R_CHUNK_NO_CUT": 36
         },
         "plan_disagreements": 0
       },
@@ -516,6 +653,30 @@
         "plan_disagreements": 0
       },
       {
+        "family": "deepseek_v4_1_flash",
+        "artifact_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+        "loader_face_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+        "normalizer": "none",
+        "paths": [
+          "python",
+          "native"
+        ],
+        "strings": 20000,
+        "chars": 18093892,
+        "chunked": 20000,
+        "chunks": 80362,
+        "cut_misses": 5199,
+        "literal_rejects": 31813,
+        "norm_rejects": 0,
+        "mismatches": {
+          "python_vs_oracle": 0,
+          "native_vs_oracle": 0,
+          "python_vs_native": 0,
+          "serial_vs_oracle": 0
+        },
+        "plan_disagreements": 0
+      },
+      {
         "family": "deepseek_v4_flash",
         "artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
         "loader_face_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
@@ -603,6 +764,30 @@
         "cut_misses": 5139,
         "literal_rejects": 29666,
         "norm_rejects": 0,
+        "mismatches": {
+          "python_vs_oracle": 0,
+          "native_vs_oracle": 0,
+          "python_vs_native": 0,
+          "serial_vs_oracle": 0
+        },
+        "plan_disagreements": 0
+      },
+      {
+        "family": "mimo_v2_6",
+        "artifact_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+        "loader_face_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+        "normalizer": "nfc",
+        "paths": [
+          "python",
+          "native"
+        ],
+        "strings": 100000,
+        "chars": 90483768,
+        "chunked": 99998,
+        "chunks": 399172,
+        "cut_misses": 25459,
+        "literal_rejects": 66283,
+        "norm_rejects": 27189,
         "mismatches": {
           "python_vs_oracle": 0,
           "native_vs_oracle": 0,
@@ -758,6 +943,6 @@
     ]
   },
   "not_reasoned": [],
-  "notes": "Chunk-cut campaign on the 0.3.1 candidate tree (98cd71b): 1,024 units of 100,000 documents, four ways (Python chunked, native chunked, serial, oracle), default policy with the table step lifted for evidence collection. The adversarial section is the 0.3.0 release battery (same tool bytes and chunked identity). Slurm jobs, 2026-11-08: 727783 (a canary over the 16 shortest units) and the array 729033 (55 tasks, task job ids 729034 to 729088, the remaining 1,008 units); the core hours count both.",
-  "root_digest": "sha256:8d0123d12e7e35322393dfb503662545f885e553b0c899f2a6c63259595a4f42"
+  "notes": "",
+  "root_digest": "sha256:f1d6881f0c55c2102fef47f2fa02c3adc6d67d7c2fd235c5292d084e45e5351b"
 }

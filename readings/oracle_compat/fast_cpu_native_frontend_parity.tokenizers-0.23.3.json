@@ -1,7 +1,7 @@
 {
   "all_ids_equal_hf": true,
-  "characters": 4437141060,
-  "documents": 1437469,
+  "characters": 7959177750,
+  "documents": 1960185,
   "engine": {
     "build_flags": [
       "profile=release",
@@ -12,15 +12,15 @@
     ],
     "delivery": "integrated",
     "module": "toktier._native",
-    "source_digest": "9594ff243421b89ff95137bda5a439a314343470951b6b7c0a98238bf51c4f41",
-    "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
+    "source_digest": "707e566699bd4ee67c26d5696f3840a4c325e2d93e3a7a68ea625f0831aef22a",
+    "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
     "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
     "upstream_project": "gigatoken",
     "version": "0.10.0+toktier.pinned.1"
   },
   "gil_released": true,
   "mismatches": 0,
-  "model_families": 12,
+  "model_families": 16,
   "one_python_to_rust_call_per_batch": true,
   "oracle": {
     "package": "tokenizers",
@@ -29,7 +29,7 @@
   "rows": [
     {
       "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
-      "characters": 403376460,
+      "characters": 530611850,
       "documents": 130679,
       "family": "deepseek_v3",
       "full_encode_equal_hf": true,
@@ -38,7 +38,7 @@
     },
     {
       "artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
-      "characters": 403376460,
+      "characters": 530611850,
       "documents": 130679,
       "family": "deepseek_v4_flash",
       "full_encode_equal_hf": true,
@@ -47,7 +47,7 @@
     },
     {
       "artifact_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
-      "characters": 403376460,
+      "characters": 530611850,
       "documents": 130679,
       "family": "glm_5_2",
       "full_encode_equal_hf": true,
@@ -56,7 +56,7 @@
     },
     {
       "artifact_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
-      "characters": 403376460,
+      "characters": 530611850,
       "documents": 130679,
       "family": "gpt_oss_120b",
       "full_encode_equal_hf": true,
@@ -64,8 +64,101 @@
       "repair_equal_hf": true
     },
     {
+      "artifact_sha256": "ff67615de6e6ee073a20bd1fe3a776053e821573f4ae566aeb8e9d43de801201",
+      "characters": 530611850,
+      "documents": 130679,
+      "family": "hy4",
+      "full_encode_equal_hf": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "af450eb8cc1f3384979594d1e382059426b024d0734179b1092f8d06df314fb4",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 85047
+        },
+        "entry_points": [
+          {
+            "documents": 130679,
+            "entry_point": "id_route",
+            "guard_documents": {
+              "bound": 1306,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 130679,
+              "gpu_segmented": 0,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 532972703,
+                "gpu": 0,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 946788,
+              "text": 641743
+            }
+          },
+          {
+            "documents": 130679,
+            "entry_point": "state_route",
+            "guard_documents": {
+              "bound": 1306,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 130679,
+              "gpu_segmented": 0,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 532972703,
+                "gpu": 0,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 946788,
+              "text": 641743
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
+      "mismatches": 0,
+      "repair_equal_hf": true,
+      "special_tokens": {
+        "documents": 130679,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 130679,
+          "gpu": 0,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 130679,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
+    },
+    {
       "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
-      "characters": 403376460,
+      "characters": 530611850,
       "documents": 130679,
       "family": "llama_3_1_8b",
       "full_encode_equal_hf": true,
@@ -74,7 +167,7 @@
     },
     {
       "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
-      "characters": 403376460,
+      "characters": 530611850,
       "documents": 130679,
       "family": "minimax_m3",
       "full_encode_equal_hf": true,
@@ -83,7 +176,7 @@
     },
     {
       "artifact_sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135",
-      "characters": 403376460,
+      "characters": 530611850,
       "documents": 130679,
       "family": "ministral_3_8b",
       "full_encode_equal_hf": true,
@@ -91,8 +184,101 @@
       "repair_equal_hf": true
     },
     {
+      "artifact_sha256": "ac2f41ef2444dec82fdc90e334f80543f298535005fe78aec7e8311ef86f84d0",
+      "characters": 530611850,
+      "documents": 130679,
+      "family": "muse_spark",
+      "full_encode_equal_hf": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "bb78da340b975092caf1f8abd070306449a57758626e1632e75a5d7c5f037331",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 87003
+        },
+        "entry_points": [
+          {
+            "documents": 130679,
+            "entry_point": "id_route",
+            "guard_documents": {
+              "bound": 1306,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 130679,
+              "gpu_segmented": 0,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 532973990,
+                "gpu": 0,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 946788,
+              "text": 641877
+            }
+          },
+          {
+            "documents": 130679,
+            "entry_point": "state_route",
+            "guard_documents": {
+              "bound": 1306,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 130679,
+              "gpu_segmented": 0,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 532973990,
+                "gpu": 0,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 946788,
+              "text": 641877
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
+      "mismatches": 0,
+      "repair_equal_hf": true,
+      "special_tokens": {
+        "documents": 130679,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 130679,
+          "gpu": 0,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 130679,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
+    },
+    {
       "artifact_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
-      "characters": 403376460,
+      "characters": 530611850,
       "documents": 130679,
       "family": "nemotron_3_nano_4b",
       "full_encode_equal_hf": true,
@@ -100,8 +286,101 @@
       "repair_equal_hf": true
     },
     {
+      "artifact_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
+      "characters": 530611850,
+      "documents": 130679,
+      "family": "nemotron_super_vl",
+      "full_encode_equal_hf": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "e7a4b96faa37718aa4286c5756788d94fa38da2fcc9f3b719cb81c723591a2fa",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 70551
+        },
+        "entry_points": [
+          {
+            "documents": 130679,
+            "entry_point": "id_route",
+            "guard_documents": {
+              "bound": 1306,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 130679,
+              "gpu_segmented": 0,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 532970629,
+                "gpu": 0,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 946855,
+              "text": 641757
+            }
+          },
+          {
+            "documents": 130679,
+            "entry_point": "state_route",
+            "guard_documents": {
+              "bound": 1306,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 130679,
+              "gpu_segmented": 0,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 532970629,
+                "gpu": 0,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 946855,
+              "text": 641757
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
+      "mismatches": 0,
+      "repair_equal_hf": true,
+      "special_tokens": {
+        "documents": 130679,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 130679,
+          "gpu": 0,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 130679,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
+    },
+    {
       "artifact_sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca",
-      "characters": 403376460,
+      "characters": 530611850,
       "documents": 130679,
       "family": "olmo_3_7b",
       "full_encode_equal_hf": true,
@@ -110,7 +389,7 @@
     },
     {
       "artifact_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
-      "characters": 403376460,
+      "characters": 530611850,
       "documents": 130679,
       "family": "qwen3_5_08b",
       "full_encode_equal_hf": true,
@@ -119,14 +398,109 @@
     },
     {
       "artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
-      "characters": 403376460,
+      "characters": 530611850,
       "documents": 130679,
       "family": "qwen3_8b",
       "full_encode_equal_hf": true,
       "mismatches": 0,
       "repair_equal_hf": true
+    },
+    {
+      "artifact_sha256": "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0",
+      "characters": 530611850,
+      "documents": 130679,
+      "family": "step5_preview",
+      "full_encode_equal_hf": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "6da11cd87ca00f5a7d1a454dd5984b046818e54b35f8df803872c435a8359691",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 80185
+        },
+        "entry_points": [
+          {
+            "documents": 130679,
+            "entry_point": "id_route",
+            "guard_documents": {
+              "bound": 1306,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 130679,
+              "gpu_segmented": 0,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 532971934,
+                "gpu": 0,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 946790,
+              "text": 641681
+            }
+          },
+          {
+            "documents": 130679,
+            "entry_point": "state_route",
+            "guard_documents": {
+              "bound": 1306,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 130679,
+              "gpu_segmented": 0,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 532971934,
+                "gpu": 0,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 946790,
+              "text": 641681
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
+      "mismatches": 0,
+      "repair_equal_hf": true,
+      "special_tokens": {
+        "documents": 130679,
+        "evidence_role": "prefix_rule",
+        "executed_by": {
+          "fast_cpu": 130679,
+          "gpu": 0,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "prefix",
+        "prefix_ids": [
+          0
+        ],
+        "served_by": {
+          "facade": 130679,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     }
   ],
   "schema": "toktier.fast_cpu.native_frontend_parity.v1",
-  "unique_artifacts": 11
+  "unique_artifacts": 15
 }

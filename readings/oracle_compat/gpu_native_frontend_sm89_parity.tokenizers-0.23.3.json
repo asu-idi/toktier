@@ -4,7 +4,7 @@
   "architecture_digest": "a237afb137748ee93d0d0ddc16c1d62d1d2797e7244579730493063011f64139",
   "characters": 8546619858,
   "devices": [
-    "NVIDIA GeForce RTX 4090, 8.9, 580.178.04"
+    "NVIDIA GeForce RTX 4090, 8.9, 580.178.04, 00000000:01:00.0, GPU-6406d610-8a8f-eedb-d097-c1b5468da5eb"
   ],
   "documents": 2100000,
   "families": 21,
@@ -19,8 +19,8 @@
       "rustflags=",
       "pyo3=abi3-py310+extension-module"
     ],
-    "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
-    "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5",
+    "host_source_digest": "8953cd6db64c427115d9ed0c1b772e8d8f6344a9d516b2868772c41eb60c432a",
+    "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2",
     "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
   },
   "one_python_to_rust_call_per_batch": true,

@@ -4,7 +4,8 @@
   "architecture_digest": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
   "characters": 73777507776,
   "devices": [
-    "NVIDIA RTX PRO 6000 Blackwell Server Edition, 12.0, 595.71.05"
+    "NVIDIA RTX PRO 6000 Blackwell Server Edition, 12.0, 595.71.05, 00000000:11:00.0, GPU-7e2a1203-36f7-c43f-6042-e329029c61ed",
+    "NVIDIA RTX PRO 6000 Blackwell Server Edition, 12.0, 595.71.05, 00000000:61:00.0, GPU-80d288ee-1a39-f2e2-2cc9-368227cc90b7"
   ],
   "documents": 23156175,
   "families": 21,
@@ -19,8 +20,8 @@
       "rustflags=",
       "pyo3=abi3-py310+extension-module"
     ],
-    "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
-    "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5",
+    "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
+    "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2",
     "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
   },
   "one_python_to_rust_call_per_batch": true,
@@ -36,8 +37,96 @@
       "documents": 1102675,
       "family": "deepseek_v3",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "39dc60b16a182c81e6c0a998fc5a5905be93ef132789447dbc31464e5369d250",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 80497
+        },
+        "entry_points": [
+          {
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408791636,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724436,
+              "text": 491187
+            }
+          },
+          {
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408791636,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724436,
+              "text": 491187
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 72295,
+          "gpu": 1030380,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -46,8 +135,96 @@
       "documents": 1102675,
       "family": "deepseek_v4_1_flash",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "b5b5d7ad62c0371f158fe40169ab4ad72754183c25e70bc5ee9887e3cfaba72b",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 86511
+        },
+        "entry_points": [
+          {
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408792014,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724437,
+              "text": 491218
+            }
+          },
+          {
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408792014,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724437,
+              "text": 491218
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 72295,
+          "gpu": 1030380,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -56,8 +233,96 @@
       "documents": 1102675,
       "family": "deepseek_v4_flash",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "58c2cb163f177e71ff176bd277d4447220c10e5eaca81a364b818fe228fa0946",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 86534
+        },
+        "entry_points": [
+          {
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408792173,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724437,
+              "text": 491200
+            }
+          },
+          {
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408792173,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724437,
+              "text": 491200
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 72295,
+          "gpu": 1030380,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -66,8 +331,96 @@
       "documents": 1102675,
       "family": "glm_5_2",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "b2ae9b9ff5cca7421e7b7235a12c9de7113ccc4f9cdce4f5c2b37e2af383ef43",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 16955
+        },
+        "entry_points": [
+          {
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408791854,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724437,
+              "text": 491116
+            }
+          },
+          {
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408791854,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724437,
+              "text": 491116
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 72295,
+          "gpu": 1030380,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -76,8 +429,126 @@
       "documents": 1102675,
       "family": "gpt_oss_120b",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "b7e34a654da9e67e5e5efc83d7a47bafef3891ea072b8b6324076e21a0248b91",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 15117
+        },
+        "entry_points": [
+          {
+            "device_declined_documents": {
+              "bytes_hf": 763325,
+              "chain": [
+                "gpu",
+                "hf"
+              ],
+              "count": 141,
+              "event": {
+                "backend": "gpu",
+                "code": "R_EXEC_FAULT",
+                "scope": "segment"
+              },
+              "whole_documents": 20
+            },
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.998132727,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99859,
+              "hf_added_token": 0,
+              "hf_device_declined": 141,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408028099,
+                "hf": 763325
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724384,
+              "text": 490914
+            }
+          },
+          {
+            "device_declined_documents": {
+              "bytes_hf": 763325,
+              "chain": [
+                "gpu",
+                "hf"
+              ],
+              "count": 141,
+              "event": {
+                "backend": "gpu",
+                "code": "R_EXEC_FAULT",
+                "scope": "segment"
+              },
+              "whole_documents": 20
+            },
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.998132727,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99859,
+              "hf_added_token": 0,
+              "hf_device_declined": 141,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408028099,
+                "hf": 763325
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724384,
+              "text": 490914
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 73249,
+          "gpu": 1029426,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -86,8 +557,96 @@
       "documents": 1102675,
       "family": "hy3",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "685a4802a948b81fbd82875d4bc258908548ded4506e82530edef616b5b48067",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 85053
+        },
+        "entry_points": [
+          {
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408791623,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724437,
+              "text": 491166
+            }
+          },
+          {
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408791623,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724437,
+              "text": 491166
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 0,
+          "gpu": 1030380,
+          "hf": 72295
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -96,8 +655,96 @@
       "documents": 1102675,
       "family": "hy4",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "af450eb8cc1f3384979594d1e382059426b024d0734179b1092f8d06df314fb4",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 85047
+        },
+        "entry_points": [
+          {
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408791858,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724436,
+              "text": 491196
+            }
+          },
+          {
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408791858,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724436,
+              "text": 491196
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 72295,
+          "gpu": 1030380,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -106,8 +753,126 @@
       "documents": 1102675,
       "family": "kimi_k3",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "b0dac9b9e7956b0b7b19d61931a9cfb983c1b7066493d90c1356b4ffdcb3669d",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 51179
+        },
+        "entry_points": [
+          {
+            "device_declined_documents": {
+              "bytes_hf": 772438,
+              "chain": [
+                "gpu",
+                "hf"
+              ],
+              "count": 142,
+              "event": {
+                "backend": "gpu",
+                "code": "R_EXEC_FAULT",
+                "scope": "segment"
+              },
+              "whole_documents": 20
+            },
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.998110435,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99858,
+              "hf_added_token": 0,
+              "hf_device_declined": 142,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408019058,
+                "hf": 772438
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724384,
+              "text": 490914
+            }
+          },
+          {
+            "device_declined_documents": {
+              "bytes_hf": 772438,
+              "chain": [
+                "gpu",
+                "hf"
+              ],
+              "count": 142,
+              "event": {
+                "backend": "gpu",
+                "code": "R_EXEC_FAULT",
+                "scope": "segment"
+              },
+              "whole_documents": 20
+            },
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.998110435,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99858,
+              "hf_added_token": 0,
+              "hf_device_declined": 142,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408019058,
+                "hf": 772438
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724384,
+              "text": 490914
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 0,
+          "gpu": 1029418,
+          "hf": 73257
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -116,8 +881,98 @@
       "documents": 1102675,
       "family": "laguna_s_2_1",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "eea96ebb36f6b2f3481955248fe92c4a14d30795fb0e56ef8b6b5c272618eb37",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 21314
+        },
+        "entry_points": [
+          {
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408791846,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724439,
+              "text": 491118
+            }
+          },
+          {
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408791846,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724439,
+              "text": 491118
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "prefix_rule",
+        "executed_by": {
+          "fast_cpu": 0,
+          "gpu": 1030380,
+          "hf": 72295
+        },
+        "mismatches": 0,
+        "postprocessor_class": "prefix",
+        "prefix_ids": [
+          2
+        ],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -126,8 +981,100 @@
       "documents": 1102675,
       "family": "ling_3_0_flash",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "9c491824b879fcbf35bcaf1d5468c87442731e561698e42c5ac91966a54a2a4c",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 50387
+        },
+        "entry_points": [
+          {
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408791854,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724437,
+              "text": 491116
+            }
+          },
+          {
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.997891451,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99998,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 2
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 407930072,
+                "hf": 861958
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724422,
+              "text": 491106
+            },
+            "span_guard_documents": {
+              "bytes_hf": 861958,
+              "count": 2
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 0,
+          "gpu": 1030380,
+          "hf": 72295
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -136,8 +1083,98 @@
       "documents": 1102675,
       "family": "llama_3_1_8b",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "8212579fa65ce401ba5b765839dea0d212d2f3a7487480a40f3ccee43d5698d0",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 53753
+        },
+        "entry_points": [
+          {
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408789821,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724436,
+              "text": 491148
+            }
+          },
+          {
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408789821,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724436,
+              "text": 491148
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "prefix_rule",
+        "executed_by": {
+          "fast_cpu": 72295,
+          "gpu": 1030380,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "prefix",
+        "prefix_ids": [
+          128000
+        ],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -146,8 +1183,100 @@
       "documents": 1102675,
       "family": "mimo_v2_6",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "47975c78674a13ab96d631a06b0caff33736900792822cf26afc71bf5a879fe9",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 16541
+        },
+        "entry_points": [
+          {
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408790176,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724437,
+              "text": 491143
+            }
+          },
+          {
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.997891394,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99998,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 2
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 407928394,
+                "hf": 861978
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724422,
+              "text": 491133
+            },
+            "span_guard_documents": {
+              "bytes_hf": 861978,
+              "count": 2
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 71443,
+          "gpu": 1030380,
+          "hf": 852
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -156,8 +1285,130 @@
       "documents": 1102675,
       "family": "minimax_m3",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "2b0fa8d5e8acac7d598dfb2786257ebb0b237516a151748f82cd69774698226d",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 20282
+        },
+        "entry_points": [
+          {
+            "device_declined_documents": {
+              "bytes_hf": 763663,
+              "chain": [
+                "gpu",
+                "hf"
+              ],
+              "count": 141,
+              "event": {
+                "backend": "gpu",
+                "code": "R_EXEC_FAULT",
+                "scope": "segment"
+              },
+              "whole_documents": 20
+            },
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.998131897,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99859,
+              "hf_added_token": 0,
+              "hf_device_declined": 141,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408026970,
+                "hf": 763663
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724391,
+              "text": 491131
+            }
+          },
+          {
+            "device_declined_documents": {
+              "bytes_hf": 709112,
+              "chain": [
+                "gpu",
+                "hf"
+              ],
+              "count": 140,
+              "event": {
+                "backend": "gpu",
+                "code": "R_EXEC_FAULT",
+                "scope": "segment"
+              },
+              "whole_documents": 20
+            },
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.996156602,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99858,
+              "hf_added_token": 0,
+              "hf_device_declined": 140,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 2
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 407219739,
+                "hf": 1571146
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724376,
+              "text": 491121
+            },
+            "span_guard_documents": {
+              "bytes_hf": 862034,
+              "count": 2
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 72395,
+          "gpu": 1029426,
+          "hf": 854
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -166,8 +1417,128 @@
       "documents": 1102675,
       "family": "ministral_3_8b",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "5fe9cef0194e94574a35a1a37f921d3611e2912d2f8221231a5a324a2695444d",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 70589
+        },
+        "entry_points": [
+          {
+            "device_declined_documents": {
+              "bytes_hf": 730923,
+              "chain": [
+                "gpu",
+                "hf"
+              ],
+              "count": 139,
+              "event": {
+                "backend": "gpu",
+                "code": "R_EXEC_FAULT",
+                "scope": "segment"
+              },
+              "whole_documents": 19
+            },
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.998211995,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99861,
+              "hf_added_token": 0,
+              "hf_device_declined": 139,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408061576,
+                "hf": 730923
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724388,
+              "text": 491093
+            }
+          },
+          {
+            "device_declined_documents": {
+              "bytes_hf": 730923,
+              "chain": [
+                "gpu",
+                "hf"
+              ],
+              "count": 139,
+              "event": {
+                "backend": "gpu",
+                "code": "R_EXEC_FAULT",
+                "scope": "segment"
+              },
+              "whole_documents": 19
+            },
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.998211995,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99861,
+              "hf_added_token": 0,
+              "hf_device_declined": 139,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408061576,
+                "hf": 730923
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724388,
+              "text": 491093
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "prefix_rule",
+        "executed_by": {
+          "fast_cpu": 73235,
+          "gpu": 1029440,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "prefix",
+        "prefix_ids": [
+          1
+        ],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -176,8 +1547,126 @@
       "documents": 1102675,
       "family": "muse_spark",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "bb78da340b975092caf1f8abd070306449a57758626e1632e75a5d7c5f037331",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 87003
+        },
+        "entry_points": [
+          {
+            "device_declined_documents": {
+              "bytes_hf": 763726,
+              "chain": [
+                "gpu",
+                "hf"
+              ],
+              "count": 141,
+              "event": {
+                "backend": "gpu",
+                "code": "R_EXEC_FAULT",
+                "scope": "segment"
+              },
+              "whole_documents": 20
+            },
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.998131753,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99859,
+              "hf_added_token": 0,
+              "hf_device_declined": 141,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408029096,
+                "hf": 763726
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724384,
+              "text": 491262
+            }
+          },
+          {
+            "device_declined_documents": {
+              "bytes_hf": 763726,
+              "chain": [
+                "gpu",
+                "hf"
+              ],
+              "count": 141,
+              "event": {
+                "backend": "gpu",
+                "code": "R_EXEC_FAULT",
+                "scope": "segment"
+              },
+              "whole_documents": 20
+            },
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.998131753,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99859,
+              "hf_added_token": 0,
+              "hf_device_declined": 141,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408029096,
+                "hf": 763726
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724384,
+              "text": 491262
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 73249,
+          "gpu": 1029426,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -186,8 +1675,126 @@
       "documents": 1102675,
       "family": "nemotron_3_nano_4b",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "90b04a1dbd1561986d38cfbf4aac76fdb7ac2c270bfbf2cd2d46bd7029360805",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 70667
+        },
+        "entry_points": [
+          {
+            "device_declined_documents": {
+              "bytes_hf": 730810,
+              "chain": [
+                "gpu",
+                "hf"
+              ],
+              "count": 139,
+              "event": {
+                "backend": "gpu",
+                "code": "R_EXEC_FAULT",
+                "scope": "segment"
+              },
+              "whole_documents": 19
+            },
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.998212264,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99861,
+              "hf_added_token": 0,
+              "hf_device_declined": 139,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408060003,
+                "hf": 730810
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724387,
+              "text": 491120
+            }
+          },
+          {
+            "device_declined_documents": {
+              "bytes_hf": 730810,
+              "chain": [
+                "gpu",
+                "hf"
+              ],
+              "count": 139,
+              "event": {
+                "backend": "gpu",
+                "code": "R_EXEC_FAULT",
+                "scope": "segment"
+              },
+              "whole_documents": 19
+            },
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.998212264,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99861,
+              "hf_added_token": 0,
+              "hf_device_declined": 139,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408060003,
+                "hf": 730810
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724387,
+              "text": 491120
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 73235,
+          "gpu": 1029440,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -196,8 +1803,126 @@
       "documents": 1102675,
       "family": "nemotron_super_vl",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "e7a4b96faa37718aa4286c5756788d94fa38da2fcc9f3b719cb81c723591a2fa",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 70551
+        },
+        "entry_points": [
+          {
+            "device_declined_documents": {
+              "bytes_hf": 730787,
+              "chain": [
+                "gpu",
+                "hf"
+              ],
+              "count": 139,
+              "event": {
+                "backend": "gpu",
+                "code": "R_EXEC_FAULT",
+                "scope": "segment"
+              },
+              "whole_documents": 19
+            },
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.998212317,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99861,
+              "hf_added_token": 0,
+              "hf_device_declined": 139,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408059285,
+                "hf": 730787
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724444,
+              "text": 491181
+            }
+          },
+          {
+            "device_declined_documents": {
+              "bytes_hf": 730787,
+              "chain": [
+                "gpu",
+                "hf"
+              ],
+              "count": 139,
+              "event": {
+                "backend": "gpu",
+                "code": "R_EXEC_FAULT",
+                "scope": "segment"
+              },
+              "whole_documents": 19
+            },
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.998212317,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99861,
+              "hf_added_token": 0,
+              "hf_device_declined": 139,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408059285,
+                "hf": 730787
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724444,
+              "text": 491181
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 73235,
+          "gpu": 1029440,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -206,8 +1931,96 @@
       "documents": 1102675,
       "family": "olmo_3_7b",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "091f91a7da522aa43082218205f87a0c599b076f3e295b6605c13d78a6e7a611",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 15216
+        },
+        "entry_points": [
+          {
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408790862,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724436,
+              "text": 490938
+            }
+          },
+          {
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408790862,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724436,
+              "text": 490938
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 72295,
+          "gpu": 1030380,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -216,8 +2029,100 @@
       "documents": 1102675,
       "family": "qwen3_5_08b",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "6f80a43b9fe6a15fda93880fd7ad41589ae6cef1801ea74e8f581a78d516cced",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 16625
+        },
+        "entry_points": [
+          {
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 256,
+            "gpu_share": 0.946867428,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 4144,
+              "gpu_segmented": 95856,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 21720054,
+                "gpu": 387069759,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724437,
+              "text": 491149
+            }
+          },
+          {
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 256,
+            "gpu_share": 0.944758823,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 4144,
+              "gpu_segmented": 95854,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 2
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 21720053,
+                "gpu": 386207978,
+                "hf": 861989
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724422,
+              "text": 491139
+            },
+            "span_guard_documents": {
+              "bytes_hf": 861989,
+              "count": 2
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 71443,
+          "gpu": 1030380,
+          "hf": 852
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -226,8 +2131,100 @@
       "documents": 1102675,
       "family": "qwen3_8b",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "dd5aea1ad87550cf465354b054de93609b0f6e32aafdd8fda40eeb2388a08d33",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 15693
+        },
+        "entry_points": [
+          {
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408791918,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724437,
+              "text": 491287
+            }
+          },
+          {
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 0.99789141,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 99998,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 2
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 407930127,
+                "hf": 861975
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724422,
+              "text": 491277
+            },
+            "span_guard_documents": {
+              "bytes_hf": 861975,
+              "count": 2
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "regression_guard",
+        "executed_by": {
+          "fast_cpu": 71443,
+          "gpu": 1030380,
+          "hf": 852
+        },
+        "mismatches": 0,
+        "postprocessor_class": "identity",
+        "prefix_ids": [],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     },
     {
       "all_ids_equal_hf": true,
@@ -236,8 +2233,98 @@
       "documents": 1102675,
       "family": "step5_preview",
       "gil_released": true,
+      "literal_segments": {
+        "added_frontend_fingerprint": "6da11cd87ca00f5a7d1a454dd5984b046818e54b35f8df803872c435a8359691",
+        "battery": {
+          "generator_sha256": "74af48f58b0768fb1bf3deae253e074b869774f0c79368b485b5415f60686d17",
+          "mismatches": 0,
+          "strings": 80185
+        },
+        "entry_points": [
+          {
+            "documents": 100000,
+            "entry_point": "id_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408791100,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724437,
+              "text": 491136
+            }
+          },
+          {
+            "documents": 100000,
+            "entry_point": "state_route",
+            "gpu_min_bytes": 0,
+            "gpu_share": 1.0,
+            "guard_documents": {
+              "bound": 1000,
+              "bytes_hf": 0,
+              "count": 0
+            },
+            "mismatches": 0,
+            "paths": {
+              "gigatoken_segmented": 0,
+              "gpu_segmented": 100000,
+              "hf_added_token": 0,
+              "hf_engine_guard": 0,
+              "hf_segments_below_crossover": 0,
+              "hf_span_guard": 0
+            },
+            "segments": {
+              "bytes": {
+                "fast_cpu": 0,
+                "gpu": 408791100,
+                "hf": 0
+              },
+              "largest_text_bytes": 518985,
+              "literals": 724437,
+              "text": 491136
+            }
+          }
+        ],
+        "literal_class": "served"
+      },
       "mismatches": 0,
-      "one_python_to_rust_call_per_batch": true
+      "one_python_to_rust_call_per_batch": true,
+      "special_tokens": {
+        "documents": 1102675,
+        "evidence_role": "prefix_rule",
+        "executed_by": {
+          "fast_cpu": 72295,
+          "gpu": 1030380,
+          "hf": 0
+        },
+        "mismatches": 0,
+        "postprocessor_class": "prefix",
+        "prefix_ids": [
+          0
+        ],
+        "served_by": {
+          "facade": 1102675,
+          "reference": 0
+        },
+        "surface": "facade"
+      }
     }
   ],
   "scale": "full",

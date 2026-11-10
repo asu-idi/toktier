@@ -819,6 +819,22 @@ digest, bounded tail, and content checkpoints all match. Persistent stores
 therefore contain transcript plaintext and must be protected as application
 data.
 
+Memory of a long-lived runtime. The session store keeps one record per
+completed 4,096-character block of every text a session stores (`seed`,
+`overwrite`, `append`, `encode_transcript`, and a `Tokenizer::lookup` hit
+with a remainder), which `Tokenizer::lookup` reads, and nothing removes
+one: `close()`, `delete()` and eviction at the session capacity leave the
+records. For ASCII text that is about 65 KB per distinct 24,000-character
+text and about 0.56 MB per distinct text of 65,536 characters or more,
+measured on the store core this crate uses; which calls reach it was read
+from the code and not run. `Tokenizer::encode`, `encode_batch` and the
+chunked encoder do not grow. Dropping every `Tokenizer` clone and session
+and loading again releases the records in memory; in durable mode they are
+also written to the SQLite file and read back at start (read from the
+code), so only removing the file clears them, together with its sessions.
+The Python package stopped writing these records in 0.3.2; the crate keeps
+them ([0.3.2 release notes](releases/v0.3.2.md), Known issues).
+
 ## Bounded concurrent serving
 
 The optional executor-neutral serving adapter implements both `Future` and a

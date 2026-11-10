@@ -117,19 +117,22 @@ differ from it), or synchronously against the object itself when no copy
 can be made (`stats()["shadow"]` says which). A JSONL timing log records
 each encode next to SGLang's own tokenize window.
 
-The default mode, `auto`, keeps stored state. Each request text of 4,096
-bytes or more is stored for content lookup, and the session store keeps
-a record for every 4,096-character block of each distinct text it
-stores, so a long-lived worker on long, distinct prompts grows in memory
-(about 65 KB per distinct 24,000-character prompt; the
-[0.3.2 release notes](../releases/v0.3.2.md), Known issues, give the
-sizes and what does not grow). The `contextvar` mode does the same for
-keyed requests once a transcript reaches that size. A deployment whose
-requests are not extended by later ones should choose the stateless
-mode, `TOKTIER_SGLANG_SESSION_KEY=off` (or
-`AdapterConfig(session_key="off")`), which encodes with `lookup="off"`
-and stores nothing; otherwise recycle the worker on a schedule or a
-memory threshold.
+The default mode, `auto`, keeps stored state: each request text of 4,096
+bytes or more is stored for content lookup, within the store's
+in-process cache budget, and the `contextvar` mode does the same for
+keyed requests once a transcript reaches that size. Through 0.3.1 the
+session store also kept a record for every 4,096-character block of each
+distinct text it stored, so a long-lived worker on long, distinct prompts
+grew in memory (about 65 KB per distinct 24,000-character prompt); 0.3.2
+no longer writes those records (the
+[0.3.2 release notes](../releases/v0.3.2.md), Fixed). The stateless mode,
+`TOKTIER_SGLANG_SESSION_KEY=off` (or `AdapterConfig(session_key="off")`),
+encodes with `lookup="off"` and stores nothing; it suits a deployment
+whose requests are not extended by later ones, and on 0.3.1 it is the way
+around the block records. It does not bound the corrected CPU engine's
+word cache, which grows on stateless calls too (Known issues in the same
+notes); for open-vocabulary traffic watch the worker's memory or recycle
+the worker on a schedule or a memory threshold.
 
 The same wrapper can be attached without patching anything, for evaluation:
 a `sitecustomize` on `PYTHONPATH` calls

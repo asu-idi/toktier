@@ -181,7 +181,7 @@ def encode(self, text, *, session=None, lookup=None,
   kept as sparse checkpoints rebuilt on demand; this bridge does not
   initialize the CPU engine. If the stored text is a **prefix** of the input, only the
   remainder is processed through corrected Gigatoken's certified CPU repair
-  machinery for the 12 covered model families, independent of total
+  machinery for the 18 covered model families, independent of total
   transcript size. A failed span/repair premise falls back to HF. The returned
   ids are bit-identical to a from-scratch reference encode in every case.
 - `lookup="auto"` (the default when no session is given): content

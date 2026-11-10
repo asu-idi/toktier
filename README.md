@@ -388,10 +388,10 @@ The install profile and input shape then determine the automatic route:
 
 | Situation under the default `SUPPORTED` policy | Automatic route |
 |---|---|
-| `toktier`, one of 13 tokenizer artifacts with a certified CPU fast path (14 model families) | Corrected Gigatoken for full CPU encoding; HF if any binding check fails |
+| `toktier`, one of 17 tokenizer artifacts with a certified CPU fast path (18 model families) | Corrected Gigatoken for full CPU encoding; HF if any binding check fails |
 | `toktier[gpu]`, cold/plain input below the GPU crossover (64 KiB default) | Corrected Gigatoken CPU path (HF for a family without CPU-fast certification) |
 | `toktier[gpu]`, cold/plain input at or above the GPU crossover (64 KiB default) | Shipped prebuilt GPU path; then corrected Gigatoken and HF in the frozen fallback chain |
-| Existing session receives a strict append | Corrected Gigatoken CPU repair for the 14 covered model families, independent of total transcript size |
+| Existing session receives a strict append | Corrected Gigatoken CPU repair for the 18 covered model families, independent of total transcript size |
 | Added-token or repair guard cannot prove its premise | HF reference path for that input |
 
 The two GPU rows describe what happens when the GPU route is admitted, and
@@ -433,8 +433,8 @@ family's readings through the cross-artifact carry-over
 ([support matrix](docs/support-matrix.md#certified-by-cross-artifact-carry-over-deepseek-v41-flash-and-mimo-v26)).
 The same holds for `XiaomiMiMo/MiMo-V2.6-Flash-RL` as `mimo_v2_6`, carried
 from `qwen3_8b`.
-toktier 0.3.1 on crates.io carries the family, so a new project takes the
-crate by version:
+Since 0.3.1 the toktier crate on crates.io carries the family, so a new
+project takes the crate by version:
 
 ```sh
 cargo new v41-example && cd v41-example
@@ -442,7 +442,7 @@ cargo new v41-example && cd v41-example
 
 ```toml
 [dependencies]
-toktier = { version = "0.3.1", features = ["network"] }
+toktier = { version = "0.3.2", features = ["network"] }
 ```
 
 If you build from a clone of `main` instead, depend on `crates/toktier` by
@@ -901,9 +901,10 @@ question: **21 packaged artifacts** (what `toktier inspect` lists, all
 certified; `deepseek_v4_1_flash` and `mimo_v2_6` through the cross-artifact
 carry-over), **21+3
 model families** (byte-level BPE plus WordPiece, since families can share an
-artifact), **13 artifacts with a certified CPU fast path** (the 11 the CPU
-campaign judged, covering 12 families by exact-artifact inheritance, and the
-two certified through the cross-artifact carry-over), and **241 registry rows** (240 audited sibling
+artifact), **17 artifacts with a certified CPU fast path** (the 11 the CPU
+campaign judged, covering 12 families by exact-artifact inheritance, the four
+judged directly on their own full-corpus engine differential, and the two
+certified through the cross-artifact carry-over), and **241 registry rows** (240 audited sibling
 repositories plus one canonical self-row). Numbers that appear inconsistent
 usually belong to different axes.
 
@@ -1049,7 +1050,7 @@ document also shows the regimes where direct use of another engine is faster.
 
 | Track | Families | Coverage |
 |---|---:|---|
-| Certified CPU fast repair | 14 model families / 13 unique tokenizer artifacts | corrected Gigatoken; 11 artifacts judged over 12.33T characters with zero observed ID divergence, 2 by cross-artifact carry-over |
+| Certified CPU fast repair | 18 model families / 17 unique tokenizer artifacts | corrected Gigatoken; 11 artifacts judged over 12.33T characters with zero observed ID divergence, 4 judged directly on their own full-corpus engine differential, 2 by cross-artifact carry-over |
 | Byte-level BPE | 21 | CPU evidence; GPU status recorded per artifact |
 | WordPiece | 3 | CPU evidence |
 | Structural exclusions | 2 | reason recorded |
@@ -1116,11 +1117,12 @@ TokTier's CPU Fast Pass and Fast Repair build on the excellent
 [Fastokens](https://github.com/crusoecloud/fastokens) projects. We thank their
 authors and contributors for making this work openly available.
 
-Corrected Gigatoken is the default certified repair-window engine for 13
+Corrected Gigatoken is the default certified repair-window engine for 17
 unique tokenizer artifacts: the 11 the CPU campaign judged, covering 12 model
 families because NVIDIA Nemotron-Terminal ships a tokenizer that is
-byte-for-byte identical to the `qwen3_8b` tokenizer, and the two certified
-through the cross-artifact carry-over. TokTier's
+byte-for-byte identical to the `qwen3_8b` tokenizer, the four judged directly
+on their own full-corpus engine differential, and the two certified through
+the cross-artifact carry-over. TokTier's
 compatibility patch aligns Gigatoken's Unicode data and UTF-8 handling with the
 frozen [Hugging Face tokenizers](https://github.com/huggingface/tokenizers)
 reference; the resulting path recorded 41.8 billion checks over 12.33 trillion

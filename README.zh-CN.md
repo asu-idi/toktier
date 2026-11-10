@@ -316,10 +316,10 @@ tok = toktier.load("qwen3_8b", policy=RoutingPolicy.CERTIFIED)
 
 | 默认 `SUPPORTED` 策略下的情形 | 自动路由 |
 |---|---|
-| 安装项为 `toktier`，且使用 13 个具备 CPU 快路径认证的 tokenizer 工件（覆盖 14 个 family）之一 | 修正版 Gigatoken 完成 CPU 全量编码；任一绑定检查失败则使用 HF |
+| 安装项为 `toktier`，且使用 17 个具备 CPU 快路径认证的 tokenizer 工件（覆盖 18 个 family）之一 | 修正版 Gigatoken 完成 CPU 全量编码；任一绑定检查失败则使用 HF |
 | 安装项为 `toktier[gpu]`，且冷请求/普通请求的输入大小低于 GPU crossover（默认 64 KiB） | 修正版 Gigatoken CPU 路径（没有 CPU-fast 认证的 family 使用 HF） |
 | 安装项为 `toktier[gpu]`，且冷请求/普通请求的输入大小达到或超过 GPU crossover（默认 64 KiB） | 随包预编译 GPU 路径；随后按固定 fallback 链依次使用修正版 Gigatoken 和 HF |
-| 已存在的会话收到严格追加 | 覆盖范围内的 14 个 family 使用修正版 Gigatoken CPU repair，不受完整对话总长度影响 |
+| 已存在的会话收到严格追加 | 覆盖范围内的 18 个 family 使用修正版 Gigatoken CPU repair，不受完整对话总长度影响 |
 | Added-token 或 repair guard 无法证明前提 | 该输入使用 HF 参考路径 |
 
 表中两行 GPU 描述的是 GPU 路由被准入之后的行为，而准入条件比“机器上有 GPU”
@@ -355,7 +355,7 @@ family `deepseek_v4_1_flash`。它的 pipeline 与已认证的 `deepseek_v4_flas
 因此通过跨工件 carry-over 沿用该 family 的读数
 （[支持矩阵](docs/support-matrix.md#certified-by-cross-artifact-carry-over-deepseek-v41-flash-and-mimo-v26)）。
 `XiaomiMiMo/MiMo-V2.6-Flash-RL` 以 `mimo_v2_6` 同样从 `qwen3_8b` 沿用。
-crates.io 上的 toktier 0.3.1 已收录这个 family，新项目按版本依赖即可：
+crates.io 上的 toktier crate 自 0.3.1 起已收录这个 family，新项目按版本依赖即可：
 
 ```sh
 cargo new v41-example && cd v41-example
@@ -363,7 +363,7 @@ cargo new v41-example && cd v41-example
 
 ```toml
 [dependencies]
-toktier = { version = "0.3.1", features = ["network"] }
+toktier = { version = "0.3.2", features = ["network"] }
 ```
 
 若从 `main` 的克隆构建，请按路径依赖 `crates/toktier`，而不是 `git` 依赖：
@@ -761,9 +761,9 @@ pip uninstall -y fastokens toktier-fastokens && pip install "toktier[fastokens]"
 本文档中出现了四类计数，各自回答不同的问题：**21 个随包工件**（`toktier
 inspect` 列出的那些，全部已认证，其中 `deepseek_v4_1_flash` 与 `mimo_v2_6`
 通过跨工件 carry-over 认证）、**21+3 个 model family**（byte-level BPE 加
-WordPiece；不同 family 可以共用同一工件）、**13 个具备 CPU 快路径认证的
-工件**（CPU 战役判定的 11 个，按精确工件继承覆盖 12 个 family；另有 2 个通过跨工件
-carry-over 认证），以及**注册表 241 条**（240 个
+WordPiece；不同 family 可以共用同一工件）、**17 个具备 CPU 快路径认证的
+工件**（CPU 战役判定的 11 个，按精确工件继承覆盖 12 个 family；4 个以各自的全语料引擎差分直接判定；
+另有 2 个通过跨工件 carry-over 认证），以及**注册表 241 条**（240 个
 已审计 sibling 仓库加 1 个 canonical 自指条目）。如果某个数字看起来与另一个
 不一致，通常是因为它们属于不同的计数轴。
 
@@ -889,7 +889,7 @@ kernel 的批量吞吐，与上表的端到端数据回答的是不同问题，�
 
 | 类别 | family 数量 | 覆盖情况 |
 |---|---:|---|
-| 认证 CPU 快速 repair | 14 个 family / 13 个唯一 tokenizer 工件 | 修正版 Gigatoken；11 个工件在 12.33 万亿字符上判定，未观察到 ID 不一致，2 个经跨工件 carry-over |
+| 认证 CPU 快速 repair | 18 个 family / 17 个唯一 tokenizer 工件 | 修正版 Gigatoken；11 个工件在 12.33 万亿字符上判定，未观察到 ID 不一致，4 个以各自的全语料引擎差分直接判定，2 个经跨工件 carry-over |
 | Byte-level BPE | 21 | CPU 证据；逐工件记录 GPU 状态 |
 | WordPiece | 3 | CPU 证据 |
 | 结构性排除 | 2 | 记录具体原因 |
@@ -951,10 +951,10 @@ TokTier 的 CPU Fast Pass 和 Fast Repair 建立在
 [Fastokens](https://github.com/crusoecloud/fastokens) 两项优秀的开源工作之上。感谢
 两项工作的作者和贡献者将这些成果开源。
 
-修正版 Gigatoken 是 13 个唯一 tokenizer 工件的默认认证 repair 窗口引擎：
+修正版 Gigatoken 是 17 个唯一 tokenizer 工件的默认认证 repair 窗口引擎：
 其中 CPU 战役判定的 11 个工件覆盖 12 个 family（NVIDIA Nemotron-Terminal
-随附了逐字节完全相同的 `qwen3_8b` tokenizer），另有 2 个通过跨工件
-carry-over 认证。TokTier 的兼容性补丁使 Gigatoken 的 Unicode
+随附了逐字节完全相同的 `qwen3_8b` tokenizer），4 个以各自的全语料引擎差分直接判定，
+另有 2 个通过跨工件 carry-over 认证。TokTier 的兼容性补丁使 Gigatoken 的 Unicode
 数据和 UTF-8 处理与冻结的
 [Hugging Face tokenizers](https://github.com/huggingface/tokenizers) 参考实现对齐；
 该路径在 12.33 万亿字符上完成 418 亿次检查，未观察到 token ID 不一致。

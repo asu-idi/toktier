@@ -1655,14 +1655,39 @@ fn prepend(prefix: &[u32], ids: Vec<u32>) -> Vec<u32> {
     out
 }
 
-fn semantic_fingerprint(artifact_sha256: &[u8], fast_cpu: bool) -> [u8; 32] {
+/// The key a session store of this crate is written and opened under.
+///
+/// Besides the artifact, the reference library and the backend, it names
+/// the serving generation and this build's source identity
+/// (`TOKTIER_RUST_API_SOURCE_SHA256`, the exact digest of the crate and the
+/// routing and store sources it compiles, which the build script provides).
+/// A store written by any other build -- every earlier release included --
+/// therefore carries a different key and is refused with
+/// [`ErrorCode::SessionStateMismatch`]: its sealed ids were certified by
+/// the code that wrote them, not by this one. Releases 0.2.4 to 0.3.1 wrote
+/// the `toktier-rust-serving-v1` key, which had no source component.
+pub(crate) fn semantic_fingerprint(artifact_sha256: &[u8], fast_cpu: bool) -> [u8; 32] {
+    semantic_fingerprint_for(
+        artifact_sha256,
+        fast_cpu,
+        env!("TOKTIER_RUST_API_SOURCE_SHA256"),
+    )
+}
+
+/// [`semantic_fingerprint`] for an explicit source identity.
+pub(crate) fn semantic_fingerprint_for(
+    artifact_sha256: &[u8],
+    fast_cpu: bool,
+    source_identity: &str,
+) -> [u8; 32] {
     let mut digest = Sha256::new();
     digest.update(b"toktier.rust.fingerprint.v1\0");
     for component in [
         artifact_sha256,
         b"tokenizers" as &[u8],
         b"0.22.2",
-        b"toktier-rust-serving-v1",
+        b"toktier-rust-serving-v2",
+        source_identity.as_bytes(),
         if fast_cpu { b"fast_cpu" } else { b"hf" },
         if fast_cpu {
             b"toktier-fast-repair-v1" as &[u8]

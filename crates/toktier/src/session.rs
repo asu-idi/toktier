@@ -723,6 +723,72 @@ mod tests {
         fs::metadata(path).unwrap().permissions().mode() & 0o777
     }
 
+    /// The key releases 0.2.4 to 0.3.1 of this crate wrote: no serving
+    /// generation beyond `v1` and no source component.
+    fn released_key(artifact_sha256: &[u8], fast_cpu: bool) -> [u8; 32] {
+        use sha2::{Digest, Sha256};
+        let mut digest = Sha256::new();
+        digest.update(b"toktier.rust.fingerprint.v1\0");
+        for component in [
+            artifact_sha256,
+            b"tokenizers" as &[u8],
+            b"0.22.2",
+            b"toktier-rust-serving-v1",
+            if fast_cpu { b"fast_cpu" } else { b"hf" },
+            if fast_cpu {
+                b"toktier-fast-repair-v1" as &[u8]
+            } else {
+                b""
+            },
+        ] {
+            digest.update((component.len() as u32).to_le_bytes());
+            digest.update(component);
+        }
+        digest.finalize().into()
+    }
+
+    #[test]
+    fn a_store_written_under_an_earlier_release_key_is_refused() {
+        use crate::runtime::{semantic_fingerprint, semantic_fingerprint_for};
+        let artifact = [b'a'; 64];
+        for fast_cpu in [true, false] {
+            let current = semantic_fingerprint(&artifact, fast_cpu);
+            assert_ne!(current, released_key(&artifact, fast_cpu));
+            assert_ne!(
+                semantic_fingerprint_for(&artifact, fast_cpu, "0".repeat(64).as_str()),
+                semantic_fingerprint_for(&artifact, fast_cpu, "1".repeat(64).as_str()),
+                "the key must follow the build's source identity"
+            );
+            let temporary = tempfile::tempdir().unwrap();
+            let old = temporary.path().join("sessions/released.sqlite3");
+            drop(
+                SessionStoreState::new(
+                    reference_router(),
+                    released_key(&artifact, fast_cpu),
+                    0,
+                    Some(&old),
+                    false,
+                )
+                .unwrap(),
+            );
+            let refused = SessionStoreState::new(reference_router(), current, 0, Some(&old), false)
+                .unwrap_err();
+            assert_eq!(refused.code(), ErrorCode::SessionStateMismatch);
+            assert!(
+                refused
+                    .message()
+                    .contains("does not contain this tokenizer fingerprint"),
+                "{}",
+                refused.message()
+            );
+            let own = temporary.path().join("sessions/own.sqlite3");
+            drop(
+                SessionStoreState::new(reference_router(), current, 0, Some(&own), false).unwrap(),
+            );
+            SessionStoreState::new(reference_router(), current, 0, Some(&own), false).unwrap();
+        }
+    }
+
     #[test]
     fn fresh_rust_store_home_and_database_are_owner_only() {
         let temporary = tempfile::tempdir().unwrap();

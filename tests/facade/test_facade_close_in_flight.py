@@ -12,6 +12,12 @@ with the tokenizer's ``RuntimeError("backend is closed")``.
 A callback that outlives its tokenizer (reachable only through private
 objects) is a miss for the store, never ids.
 
+``close()`` may also land at a Python step of a store call, when the
+native store is not held at that moment. Nothing native defers the
+release then: the store's own record of the calls in flight does. The
+call still ends on the store it started with, and the adapter stays
+until that store has released.
+
 These tests use the fake backends of ``test_fast_repair`` and need no
 device.
 """
@@ -225,6 +231,85 @@ def test_close_from_another_thread_during_a_store_call(
                 }
             )
     assert failures == [], failures
+
+
+_LONG = "content lookup 42 " * 300
+
+
+@pytest.mark.parametrize("persistent", [False, True], ids=["memory", "directory"])
+@pytest.mark.parametrize(
+    "shape", ["session-hit", "session-append", "auto-hit", "auto-extension"]
+)
+def test_close_between_native_steps_defers_to_the_call_in_flight(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, shape: str, persistent: bool
+) -> None:
+    """``close()`` from a Python step of a store call (no native borrow held).
+
+    The release waits for the call: right after ``close()`` returns, the
+    native store the call started with and the session-repair adapter are
+    both still present; the call ends with ids equal to the reference or
+    with ``RuntimeError("backend is closed")``; when it has ended both
+    are released without a second ``close()``.
+    """
+    live, options = _install(rig, monkeypatch, "gpu-jit")
+    directory = rig.store_path() if persistent else None
+    tokenizer = rig.tokenizer(store=directory, **options)
+    session: Any = None
+    if shape.startswith("session"):
+        session = tokenizer.session(session_id="chat", text=_BASE).__enter__()
+        text = _BASE if shape == "session-hit" else _BASE + _DELTAS[0]
+    else:
+        assert list(tokenizer.encode(_LONG).ids) == _reference(live, _LONG)
+        text = _LONG if shape == "auto-hit" else _LONG + _DELTAS[0]
+    store = _callback_store(tokenizer)
+    native_store = store._store
+    assert native_store is not None
+    assert tokenizer._session_repair is not None
+    original_touch = store._touch
+    seen: dict[str, object] = {}
+
+    def touch_then_close(entry: Any) -> None:
+        original_touch(entry)
+        if "close_error" in seen:
+            return
+        try:
+            tokenizer.close()
+        except Exception as error:  # recorded and asserted below
+            seen["close_error"] = f"{type(error).__name__}: {error}"
+        else:
+            seen["close_error"] = None
+        seen["store_kept"] = store._store is native_store
+        seen["encoder_kept"] = store._encoder is not None
+        seen["adapter_kept"] = tokenizer._session_repair is not None
+
+    store._touch = touch_then_close  # type: ignore[method-assign]
+    if session is not None and shape == "session-append":
+        outcome = _outcome(live, lambda: session.append(_DELTAS[0]).all_ids, text)
+    elif session is not None:
+        outcome = _outcome(
+            live, lambda: tokenizer.encode(text, session="chat").ids, text
+        )
+    else:
+        outcome = _outcome(live, lambda: tokenizer.encode(text).ids, text)
+
+    assert "close_error" in seen, "the store call did not reach a Python step"
+    assert seen["close_error"] is None, seen
+    # Deferred, not partial: the call in flight kept its store, and the
+    # adapter that serves the store's callbacks stayed with it.
+    assert seen["store_kept"] and seen["encoder_kept"], seen
+    assert seen["adapter_kept"], seen
+    assert outcome in {"equal", "closed"}, outcome
+
+    # The call has ended: the release is complete without a second close().
+    assert _released(tokenizer, store)
+    assert not store._calls
+    with pytest.raises(RuntimeError, match=_CLOSED):
+        tokenizer.encode(text, session="chat")
+    tokenizer.close()
+    assert _released(tokenizer, store)
+    report = tokenizer.explain()
+    assert isinstance(report["store"], dict)
+    assert isinstance(report["session_repair"], dict)
 
 
 @pytest.mark.parametrize("persistent", [False, True], ids=["memory", "directory"])

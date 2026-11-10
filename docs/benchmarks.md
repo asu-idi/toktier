@@ -470,7 +470,7 @@ may serve is read from the admission table, as described in
 
 The GPU lanes are measured on `sm_120`, and the certification evidence
 behind them is taken under the `gpu-cert-sm120-primary-v1` protocol: the
-full per-family campaign runs on `sm_120` (fifteen families, 1,102,675
+full per-family campaign runs on `sm_120` (21 families, 1,102,675
 documents each), while `sm_89` is held by a bounded spot check on the same
 protocol and roster (100,000 documents per family). Both report zero
 mismatches, and both bind the same host identity, because the sm_89 host

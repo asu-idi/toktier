@@ -840,7 +840,8 @@ well-formed-but-newer records, in the contract's explicit-verify split.
   `chunks`, `k_requested`, `cuts`, `cut_misses`, `literal_rejects`,
   `norm_rejects`, `serial_reason` and `native_facts`. It is a helper
   rather than a new route. Admission takes three conditions: the
-  certified repair roster (family and artifact digest), a normalizer
+  chunk admission roster (the certified repair roster plus the records
+  carried from one of its artifacts; family and artifact digest), a normalizer
   shape the rule reasons about (none, the empty sequence, NFC with
   input-matched added tokens), and a certified row, one with both levels
   of chunked-path evidence, in the chunked admission table the package

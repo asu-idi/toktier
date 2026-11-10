@@ -25,9 +25,13 @@ code namespace are contract; new reason codes may be appended (see Section 5.4).
   `toktier gpu compile <family> --accept-uncertified-jit` command; no
   environment variable or config-file value can select it. The CLI acceptance
   applies only to that process and does not modify or extend the registry.
-  Persistent experimental state
-  uses a backend/version/configuration-bound fingerprint and therefore cannot
-  be replayed into a certified or differently versioned configuration.
+  Persistent experimental state uses a fingerprint bound to the engine
+  meaning (backend, version, configuration): state from an experimental
+  adapter with a repair configuration of its own cannot be replayed into a
+  certified or differently versioned configuration, while a record from a
+  route admitted only by an experimental waiver carries the key a certified
+  process of the same build uses (`store-format-v1.md` Section 6). Use a
+  separate store directory when policy separation matters.
 - Registry status `certified` (binary digest bound) and
   `certified_source` (source digest + build flags + exact toolchain bound;
   used by the integrated CPU engine and GPU JIT) are both eligible under `CERTIFIED`,

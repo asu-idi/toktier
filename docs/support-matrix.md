@@ -242,13 +242,12 @@ one of these states in `explain()["session_repair"]["engine_assurance"]` and
 | `unverifiable` | the bytes the import system would run are not the ones any installed distribution recorded (a shadowing copy on `sys.path`); the adapter refuses to open | `false` |
 
 The exact-id assurance (`certified_pinned`) holds with `tokenizers==0.22.2`,
-the version the pinned build was judged against (the Reference row above), so
-install the two together with
-`pip install "toktier[fastokens]" "tokenizers==0.22.2"`; with another
-installed `tokenizers` the adapter reports `oracle_mismatch` and no exact-id
-guarantee, and the default routes are unaffected. Since 0.3.0 the base
-package admits `tokenizers>=0.22.2,<0.24`, so a new environment may resolve
-a later release unless the version is given.
+the version the pinned build was judged against (the Reference row above).
+Install the adapter with `pip install "toktier[fastokens]"`, which since 0.3.2
+also installs `tokenizers==0.22.2`; with another installed `tokenizers` the
+adapter reports `oracle_mismatch` and no exact-id guarantee, and the default
+routes are unaffected. To satisfy the pin pip may move `transformers` to an
+earlier 5.x release; in an existing environment, run `pip check` afterwards.
 
 The distribution keeps the upstream import name `fastokens`. Installing it
 beside the upstream distribution overwrites the shared files silently, and
@@ -365,8 +364,10 @@ the shared strings carry the same id; the merge lists hold 119,744 against
 119,758 entries with 91,582 in common; the added-token table holds 832
 entries against 818. Unlike `hy3`, its vocabulary covers all 256 byte
 symbols. The repository's `tokenizer_config.json` names a
-`tokenizer_class` that `transformers.AutoTokenizer` does not resolve, so
-the loader face is the artifact file itself, read the way this package's
+`tokenizer_class` (`TokenizersBackend`) that `transformers` 4.57.6 does not
+resolve (the 5.x releases provide that class; under 5.15.1 and 5.22.2
+`AutoTokenizer` loads it, with the file's ids), so the loader face is the
+artifact file itself, read the way this package's
 reference route reads it; that configuration file declares no added tokens
 of its own.
 
@@ -1160,7 +1161,7 @@ repository's pinned conversion inputs, so the executed tokenizer is that
 certified conversion, and the conversion table is unchanged.
 
 The other fourteen repositories compared on 2026-11-06 share one of the
-five artifacts certified in this release. Each file group was fetched at the
+five artifacts certified in 0.3.1. Each file group was fetched at the
 pinned commit and hashed, and each file was compared byte for byte against the
 frozen anchor file and, where an earlier download of the same commit exists,
 against that download. Thirteen ship a `tokenizer.json` and a
@@ -1194,7 +1195,7 @@ the anchor's. It is admitted on the `equivalent (serialisation)` basis. Its
 `model_max_length`.
 
 Four more repositories compared on 2026-11-06 ship the `tokenizer.json` of
-`nemotron_super_vl`, the artifact certified in this release whose vocabulary
+`nemotron_super_vl`, the artifact certified in 0.3.1 whose vocabulary
 renames twelve special slots of `nemotron_3_nano_4b` (see [Renamed special
 slots inside the vocabulary](#renamed-special-slots-inside-the-vocabulary)).
 They were fetched at the pinned commit, hashed, and compared byte for byte
@@ -1266,7 +1267,7 @@ the serializations byte for byte.
 `from_pretrained("Qwen/Qwen3.8-27B")` and
 `from_pretrained("Qwen/Qwen3.8-Flash-Next")` therefore resolve by content to
 the certified `qwen3_5_08b` anchor, execute its bytes, and are covered by its
-certificates, exactly as the other 212 sibling rows are. Admission is still by
+certificates, exactly as the other sibling rows are. Admission is still by
 digest: a Qwen3.8 revision whose `tokenizer.json` differs from the audited
 bytes matches no row and stays on the reference route.
 
@@ -1349,9 +1350,12 @@ effective maximum token length 128, normalizer present for
 recorded in the registry record (`backends.fast_cpu.repair`) rather than in
 the repair roster, which keeps the eleven artifacts the CPU campaign judged,
 its digest, and the fast CPU engine's bound source set unchanged. A document
-holding one of the differing literals is routed to the reference, like any
-input holding an added-token literal. `toktier.chunked` encodes them
-serially: they have no row in the chunked admission table. The GPU route is
+holding an added-token literal, one of the differing literals included, is
+segmented at the literals as on the anchors (the 0.3.2 release notes,
+Chat-shaped prompts), and `toktier.chunked` cuts both artifacts on the
+Python and the native path: the chunk admission roster includes the records
+carried from a roster anchor, and the chunked admission table has certified
+rows for them. The GPU route is
 carried from the anchor under the same conditions: the record's GPU entry is
 the anchor's, the kernel table lists each family in its anchor's band with
 its anchor's class table (`deepseek_v1`, `cl100k_v3`), and the class-table

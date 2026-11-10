@@ -96,11 +96,48 @@ def _four_face_tree(
     return binding, direct
 
 
-def _cpu_reading(binding: dict[str, Any], direct: list[str]) -> dict[str, Any]:
-    """The shipped CPU parity reading extended by one row per direct face."""
+def _pending_tree(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> tuple[dict[str, Any], list[str]]:
+    """A scratch tree where every directly judged family is still pending.
+
+    A copy of the binding records no digest for any directly judged family
+    (``"sha256": null``), the shape a face has while its reading is being
+    taken; the tool's root and binding path point at the scratch copy.
+    """
+    binding = copy.deepcopy(_fast_binding())
+    direct = sorted(binding["direct_families"])
+    assert direct, "the binding lists no directly judged family"
+    for family in direct:
+        binding["direct_families"][family]["sha256"] = None
+    binding_path = _write(tmp_path / "tools/fast_cpu_binding.json", binding)
+    monkeypatch.setattr(tool, "ROOT", tmp_path)
+    monkeypatch.setattr(tool, "FAST_CPU_BINDING", binding_path, raising=False)
+    return binding, direct
+
+
+def _loadable_reading(binding: dict[str, Any]) -> dict[str, Any]:
+    """The shipped CPU parity reading cut to the loadable families' rows.
+
+    This is the reading as it reads while every directly judged face is
+    pending: one row per loadable family and the coverage counts of the
+    judged campaign.
+    """
     reading = copy.deepcopy(
         _read(ROOT / "readings/fast_cpu_native_frontend_parity.json")
     )
+    loadable = set(binding["loadable_families"])
+    reading["rows"] = [row for row in reading["rows"] if row["family"] in loadable]
+    assert {row["family"] for row in reading["rows"]} == loadable
+    reading["unique_artifacts"] = len(reading["rows"])
+    reading["model_families"] = binding["coverage"]["model_families"]
+    return reading
+
+
+def _cpu_reading(binding: dict[str, Any], direct: list[str]) -> dict[str, Any]:
+    """The loadable-only CPU parity reading extended by one row per direct
+    face."""
+    reading = _loadable_reading(binding)
     template = reading["rows"][0]
     for family in direct:
         row = copy.deepcopy(template)
@@ -109,6 +146,16 @@ def _cpu_reading(binding: dict[str, Any], direct: list[str]) -> dict[str, Any]:
     reading["unique_artifacts"] = len(reading["rows"])
     reading["model_families"] = binding["coverage"]["model_families"] + len(direct)
     return reading
+
+
+def _pending_matrix(direct: list[str]) -> dict[str, dict[str, Any]]:
+    """The shipped matrix readings with the directly judged faces answering
+    through the reference engine at the CPU venue."""
+    readings = copy.deepcopy(_matrix_readings())
+    for row in readings["cpu"]["rows"]:
+        if row["family"] in direct:
+            row["backend"] = "HuggingFace"
+    return readings
 
 
 def _install_cpu_reading(
@@ -144,12 +191,44 @@ def _counts(backends: dict[str, str]) -> dict[str, int]:
     return counts
 
 
-# The recorded binding: the pending direct faces stay on the reference engine.
+# The recorded binding: every directly judged face has its reading.
 
 
-def test_the_recorded_binding_keeps_the_present_split() -> None:
+def test_the_recorded_binding_puts_every_direct_face_on_the_route() -> None:
     binding = _fast_binding()
     route = tool.fast_cpu_route(binding)
+    assert route["pending"] == set()
+    assert route["direct"] == set(binding["direct_families"])
+    expected = route["loadable"] | route["carried"] | route["direct"]
+    backends = tool.cpu_matrix_backends(binding, _roster())
+    assert {f for f, b in backends.items() if b == "FastCpu"} == expected
+    assert _counts(backends) == {
+        "FastCpu": len(expected),
+        "HuggingFace": len(_roster()) - len(expected),
+    }
+    shipped_matrix = {
+        row["family"]: row["backend"] for row in _matrix_readings()["cpu"]["rows"]
+    }
+    assert backends == shipped_matrix
+    counts = tool.cpu_parity_counts(binding)
+    assert counts["rows"] == route["loadable"] | route["direct"]
+    assert counts["unique_artifacts"] == len(route["loadable"]) + len(route["direct"])
+    shipped = _read(ROOT / "readings/fast_cpu_native_frontend_parity.json")
+    assert {row["family"] for row in shipped["rows"]} == counts["rows"]
+    assert shipped["unique_artifacts"] == counts["unique_artifacts"]
+    assert shipped["model_families"] == counts["model_families"]
+
+
+# A pending direct face stays on the reference engine.
+
+
+def test_a_pending_direct_face_stays_on_the_reference_engine(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    binding, direct = _pending_tree(monkeypatch, tmp_path)
+    route = tool.fast_cpu_route(binding)
+    assert route["pending"] == set(direct)
+    assert route["direct"] == set()
     expected = route["loadable"] | route["carried"]
     backends = tool.cpu_matrix_backends(binding, _roster())
     assert {f for f, b in backends.items() if b == "FastCpu"} == expected
@@ -160,6 +239,39 @@ def test_the_recorded_binding_keeps_the_present_split() -> None:
     counts = tool.cpu_parity_counts(binding)
     assert counts["rows"] == route["loadable"] | route["direct"]
     assert counts["unique_artifacts"] == len(route["loadable"]) + len(route["direct"])
+
+
+def test_readings_for_pending_faces_answer_through_the_reference_engine(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    binding, direct = _pending_tree(monkeypatch, tmp_path)
+    readings = _pending_matrix(direct)
+    _install_matrix(monkeypatch, tmp_path, readings)
+    tool.verify_public_matrix(
+        _matrix_binding(readings), bootstrap=False, roster=_roster()
+    )
+    tool.verify_shared_evidence(
+        _install_cpu_reading(monkeypatch, tmp_path, _loadable_reading(binding))
+    )
+
+
+def test_the_shipped_readings_are_refused_while_the_faces_are_pending(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _binding, direct = _pending_tree(monkeypatch, tmp_path)
+    readings = _matrix_readings()
+    _install_matrix(monkeypatch, tmp_path, readings)
+    with pytest.raises(GenerationError, match="families on another backend") as raised:
+        tool.verify_public_matrix(
+            _matrix_binding(readings), bootstrap=False, roster=_roster()
+        )
+    for family in direct:
+        assert family in str(raised.value)
+    reading = _read(ROOT / "readings/fast_cpu_native_frontend_parity.json")
+    with pytest.raises(GenerationError, match="rows are not the fast CPU route"):
+        tool.verify_shared_evidence(
+            _install_cpu_reading(monkeypatch, tmp_path, reading)
+        )
 
 
 def test_the_shipped_readings_still_pass(
@@ -228,8 +340,8 @@ def test_a_wrong_cpu_count_is_refused(
 def test_the_old_eleven_and_twelve_are_refused_once_the_faces_have_readings(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    _four_face_tree(monkeypatch, tmp_path)
-    reading = _read(ROOT / "readings/fast_cpu_native_frontend_parity.json")
+    binding, _direct = _four_face_tree(monkeypatch, tmp_path)
+    reading = _loadable_reading(binding)
     with pytest.raises(GenerationError, match="rows are not the fast CPU route"):
         tool.verify_shared_evidence(
             _install_cpu_reading(monkeypatch, tmp_path, reading)
@@ -242,8 +354,8 @@ def test_a_direct_face_left_on_the_reference_engine_is_refused(
     _binding, direct = _four_face_tree(monkeypatch, tmp_path)
     readings = copy.deepcopy(_matrix_readings())
     for row in readings["cpu"]["rows"]:
-        if row["family"] in direct[1:]:
-            row["backend"] = "FastCpu"
+        if row["family"] in direct:
+            row["backend"] = "HuggingFace" if row["family"] == direct[0] else "FastCpu"
     _install_matrix(monkeypatch, tmp_path, readings)
     with pytest.raises(GenerationError, match=direct[0]):
         tool.verify_public_matrix(

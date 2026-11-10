@@ -262,10 +262,36 @@ def test_a_record_held_repair_row_without_a_carry_over_is_not_selected() -> None
         tool._roster(registry)
 
 
-def test_a_carried_record_with_both_levels_gets_a_certified_row() -> None:
+def _without_family(readings: dict[str, Any], family: str) -> dict[str, Any]:
+    """A copy of a chunk reading as it reads before the family was taken:
+    neither the corpus level nor the battery level lists it."""
+    out = copy.deepcopy(readings)
+    for rows in (out["families"], out["adversarial"]["families"]):
+        index = _row_index(rows, family)
+        del rows[index]
+        assert all(row["family"] != family for row in rows)
+    return out
+
+
+def test_the_shipped_reading_certifies_every_carried_record() -> None:
     readings = _readings()
     carried = registry_common.carried_repair_records(_registry())
+    assert carried
+    table, manifest = _derive(readings)
+    for family, digest in sorted(carried.items()):
+        row = next(r for r in table["rows"] if r["family"] == family)
+        assert row["status"] == "certified" and "python" in row["paths"], family
+        listed = next(r for r in readings["families"] if r["family"] == family)
+        assert listed["artifact_sha256"] == digest, family
+    assert {a["family"] for a in manifest["artifacts"]} >= set(carried)
+
+
+def test_a_carried_record_with_both_levels_gets_a_certified_row() -> None:
+    carried = registry_common.carried_repair_records(_registry())
     family, digest = sorted(carried.items())[0]
+    # The reading without the carried family, to which both levels are
+    # then added from another family's rows.
+    readings = _without_family(_readings(), family)
     donor = readings["families"][0]["family"]
     corpus_row = copy.deepcopy(readings["families"][0])
     battery_row = copy.deepcopy(

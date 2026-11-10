@@ -53,7 +53,7 @@ from toktier.errors import RegistryInvalid
 from toktier.paths import artifact_cache_dir
 from toktier.repair.registry import families as roster_families
 from toktier.repair.registry import pclass_table
-from toktier.routing.tables import CHUNKED_ADMISSION
+from toktier.routing.tables import CHUNKED_ADMISSION, SUPPORT_REGISTRY
 
 from .facade.conftest import build_rig
 
@@ -82,6 +82,24 @@ PARTIAL_FAMILIES = tuple(
     family for family, row in TABLE_ROWS.items() if row["status"] != "certified"
 )
 SIZES = (64_000, 256_000, 1_000_000)
+
+
+def _admission_roster() -> set[tuple[str, str]]:
+    """``(family, artifact_sha256)`` of the chunked admission roster.
+
+    The certified repair roster plus the records carried onto one of its
+    rows: a registry record whose fast CPU entry holds a ``repair`` member
+    beside a cross-artifact carry-over node. A directly judged face holds
+    a ``repair`` member with no carry-over node and is not on it.
+    """
+    roster = {(item.family, item.artifact_sha256) for item in roster_families()}
+    registry = json.loads(SUPPORT_REGISTRY.read_text(encoding="utf-8"))
+    for record in registry["artifacts"]:
+        fast = (record.get("backends") or {}).get("fast_cpu") or {}
+        if "repair" in fast and "carryover" in record:
+            roster.add((str(record["family"]), str(record["artifact_sha256"])))
+    return roster
+
 
 _O, _S, _L, _N, _M = 0, 1, 2, 3, 4
 
@@ -744,7 +762,7 @@ def stand_in_table(
 
 def test_admission_table_rows_are_roster_artifacts_with_the_python_path() -> None:
     rows = chunked._admission_rows()
-    roster = {(item.family, item.artifact_sha256) for item in roster_families()}
+    roster = _admission_roster()
     assert rows and set(rows) <= roster
     assert CANDIDATE_FAMILIES, "the shipped table certifies no family"
     for (family, _digest), row in rows.items():
@@ -1557,7 +1575,7 @@ def test_roster_families_are_the_admitted_set(
     is present locally is loaded and asked; a certified row is admitted, a
     partial row is refused with its status, an absent family is refused as
     without evidence. The artifact part runs when the artifacts are there."""
-    names = {item.family for item in roster_families()}
+    names = {family for family, _digest in _admission_roster()}
     assert set(TABLE_FAMILIES) <= names
     assert set(CANDIDATE_FAMILIES) <= set(TABLE_FAMILIES)
     assert "kimi_k3" not in names and "bert_uncased" not in names

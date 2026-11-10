@@ -203,18 +203,36 @@ def _reading(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {"schema": "toktier.fast_cpu.native_frontend_parity.v1", "rows": rows}
 
 
+def _without_columns(reading: dict[str, Any]) -> dict[str, Any]:
+    """A copy of a parity reading as it reads before the 0.3.2 columns:
+    every row without ``special_tokens`` and ``literal_segments``."""
+    bare = copy.deepcopy(reading)
+    for row in bare["rows"]:
+        for column in ("special_tokens", "literal_segments"):
+            row.pop(column, None)
+    return bare
+
+
 def test_parity_problems_require_and_check_columns() -> None:
     shipped = json.loads(
         (ROOT / "readings" / "fast_cpu_native_frontend_parity.json").read_text(
             encoding="utf-8"
         )
     )
-    # The shipped readings carry no 0.3.2 column: they pass as they are and
-    # fail only when the column is required.
+    # The shipped reading carries both 0.3.2 columns on every row: it passes
+    # as it is and with both columns required.
+    for row in shipped["rows"]:
+        assert "special_tokens" in row and "literal_segments" in row, row["family"]
     assert forms.parity_problems(shipped) == ([], [])
-    problems, _notes = forms.parity_problems(shipped, ["special_tokens"])
-    assert len(problems) == len(shipped["rows"])
-    rows = copy.deepcopy(shipped["rows"])
+    required = ["special_tokens", "literal_segments"]
+    assert forms.parity_problems(shipped, required) == ([], [])
+    # A reading without the columns passes as it is and fails only when
+    # the column is required.
+    bare = _without_columns(shipped)
+    assert forms.parity_problems(bare) == ([], [])
+    problems, _notes = forms.parity_problems(bare, ["special_tokens"])
+    assert len(problems) == len(bare["rows"])
+    rows = copy.deepcopy(bare["rows"])
     for row in rows:
         row["special_tokens"] = _true_column("identity", int(row["documents"]))
     assert forms.parity_problems(_reading(rows), ["special_tokens"]) == ([], [])
@@ -551,21 +569,32 @@ def test_the_release_check_requires_the_columns_on_certified_rows(
     import generate_registry
 
     registry_path = ROOT / "tables" / "support_registry.json"
-    # The readings in the tree predate the 0.3.2 columns: refused.
-    shipped = generate_registry.release_reading_problems(registry_path)
-    assert shipped and any(p.startswith("cpu/") for p in shipped)
-    assert any(p.startswith("sm_120/") for p in shipped)
-    fingerprints = forms.registry_fingerprints(_registry())
-    cpu = json.loads(
-        (ROOT / "readings" / "fast_cpu_native_frontend_parity.json").read_text(
-            encoding="utf-8"
-        )
+    # The readings in the tree carry the 0.3.2 columns: nothing is refused.
+    assert generate_registry.release_reading_problems(registry_path) == []
+    # The same readings without the columns are refused, on the CPU reading
+    # and on each certified architecture.
+    cpu_source = ROOT / "readings" / "fast_cpu_native_frontend_parity.json"
+    bare_cpu = _without_columns(json.loads(cpu_source.read_text(encoding="utf-8")))
+    bare_cpu_path = tmp_path / "bare_cpu.json"
+    bare_cpu_path.write_text(json.dumps(bare_cpu), encoding="utf-8")
+    bare_gpu_paths: dict[str, Path] = {}
+    for architecture, source in generate_registry.PREBUILT_HARDWARE_READINGS.items():
+        bare_gpu = _without_columns(json.loads(source.read_text(encoding="utf-8")))
+        bare_gpu_paths[architecture] = tmp_path / f"bare_{architecture}.json"
+        bare_gpu_paths[architecture].write_text(json.dumps(bare_gpu), encoding="utf-8")
+    bare = generate_registry.release_reading_problems(
+        registry_path, cpu_reading=bare_cpu_path, gpu_readings=bare_gpu_paths
     )
+    assert bare and any(p.startswith("cpu/") for p in bare)
+    for architecture in bare_gpu_paths:
+        assert any(p.startswith(f"{architecture}/") for p in bare), architecture
+    fingerprints = forms.registry_fingerprints(_registry())
+    cpu = copy.deepcopy(bare_cpu)
     cpu["rows"] = [_complete_row(row, "cpu", fingerprints) for row in cpu["rows"]]
     cpu_path = tmp_path / "cpu.json"
     cpu_path.write_text(json.dumps(cpu), encoding="utf-8")
     gpu_paths: dict[str, Path] = {}
-    for architecture, source in generate_registry.PREBUILT_HARDWARE_READINGS.items():
+    for architecture, source in bare_gpu_paths.items():
         gpu = json.loads(source.read_text(encoding="utf-8"))
         gpu["rows"] = [_complete_row(row, "gpu", fingerprints) for row in gpu["rows"]]
         gpu_paths[architecture] = tmp_path / f"{architecture}.json"

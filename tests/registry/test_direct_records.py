@@ -5,12 +5,14 @@ carried one: a face judged directly, with no carry-over node, certified by
 a full-corpus engine differential of its own
 (``schemas/engine_differential_reading.schema.json``) and named in
 ``tools/fast_cpu_binding.json`` under ``direct_families``. The shipped
-registry registers four such faces before their readings exist (pending:
-the binding names each reading's path with no digest). These tests
-complete one of them on a copy of the shipped files (family ``hy4`` with
-its derived parameters) and require the binding tool to produce the entry
-and the release check (``carryover_problems``, conditions D1-D6) to
-accept it, then refuse each change that breaks a condition.
+registry holds four such faces, each with its recorded reading. A face may
+also be registered before its reading exists (pending: the binding names
+the reading's path with no digest); copies of the shipped files rebuild
+that shape where it is read. These tests judge one face on a copy of the
+shipped files with a synthetic reading (family ``hy4`` with its derived
+parameters) and require the binding tool to produce the entry and the
+release check (``carryover_problems``, conditions D1-D6) to accept it,
+then refuse each change that breaks a condition.
 """
 
 from __future__ import annotations
@@ -240,12 +242,15 @@ def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     binding["direct_families"][FAMILY] = {"reading": READING, "sha256": digest}
     _dump(tmp_path / "tools" / "fast_cpu_binding.json", binding)
 
+    # The shipped reading lists the face; its row is replaced by the
+    # synthetic one, last in the list, so the counts stay as shipped.
     parity_path = tmp_path / "readings" / "fast_cpu_native_frontend_parity.json"
     parity = _load(parity_path)
     fingerprint = forms.registry_fingerprints(document)[FAMILY]
+    shipped_rows = len(parity["rows"])
+    parity["rows"] = [row for row in parity["rows"] if row["family"] != FAMILY]
+    assert len(parity["rows"]) == shipped_rows - 1
     parity["rows"].append(_parity_row(artifact, fingerprint))
-    parity["unique_artifacts"] += 1
-    parity["model_families"] += 1
     _dump(parity_path, parity)
 
     monkeypatch.setattr(generate_registry, "REPOSITORY_ROOT", tmp_path)
@@ -336,10 +341,11 @@ def _pending_problem(problem: str) -> bool:
     )
 
 
-def test_the_shipped_registry_registers_pending_direct_faces() -> None:
-    """Each registered face holds its derived parameters and waits for its
-    reading. A face withdrawn before the release (back to rejected_families,
-    its entry back to the unsupported one) simply leaves this set."""
+def test_the_shipped_registry_registers_the_direct_faces() -> None:
+    """Each registered face holds its derived parameters and the recorded
+    engine-differential reading, and the release check refuses nothing.
+    A face withdrawn before the release (back to rejected_families, its
+    entry back to the unsupported one) simply leaves this set."""
     binding = _load(BINDING)
     document = _load(SHIPPED)
     registered = set(binding["direct_families"])
@@ -347,13 +353,16 @@ def test_the_shipped_registry_registers_pending_direct_faces() -> None:
     uniform = _row(document, "deepseek_v3")["backends"]["fast_cpu"]
     for family in sorted(registered):
         margin, l_max, normalizer, table = REGISTERED[family]
+        reading = f"readings/fast_cpu_engine_differential_{family}.json"
+        digest = hashlib.sha256((ROOT / reading).read_bytes()).hexdigest()
         assert binding["direct_families"][family] == {
-            "reading": f"readings/fast_cpu_engine_differential_{family}.json",
-            "sha256": None,
+            "reading": reading,
+            "sha256": digest,
         }
         assert family not in binding["rejected_families"]
         artifact = _row(document, family)
         assert "carryover" not in artifact
+        main_pass = _load(ROOT / reading)["main_pass"]
         assert artifact["backends"]["fast_cpu"] == {
             **uniform,
             "repair": {
@@ -362,17 +371,37 @@ def test_the_shipped_registry_registers_pending_direct_faces() -> None:
                 "has_normalizer": normalizer,
                 "source_table_sha256": table,
             },
+            "engine_differential": {
+                "reading": reading,
+                "sha256": digest,
+                "documents": main_pass["documents"],
+                "mismatches": 0,
+            },
         }
-    assert update_fast_cpu_registry.pending_direct_families(binding) == {
+    assert update_fast_cpu_registry.pending_direct_families(binding) == {}
+    assert generate_registry.carryover_problems(SHIPPED) == []
+
+
+def test_pending_direct_faces_are_each_named_and_refused(tree: Path) -> None:
+    """The faces registered before their readings exist (a copy of the
+    shipped files with every direct face pending and absent from the
+    parity reading): each is refused by name, and nothing else is."""
+    binding = _load(BINDING)
+    registered = sorted(binding["direct_families"])
+    _make_pending(tree, registered, drop_parity_rows=True)
+    pending_binding = _load(tree / "tools" / "fast_cpu_binding.json")
+    assert update_fast_cpu_registry.pending_direct_families(pending_binding) == {
         family: f"readings/fast_cpu_engine_differential_{family}.json"
         for family in registered
     }
-    # Each is refused by name until its reading is recorded, and nothing
-    # else is refused.
-    problems = generate_registry.carryover_problems(SHIPPED)
+    problems = generate_registry.carryover_problems(_registry(tree))
     for family in registered:
         assert any(
             p.startswith(f"{family}: the engine-differential reading is pending")
+            for p in problems
+        ), problems
+        assert any(
+            p.startswith(f"{family}: the native-front-end parity reading does not")
             for p in problems
         ), problems
     assert all(_pending_problem(p) for p in problems), problems
@@ -380,15 +409,25 @@ def test_the_shipped_registry_registers_pending_direct_faces() -> None:
 
 def test_a_directly_judged_record_passes(tree: Path) -> None:
     assert _problems(tree) == []
-    # ... and the release check of the whole copy names only the pending
-    # readings (and parity rows) of the other registered faces.
-    others = [
+    # ... and the release check of the whole copy refuses nothing else: the
+    # other registered faces hold their recorded readings.
+    assert generate_registry.carryover_problems(_registry(tree)) == []
+
+
+def test_beside_pending_faces_only_their_readings_are_named(tree: Path) -> None:
+    """The other registered faces pending (their readings and parity rows
+    not yet taken): the release check of the copy names only those."""
+    others = sorted(set(_load(BINDING)["direct_families"]) - {FAMILY})
+    assert others
+    _make_pending(tree, others, drop_parity_rows=True)
+    assert _problems(tree) == []
+    named = [
         problem
         for problem in generate_registry.carryover_problems(_registry(tree))
         if not problem.startswith(FAMILY)
     ]
-    assert others
-    assert all(_pending_problem(p) for p in others), others
+    assert {problem.split(":")[0] for problem in named} == set(others)
+    assert all(_pending_problem(p) for p in named), named
 
 
 def test_the_binding_tool_produces_the_direct_entry(tree: Path) -> None:
@@ -670,18 +709,38 @@ def test_engine_differential_beside_a_carry_over_is_refused(tree: Path) -> None:
 # -- registered before the reading exists (pending) --------------------------
 
 
-def _make_pending(tree: Path) -> None:
-    """The face registered with its reading's path but no digest yet."""
+def _make_pending(
+    tree: Path,
+    families: list[str] | None = None,
+    *,
+    drop_parity_rows: bool = False,
+) -> None:
+    """The faces (default ``hy4``) registered with their readings' paths but
+    no digest yet; with ``drop_parity_rows`` their parity rows are not taken
+    yet either."""
+    families = families or [FAMILY]
 
     def drop(document: dict[str, Any]) -> None:
-        del _row(document, FAMILY)["backends"]["fast_cpu"]["engine_differential"]
+        for family in families:
+            del _row(document, family)["backends"]["fast_cpu"]["engine_differential"]
 
     _edit_registry(tree, drop)
     binding_path = tree / "tools" / "fast_cpu_binding.json"
     binding = _load(binding_path)
-    binding["direct_families"][FAMILY] = {"reading": READING, "sha256": None}
+    for family in families:
+        reading = f"readings/fast_cpu_engine_differential_{family}.json"
+        binding["direct_families"][family] = {"reading": reading, "sha256": None}
+        (tree / reading).unlink()
     _dump(binding_path, binding)
-    (tree / READING).unlink()
+    if drop_parity_rows:
+        parity_path = tree / "readings" / "fast_cpu_native_frontend_parity.json"
+        parity = _load(parity_path)
+        kept = [row for row in parity["rows"] if row["family"] not in families]
+        assert len(parity["rows"]) - len(kept) == len(families)
+        parity["unique_artifacts"] -= len(families)
+        parity["model_families"] -= len(families)
+        parity["rows"] = kept
+        _dump(parity_path, parity)
 
 
 def _writer_without_identity(

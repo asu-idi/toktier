@@ -149,8 +149,27 @@ def test_native_frontend_parity_covers_every_roster_artifact() -> None:
     assert engine["source_digest"] == binding["source_digest"]
     assert engine["build_flags"] == binding["build_flags"]
     assert engine["toolchain"] == binding["toolchain"]
-    assert reading["unique_artifacts"] == 11
-    assert reading["model_families"] == 12
+    # The rows are the loadable families and the directly judged families
+    # whose engine-differential reading the binding records (a pending
+    # face, recorded with no digest, has no row yet).
+    loadable = binding["loadable_families"]
+    assert isinstance(loadable, list)
+    direct = binding["direct_families"]
+    assert isinstance(direct, dict)
+    recorded = {
+        family
+        for family, node in direct.items()
+        if isinstance(node, dict) and node.get("sha256") is not None
+    }
+    for family in recorded:
+        node = direct[family]
+        assert isinstance(node, dict)
+        assert _sha256(str(node["reading"])) == node["sha256"], family
+    coverage = binding["coverage"]
+    assert isinstance(coverage, dict)
+    assert coverage["unique_tokenizer_artifacts"] == len(loadable)
+    assert reading["unique_artifacts"] == len(loadable) + len(recorded)
+    assert reading["model_families"] == coverage["model_families"] + len(recorded)
     assert reading["all_ids_equal_hf"] is True
     assert reading["one_python_to_rust_call_per_batch"] is True
     assert reading["gil_released"] is True
@@ -159,9 +178,8 @@ def test_native_frontend_parity_covers_every_roster_artifact() -> None:
     by_family = {
         str(row["family"]): row for row in rows if isinstance(row, dict)
     }
-    loadable = binding["loadable_families"]
-    assert isinstance(loadable, list)
-    assert set(by_family) == set(loadable)
+    assert len(by_family) == len(rows)
+    assert set(by_family) == set(loadable) | recorded
     assert all(row["full_encode_equal_hf"] is True for row in by_family.values())
     assert all(row["repair_equal_hf"] is True for row in by_family.values())
 

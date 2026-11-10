@@ -362,6 +362,63 @@ fn seal_guard_keeps_distance_from_tail_end() {
     }
 }
 
+/// Prefix reuse by another text (`SessionStore::lookup`) relies on this: a
+/// block node that records a seal point `c > 0` belongs to a block that
+/// completed in a later call than that seal, when the text was already
+/// longer than `c + guard`, so its block end lies more than the seal guard
+/// beyond its seal point. It holds by the order of `seal_blocks` (block
+/// nodes are written before the seal search of the same call) and by the
+/// seal ceiling (the tail end minus the guard).
+#[test]
+fn a_block_node_ends_more_than_the_seal_guard_beyond_its_seal_point() {
+    let enc = MockEncoder::default();
+    for (block_chars, guard, piece) in [
+        (64u64, 40u64, 7usize),
+        (64, 5, 23),
+        (128, 100, 61),
+        (32, 16, 300),
+    ] {
+        let mut store = SessionStore::new(StoreConfig {
+            block_chars,
+            tail_soft_cap_bytes: 64,
+            ..StoreConfig::default()
+        })
+        .unwrap();
+        let kid = store.register_fingerprint(fp(3), guard).unwrap();
+        let text = "chunk with words, 123 numbers and boundaries. ".repeat(400);
+        let chars: Vec<char> = text.chars().collect();
+        let first: String = chars[..piece].iter().collect();
+        let put = store.put(kid, &first, &enc).unwrap();
+        let (handle, mut revision) = (put.handle, put.revision);
+        for start in (piece..chars.len()).step_by(piece) {
+            let delta: String = chars[start..(start + piece).min(chars.len())]
+                .iter()
+                .collect();
+            revision = store
+                .append(handle, &delta, revision, &enc)
+                .unwrap()
+                .revision;
+        }
+        assert_eq!(store.all_ids(handle).unwrap(), judge(&enc, &text));
+        assert!(store.stats().seals > 0, "the battery has to seal");
+        let mut sealed_nodes = 0;
+        for (_key, bytes) in store.export_node_items().unwrap() {
+            let node = toktier_store_core::NodeCacheRecord::from_bytes(&bytes).unwrap();
+            if node.safe_char > 0 {
+                sealed_nodes += 1;
+                assert!(
+                    node.end_char > node.safe_char + guard,
+                    "block end {} within the guard {guard} of its seal point {} \
+                     (block {block_chars}, piece {piece})",
+                    node.end_char,
+                    node.safe_char
+                );
+            }
+        }
+        assert!(sealed_nodes > 0, "no node records a seal point");
+    }
+}
+
 #[test]
 fn revision_conflicts_are_rejected_and_counted() {
     let enc = MockEncoder::default();

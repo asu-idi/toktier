@@ -52,12 +52,14 @@ enum Route {
     Reference,
     /// The fast CPU engine with repair in front of the reference, as on
     /// a CPU plan, with the family's repair parameters from the frozen
-    /// table in this tree.
+    /// table the crate ships.
     FastCpu { family: &'static str },
 }
 
+/// The crate's own copy of the frozen repair tables (the one it embeds
+/// and ships), so the test also runs from the published package.
 fn repair_tables() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../src/toktier/repair/tables")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("data/src/toktier/repair/tables")
 }
 
 fn fast_engine(json: &[u8], reference: Arc<ReferenceEngine>, family: &str) -> FastCpuEngine {

@@ -39,15 +39,15 @@ NAMES = "OSLNM"
 #: Marks of several combining classes; a character that reorders against one
 #: of them has a nonzero combining class for the normalizer.
 PROBES = [
-    "́", "̵", "̣", "ְ", "゙", "्", "ุ", "ཱ",
-    "ͅ",
+    "\u0301", "\u0335", "\u0323", "\u05b0", "\u3099", "\u094d", "\u0e38", "\u0f71",
+    "\u0345",
 ]  # fmt: skip
 #: The stable-split-point probes of the chunk planner (``chunked.rs``).
 PROBE_BEFORE, PROBE_AFTER, PROBE_JAMO_L, PROBE_SYLLABLE = (
-    "́",
-    "̵",
-    "ᄀ",
-    "가",
+    "\u0301",
+    "\u0335",
+    "\u1100",
+    "\uac00",
 )
 
 
@@ -80,7 +80,7 @@ def facts() -> dict[str, Any]:
     out: dict[str, Any] = {"nonstarters": len(nonstarter)}
     out["F1"] = [c for c in sorted(nonstarter) if table[c] != M]
     nfd_first_nonstarter, nfd_first_class, nfc_first_class = [], [], []
-    nfc_last = collections.Counter()
+    nfc_last: collections.Counter[str] = collections.Counter()
     for c in scalars:
         if table[c] == M:
             continue
@@ -147,7 +147,7 @@ def facts() -> dict[str, Any]:
         sorted(split & nonstarter),
         sorted(ord(x) for x in seconds if ord(x) in split),
     )
-    combining = collections.Counter()
+    combining: collections.Counter[str] = collections.Counter()
     for c in scalars:
         if table[c] == M or c in split or c in nfc_of:
             continue

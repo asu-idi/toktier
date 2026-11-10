@@ -280,6 +280,7 @@ def _segments_column(
             "hf_added_token": 0 if served else 990,
             "hf_engine_guard": 10,
             "hf_segments_below_crossover": 0,
+            "hf_span_guard": 0,
         },
         "segments": {
             "literals": 5000,
@@ -315,7 +316,7 @@ def test_reference_bytes_outside_the_guard_documents_are_refused() -> None:
     column["entry_points"][0]["segments"]["bytes"]["hf"] = 150
     problems = forms.literal_segments_problems("f", column, arm="cpu")
     assert any(
-        "50 byte(s) outside the listed guard and below-crossover documents" in p
+        "50 byte(s) outside the listed guard, below-crossover and span-guard" in p
         for p in problems
     )
 
@@ -625,6 +626,7 @@ def test_a_column_of_a_handful_of_documents_does_not_pass_the_ratios() -> None:
         "hf_added_token": 0,
         "hf_engine_guard": 0,
         "hf_segments_below_crossover": 0,
+        "hf_span_guard": 0,
     }
     entry["guard_documents"] = {"count": 0, "bytes_hf": 0, "bound": 0}
     entry["segments"]["bytes"]["hf"] = 0
@@ -784,6 +786,7 @@ def test_one_guard_document_is_above_one_percent_of_few_documents(
         "hf_added_token": 0,
         "hf_engine_guard": 1,
         "hf_segments_below_crossover": 0,
+        "hf_span_guard": 0,
     }
     entry["guard_documents"] = {"count": 1, "bytes_hf": 100, "bound": 1}
     problems = forms.literal_segments_problems("f", column, arm="cpu")
@@ -798,3 +801,92 @@ def test_the_guard_bound_is_one_percent_of_the_documents() -> None:
     guard["bound"] = 11
     problems = forms.literal_segments_problems("f", column, arm="cpu")
     assert any("is above 1% of the documents" in p for p in problems)
+
+
+def _span_guard(column: dict[str, Any], documents: int, size: int) -> None:
+    """Make the column's entry the state route and move ``documents``
+    GPU-segmented documents of ``size`` bytes each to the span guard: the
+    device row was refused and the reference re-encoded them whole."""
+    entry = column["entry_points"][0]
+    entry["entry_point"] = "state_route"
+    entry["paths"]["gpu_segmented"] -= documents
+    entry["paths"]["hf_span_guard"] += documents
+    entry["segments"]["bytes"]["gpu"] -= documents * size
+    entry["segments"]["bytes"]["hf"] += documents * size
+    entry["span_guard_documents"] = {"count": documents, "bytes_hf": documents * size}
+    total = sum(entry["segments"]["bytes"].values())
+    entry["gpu_share"] = entry["segments"]["bytes"]["gpu"] / total
+    id_route = copy.deepcopy(_segments_column("gpu")["entry_points"][0])
+    column["entry_points"].insert(0, id_route)
+
+
+def test_span_guard_documents_are_their_own_path_class() -> None:
+    column = _segments_column("gpu")
+    _span_guard(column, 40, 100)
+    assert forms.literal_segments_problems("f", column, arm="gpu") == []
+    # Counted under the engine guard instead, the same documents break the
+    # guard listing (and the guard bound): the two are kept apart.
+    entry = column["entry_points"][1]
+    entry["paths"]["hf_engine_guard"] += 40
+    entry["paths"]["hf_span_guard"] -= 40
+    del entry["span_guard_documents"]
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("counted as hf_engine_guard" in p for p in problems), problems
+
+
+def test_span_guard_documents_are_listed_with_their_bytes() -> None:
+    column = _segments_column("gpu")
+    _span_guard(column, 40, 100)
+    del column["entry_points"][1]["span_guard_documents"]
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("hf_span_guard without span_guard_documents" in p for p in problems)
+    column = _segments_column("gpu")
+    _span_guard(column, 40, 100)
+    column["entry_points"][1]["span_guard_documents"]["count"] = 39
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("39 span-guard document(s) listed, 40" in p for p in problems)
+    column = _segments_column("gpu")
+    _span_guard(column, 40, 100)
+    column["entry_points"][1]["span_guard_documents"]["bytes_hf"] = 3000
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("1000 byte(s) outside the listed guard" in p for p in problems)
+
+
+def test_span_guard_documents_appear_only_on_a_served_gpu_state_route() -> None:
+    # On the ID route
+    column = _segments_column("gpu")
+    _span_guard(column, 40, 100)
+    column["entry_points"] = column["entry_points"][1:]
+    column["entry_points"][0]["entry_point"] = "id_route"
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("hf_span_guard outside the state route" in p for p in problems)
+    # In the CPU arm
+    column = _segments_column("cpu")
+    entry = copy.deepcopy(column["entry_points"][0])
+    entry["entry_point"] = "state_route"
+    entry["paths"]["gigatoken_segmented"] -= 5
+    entry["paths"]["hf_span_guard"] = 5
+    entry["segments"]["bytes"]["hf"] += 500
+    entry["span_guard_documents"] = {"count": 5, "bytes_hf": 500}
+    column["entry_points"].append(entry)
+    problems = forms.literal_segments_problems("f", column, arm="cpu")
+    assert any("the CPU arm records GPU segments" in p for p in problems)
+    # On an unserved face
+    column = _segments_column("gpu", served=False)
+    entry = column["entry_points"][0]
+    entry["entry_point"] = "state_route"
+    entry["guard_documents"]["bytes_hf"] = 0
+    entry["paths"]["hf_added_token"] -= 5
+    entry["paths"]["hf_span_guard"] = 5
+    entry["span_guard_documents"] = {"count": 5, "bytes_hf": 500}
+    id_route = copy.deepcopy(_segments_column("gpu", served=False)["entry_points"][0])
+    column["entry_points"].insert(0, id_route)
+    column["entry_points"][0]["guard_documents"]["bytes_hf"] = 0
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("unserved face shows segmented documents" in p for p in problems)
+
+
+def test_the_span_guard_class_is_a_required_key() -> None:
+    column = _segments_column("gpu")
+    del column["entry_points"][0]["paths"]["hf_span_guard"]
+    assert forms.literal_segments_problems("f", column, arm="gpu")

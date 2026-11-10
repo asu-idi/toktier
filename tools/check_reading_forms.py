@@ -33,8 +33,13 @@ checks a column has to pass beyond its schema:
     its own, ``hf_segments_below_crossover`` (GPU arm only: a route whose
     only backend after the GPU is the reference, every text segment below
     the crossover), listed with its bytes in ``below_crossover_documents``.
+    A second class of its own is ``hf_span_guard`` (state route, GPU arm
+    only): the state-route acceptance refused a device row because the
+    text is not stable under the normalizer (or the span bridge failed),
+    and the reference re-encoded the document; it is listed with its bytes
+    in ``span_guard_documents`` and counted apart from the engine guard.
     An unserved face keeps the whole-document path, so it shows no
-    segmented document and no below-crossover document. The column names
+    segmented, below-crossover or span-guard document. The column names
     the added-token table it was taken on (``added_frontend_fingerprint``),
     which a registry check holds to the record's.
 
@@ -372,6 +377,28 @@ def literal_segments_problems(
         below_count = int(paths["hf_segments_below_crossover"])
         below = entry.get("below_crossover_documents")
         below_bytes = 0
+        span_count = int(paths["hf_span_guard"])
+        span = entry.get("span_guard_documents")
+        span_bytes = 0
+        if span is not None:
+            span_bytes = int(span["bytes_hf"])
+            if int(span["count"]) != span_count:
+                problems.append(
+                    f"{where}: {span['count']} span-guard document(s) listed, "
+                    f"{span_count} counted as hf_span_guard"
+                )
+        elif span_count:
+            problems.append(
+                f"{where}: {span_count} document(s) counted as hf_span_guard "
+                "without span_guard_documents"
+            )
+        if span_count and name != "state_route":
+            # The span guard decides on a device row entering stored state;
+            # the ID route adopts no state.
+            problems.append(
+                f"{where}: {span_count} document(s) counted as hf_span_guard "
+                "outside the state route"
+            )
         if below is not None:
             below_bytes = int(below["bytes_hf"])
             if int(below["count"]) != below_count:
@@ -425,6 +452,7 @@ def literal_segments_problems(
                 int(paths["gigatoken_segmented"])
                 or int(paths["gpu_segmented"])
                 or below_count
+                or span_count
             ):
                 problems.append(
                     f"{where}: an unserved face shows segmented documents; it "
@@ -436,18 +464,20 @@ def literal_segments_problems(
                 f"{where}: {paths['hf_added_token']} document(s) on a served face "
                 "went whole to the reference for a literal"
             )
-        listed_hf = int(guard["bytes_hf"]) + below_bytes
+        listed_hf = int(guard["bytes_hf"]) + below_bytes + span_bytes
         if int(segment_bytes["hf"]) != listed_hf:
             problems.append(
                 f"{where}: the reference encoded "
                 f"{int(segment_bytes['hf']) - listed_hf} byte(s) "
-                "outside the listed guard and below-crossover documents"
+                "outside the listed guard, below-crossover and span-guard "
+                "documents"
             )
         if arm == "cpu":
             if (
                 int(segment_bytes["gpu"])
                 or int(paths["gpu_segmented"])
                 or below_count
+                or span_count
             ):
                 problems.append(f"{where}: the CPU arm records GPU segments")
             if int(paths["gigatoken_segmented"]) < 1 or not int(

@@ -522,14 +522,17 @@ generator binds, and `tools/generate_registry.py --check` and
   `engine.source_digest` the executing extension reported.
 - **The literal segments column.** Each measured entry point (`id_route`
   required, `state_route` when measured) counts every document once in
-  one of five path classes: `gigatoken_segmented`, `gpu_segmented`,
-  `hf_added_token`, `hf_engine_guard` and `hf_segments_below_crossover`.
-  On a served face `hf_added_token` is 0 (that class is an unserved face
-  or a fail-closed premise), and the reference encodes bytes only inside
-  the listed guard documents and the below-crossover documents
-  (`below_crossover_documents`, with their bytes; GPU arm only, a route
-  whose only backend after the GPU is the reference with every text
-  segment below the crossover). Floors beside the ratios: at least 1,000
+  one of six path classes: `gigatoken_segmented`, `gpu_segmented`,
+  `hf_added_token`, `hf_engine_guard`, `hf_segments_below_crossover` and
+  `hf_span_guard`. On a served face `hf_added_token` is 0 (that class is
+  an unserved face or a fail-closed premise), and the reference encodes
+  bytes only inside the listed guard documents, the below-crossover
+  documents (`below_crossover_documents`, with their bytes; GPU arm only,
+  a route whose only backend after the GPU is the reference with every
+  text segment below the crossover) and the span-guard documents
+  (`span_guard_documents`, with their bytes; the GPU arm's state route
+  only, a device row the state-route acceptance refused because the text
+  is not stable under the face's normalizer). Floors beside the ratios: at least 1,000
   documents per entry point and 10,000 battery strings; guard documents
   at most 1 % of the documents (rounded down, so a small reading allows
   none) and at most 1 % of the segment bytes; on the GPU arm's ID route

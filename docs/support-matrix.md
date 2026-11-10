@@ -119,9 +119,16 @@ a roster artifact by the cross-artifact carry-over holds the anchor's
 parameters (`deepseek_v4_1_flash`, `mimo_v2_6`). A record judged directly
 on its own artifact holds its own parameters beside a full-corpus engine
 differential of that artifact (`docs/contracts/registry.md` Section 3.0).
-<!-- TODO(fill: whether the directly judged records for hy4, step5_preview, muse_spark and nemotron_super_vl enter this release, with each face's full-corpus engine differential: documents, characters, mismatches) -->
-The directly judged records for `hy4`, `step5_preview`, `muse_spark` and
-`nemotron_super_vl` are pending their full-corpus readings.
+The four directly judged records are `hy4`, `step5_preview`, `muse_spark`
+and `nemotron_super_vl`. Each one's engine differential covers the full
+certification corpus, 3,800,016,491 documents and 12,328,592,579,973
+characters, with zero mismatches against `tokenizers` 0.22.2; the documents
+that hold an added-token literal were run again on the 0.3.2 sources, as
+was a seeded sample of about 1 % of the corpus (37,996,235 documents per
+face), whole and as session appends, and a constructed arm of 1,000,000
+strings per face stresses the repair window, all with zero mismatches
+(`readings/fast_cpu_engine_differential_<family>.json`; the 0.3.2 release
+notes give the figures per face and the sample's sensitivity limit).
 
 The exact engine binding and native-equivalence record are in
 [`tools/fast_cpu_binding.json`](../tools/fast_cpu_binding.json). A focused
@@ -143,11 +150,14 @@ it, and only two of them are about the chunked path.
 | Engine differential | the corrected CPU engine encoding whole documents; it never cuts one, so it says nothing about cuts | 41,800,181,401 checks, 11 artifacts x 3,800,016,491 documents, 0 divergences ([`tools/fast_cpu_binding.json`](../tools/fast_cpu_binding.json)) |
 | Adversarial battery | the cut rule on strings built to stress it: decomposing characters, combining sequences, jamo, kana voicing marks, literals beside marks | 460,000 strings, 11 artifacts (100,000 each for qwen3_8b, qwen3_5_08b and minimax_m3, 20,000 for each of the other eight), Python and native paths, 0 mismatches in all four comparisons and 0 plan differences between the two paths, 2026-10-15 ([`readings/chunked_cuts_campaign.json`](../readings/chunked_cuts_campaign.json), adversarial section) |
 | Corpus cut comparison | web documents of 512 to 400,000 characters, encoded with forced cuts and compared id for id with the serial encode and the reference | 102,400,000 documents for each of the 11 roster artifacts, Python and native paths, 0 mismatches in all four comparisons and 0 plan differences between the two paths; 35 or 36 documents per artifact had no admissible cut and were encoded serially on both paths, 2026-11-08 ([`readings/chunked_cuts_campaign.json`](../readings/chunked_cuts_campaign.json)) |
-| Carried artifacts | the adversarial battery and the corpus cut comparison for `deepseek_v4_1_flash` and `mimo_v2_6`, on both paths | pending <!-- TODO(fill: adversarial battery strings and corpus cut comparison documents for deepseek_v4_1_flash and mimo_v2_6, both paths, mismatches, plan differences, date, reading path) --> |
+| Carried artifacts | the adversarial battery and the corpus cut comparison for `deepseek_v4_1_flash` and `mimo_v2_6`, on both paths | 20,000 battery strings for deepseek_v4_1_flash and 100,000 for mimo_v2_6, and 102,400,000 corpus documents for each, Python and native paths, 0 mismatches in all four comparisons and 0 plan differences between the two paths; 36 documents of each had no admissible cut and were encoded serially on both paths, 2026-11-10 ([`readings/chunked_cuts_campaign.json`](../readings/chunked_cuts_campaign.json)) |
 
-<!-- TODO(fill: the eleven roster rows re-taken or re-bound on the 0.3.2 build: corpus cut comparison and adversarial battery figures, date) -->
-The rows of the eleven roster artifacts are bound to the 0.3.2 build's
-engine identity; their figures on that build are pending.
+The rows of the eleven roster artifacts were taken again on the 0.3.2
+sources on 2026-11-10, both readings on both paths: every figure equals the
+one in the table, token counts included, with 0 mismatches and 0 plan
+differences, and the rows are bound to the 0.3.2 build's engine identity.
+The dates in the table are those of the first readings (2026-10-15 for the
+battery, 2026-11-08 for the corpus comparison).
 
 The engine differential stays what it was in the section above. It
 supports the chunked path only in the sense that each chunk is encoded
@@ -172,7 +182,8 @@ path to the corrected CPU engine's version-normalized source digest. A
 change to either code takes the matching rows out of the evidence until
 it is measured again. The thirteen admitted artifacts -- the eleven
 roster artifacts and the two carried ones -- have certified rows, on both
-paths (the table regenerated on the 0.3.2 build is pending).
+paths; the table that ships with 0.3.2 was regenerated from the readings
+above.
 
 ## Pinned Fastokens distribution (toktier-fastokens)
 
@@ -277,15 +288,12 @@ package.
 | `kimi_k3` | `moonshotai/Kimi-K3` | 773c2476259d | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
 | `ling_3_0_flash` | `inclusionAI/Ling-3.0-flash` | 40fb9d7d7795 | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
 | `laguna_s_2_1` | `poolside/Laguna-S-2.1` | 809240f7a182 | unsupported by Gigatoken; HF | certified (prebuilt) | not admitted |
-| `hy4` | `tencent/Hy4-preview` | ff67615de6e6 | pending: certified (Gigatoken), judged directly | certified (prebuilt) | not admitted |
-| `step5_preview` | `stepfun-ai/Step-5-Preview` | b564c620eb77 | pending: certified (Gigatoken), judged directly | certified (prebuilt) | not admitted |
-| `muse_spark` | `meta-models/Muse-Spark-Open-816B-A42B` | ac2f41ef2444 | pending: certified (Gigatoken), judged directly | certified (prebuilt) | not admitted |
-| `nemotron_super_vl` | `nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16` | d0432ad8b1c2 | pending: certified (Gigatoken), judged directly | certified (prebuilt) | not admitted |
+| `hy4` | `tencent/Hy4-preview` | ff67615de6e6 | certified (Gigatoken), judged directly | certified (prebuilt) | not admitted |
+| `step5_preview` | `stepfun-ai/Step-5-Preview` | b564c620eb77 | certified (Gigatoken), judged directly | certified (prebuilt) | not admitted |
+| `muse_spark` | `meta-models/Muse-Spark-Open-816B-A42B` | ac2f41ef2444 | certified (Gigatoken), judged directly | certified (prebuilt) | not admitted |
+| `nemotron_super_vl` | `nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16` | d0432ad8b1c2 | certified (Gigatoken), judged directly | certified (prebuilt) | not admitted |
 | `deepseek_v4_1_flash` | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | c90dfa01249d | certified (Gigatoken), carried from `deepseek_v4_flash` | certified (prebuilt), carried from `deepseek_v4_flash` | certified (python, native) |
 | `mimo_v2_6` | `XiaomiMiMo/MiMo-V2.6-Flash-RL` | ff15eb925890 | certified (Gigatoken), carried from `qwen3_8b` | certified (prebuilt), carried from `qwen3_8b` | certified (python, native) |
-
-<!-- TODO(fill: the CPU fast repair cells of hy4, step5_preview, muse_spark and nemotron_super_vl: "certified (Gigatoken), judged directly" once each full-corpus reading reads zero mismatches, otherwise "unsupported (no repair row); HF") -->
-<!-- TODO(fill: confirm the Chunked cuts cells of deepseek_v4_1_flash and mimo_v2_6 against the chunked admission table regenerated on the 0.3.2 build) -->
 
 Pinned upstream revisions are recorded per row as
 `support.repo_revision.{family}` in the generated table; the package verifies
@@ -308,10 +316,9 @@ admitted` means the artifact is not on that roster: either its CPU route
 is the reference engine, or its fast CPU record is a directly judged one,
 which the roster does not take; chunked encode then runs serially and
 names the refusal `artifact_not_in_certified_repair_roster`.
-`pending: certified (Gigatoken), judged directly` marks the four
-artifacts whose directly judged fast CPU records wait for their
-full-corpus readings; until then their CPU route is the reference engine,
-as in 0.3.1.
+`certified (Gigatoken), judged directly` marks the four artifacts whose
+fast CPU record is judged directly on its own artifact (Certified CPU fast
+repair, above); their CPU route is the corrected CPU engine.
 The whole-document routes
 in the other columns do not depend on this one; see
 [Certified chunk cuts](#certified-chunk-cuts).
@@ -344,8 +351,8 @@ mismatches (`evidence/evidence_manifest_roster_2026_10.json`,
 `add_special_tokens=False` under the pinned loader pair,
 `transformers` 4.57.6 and `tokenizers` 0.22.2. The certified repair
 roster has no row for any of the three, and the GPU route is the certified
-one. Each is to run on the corrected CPU engine through a directly judged
-record (pending, above).
+one. Since 0.3.2 each runs on the corrected CPU engine through a directly
+judged record (above).
 
 `hy4` note: the repository is a preview publication, so the revision
 pinned above is what was judged and what the sha256 describes; a later
@@ -431,8 +438,8 @@ frozen reference digest, with zero mismatches
 (`evidence/evidence_manifest_super_vl_2026_11.json`,
 `ev-super-vl-2026-11-v1`), under the same pinned loader pair and with
 `add_special_tokens=False`. The certified repair roster has no row for it, and
-the GPU route is the certified one; its CPU route waits for a directly judged
-record like the three above.
+the GPU route is the certified one; since 0.3.2 its CPU route is the
+corrected CPU engine through a directly judged record, like the three above.
 What the rename changes, and why the anchor's readings could not simply be
 carried over, is described under [Renamed special slots inside the
 vocabulary](#renamed-special-slots-inside-the-vocabulary).

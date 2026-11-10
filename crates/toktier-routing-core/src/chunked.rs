@@ -741,8 +741,16 @@ impl NfcRule {
             if floor_index > 0 {
                 return Ok(NfcVerdict::Undecided);
             }
-            left = 0; // the start of the text anchors as well
+            // The start of the text anchors as well: for a chunk cut the
+            // text is fixed; for a seal it is the start of the tail, which is
+            // an earlier seal or the start of the session text.
+            left = 0;
         }
+        // The end of the text anchors on the right only for a chunk cut,
+        // whose text is fixed. A seal candidate lies at least the seal guard
+        // (at least 513 characters) before the end of the session tail and
+        // the scan below stops after ANCHOR_SCAN (256), so for a seal the
+        // right anchor is always a character (`seal_cut.rs`).
         let mut right = position + 1;
         let ceiling = total.min(position + 1 + ANCHOR_SCAN);
         while right < ceiling && !self.stable(boundary, window.char_at(right))? {

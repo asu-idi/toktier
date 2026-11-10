@@ -23,6 +23,17 @@
 //! the reference reads. A candidate that is not admitted is skipped and the
 //! search continues below it.
 //!
+//! The right anchor of a seal candidate is always a character, never the
+//! end of the text: a candidate lies at least the seal guard (at least 513
+//! characters, and at least the longest literal) before the end of the
+//! tail, and the anchor scan stops after `ANCHOR_SCAN` (256) characters.
+//! The rule relies on that: unlike a chunk cut, whose text is fixed, the
+//! end of a session tail is not, so the end of the text cannot stand as an
+//! anchor for a seal. (Where the rule is called without that guard, in unit
+//! tests and probes, the cut is still safe by the normalizer's table facts.)
+//! The left anchor may be the start of the tail, which is an earlier seal
+//! or the start of the text.
+//!
 //! On a face without an effective normalizer, and on ASCII text under an
 //! NFC normalizer, the condition holds for every candidate and costs
 //! nothing. A face with an effective normalizer other than NFC seals
@@ -319,6 +330,20 @@ mod tests {
         let decomposed = "ab \u{0915}\u{093c}.com";
         assert_eq!(cut_at(raw(decomposed, u64::MAX)), Some(2));
         assert_eq!(cut_at(sealed(&rule, decomposed, u64::MAX)), Some(2));
+    }
+
+    #[test]
+    fn the_seal_guard_keeps_the_right_anchor_inside_the_tail() {
+        // The module comment relies on this: the corrected CPU engine's
+        // seal guard (`FastCpuEngine::minimum_seal_tail_chars`) starts at
+        // the repair window plus one and only grows, a candidate lies at
+        // least the guard before the end of the tail, and the right anchor
+        // scan stops after ANCHOR_SCAN characters (plus the character at
+        // the cut). So the scan never reaches the end of the tail.
+        let spec =
+            crate::fast_cpu::FastRepairSpec::new("face".to_owned(), "0".repeat(64), 0, 0, false);
+        assert_eq!(spec.window_chars + 1, 513);
+        assert!(spec.window_chars + 1 > ANCHOR_SCAN + 1);
     }
 
     #[test]

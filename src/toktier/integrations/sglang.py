@@ -727,6 +727,10 @@ class SGLangToktierTokenizer:
         self._tok: Any = None
         self._chunk_workers = self._cfg.chunked_workers or default_chunk_workers()
         self._chunk_pool_started = False
+        # Set when the start of the chunk pool raised: the native chunked
+        # path would then build the pool itself, at the process's available
+        # parallelism, so stateless long requests are served serially.
+        self._chunk_pool_failed = False
         self._store_dir: str | None = None
         self._identity: dict[str, Any] = {
             "status": "skipped",
@@ -829,7 +833,9 @@ class SGLangToktierTokenizer:
         ``chunked_workers`` workers (:func:`default_chunk_workers` when it
         is 0), so it never starts one thread per visible CPU unasked. A
         warm that raises is recorded in the timing log and never fails the
-        wrap or the request; it is tried once.
+        wrap or the request; it is tried once, and the long stateless
+        requests after it are served serially (the chunked call would
+        otherwise build the pool at the process's available parallelism).
         """
         if eager and not self._cfg.chunked_warm:
             return
@@ -847,8 +853,15 @@ class SGLangToktierTokenizer:
 
             if not chunked.admission(self._tok).get("native_by_default"):
                 return
+        except Exception as ex:
+            self._record(
+                {"kind": "chunked_warm", "error": f"{type(ex).__name__}: {ex}"[:300]}
+            )
+            return
+        try:
             size = chunked.warm(self._tok, workers=self._chunk_workers)
         except Exception as ex:
+            self._chunk_pool_failed = True
             self._record(
                 {"kind": "chunked_warm", "error": f"{type(ex).__name__}: {ex}"[:300]}
             )
@@ -1221,21 +1234,29 @@ class SGLangToktierTokenizer:
             # A request that would be a stateless full encode: every
             # request in "off" mode, and a keyless one in "contextvar" mode.
             stateless = key is None and self._mode in ("off", "contextvar")
-            if (
+            long_request = (
                 stateless
                 and self._cfg.long_request_encoder is not None
                 and len(text) >= self._cfg.long_request_min_chars
-            ):
-                core = list(self._cfg.long_request_encoder(text))
-                how = "long_request_encoder"
-            elif (
-                stateless
+            )
+            chunk_request = (
+                not long_request
+                and stateless
                 and self._cfg.chunked_min_chars > 0
                 and len(text) >= self._cfg.chunked_min_chars
-            ):
+            )
+            if chunk_request:
+                self._warm_chunk_encoder(eager=False)
+                if self._chunk_pool_failed:
+                    chunk_request = False
+                    extra = {"chunked_serial_reason": "chunked_warm_failed"}
+            if long_request:
+                assert self._cfg.long_request_encoder is not None
+                core = list(self._cfg.long_request_encoder(text))
+                how = "long_request_encoder"
+            elif chunk_request:
                 from toktier import chunked
 
-                self._warm_chunk_encoder(eager=False)
                 encoded = chunked.encode(self._tok, text, k=self._cfg.chunked_k or None)
                 core = list(encoded.ids)
                 how = "chunked"

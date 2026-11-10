@@ -189,7 +189,11 @@ tokenizer instead, so no request pays for it. Either way the pool is
 started only when chunking is configured, the session mode has stateless
 requests (`off` or `contextvar`) and the native encoder serves the
 tokenizer; a start that fails is recorded in the timing log (`kind:
-"chunked_warm"`) and never fails the wrap or the request. The first count
+"chunked_warm"`) and never fails the wrap or the request, and the long
+stateless requests after it are served serially (`how: "off"` or
+`"auto"`, with `chunked_serial_reason: "chunked_warm_failed"`) rather
+than let the chunked call build a pool of its own at the process's
+available parallelism. The first count
 named in a process sizes its pool and a later, larger one grows it. Only
 the Python chunked path, which runs where the native encoder cannot,
 follows the Rayon thread count.

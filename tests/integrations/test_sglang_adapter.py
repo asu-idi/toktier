@@ -704,6 +704,51 @@ def test_the_chunk_pool_starts_on_the_first_chunked_request_with_a_bounded_count
     assert w.encode("x" * 20, add_special_tokens=False) == [ord("x")] * 20
 
 
+def test_a_failed_pool_start_serves_long_requests_serially(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After a warm that raised, the chunked call would build the pool at
+    the process's available parallelism, the size the configured count is
+    there to avoid; the request is served serially instead."""
+    fake = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
+    monkeypatch.setattr(
+        "toktier.chunked.admission", lambda tok: {"native_by_default": True}
+    )
+    chunked_calls: list[str] = []
+
+    def chunked(tok: object, text: str, *, k: int | None = None) -> _Chunked:
+        chunked_calls.append(text)
+        return _Chunked(text, k)
+
+    monkeypatch.setattr("toktier.chunked.encode", chunked)
+    warms: list[int | None] = []
+
+    def failing_warm(
+        tok: object, *, workers: int | None = None, **kwargs: object
+    ) -> int:
+        warms.append(workers)
+        raise RuntimeError("no pool")
+
+    monkeypatch.setattr("toktier.chunked.warm", failing_warm)
+    for eager in (False, True):
+        warms.clear()
+        chunked_calls.clear()
+        fake.calls.clear()
+        w = wrap_tokenizer(
+            _StubHf(),
+            AdapterConfig(
+                session_key="off", chunked_min_chars=10, chunked_warm=eager
+            ),
+        )
+        assert w.encode("x" * 20, add_special_tokens=False) == [ord("x")] * 20
+        assert w.encode("y" * 20, add_special_tokens=False) == [ord("y")] * 20
+        assert warms == [default_chunk_workers()], eager
+        assert chunked_calls == [], eager
+        assert fake.calls == [{"lookup": "off"}, {"lookup": "off"}], eager
+        assert w.stats()["how"] == {"off": 2}, eager
+
+
 def test_chunk_worker_count_follows_the_environment_as_before() -> None:
     assert AdapterConfig.from_env({}).chunked_workers == 0
     assert AdapterConfig.from_env({}).chunked_warm is False

@@ -922,7 +922,7 @@ def _device_declined(
     the chain, encoded the whole document. The entry's engine-guard
     documents are moved back to the GPU first, so the shared bound has
     room."""
-    entry = column["entry_points"][entry_index]
+    entry: dict[str, Any] = column["entry_points"][entry_index]
     entry["paths"]["gpu_segmented"] += entry["paths"]["hf_engine_guard"]
     entry["segments"]["bytes"]["hf"] -= entry["guard_documents"]["bytes_hf"]
     entry["segments"]["bytes"]["gpu"] += entry["guard_documents"]["bytes_hf"]
@@ -1023,13 +1023,16 @@ def test_device_declined_documents_share_the_guard_bounds() -> None:
     ), problems
 
 
-def test_device_declined_documents_appear_only_where_the_device_hands_to_the_reference() -> None:
+def test_device_declined_documents_appear_only_where_the_device_hands_to_the_reference(
+) -> None:
     # A chain with a CPU engine between the device and the reference: a
     # declined segment would go to the CPU engine, not whole to the reference.
     column = _segments_column("gpu")
     _device_declined(column, 3, 100, chain=["gpu", "fast_cpu", "hf"])
     problems = forms.literal_segments_problems("f", column, arm="gpu")
-    assert any("on the chain ['gpu', 'fast_cpu', 'hf']" in p for p in problems), problems
+    assert any("on the chain ['gpu', 'fast_cpu', 'hf']" in p for p in problems), (
+        problems
+    )
     # The record has to show the device's own decline.
     column = _segments_column("gpu")
     _device_declined(column, 3, 100)["device_declined_documents"]["event"] = {

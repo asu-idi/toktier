@@ -219,11 +219,18 @@ Failure handling by path:
   offered.
 - Sessions running under `EXPERIMENTAL` routing policy may be written to a
   persistent store under their implementation fingerprint. Persistence does
-  not constitute a certification claim. The separate 0.x facade fingerprint
-  domain and its engine bindings (see `fingerprint.md` Section 4) prevent an
-  experimental record from matching a certified configuration or any other
-  engine meaning; replay under the same experimental configuration is
-  expected.
+  not constitute a certification claim. The fingerprint (the 0.x facade
+  fingerprint domain and its engine bindings, see `fingerprint.md`
+  Section 4) names the engine meaning -- the artifact and loader face, the
+  reference library, the engine and host builds, the backend and the repair
+  configuration -- and nothing about the routing policy, the device or the
+  kernel delivery. A record therefore stays apart from a certified
+  configuration only where its engine meaning differs, as for the
+  experimental repair adapter, which has a repair configuration of its own.
+  A record whose rows came from a route admitted only by an experimental
+  waiver (for example an unjudged device) carries the key a certified
+  process of the same build uses, and that process opens it; replay under
+  the same experimental configuration is expected.
 
 ## 7. Division of responsibility (settled micro-decision)
 

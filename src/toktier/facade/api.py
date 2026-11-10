@@ -19,10 +19,12 @@ eligible input crosses the configured byte threshold.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import threading
 import warnings
+import weakref
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -121,6 +123,39 @@ _ACCELERATED_STATE_ENCODE_PATHS = {
 DEFAULT_GPU_MIN_BYTES = 64 * 1024
 
 _SessionRepair = GigatokenRepair | FastokensFullRepair
+
+
+class _FacadeCallback:
+    """A store callback that reaches its tokenizer without owning it.
+
+    The Python-owned entry store hands its callbacks to a native encoder,
+    and the native object is not visible to the cycle collector. A bound
+    method of the tokenizer stored there would keep the tokenizer, its
+    engines and the store itself alive for the life of the process, so
+    the callback holds only a weak reference and looks the attribute up
+    on each call. It forwards the arguments and the result unchanged.
+
+    Nothing outlives the tokenizer to call it: the native encoder belongs
+    to the entry store, and the store is reachable only through the
+    tokenizer (a live :class:`Session` holds its tokenizer strongly). If
+    the tokenizer were gone all the same, the call raises
+    :class:`ReferenceError`; the native store reports a failed callback
+    as a store failure, and a store failure is a miss, never an id.
+    """
+
+    __slots__ = ("_attribute", "_tokenizer")
+
+    def __init__(self, tokenizer: Tokenizer, attribute: str) -> None:
+        self._tokenizer = weakref.ref(tokenizer)
+        self._attribute = attribute
+
+    def __call__(self, *args: Any) -> Any:
+        tokenizer = self._tokenizer()
+        if tokenizer is None:
+            raise ReferenceError(
+                "the tokenizer this store callback served has been released"
+            )
+        return getattr(tokenizer, self._attribute)(*args)
 
 
 class _RouteEveryInput:
@@ -783,6 +818,9 @@ class Tokenizer:
         self._entry_store: EntryStore | None = None
         self._session_repair: _SessionRepair | None = None
         self._session_repair_initialised = False
+        # What ``explain()`` reported about session repair when the
+        # tokenizer was closed; the repair object itself is released then.
+        self._closed_session_repair_report: dict[str, object] | None = None
         self._native_session_encoder: Any | None = None
         self._native_session_encoder_initialised = False
         self._native_request: Any | None = None
@@ -1430,7 +1468,16 @@ class Tokenizer:
         return self._entry_store.session_revision(session_id)
 
     def close(self) -> None:
-        """Release the loaded backend. Idempotent."""
+        """Release the loaded backend. Idempotent.
+
+        The Python-owned entry store and the session-repair adapter are
+        released too. Nothing is written: every store write was already
+        persisted when it happened, so a store directory holds the same
+        files before and after. What stays readable is what stayed
+        readable before: ``explain()`` reports the store counters and the
+        session-repair facts as they stood at close, and a session's
+        ``revision`` still answers from the store's entries.
+        """
         if self._closed:
             return
         self._closed = True
@@ -1443,6 +1490,11 @@ class Tokenizer:
             self._fast_backend.close()
         if self._gpu_backend is not None:
             self._gpu_backend.close()
+        if self._entry_store is not None:
+            self._entry_store.close()
+        if self._session_repair is not None:
+            self._closed_session_repair_report = self._session_repair_report()
+            self._session_repair = None
 
     def _require_open(self) -> None:
         if self._closed:
@@ -1673,13 +1725,21 @@ class Tokenizer:
                 repair, native_fast_cpu=native_repair
             )
             self._refuse_native_owned_store(python_key)
+            # The callbacks reach this tokenizer weakly (see
+            # :class:`_FacadeCallback`): the store hands them to a native
+            # encoder, and a strong reference from there would keep the
+            # tokenizer alive after its owner dropped it.
             self._entry_store = EntryStore(
                 fingerprint=python_key,
-                encode=self._state_encode,
+                encode=_FacadeCallback(self, "_state_encode"),
                 append=(
-                    self._gigatoken_append
+                    _FacadeCallback(self, "_gigatoken_append")
                     if isinstance(repair, GigatokenRepair)
-                    else repair
+                    else (
+                        _FacadeCallback(self, "_session_repair")
+                        if repair is not None
+                        else None
+                    )
                 ),
                 append_stats=(
                     native_encoder.stats
@@ -1979,6 +2039,8 @@ class Tokenizer:
         return self._session_repair
 
     def _session_repair_report(self) -> dict[str, object]:
+        if self._closed_session_repair_report is not None:
+            return copy.deepcopy(self._closed_session_repair_report)
         # A guard recorded by the Python-owned store outranks a native
         # session engine that exists but does not serve this tokenizer's
         # stored state (its request runtime did not start in this process).

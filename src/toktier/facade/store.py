@@ -31,6 +31,7 @@ layers: rebuildable, evictable, never authoritative.
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import os
 import sys
@@ -272,12 +273,15 @@ class EntryStore:
         self._store: _native.SessionStore | None = None
         self._encoder: Any = None
         self._key_id = 0
+        self._closed_stats: dict[str, object] | None = None
         if directory is not None:
             self._open_directory(directory)
 
     # -- native store --------------------------------------------------
 
     def _backend(self) -> tuple[_native.SessionStore, Any]:
+        if self._closed_stats is not None:
+            raise RuntimeError("the entry store is closed")
         if self._store is None or self._encoder is None:
             from .. import _native as native
 
@@ -657,6 +661,8 @@ class EntryStore:
     def encode_session(self, session_id: str, text: str) -> list[int] | None:
         """Serve one named-session encode; ``None`` asks the caller to
         run the plain routed path instead (never a wrong answer)."""
+        if self._closed_stats is not None:
+            return None
         name = _entry_name("session", session_id)
         entry = self._entries.get(name)
         if entry is not None:
@@ -685,6 +691,8 @@ class EntryStore:
         """Serve one content-lookup encode; ``None`` asks the caller to
         run the plain routed path (below threshold, miss that is not
         worth storing, or a store-side failure)."""
+        if self._closed_stats is not None:
+            return None
         data = text.encode("utf-8")
         served = self._serve_from_index(text, data)
         if served is not None:
@@ -797,6 +805,32 @@ class EntryStore:
             self._stats.degraded += 1
             return None
 
+    # -- lifetime -------------------------------------------------------
+
+    def close(self) -> None:
+        """Release the native store and the encoder that holds the callbacks.
+
+        Idempotent. Nothing is written: every write was persisted when it happened.
+        Afterwards :meth:`stats` answers with the counters as they stood
+        at close, :meth:`session_revision` answers from the entries as
+        before (their texts are released, their revisions kept), and the
+        encode paths decline with ``None``, which asks the caller to run
+        its own plain path.
+        """
+        if self._closed_stats is not None:
+            return
+        self._closed_stats = self.stats()
+        self._store = None
+        self._encoder = None
+        self._native = None
+        self._native_encoder = None
+        self._seal_reference = None
+        self._append_stats = None
+        self._index = CheckpointIndex()
+        for entry in self._entries.values():
+            entry.text = None
+            entry.index_entry = None
+
     # -- introspection -------------------------------------------------
 
     def stats(self) -> dict[str, object]:
@@ -807,6 +841,8 @@ class EntryStore:
         zero hits alongside growing appends is the expected shape of an
         append-mostly workload.
         """
+        if self._closed_stats is not None:
+            return copy.deepcopy(self._closed_stats)
         counters: dict[str, object] = dict(self._stats.as_mapping())
         counters["entries"] = len(self._entries)
         counters["resident_bytes"] = self._resident_bytes()

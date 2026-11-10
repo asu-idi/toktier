@@ -194,6 +194,15 @@ impl NativeEntryStore {
     ) -> Result<Self, EntryStoreOpenError> {
         let mut store = SessionStore::new(StoreConfig {
             max_sessions: NATIVE_MAX_SESSIONS,
+            // This owner finds stored prefixes through its content index and
+            // never calls `SessionStore::lookup`, `export_node_items`,
+            // `import_node_item` or the session sidecar pair, so a block
+            // chain would only be written. A zero cap takes the existing
+            // "skip the node and detach" branch at the first completed
+            // block: no node is created, and ids, seals, records and
+            // counters are as before. A change that makes this owner call
+            // one of those readers needs to revisit this setting.
+            node_tail_cap_bytes: 0,
             ..StoreConfig::default()
         })?;
         if directory.is_some() {

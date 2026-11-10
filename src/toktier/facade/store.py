@@ -36,9 +36,9 @@ import json
 import os
 import sys
 from array import array
-from collections.abc import Callable, Sequence
-from contextlib import suppress
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager, suppress
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -273,6 +273,13 @@ class EntryStore:
         self._store: _native.SessionStore | None = None
         self._encoder: Any = None
         self._key_id = 0
+        # Lifetime (see :meth:`close`). A call in flight holds one token in
+        # ``_calls``; ``close()`` asks for the release and the release
+        # runs once no call is in flight. Set membership and the flag are
+        # single operations under the interpreter lock, so neither side
+        # waits on the other.
+        self._calls: set[object] = set()
+        self._close_requested = False
         self._closed_stats: dict[str, object] | None = None
         if directory is not None:
             self._open_directory(directory)
@@ -281,7 +288,8 @@ class EntryStore:
 
     def _backend(self) -> tuple[_native.SessionStore, Any]:
         if self._closed_stats is not None:
-            raise RuntimeError("the entry store is closed")
+            # The tokenizer's own message for work after ``close()``.
+            raise RuntimeError("backend is closed")
         if self._store is None or self._encoder is None:
             from .. import _native as native
 
@@ -670,8 +678,10 @@ class EntryStore:
     def encode_session(self, session_id: str, text: str) -> list[int] | None:
         """Serve one named-session encode; ``None`` asks the caller to
         run the plain routed path instead (never a wrong answer)."""
-        if self._closed_stats is not None:
-            return None
+        with self._in_flight() as open_:
+            return self._encode_session(session_id, text) if open_ else None
+
+    def _encode_session(self, session_id: str, text: str) -> list[int] | None:
         name = _entry_name("session", session_id)
         entry = self._entries.get(name)
         if entry is not None:
@@ -700,8 +710,10 @@ class EntryStore:
         """Serve one content-lookup encode; ``None`` asks the caller to
         run the plain routed path (below threshold, miss that is not
         worth storing, or a store-side failure)."""
-        if self._closed_stats is not None:
-            return None
+        with self._in_flight() as open_:
+            return self._encode_auto(text) if open_ else None
+
+    def _encode_auto(self, text: str) -> list[int] | None:
         data = text.encode("utf-8")
         served = self._serve_from_index(text, data)
         if served is not None:
@@ -816,19 +828,59 @@ class EntryStore:
 
     # -- lifetime -------------------------------------------------------
 
-    def close(self) -> None:
+    @contextmanager
+    def _in_flight(self) -> Iterator[bool]:
+        """Mark one public store call; yields whether the store is open.
+
+        The token is added before the close request is read, and
+        :meth:`close` sets the request before it reads the tokens, so a
+        call either sees the request and declines, or is seen by
+        ``close()`` and the release waits for its end. The last call to
+        end after a request completes the release.
+        """
+        token = object()
+        self._calls.add(token)
+        try:
+            yield not self._close_requested
+        finally:
+            self._calls.discard(token)
+            if self._close_requested and not self._calls:
+                self._release()
+
+    def close(self) -> bool:
         """Release the native store and the encoder that holds the callbacks.
 
-        Idempotent. Nothing is written: every write was persisted when it happened.
+        Idempotent, and it never raises because the store is busy. When no
+        store call is in flight the release happens at once and ``True``
+        is returned. When a call is in flight (on another thread, or the
+        caller is closing from inside one of the store's callbacks), the
+        call runs to its end on the store it started with, and the release
+        happens when the last such call ends; until then ``False`` is
+        returned and nothing has been released. New calls decline from the
+        moment of the request.
+
+        Nothing is written: every write was persisted when it happened.
         Afterwards :meth:`stats` answers with the counters as they stood
-        at close, :meth:`session_revision` answers from the entries as
-        before (their texts are released, their revisions kept), and the
-        encode paths decline with ``None``, which asks the caller to run
-        its own plain path.
+        at the release, :meth:`session_revision` answers from the entries
+        as before (their texts are released, their revisions kept), and
+        the encode paths decline with ``None``, which asks the caller to
+        run its own plain path.
         """
+        self._close_requested = True
+        if not self._calls:
+            self._release()
+        return self._closed_stats is not None
+
+    def _release(self) -> None:
         if self._closed_stats is not None:
             return
-        self._closed_stats = self.stats()
+        try:
+            snapshot = self.stats()
+        except _MISS_ERRORS:
+            # The native store is still held; a later ``close()`` or the
+            # end of the call that holds it completes the release.
+            return
+        self._closed_stats = snapshot
         self._store = None
         self._encoder = None
         self._native = None
@@ -836,9 +888,12 @@ class EntryStore:
         self._seal_reference = None
         self._append_stats = None
         self._index = CheckpointIndex()
-        for entry in self._entries.values():
-            entry.text = None
-            entry.index_entry = None
+        # Text-free copies: an entry object is never changed in place
+        # here, so nothing that still holds one meets a missing text.
+        self._entries = {
+            name: replace(entry, text=None, index_entry=None)
+            for name, entry in self._entries.items()
+        }
 
     # -- introspection -------------------------------------------------
 

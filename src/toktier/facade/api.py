@@ -1086,10 +1086,19 @@ class Tokenizer:
                 self._observe_native_gpu_open(native)
             return native_ids if type(native_ids) is list else list(native_ids)
         ids: list[int] | None = None
-        if session is not None:
-            ids = self._store().encode_session(session, text)
-        elif lookup != "off" and not add_special_tokens:
-            ids = self._store().encode_auto(text)
+        if session is not None or (lookup != "off" and not add_special_tokens):
+            store = self._store()
+            try:
+                ids = (
+                    store.encode_session(session, text)
+                    if session is not None
+                    else store.encode_auto(text)
+                )
+            finally:
+                if self._closed:
+                    # ``close()`` ran while this call was in the store; the
+                    # last such call to end completes the release.
+                    self._release_stored_state()
         if ids is None:
             ids = self._executor.encode(text, add_special_tokens=add_special_tokens)
         return ids if type(ids) is list else list(ids)
@@ -1477,21 +1486,36 @@ class Tokenizer:
         readable before: ``explain()`` reports the store counters and the
         session-repair facts as they stood at close, and a session's
         ``revision`` still answers from the store's entries.
+
+        ``close()`` does not wait for, and does not fail because of, a call
+        in flight on another thread (or a callback that closes from inside
+        one): that call ends with its answer or with ``RuntimeError``, and
+        the store and the adapter are released when it ends.
         """
-        if self._closed:
+        if not self._closed:
+            self._closed = True
+            self._native_request = None
+            self._native_gpu_prepared = None
+            self._native_session_encoder = None
+            self._oracle_handle = None
+            self._backend.close()
+            if self._fast_backend is not None:
+                self._fast_backend.close()
+            if self._gpu_backend is not None:
+                self._gpu_backend.close()
+        self._release_stored_state()
+
+    def _release_stored_state(self) -> None:
+        """Release the entry store, then the session-repair adapter.
+
+        Idempotent. The adapter serves the store's append callback, so it
+        is dropped only once the store has released: while a store call
+        is still in flight neither is released, and the end of that call
+        (or a later ``close()``) runs this again.
+        """
+        store = self._entry_store
+        if store is not None and not store.close():
             return
-        self._closed = True
-        self._native_request = None
-        self._native_gpu_prepared = None
-        self._native_session_encoder = None
-        self._oracle_handle = None
-        self._backend.close()
-        if self._fast_backend is not None:
-            self._fast_backend.close()
-        if self._gpu_backend is not None:
-            self._gpu_backend.close()
-        if self._entry_store is not None:
-            self._entry_store.close()
         if self._session_repair is not None:
             self._closed_session_repair_report = self._session_repair_report()
             self._session_repair = None
@@ -1702,6 +1726,8 @@ class Tokenizer:
 
     def _store(self) -> EntryStore:
         if self._entry_store is None:
+            # A call that raced with ``close()`` does not build a new store.
+            self._require_open()
             # The pure-native session encoder performs full/seed encodes on
             # the corrected CPU engine below PyO3, without consulting the
             # routed executor. That is exactly right for CPU-only plans, but

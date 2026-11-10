@@ -112,3 +112,66 @@ def test_no_block_nodes_leaves_ids_and_counters_as_the_shipped_cap(
     assert counters["session_appends"] > 0
     assert counters["auto_hits"] > 0
     assert counters["auto_appends"] > 0
+
+
+def _directory_run(
+    rig: Rig, options: dict[str, object], live: Any, label: str
+) -> tuple[dict[str, bytes], dict[str, bytes], list[bool]]:
+    """Write a directory, close, reopen, resume and extend; files at both points."""
+    from .test_facade_lifetime import _directory_files
+
+    directory = rig.store_path(f"store-{label}")
+    writer = rig.tokenizer(store=directory, **options)
+    equal = _traffic(writer, live)
+    writer.close()
+    written = _directory_files(directory)
+
+    reader = rig.tokenizer(store=directory, **options)
+    for index in range(3):
+        text = f"[{index}] " + _PIECE
+        for step in range(12):
+            text += f" turn {step} of {index}. " + _PIECE[: 300 + 97 * step]
+        with reader.session(session_id=f"chat{index}", text=text) as session:
+            equal.append(list(session.ids) == _reference(live, text))
+            for step in range(3):
+                delta = f" resumed {step} of {index}. " + _PIECE[: 200 + 131 * step]
+                text += delta
+                update = session.append(delta)
+                equal.append(list(update.all_ids) == _reference(live, text))
+    for index in range(3):
+        text = f"<{index}> " + _PIECE * 6
+        for candidate in (text, text + " and an extension 42.", text + " again 7."):
+            ids = list(reader.encode(candidate).ids)
+            equal.append(ids == _reference(live, candidate))
+    counters = reader.explain()["store"]
+    assert isinstance(counters, dict)
+    assert counters["session_hits"] + counters["session_appends"] > 0
+    reader.close()
+    return written, _directory_files(directory), equal
+
+
+def test_store_directory_bytes_are_the_same_under_both_caps(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The setting writes nothing to disk: every file is the same, after a
+    reopen too."""
+    live, options = _install(rig, monkeypatch, "gpu-jit")
+    product = _directory_run(rig, options, live, "product")
+
+    original = _native.SessionStore
+
+    def shipped_cap(*args: Any, **keywords: Any) -> Any:
+        keywords["node_tail_cap_bytes"] = _SHIPPED_NODE_TAIL_CAP
+        return original(*args, **keywords)
+
+    monkeypatch.setattr(_native, "SessionStore", shipped_cap)
+    control = _directory_run(rig, options, live, "control")
+
+    written, reopened, equal = product
+    assert all(equal), equal
+    assert equal == control[2]
+    assert any(name.endswith(".rec") for name in written), sorted(written)
+    assert sorted(written) == sorted(control[0])
+    assert written == control[0]
+    assert sorted(reopened) == sorted(control[1])
+    assert reopened == control[1]

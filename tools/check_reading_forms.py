@@ -49,8 +49,10 @@ checks a column has to pass beyond its schema:
     an optional key that reads 0 when absent): the device declined a text
     segment itself (the execution record shows ``R_EXEC_FAULT`` from the
     ``gpu`` backend, scope ``segment``) and the reference, the only entry
-    of the chain after the device, encoded the whole document. Those
-    documents are listed with their bytes, chain and event in
+    of the chain after the device, encoded the declined text: the whole
+    document when no segment reached the device (``whole_documents``),
+    otherwise only the declined segments. Those documents are listed with
+    their reference bytes, chain and event in
     ``device_declined_documents`` and share the guard documents' bounds
     (:data:`GUARD_DOCUMENT_SHARE` of the documents,
     :data:`GUARD_BYTE_SHARE` of the bytes). The class stands only where
@@ -480,6 +482,14 @@ def literal_segments_problems(
             problems.append(
                 f"{where}: {declined_count} document(s) counted as "
                 "hf_device_declined without device_declined_documents"
+            )
+        if declined is not None and int(declined["whole_documents"]) > int(
+            declined["count"]
+        ):
+            problems.append(
+                f"{where}: {declined['whole_documents']} device-declined "
+                f"document(s) answered whole, more than the {declined['count']} "
+                "listed"
             )
         if declined_count and arm != "gpu":
             # Only a device declines a segment; a reading whose arm is not

@@ -934,6 +934,7 @@ def _device_declined(
     entry["segments"]["bytes"]["hf"] += documents * size
     entry["device_declined_documents"] = {
         "count": documents,
+        "whole_documents": documents,
         "bytes_hf": documents * size,
         "chain": chain if chain is not None else ["gpu", "hf"],
         "event": {"code": "R_EXEC_FAULT", "backend": "gpu", "scope": "segment"},
@@ -1046,6 +1047,7 @@ def test_device_declined_documents_appear_only_where_the_device_hands_to_the_ref
     entry["segments"]["bytes"]["hf"] += 300
     entry["device_declined_documents"] = {
         "count": 3,
+        "whole_documents": 3,
         "bytes_hf": 300,
         "chain": ["gpu", "hf"],
         "event": {"code": "R_EXEC_FAULT", "backend": "gpu", "scope": "segment"},
@@ -1061,12 +1063,30 @@ def test_device_declined_documents_appear_only_where_the_device_hands_to_the_ref
     entry["paths"]["hf_device_declined"] = 3
     entry["device_declined_documents"] = {
         "count": 3,
+        "whole_documents": 3,
         "bytes_hf": 300,
         "chain": ["gpu", "hf"],
         "event": {"code": "R_EXEC_FAULT", "backend": "gpu", "scope": "segment"},
     }
     problems = forms.literal_segments_problems("f", column, arm="gpu")
     assert any("unserved face shows segmented documents" in p for p in problems)
+
+
+def test_device_declined_documents_may_keep_their_other_segments_on_the_gpu() -> None:
+    """A document of several text segments of which the device declined
+    some: the others ran on the GPU, the reference encoded the declined
+    ones. It counts as device-declined (not gpu_segmented), with only the
+    declined segments' bytes on the reference."""
+    column = _segments_column("gpu")
+    entry = _device_declined(column, 3, 100)
+    # Two of the three ran their other segments on the GPU.
+    entry["device_declined_documents"]["whole_documents"] = 1
+    assert forms.literal_segments_problems("f", column, arm="gpu") == []
+    entry["device_declined_documents"]["whole_documents"] = 4
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("answered whole, more than the 3 listed" in p for p in problems)
+    del entry["device_declined_documents"]["whole_documents"]
+    assert forms.literal_segments_problems("f", column, arm="gpu")
 
 
 def test_the_aggregator_checks_the_column_in_its_arm() -> None:

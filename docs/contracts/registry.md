@@ -539,15 +539,18 @@ generator binds, and `tools/generate_registry.py --check` and
   only, a device row the state-route acceptance refused because the text
   is not stable under the face's normalizer). A seventh class,
   `hf_device_declined`, is optional (absent reads 0): a document whose
-  text segment the device itself declined, and that the reference then
-  encoded whole (runtime path `hf_full` on the ID route,
-  `hf_no_certified_span_bridge` on the state route). It stands only in the
+  text segment the device itself declined, and whose declined text the
+  reference then encoded: the whole document when no segment reached the
+  device (runtime path `hf_full` on the ID route,
+  `hf_no_certified_span_bridge` on the state route; counted in
+  `whole_documents`), otherwise only the declined segments while the
+  other segments ran on the device. It stands only in the
   GPU arm, on a served face, when both of these hold: the chain is
   exactly `gpu` then `hf` (no CPU engine between the device and the
   reference), and the execution record shows the device's own decline
   (fallback `R_EXEC_FAULT` from the `gpu` backend, scope `segment`). Such
-  documents are listed in `device_declined_documents` with their bytes,
-  the chain and the event; their bytes count toward the reference's, and
+  documents are listed in `device_declined_documents` with their
+  reference bytes, the chain and the event; their bytes count toward the reference's, and
   they count toward the guard documents' bounds. Every document of the
   column is compared with the reference whatever path answered it.
   Floors beside the ratios: at least 1,000

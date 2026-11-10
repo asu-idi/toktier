@@ -154,7 +154,7 @@ that may accompany them is not a machine interface.
 | `R_INPUT_BELOW_GPU_THRESHOLD` | Input is smaller than the configured GPU crossover, so execution starts at the next eligible backend in the immutable fallback chain. This is a normal latency policy, not a fault. |
 | `R_INPUT_GUARD_ROUTED` | A per-input guard premise on an accelerated path could not be proved -- a guarded fast-CPU input, or a state-seed closure/span premise -- so this input was routed to the reference backend. Every event detail identifies the failing `stage`: `engine_guard` for the fast-CPU engine guard, `span_bridge` for the native accelerated state-seed bridge, or `state_encode` for a facade-owned state-encoding guard. |
 | `R_SESSION_NO_SAFE_CUT` | A session append found no certified safe cut point; the accumulated text was fully re-encoded. Correctness preserved by construction. |
-| `R_EXEC_FAULT` | An accelerated engine failed to open or raised an internal error while executing; execution continued at the next eligible backend in the fallback chain, and the reference runs when the chain reaches it. Returned certified IDs remain reference-equal. |
+| `R_EXEC_FAULT` | An accelerated engine failed to open or raised an internal error while executing; execution continued at the next eligible backend in the fallback chain, and the reference runs when the chain reaches it. Returned certified IDs remain reference-equal. A text segment the GPU kernel itself declines to encode is counted here as well, with scope `segment` (literal segmentation, below). |
 | `R_INPUT_POSTPROCESS_ROUTED` | A core-stream-only accelerated backend was bypassed before execution because the request asked for postprocessing that can change the ID stream. The reference backend produced the postprocessed result. This is a capability route, not an execution fault. |
 | `R_INVALID_PRIOR_STATE` | A stored session tail did not describe itself consistently, so the accumulated text was re-encoded from the reference. Both repair adapters name this outcome in their path (`hf_full_invalid_prior_state`). Added in 0.2.7: the Rust face reported it as an unnamed string before, which was in neither vocabulary. Correctness preserved by construction. |
 | `R_CHUNK_NO_CUT` | Chunk-parallel encode (`toktier.chunked.encode`) found no certified stable boundary in the document, so the document was encoded serially on the plain route. Added in 0.3.0. Reported under `explain()["chunked"]["fallback_counts"]` rather than the routing ledger's top-level `fallback_counts`: the serial route is the same certified backend the chunks would have used, so nothing fell back between backends. Correctness preserved by construction. |
@@ -192,7 +192,12 @@ disagrees with the reference library's extraction. The execution record names th
 | `hf_segments_below_crossover` | a literal-bearing input of a face inside literal segmentation on a route whose only backend after the GPU is the reference, every text segment below the GPU crossover; the reference encodes the whole input, the record carries the segment facts, and the code is `R_INPUT_ADDED_TOKEN` |
 
 A segmented record carries a `segments` block (`docs/contracts/facade.md`
-Section 5). A text segment that trips a per-input guard -- on a face that
+Section 5). A text segment that the GPU kernel itself declines to encode
+is counted under `R_EXEC_FAULT` with scope `segment` and is answered by the
+next engine of the chain, the other segments of the document staying where
+they ran; the ids are unchanged, since every engine of a certified chain
+returns the reference's ids for the segment. A decline is a decision of the
+device's splitter about one segment, not a failure of the engine. A text segment that trips a per-input guard -- on a face that
 normalizes to NFC, a segment not already in NFC -- sends the document to
 the reference engine with `R_INPUT_GUARD_ROUTED`, as for a literal-free
 document.

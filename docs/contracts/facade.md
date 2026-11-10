@@ -307,7 +307,9 @@ The top-level `fallback_counts` mapping preserves the run-time reason-code
 distinctions in `routing.md` Section 5.2. In particular, a core-stream-only
 backend bypassed for requested postprocessing increments
 `R_INPUT_POSTPROCESS_ROUTED`; `R_EXEC_FAULT` is reserved for an engine-open
-or execution failure. Guard-routing diagnostic events always carry a `stage`
+or execution failure, and for a text segment the GPU kernel itself declines
+(scope `segment`), which the next engine of the chain answers with the same
+ids (`routing.md` Section 5.2). Guard-routing diagnostic events always carry a `stage`
 key so their fast-CPU, native span-bridge, and facade state-encoding sources can
 be distinguished without parsing messages.
 

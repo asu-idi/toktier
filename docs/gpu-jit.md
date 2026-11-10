@@ -144,6 +144,13 @@ cannot serve: the refusal is recorded as a fallback -- `R_EXEC_FAULT` in
 `gpu_backend.load_error` -- and the request is answered on the exact CPU
 lane. The ids are the ones the request would have had either way.
 
+The kernel can also decline a single text segment of a literal-bearing
+input on its own: its windowed splitter asks for an exact answer on the
+host for that segment. The routing ledger counts this under `R_EXEC_FAULT`
+with scope `segment`, the next engine of the chain encodes that segment,
+the device keeps the others, and the ids are unchanged
+([`contracts/routing.md`](contracts/routing.md) Section 5.2).
+
 The certificate goes on describing the delivery that is loaded, because
 that is the delivery that ran; the refused request contributed no
 accelerated execution for it to describe. Whether such a refusal should

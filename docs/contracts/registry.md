@@ -108,8 +108,9 @@ is admitted under every policy but `REFERENCE` and labelled
 `supported_untested` (Section 3.0); the reference route is only for a build
 whose sources do not verify, which falls back to HF under every policy but
 `EXPERIMENTAL`, and an explicit CUDA request on it reports
-`UNCERTIFIED_RUNTIME`. The GPU route keeps the judged-recipe requirement
-(see `docs/rust-api.md`).
+`UNCERTIFIED_RUNTIME`. Since 0.3.2 the Rust GPU route follows the same
+split under `SUPPORTED` and `REQUIRE_ACCELERATED`; `CERTIFIED` keeps it to
+the judged recipe (see `docs/rust-api.md`).
 
 The evidence that enters a build into `runtime_builds` is the Rust API
 matrix (`tools/update_rust_api_registry.py`): the public facade, built with

@@ -66,10 +66,12 @@ through the recorded digest and size before an atomic cache publication. An
 explicit verified directory remains available through `artifact_directory()`
 or `load_local()`. See [Rust lifecycle and distribution](rust-lifecycle.md).
 
-Without `artifact_cache()`, the cache root comes from `TOKTIER_ARTIFACT_CACHE`,
-then `$TOKTIER_HOME/cache`, `$XDG_CACHE_HOME/toktier`, or
-`$HOME/.cache/toktier` -- the same precedence the Python product uses, so one
-environment places both layers. Persistent sessions with no `home()` resolve
+Without `artifact_cache()`, the artifact directory is
+`$TOKTIER_ARTIFACT_CACHE`, else `artifacts` under `$TOKTIER_HOME/cache`,
+`$XDG_CACHE_HOME/toktier`, or `$HOME/.cache/toktier` -- the same precedence
+the Python product uses, so one environment places both layers. An explicit
+`artifact_cache()` or `TOKTIER_ARTIFACT_CACHE` names that artifact directory
+itself (the one holding `<family>-<revision-prefix>/`), not the cache root. Persistent sessions with no `home()` resolve
 `$TOKTIER_HOME/state`, `$XDG_STATE_HOME/toktier`, or
 `$HOME/.local/state/toktier`, and are refused outright when none of the three
 is set: session state is not rebuildable, so it is not placed by guesswork.
@@ -382,8 +384,10 @@ compiles for the host with unwinding, and it still reads `unwind` under a
 which is the honest form of not knowing them, and `rustflags`
 (`CARGO_ENCODED_RUSTFLAGS`) is claimed instead, because it can be observed and
 is where a `-C` codegen switch appears when a caller sets one. A build that
-sets RUSTFLAGS is therefore not the judged build; `Policy::Experimental` is
-the way to take the accelerated route knowingly anyway.
+sets RUSTFLAGS is therefore not the judged build: the default
+`Policy::Supported` admits its fast CPU and GPU routes labelled
+`supported_untested`, and `Policy::Certified` keeps the GPU route to the
+judged recipe.
 
 ### What a fresh resolution answers, and how to align it
 
@@ -429,7 +433,10 @@ What still earns no certificate at all:
   GPU route under `Policy::Supported` and `Policy::RequireAccelerated` with
   the same label; what it does not earn is the `certified` label;
 - a build whose R0 or R2 packages resolve from somewhere other than the
-  judged package -- a `[patch]`, a fork, a mirror, a vendored copy. An
+  judged package -- a `[patch]`, a fork, a mirror, or a vendored copy whose
+  package checksum differs from the judged package's (a vendored copy that
+  keeps the registry source and checksum, as the published source archive
+  does, is the judged package). An
   implementation library from another source is reported in the advisory
   rather than withholding the route;
 - a build whose R2 tables read another Unicode version, or whose reference
@@ -471,8 +478,8 @@ the first one:
   package it names, ordered so the commands can be run one after another in
   the workspace that owns the governing lockfile. Rebuild afterwards and the
   same field reads `verified`. Packages that differ by origin rather than by
-  version -- a `[patch]`, a vendored copy, a mirror -- are named with that
-  reason instead, since no version change moves them. Since 0.2.4 the list
+  version -- a `[patch]`, a vendored copy with another checksum, a mirror --
+  are named with that reason instead, since no version change moves them. Since 0.2.4 the list
   holds only packages that really are compiled, so it is both shorter and
   worth acting on: every command on it changes the bytes that run.
 - **Build inside a workspace that already holds the judged graph.** The
@@ -1106,10 +1113,11 @@ does not link a system CUDA runtime.
 
 Run the examples with `--release`. A development (dev-profile) build
 compiles the judged sources with a build recipe no campaign judged
-(`recipe_judged: false`), so it is not certified: a debug run of the CPU
-example still routes `[FastCpu, HuggingFace]` under the default policy,
-labelled `supported_untested`, and the GPU examples, whose route keeps
-the judged-recipe requirement, refuse with `UncertifiedRuntime`.
+(`recipe_judged: false`), so it is not certified: under the default policy
+a debug run of the CPU example routes `[FastCpu, HuggingFace]` labelled
+`supported_untested`, and the prebuilt GPU example runs its GPU route
+labelled `supported_untested` too; under `Policy::Certified` the GPU route
+is refused with `GpuBuildRecipeUnjudged` beside `GpuUncertified`.
 
 - `cargo run --release -p toktier --example cpu`
 - `cargo run --release -p toktier --example batch`
@@ -1121,6 +1129,19 @@ the judged-recipe requirement, refuse with `UncertifiedRuntime`.
 - `cargo run --release -p toktier --example correctness_campaign`
 - `cargo run --release -p toktier --example rust_api_bench`
 - `cargo run --release -p toktier --example chunked`
+
+`native_jit` has two prerequisites of its own. It reads
+`TOKTIER_ARTIFACT_CACHE`, which must name the artifact directory holding
+`qwen3_8b` (for example `$TOKTIER_HOME/cache/artifacts` after
+`toktier-rust artifacts fetch qwen3_8b`), and it stops with an `Io` error
+saying so when the variable is unset. It also needs an NVCC release the
+registry has judged for the device class; in this release that is NVCC
+13.2 on `sm_120`. The example asks for `Policy::Experimental`, which admits
+only a judged (NVCC, device) pair: on any other pair it compiles the
+kernel and then stops with the typed `UncertifiedJit` refusal, whose
+message names the architecture. The ids are never affected. The same build
+under the default `Policy::Supported` runs such a pair's JIT route
+labelled `supported_untested`.
 
 The `toktier-rust` binary exposes `doctor`, artifact lifecycle operations, and
 direct JIT compilation without importing Python. Run `toktier-rust` without

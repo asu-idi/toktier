@@ -22,18 +22,21 @@ ROOT = Path(__file__).resolve().parents[1]
 GPU_FAMILIES = 21
 
 
-def _columns(row: dict[str, Any], require: tuple[str, ...]) -> dict[str, Any]:
+def _columns(
+    row: dict[str, Any], require: tuple[str, ...], *, arm: str | None = None
+) -> dict[str, Any]:
     """The 0.3.2 columns of one family row, checked, to carry into the output.
 
     A column the family row carries passes its checks
-    (``tools/check_reading_forms.py``) or the aggregation stops; a column
-    named in ``require`` has to be present.
+    (``tools/check_reading_forms.py``, with the rules of ``arm`` when it is
+    given) or the aggregation stops; a column named in ``require`` has to be
+    present.
     """
     family = str(row.get("family"))
     for name in require:
         if name not in row:
             raise GenerationError(f"{family}: the family row carries no {name} column")
-    problems = column_problems(row)
+    problems = column_problems(row, arm=arm)
     if problems:
         raise GenerationError(
             "native-front-end column did not pass:\n  " + "\n  ".join(problems)
@@ -89,7 +92,7 @@ def aggregate_cpu(
         )
     for row in rows:
         if str(row.get("family")) in direct:
-            _columns(row, ("special_tokens", "literal_segments"))
+            _columns(row, ("special_tokens", "literal_segments"), arm="cpu")
     fact_rows = [row.get("fast_cpu_build_facts") for row in rows]
     if not all(
         isinstance(value, dict) and value == fact_rows[0] for value in fact_rows
@@ -121,7 +124,7 @@ def aggregate_cpu(
                 "mismatches": 0,
                 "full_encode_equal_hf": True,
                 "repair_equal_hf": True,
-                **_columns(row, require),
+                **_columns(row, require, arm="cpu"),
             }
         )
     return {
@@ -216,7 +219,7 @@ def aggregate_gpu(
             "all_ids_equal_hf": True,
             "one_python_to_rust_call_per_batch": True,
             "gil_released": True,
-            **_columns(row, require),
+            **_columns(row, require, arm="gpu"),
         }
         for row in rows
     ]

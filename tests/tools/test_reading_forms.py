@@ -905,6 +905,216 @@ def test_the_span_guard_class_is_a_required_key() -> None:
     assert forms.literal_segments_problems("f", column, arm="gpu")
 
 
+# -- device-declined documents (the reference answers the whole document) ----
+
+
+def _device_declined(
+    column: dict[str, Any],
+    documents: int,
+    size: int,
+    *,
+    entry_index: int = 0,
+    chain: list[str] | None = None,
+) -> dict[str, Any]:
+    """Move ``documents`` GPU-segmented documents of ``size`` bytes each of
+    one entry point to the device-declined class: the device declined a
+    text segment (R_EXEC_FAULT, scope segment) and the reference, next in
+    the chain, encoded the whole document. The entry's engine-guard
+    documents are moved back to the GPU first, so the shared bound has
+    room."""
+    entry = column["entry_points"][entry_index]
+    entry["paths"]["gpu_segmented"] += entry["paths"]["hf_engine_guard"]
+    entry["segments"]["bytes"]["hf"] -= entry["guard_documents"]["bytes_hf"]
+    entry["segments"]["bytes"]["gpu"] += entry["guard_documents"]["bytes_hf"]
+    entry["paths"]["hf_engine_guard"] = 0
+    entry["guard_documents"] = {"count": 0, "bytes_hf": 0, "bound": 10}
+    entry["paths"]["gpu_segmented"] -= documents
+    entry["paths"]["hf_device_declined"] = documents
+    entry["segments"]["bytes"]["gpu"] -= documents * size
+    entry["segments"]["bytes"]["hf"] += documents * size
+    entry["device_declined_documents"] = {
+        "count": documents,
+        "bytes_hf": documents * size,
+        "chain": chain if chain is not None else ["gpu", "hf"],
+        "event": {"code": "R_EXEC_FAULT", "backend": "gpu", "scope": "segment"},
+    }
+    total = sum(entry["segments"]["bytes"].values())
+    entry["gpu_share"] = entry["segments"]["bytes"]["gpu"] / total
+    return entry
+
+
+def _both_routes_gpu() -> dict[str, Any]:
+    column = _segments_column("gpu")
+    state = copy.deepcopy(column["entry_points"][0])
+    state["entry_point"] = "state_route"
+    column["entry_points"].append(state)
+    return column
+
+
+def test_device_declined_documents_are_their_own_path_class() -> None:
+    column = _both_routes_gpu()
+    _device_declined(column, 3, 100, entry_index=0)
+    _device_declined(column, 3, 100, entry_index=1)
+    assert forms.literal_segments_problems("f", column, arm="gpu") == []
+    # Counted under hf_added_token instead, the same documents are refused on
+    # a served face: the class keeps that guard's meaning.
+    entry = column["entry_points"][0]
+    entry["paths"]["hf_added_token"] += 3
+    entry["paths"]["hf_device_declined"] -= 3
+    del entry["device_declined_documents"]
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("went whole to the reference for a literal" in p for p in problems)
+
+
+def test_the_device_declined_class_is_optional_and_reads_zero_when_absent() -> None:
+    # Readings taken before the class existed carry no key: they read 0.
+    column = _segments_column("gpu")
+    assert "hf_device_declined" not in column["entry_points"][0]["paths"]
+    assert forms.literal_segments_problems("f", column, arm="gpu") == []
+    column["entry_points"][0]["paths"]["hf_device_declined"] = 0
+    assert forms.literal_segments_problems("f", column, arm="gpu") == []
+
+
+def test_device_declined_documents_are_listed_with_their_bytes() -> None:
+    column = _segments_column("gpu")
+    _device_declined(column, 3, 100)
+    del column["entry_points"][0]["device_declined_documents"]
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any(
+        "hf_device_declined without device_declined_documents" in p for p in problems
+    ), problems
+    column = _segments_column("gpu")
+    _device_declined(column, 3, 100)["device_declined_documents"]["count"] = 2
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("2 device-declined document(s) listed, 3" in p for p in problems)
+    column = _segments_column("gpu")
+    _device_declined(column, 3, 100)["device_declined_documents"]["bytes_hf"] = 200
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("100 byte(s) outside the listed guard" in p for p in problems)
+
+
+def test_device_declined_documents_share_the_guard_bounds() -> None:
+    # 11 documents of 1,000: above floor(1 %) = 10.
+    column = _segments_column("gpu")
+    _device_declined(column, 11, 10)
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("exceed the bound 10" in p for p in problems), problems
+    # Together with engine-guard documents: 5 + 6 > 10.
+    column = _segments_column("gpu")
+    entry = _device_declined(column, 5, 10)
+    entry["paths"]["gpu_segmented"] -= 6
+    entry["paths"]["hf_engine_guard"] = 6
+    entry["guard_documents"] = {"count": 6, "bytes_hf": 60, "bound": 10}
+    entry["segments"]["bytes"]["gpu"] -= 60
+    entry["segments"]["bytes"]["hf"] += 60
+    entry["gpu_share"] = entry["segments"]["bytes"]["gpu"] / sum(
+        entry["segments"]["bytes"].values()
+    )
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("exceed the bound 10" in p for p in problems), problems
+    # Bytes: 3 documents of 400 bytes hold 1,200 of 90,100 bytes, above 1 %.
+    column = _segments_column("gpu")
+    _device_declined(column, 3, 400)
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any(
+        "guard and device-declined documents hold 1200 of 90100 bytes" in p
+        for p in problems
+    ), problems
+
+
+def test_device_declined_documents_appear_only_where_the_device_hands_to_the_reference() -> None:
+    # A chain with a CPU engine between the device and the reference: a
+    # declined segment would go to the CPU engine, not whole to the reference.
+    column = _segments_column("gpu")
+    _device_declined(column, 3, 100, chain=["gpu", "fast_cpu", "hf"])
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("on the chain ['gpu', 'fast_cpu', 'hf']" in p for p in problems), problems
+    # The record has to show the device's own decline.
+    column = _segments_column("gpu")
+    _device_declined(column, 3, 100)["device_declined_documents"]["event"] = {
+        "code": "R_INPUT_ADDED_TOKEN",
+        "backend": "gpu",
+        "scope": "segment",
+    }
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("the device's own decline" in p for p in problems), problems
+    # Not in the CPU arm, nor where the arm is not named.
+    column = _segments_column("cpu")
+    entry = column["entry_points"][0]
+    entry["paths"]["gigatoken_segmented"] -= 3
+    entry["paths"]["hf_device_declined"] = 3
+    entry["segments"]["bytes"]["hf"] += 300
+    entry["device_declined_documents"] = {
+        "count": 3,
+        "bytes_hf": 300,
+        "chain": ["gpu", "hf"],
+        "event": {"code": "R_EXEC_FAULT", "backend": "gpu", "scope": "segment"},
+    }
+    for arm in ("cpu", None):
+        problems = forms.literal_segments_problems("f", column, arm=arm)
+        assert any("outside the GPU arm" in p for p in problems), (arm, problems)
+    # Not on an unserved face.
+    column = _segments_column("gpu", served=False)
+    entry = column["entry_points"][0]
+    entry["guard_documents"]["bytes_hf"] = 0
+    entry["paths"]["hf_added_token"] -= 3
+    entry["paths"]["hf_device_declined"] = 3
+    entry["device_declined_documents"] = {
+        "count": 3,
+        "bytes_hf": 300,
+        "chain": ["gpu", "hf"],
+        "event": {"code": "R_EXEC_FAULT", "backend": "gpu", "scope": "segment"},
+    }
+    problems = forms.literal_segments_problems("f", column, arm="gpu")
+    assert any("unserved face shows segmented documents" in p for p in problems)
+
+
+def test_the_aggregator_checks_the_column_in_its_arm() -> None:
+    column = _segments_column("gpu")
+    _device_declined(column, 3, 100)
+    row: dict[str, Any] = {"family": "f", "documents": 1000, "literal_segments": column}
+    assert aggregate._columns(row, ("literal_segments",), arm="gpu") == {
+        "literal_segments": column
+    }
+    with pytest.raises(GenerationError, match="outside the GPU arm"):
+        aggregate._columns(row, ("literal_segments",), arm="cpu")
+
+
+def test_a_gpu_reading_with_device_declined_documents_passes_the_command_line(
+    tmp_path: Path,
+) -> None:
+    column = _both_routes_gpu()
+    _device_declined(column, 3, 100, entry_index=0)
+    _device_declined(column, 3, 100, entry_index=1)
+    reading = {
+        "schema": "toktier.gpu.native_frontend_parity.v1",
+        "rows": [{"family": "f", "documents": 1000, "literal_segments": column}],
+    }
+    path = tmp_path / "reading.json"
+    path.write_text(json.dumps(reading), encoding="utf-8")
+    command = [sys.executable, str(TOOLS / "check_reading_forms.py"), "parity"]
+    result = subprocess.run(
+        [*command, str(path), "--require", "literal_segments"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    column["entry_points"][1]["device_declined_documents"]["chain"] = [
+        "gpu",
+        "fast_cpu",
+        "hf",
+    ]
+    path.write_text(json.dumps(reading), encoding="utf-8")
+    result = subprocess.run(
+        [*command, str(path), "--require", "literal_segments"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1 and "fast_cpu" in result.stderr
+
+
 # -- special_tokens: which engine produced the core streams ------------------
 
 

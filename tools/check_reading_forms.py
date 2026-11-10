@@ -45,8 +45,21 @@ checks a column has to pass beyond its schema:
     text is not stable under the normalizer (or the span bridge failed),
     and the reference re-encoded the document; it is listed with its bytes
     in ``span_guard_documents`` and counted apart from the engine guard.
+    A third is ``hf_device_declined`` (GPU arm only, either entry point;
+    an optional key that reads 0 when absent): the device declined a text
+    segment itself (the execution record shows ``R_EXEC_FAULT`` from the
+    ``gpu`` backend, scope ``segment``) and the reference, the only entry
+    of the chain after the device, encoded the whole document. Those
+    documents are listed with their bytes, chain and event in
+    ``device_declined_documents`` and share the guard documents' bounds
+    (:data:`GUARD_DOCUMENT_SHARE` of the documents,
+    :data:`GUARD_BYTE_SHARE` of the bytes). The class stands only where
+    both hold: the chain has no CPU engine between the device and the
+    reference (:data:`DEVICE_DECLINED_CHAIN`), and the record shows the
+    device's own decline (:data:`DEVICE_DECLINED_EVENT`).
     An unserved face keeps the whole-document path, so it shows no
-    segmented, below-crossover or span-guard document. The column names
+    segmented, below-crossover, span-guard or device-declined document.
+    The column names
     the added-token table it was taken on (``added_frontend_fingerprint``),
     which a registry check holds to the record's.
 
@@ -144,6 +157,15 @@ GUARD_DOCUMENT_SHARE = 0.01
 #: all bytes an entry point encoded: the document bound alone would admit
 #: a few long guard documents carrying most of the bytes.
 GUARD_BYTE_SHARE = 0.01
+
+#: The chain and the execution-record event a ``hf_device_declined``
+#: document has to show (the narrower of the two readings, both required):
+#: the reference follows the device directly, so a declined segment sends
+#: the whole document to it, and the device itself declined (a fallback
+#: fault of the gpu backend on a segment), not a crossover, a size bound or
+#: an unserved literal.
+DEVICE_DECLINED_CHAIN = ("gpu", "hf")
+DEVICE_DECLINED_EVENT = {"code": "R_EXEC_FAULT", "backend": "gpu", "scope": "segment"}
 
 #: Absolute floors beside the ratio checks: a column of a handful of
 #: documents passes every ratio. An entry point of the literal_segments
@@ -444,6 +466,43 @@ def literal_segments_problems(
         span_count = int(paths["hf_span_guard"])
         span = entry.get("span_guard_documents")
         span_bytes = 0
+        declined_count = int(paths.get("hf_device_declined", 0))
+        declined = entry.get("device_declined_documents")
+        declined_bytes = 0
+        if declined is not None:
+            declined_bytes = int(declined["bytes_hf"])
+            if int(declined["count"]) != declined_count:
+                problems.append(
+                    f"{where}: {declined['count']} device-declined document(s) "
+                    f"listed, {declined_count} counted as hf_device_declined"
+                )
+        elif declined_count:
+            problems.append(
+                f"{where}: {declined_count} document(s) counted as "
+                "hf_device_declined without device_declined_documents"
+            )
+        if declined_count and arm != "gpu":
+            # Only a device declines a segment; a reading whose arm is not
+            # named cannot show that the documents came from one.
+            problems.append(
+                f"{where}: {declined_count} device-declined document(s) outside "
+                "the GPU arm"
+            )
+        if declined_count and declined is not None:
+            chain = [str(item) for item in declined["chain"]]
+            if tuple(chain) != DEVICE_DECLINED_CHAIN:
+                problems.append(
+                    f"{where}: device-declined documents on the chain {chain}; "
+                    "the class stands only where the reference follows the "
+                    f"device directly ({list(DEVICE_DECLINED_CHAIN)}, no CPU "
+                    "engine between them)"
+                )
+            if dict(declined["event"]) != DEVICE_DECLINED_EVENT:
+                problems.append(
+                    f"{where}: device-declined documents recorded with event "
+                    f"{dict(declined['event'])}; the class needs the device's "
+                    f"own decline ({DEVICE_DECLINED_EVENT})"
+                )
         if span is not None:
             span_bytes = int(span["bytes_hf"])
             if int(span["count"]) != span_count:
@@ -489,6 +548,23 @@ def literal_segments_problems(
                 f"{where}: guard documents hold {guard['bytes_hf']} of "
                 f"{total_bytes} bytes, above {GUARD_BYTE_SHARE:.0%}"
             )
+        if declined_count:
+            # The device-declined documents count toward the guard
+            # documents' bounds: together at most the stated bound (itself at
+            # most 1 % of the documents) and 1 % of the bytes.
+            held = int(guard["count"]) + declined_count
+            if held > int(guard["bound"]):
+                problems.append(
+                    f"{where}: {guard['count']} guard and {declined_count} "
+                    f"device-declined document(s) exceed the bound {guard['bound']}"
+                )
+            held_bytes = int(guard["bytes_hf"]) + declined_bytes
+            if held_bytes > GUARD_BYTE_SHARE * total_bytes:
+                problems.append(
+                    f"{where}: guard and device-declined documents hold "
+                    f"{held_bytes} of {total_bytes} bytes, above "
+                    f"{GUARD_BYTE_SHARE:.0%}"
+                )
         if sum(int(value) for value in paths.values()) != documents:
             problems.append(f"{where}: the path classes do not add up to the documents")
         if int(guard["count"]) != int(paths["hf_engine_guard"]):
@@ -517,6 +593,7 @@ def literal_segments_problems(
                 or int(paths["gpu_segmented"])
                 or below_count
                 or span_count
+                or declined_count
             ):
                 problems.append(
                     f"{where}: an unserved face shows segmented documents; it "
@@ -528,13 +605,13 @@ def literal_segments_problems(
                 f"{where}: {paths['hf_added_token']} document(s) on a served face "
                 "went whole to the reference for a literal"
             )
-        listed_hf = int(guard["bytes_hf"]) + below_bytes + span_bytes
+        listed_hf = int(guard["bytes_hf"]) + below_bytes + span_bytes + declined_bytes
         if int(segment_bytes["hf"]) != listed_hf:
             problems.append(
                 f"{where}: the reference encoded "
                 f"{int(segment_bytes['hf']) - listed_hf} byte(s) "
                 "outside the listed guard, below-crossover and span-guard "
-                "documents"
+                "documents and the device-declined documents"
             )
         if arm == "cpu":
             if (

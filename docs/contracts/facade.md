@@ -110,6 +110,18 @@ tok.explain()                                # full plan, reasons, counters
   `repair_backend="fastokens"` requires `policy="experimental"`, re-encodes
   the full session, and carries no exact-ID guarantee unless Section 5.2
   applies. It is never an automatic fallback.
+- `tok.close()` releases the loaded engines and the tokenizer's
+  in-process stored state at once. It is idempotent and writes nothing to
+  a persistent store; afterwards a call that needs the backend raises
+  `RuntimeError("backend is closed")`, and `explain()` still answers. A
+  tokenizer dropped without `close()` is released at Python's next cycle
+  collection, so a process that loads and drops tokenizers should call
+  `close()` for prompt release. Resident memory is not promised to fall
+  back at once: the allocator may keep freed memory for reuse. Calling
+  `close()` while another thread is inside a call on the same tokenizer
+  is safe: `close()` does not raise, the call in flight ends with its
+  answer or with `RuntimeError`, and the release completes when that
+  call has ended.
 - `Encoding` is immutable and carries at least `.ids`
   (`tuple[int, ...]`). Additional diagnostic attributes may appear
   within 0.x; `.ids` is stable.

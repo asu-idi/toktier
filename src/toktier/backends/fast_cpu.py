@@ -497,8 +497,29 @@ class FastCpuBackend:
         """
         engine = self._live()
         live = self._hf_tokenizer
-        if live is None:  # pragma: no cover - guarded by _live
-            raise RuntimeError("fast CPU backend lost its live tokenizer")
+        if live is None:
+            # The engine was built for the native request runtime
+            # (:meth:`native_session_engine`), which owns its repair below
+            # PyO3 and never needed the live object. That runtime did not
+            # start in this process (for example a GPU kernel delivery
+            # already loaded through another host), so the Python store
+            # asked for the callback-lane components instead. Refuse in the
+            # typed form the store's caller turns into the reference path.
+            raise BackendExecutionFault(
+                f"fast CPU session repair for family {self._family!r} is "
+                "unavailable in this process: its engine belongs to the "
+                "native request runtime, which did not start here, so "
+                "stored-state calls are answered by the reference engine; "
+                "open the tokenizer in a process where no other GPU kernel "
+                "delivery is loaded, or with the same gpu_delivery as the "
+                "one already loaded, to keep session repair",
+                details={
+                    "backend": BACKEND_FAST_CPU,
+                    "stage": "repair_components",
+                    "family": self._family,
+                    "reason": "engine_owned_by_native_request_runtime",
+                },
+            )
         return engine, live
 
     def materialized_tokenizer_json(self) -> str:

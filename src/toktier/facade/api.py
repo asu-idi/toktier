@@ -1979,7 +1979,13 @@ class Tokenizer:
         return self._session_repair
 
     def _session_repair_report(self) -> dict[str, object]:
-        if self._native_session_encoder is not None:
+        # A guard recorded by the Python-owned store outranks a native
+        # session engine that exists but does not serve this tokenizer's
+        # stored state (its request runtime did not start in this process).
+        if (
+            self._native_session_encoder is not None
+            and self._session_repair_guard is None
+        ):
             return {
                 "status": "active",
                 "request_path": "rust_native",

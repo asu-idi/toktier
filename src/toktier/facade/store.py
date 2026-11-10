@@ -295,13 +295,14 @@ class EntryStore:
 
             self._native = native
             # This owner finds stored prefixes through its content index
-            # and never reads the native store's sealed-block chain (it
-            # calls no ``lookup`` and exports no node), so a chain would
-            # only be written and kept. A zero node tail cap takes the
-            # store's existing "skip the node and detach the chain" branch
-            # at the first completed block: no node is created, and ids,
-            # seals, records and the store counters are as before. A
-            # change that starts reading the chain revisits this setting.
+            # and never calls ``SessionStore.lookup``, ``export_node_items``,
+            # ``import_node_item`` or the session sidecar pair, so a block
+            # chain would only be written. A zero cap takes the existing
+            # "skip the node and detach" branch at the first completed
+            # block: no node is created; ids, seals, records and counters
+            # are as before, except the store's ``chain_detaches`` and
+            # ``nodes_skipped_tail_cap``. A change that makes this owner call
+            # one of those functions needs to revisit this setting.
             store = native.SessionStore(
                 max_sessions=_NATIVE_MAX_SESSIONS,
                 node_tail_cap_bytes=0,

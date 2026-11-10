@@ -10,12 +10,17 @@ rebuilt over the raw text were shifted between the two characters, the session
 store sealed at a shifted cut, and the next append returned ids that differ
 from the reference (one token repeated at the cut: "... agreed to to the ...").
 
-These tests seed a session (and the default content store) on a
-``[gpu, fast_cpu, hf]`` chain and compare the ids after every step with
-``tokenizers`` on the same face. Either outcome of a fix is accepted: the
-row is refused (``hf_span_guard``) or adopted with correct spans; only the ids
-are asserted. The NFC-stable control asserts that the device path is really
-taken, so a pass is not one where the reference answered every request.
+These tests seed a session (and the default content store) on the face's
+GPU-headed chain (``[gpu, fast_cpu, hf]``, or ``[gpu, hf]`` for
+``ling_3_0_flash``, which has no corrected CPU engine and never seals) and
+compare the ids after every step with ``tokenizers`` on the same face. The
+rows the state route adopts (the lazy seed and the materialized state
+encode, ``NativeRuntime.state_rows``) must also carry the reference's
+character offsets: on ``ling_3_0_flash`` a shifted row changes no id, only
+its spans. Either outcome of a fix is accepted: the row is refused
+(``hf_span_guard``) or adopted with correct spans. The NFC-stable control
+asserts that the device path is really taken, so a pass is not one where
+the reference answered every request.
 
 Marked ``gpu``; skipped without torch, a CUDA device or the prebuilt delivery.
 Artifacts: the GPU tier's ``artifact_handles`` fixture when this file lives in
@@ -36,7 +41,10 @@ import pytest
 
 pytestmark = pytest.mark.gpu
 
-NFC_FAMILIES = ("qwen3_8b", "qwen3_5_08b", "mimo_v2_6", "minimax_m3")
+NFC_FAMILIES = ("qwen3_8b", "qwen3_5_08b", "mimo_v2_6", "minimax_m3", "ling_3_0_flash")
+#: The GPU-headed chain each face plans; ``ling_3_0_flash`` has no corrected
+#: CPU engine.
+CHAINS = {"ling_3_0_flash": ["gpu", "hf"]}
 FILL = "The committee met on Tuesday and agreed to the plan for the coming year. "
 DELTAS = (
     "One more sentence arrives after the seed. ",
@@ -152,19 +160,47 @@ def _load(face: dict[str, Any], crossover: int, persistent: bool = False) -> Any
                 f"identities are not bound in the registry): {error}"
             )
         pytest.skip(f"prebuilt GPU delivery unavailable: {error}")
-    if tokenizer.explain().get("fallback_chain") != ["gpu", "fast_cpu", "hf"]:
+    chain = CHAINS.get(face["family"], ["gpu", "fast_cpu", "hf"])
+    if tokenizer.explain().get("fallback_chain") != chain:
         tokenizer.close()
         if face["policy"] == "default":
             pytest.skip(
-                "the default policy does not plan the [gpu, fast_cpu, hf] chain on "
-                "this build (its source identities are not bound in the registry)"
+                f"the default policy does not plan the {chain} chain on this "
+                "build (its source identities are not bound in the registry)"
             )
-        pytest.skip("this face does not plan a [gpu, fast_cpu, hf] chain")
+        pytest.skip(f"this face does not plan a {chain} chain")
     return tokenizer
 
 
 def _ref(face: dict[str, Any], text: str) -> list[int]:
     return list(face["reference"].encode(text, add_special_tokens=False).ids)
+
+
+def _assert_rows_carry_reference_offsets(
+    face: dict[str, Any], tokenizer: Any, text: str
+) -> dict[str, Any]:
+    """The lazy seed and the materialized state encode of ``text`` equal the
+    reference in ids and character offsets; returns the lazy row's state."""
+    runtime = tokenizer._native_request_runtime()
+    assert runtime is not None, "the native request runtime did not start"
+    encoding = face["reference"].encode(text, add_special_tokens=False)
+    want_ids = list(encoding.ids)
+    want_spans = [tuple(item) for item in encoding.offsets]
+    rows = runtime.state_rows(text)
+    for name in ("lazy", "materialized"):
+        ids, spans, state = rows[name]
+        assert list(ids) == want_ids, f"{name}: ids differ ({state})"
+        got = [tuple(item) for item in spans]
+        first = next(
+            (
+                index
+                for index, pair in enumerate(zip(got, want_spans, strict=False))
+                if pair[0] != pair[1]
+            ),
+            None,
+        )
+        assert got == want_spans, f"{name}: spans differ from token {first} ({state})"
+    return dict(rows["lazy"][2] or {})
 
 
 def _seed_state(tokenizer: Any) -> dict[str, Any]:
@@ -198,6 +234,22 @@ def test_control_takes_the_device_state_path(nfc_face: dict[str, Any]) -> None:
         state = _session_equal_after_appends(nfc_face, tokenizer, text, "control")
         assert state.get("backend") == "gpu", state
         assert str(state.get("path", "")).startswith("accelerated"), state
+        rows = _assert_rows_carry_reference_offsets(nfc_face, tokenizer, text)
+        assert rows.get("backend") == "gpu", rows
+    finally:
+        tokenizer.close()
+
+
+def test_rows_over_balanced_nfc_changes_carry_the_reference_offsets(
+    nfc_face: dict[str, Any],
+) -> None:
+    """Spans of the adopted rows, not only ids: on a ``[gpu, hf]`` face a
+    shifted row changes no id."""
+    text = _balanced(100)
+    assert unicodedata.normalize("NFC", text) != text
+    tokenizer = _load(nfc_face, crossover=256)
+    try:
+        _assert_rows_carry_reference_offsets(nfc_face, tokenizer, text)
     finally:
         tokenizer.close()
 

@@ -1337,6 +1337,45 @@ impl PyNativeRuntime {
         Ok(output)
     }
 
+    /// Verification hook: the two rows the state route would adopt for
+    /// `text`, each as `(ids, spans, state_encode)` with character-unit
+    /// spans -- `lazy`, the seed a fresh session tail receives, and
+    /// `materialized`, the state encode with spans built at once. Neither
+    /// opens, reads or writes a session of the store; the router's
+    /// counters move as for any request.
+    fn state_rows<'py>(&self, py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyDict>> {
+        let router = Arc::clone(&self.router);
+        let (lazy_ids, lazy_spans, materialized) = py
+            .allow_threads(|| -> Result<_, EngineError> {
+                let mut tail = TailState::new();
+                SessionEncoder::append(router.as_ref(), &mut tail, text)?;
+                let lazy = (tail.ids().to_vec(), tail.spans());
+                let lazy_state = router.stats().last_state_encode;
+                let encoded = SessionEncoder::encode(router.as_ref(), text)?;
+                Ok((lazy.0, lazy.1, (encoded, lazy_state)))
+            })
+            .map_err(reference_err)?;
+        let (encoded, lazy_state) = materialized;
+        let materialized_state = self.router.stats().last_state_encode;
+        let output = PyDict::new(py);
+        let row = |ids: Vec<u32>,
+                   spans: Vec<(u32, u32)>,
+                   state: &Option<serde_json::Value>|
+         -> PyResult<Bound<'py, PyAny>> {
+            let state = match state {
+                Some(value) => json_to_py(py, value)?,
+                None => py.None(),
+            };
+            Ok((ids, spans, state).into_pyobject(py)?.into_any())
+        };
+        output.set_item("lazy", row(lazy_ids, lazy_spans, &lazy_state)?)?;
+        output.set_item(
+            "materialized",
+            row(encoded.ids, encoded.spans, &materialized_state)?,
+        )?;
+        Ok(output)
+    }
+
     fn store_stats<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let store = self
             .store

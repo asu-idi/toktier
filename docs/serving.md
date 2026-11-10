@@ -309,6 +309,14 @@ another, exact and not faster.
   own directory (the SGLang adapter appends the pid); sessions are
   therefore worker-local, and a request must be routed to the worker
   that holds its session.
+- A long-lived worker holds memory that grows with what it has
+  encoded: the session store keeps a record for each 4,096-character
+  block of every distinct text it stores, and the corrected CPU engine
+  caches every word it has encoded (the 0.3.2 release notes, Known
+  issues, give the sizes). `lookup="off"` on single-shot requests avoids
+  the first; recycling the worker on a schedule or a memory threshold
+  bounds both. To release a tokenizer inside a process, call `close()`
+  ([`contracts/facade.md`](contracts/facade.md) Section 1).
 - Batch encodes share the worker pool: two threads calling
   `encode_batch` at once take turns on the same workers rather than
   doubling them. The native chunk encoder's pool is separate and does

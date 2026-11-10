@@ -115,6 +115,20 @@ differ from it), or synchronously against the object itself when no copy
 can be made (`stats()["shadow"]` says which). A JSONL timing log records
 each encode next to SGLang's own tokenize window.
 
+The default mode, `auto`, keeps stored state. Each request text of 4,096
+bytes or more is stored for content lookup, and the session store keeps
+a record for every 4,096-character block of each distinct text it
+stores, so a long-lived worker on long, distinct prompts grows in memory
+(about 65 KB per distinct 24,000-character prompt; the
+[0.3.2 release notes](../releases/v0.3.2.md), Known issues, give the
+sizes and what does not grow). The `contextvar` mode does the same for
+keyed requests once a transcript reaches that size. A deployment whose
+requests are not extended by later ones should choose the stateless
+mode, `TOKTIER_SGLANG_SESSION_KEY=off` (or
+`AdapterConfig(session_key="off")`), which encodes with `lookup="off"`
+and stores nothing; otherwise recycle the worker on a schedule or a
+memory threshold.
+
 The same wrapper can be attached without patching anything, for evaluation:
 a `sitecustomize` on `PYTHONPATH` calls
 `attach_to_tokenizer_manager(TokenizerManager)` once the module is

@@ -1003,7 +1003,10 @@ def _direct_record_problems(
     the engine-differential reading passes
     :func:`check_reading_forms.engine_differential_problems` (D4, D6);
     and the build-bound native-front-end parity reading lists the face
-    with both 0.3.2 columns passing (D5).
+    with both 0.3.2 columns passing (D5). A face registered before its
+    reading exists (the binding names the path with ``"sha256": null``
+    and the entry holds no ``engine_differential``) is refused by name as
+    pending; D1, D3 and D5 are still read for it.
     """
     family = str(artifact.get("family", "<unknown>"))
     fast = (artifact.get("backends") or {}).get("fast_cpu") or {}
@@ -1056,6 +1059,16 @@ def _direct_record_problems(
     # D4, D6
     node = fast.get("engine_differential")
     bound = direct[family] if isinstance(direct[family], dict) else {}
+    if bound.get("sha256") is None and node is None:
+        # Registered before its reading exists: the binding names the
+        # reading's path with no digest. Refused until the reading is
+        # committed and recorded; D5 is still read.
+        problems.append(
+            f"{family}: the engine-differential reading is pending "
+            f"({bound.get('reading')}); the fast CPU binding records no "
+            "digest for it yet"
+        )
+        return problems + _direct_parity_problems(family, artifact, document)
     if not isinstance(node, dict):
         return [
             *problems,
@@ -1096,7 +1109,14 @@ def _direct_record_problems(
         )
     if node.get("mismatches") != 0:
         problems.append(f"{family}: engine_differential records mismatches")
-    # D5
+    return problems + _direct_parity_problems(family, artifact, document)
+
+
+def _direct_parity_problems(
+    family: str, artifact: dict[str, Any], document: dict[str, Any]
+) -> list[str]:
+    """D5: the build-bound native-front-end parity reading lists the face."""
+    problems: list[str] = []
     parity_path = REPOSITORY_ROOT / NATIVE_PARITY_RELATIVE
     parity = load_json(parity_path) if parity_path.is_file() else {}
     row = next(

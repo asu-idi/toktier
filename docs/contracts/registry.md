@@ -333,7 +333,11 @@ two forms, and a record holds exactly one of them:
   `literal_segments` columns. In `tools/fast_cpu_binding.json` such a family
   is listed under `direct_families` with its reading's path and SHA-256,
   and the roster, its count and the binding's `lineage` and `validation`
-  blocks are unchanged by it.
+  blocks are unchanged by it. A family registered before its reading exists
+  is listed with the reading's path and `"sha256": null` (pending); its
+  entry holds `repair` without `engine_differential`, and the check refuses
+  the record, naming the pending reading, until the reading is committed and
+  its digest recorded in both places.
 
 The chunk admission roster (`docs/serving.md` Section 3) takes the roster
 and the carried records, and not a directly judged one.

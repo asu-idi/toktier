@@ -14,6 +14,7 @@ import copy
 import hashlib
 import sys
 import zlib
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -173,7 +174,7 @@ def _carried_families(binding: dict[str, Any]) -> dict[str, str]:
     return {str(family): str(anchor) for family, anchor in carried.items()}
 
 
-def _direct_families(binding: dict[str, Any]) -> dict[str, dict[str, str]]:
+def _direct_families(binding: dict[str, Any]) -> dict[str, dict[str, str | None]]:
     """Directly judged family to its engine-differential reading (fourth class).
 
     A directly judged family holds its repair parameters in its registry
@@ -183,12 +184,18 @@ def _direct_families(binding: dict[str, Any]) -> dict[str, dict[str, str]]:
     path and SHA-256. Like a carried family it adds no row to
     the repair roster and is not one of the eleven artifacts the campaign
     judged, so the counts below stay those of the judged artifacts.
+
+    A family registered before its reading exists names the reading's
+    path with ``"sha256": null`` (pending). Its record then holds the
+    uniform entry and ``repair`` without an ``engine_differential``
+    member; ``tools/generate_registry.py`` refuses the record until the
+    reading is committed and its digest recorded here.
     """
     raw = binding.get("direct_families")
     if raw is None:
         return {}
     direct = _require_mapping(raw, label="direct_families")
-    out: dict[str, dict[str, str]] = {}
+    out: dict[str, dict[str, str | None]] = {}
     for family, value in direct.items():
         node = _require_mapping(value, label=f"direct_families.{family}")
         reading = node.get("reading")
@@ -196,9 +203,21 @@ def _direct_families(binding: dict[str, Any]) -> dict[str, dict[str, str]]:
             raise GenerationError(
                 f"{family}: a directly judged family names its reading under readings/"
             )
+        if node.get("sha256") is None:
+            out[str(family)] = {"reading": reading, "sha256": None}
+            continue
         _require_digest(node.get("sha256"), label=f"direct_families.{family}.sha256")
         out[str(family)] = {"reading": reading, "sha256": str(node["sha256"])}
     return out
+
+
+def pending_direct_families(binding: dict[str, Any]) -> dict[str, str]:
+    """Directly judged families whose reading is not recorded yet (path)."""
+    return {
+        family: str(node["reading"])
+        for family, node in _direct_families(binding).items()
+        if node["sha256"] is None
+    }
 
 
 def _verify_coverage(
@@ -334,14 +353,19 @@ def _verify_native_reading(
     registry_by_family: dict[str, dict[str, Any]],
     fingerprints: dict[str, str] | None = None,
     direct: set[str] | None = None,
+    pending: set[str] | None = None,
 ) -> None:
     """The build-bound native-front-end parity reading.
 
     Its rows are the judged roster plus the directly judged families
     present in the registry; a directly judged row carries both 0.3.2
-    columns (``special_tokens``, ``literal_segments``).
+    columns (``special_tokens``, ``literal_segments``). A directly judged
+    family whose engine-differential reading is still pending
+    (``pending``) may be absent; its row, when present, is held to the
+    same checks.
     """
     judged = loadable | (direct or set())
+    required = judged - (pending or set())
     validation = _require_mapping(binding.get("validation"), label="validation")
     relative = validation.get("native_frontend_parity")
     if relative != "readings/fast_cpu_native_frontend_parity.json":
@@ -353,10 +377,17 @@ def _verify_native_reading(
     engine = _require_mapping(reading.get("engine"), label="reading.engine")
     oracle = _require_mapping(reading.get("oracle"), label="reading.oracle")
     oracle_binding = _require_mapping(binding.get("oracle"), label="oracle")
+    # The counts are those of the families the reading lists (a pending
+    # directly judged family may be absent).
+    listed = judged & {
+        str(row.get("family"))
+        for row in reading.get("rows") or ()
+        if isinstance(row, dict)
+    }
     if (
         reading.get("schema") != "toktier.fast_cpu.native_frontend_parity.v1"
-        or reading.get("unique_artifacts") != len(judged)
-        or reading.get("model_families") != 12 + len(judged - loadable)
+        or reading.get("unique_artifacts") != len(listed)
+        or reading.get("model_families") != 12 + len(listed - loadable)
         or reading.get("all_ids_equal_hf") is not True
         or reading.get("one_python_to_rust_call_per_batch") is not True
         or reading.get("gil_released") is not True
@@ -383,7 +414,7 @@ def _verify_native_reading(
     by_family = {
         str(row.get("family")): row for row in rows if isinstance(row, dict)
     }
-    if set(by_family) != judged:
+    if not required <= set(by_family) <= judged:
         raise GenerationError("native-frontend parity roster differs from binding")
     for family, row in by_family.items():
         if (
@@ -485,9 +516,11 @@ def _direct_repair(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _engine_differential(family: str, node: dict[str, str]) -> dict[str, Any]:
+def _engine_differential(
+    family: str, node: Mapping[str, str | None]
+) -> dict[str, Any]:
     """The registry's ``engine_differential`` member, read from the reading."""
-    path = READINGS_ROOT / node["reading"]
+    path = READINGS_ROOT / str(node["reading"])
     if not path.is_file():
         raise GenerationError(f"{family}: engine-differential reading is missing")
     if sha256_of_file(path) != node["sha256"]:
@@ -535,8 +568,14 @@ def augmented_document(
         if family in by_family
     }
     config_digest = _verify_repair_tables(binding, loadable, by_family)
+    pending = {family for family, node in direct.items() if node["sha256"] is None}
     _verify_native_reading(
-        binding, loadable, by_family, registry_fingerprints(completed), set(direct)
+        binding,
+        loadable,
+        by_family,
+        registry_fingerprints(completed),
+        set(direct),
+        pending,
     )
 
     certified_entry = {
@@ -571,6 +610,10 @@ def augmented_document(
                 **certified_entry,
                 "repair": _carried_repair(row, carried[family]),
             }
+        elif family in pending:
+            # Registered, reading pending: no engine_differential member
+            # yet (generate_registry.py refuses the record until it has one).
+            backends["fast_cpu"] = {**certified_entry, "repair": _direct_repair(row)}
         elif family in direct:
             backends["fast_cpu"] = {
                 **certified_entry,
@@ -616,6 +659,14 @@ def main(argv: list[str] | None = None) -> int:
             "augmented registry violates its schema:\n  " + "\n  ".join(violations)
         )
     payload = serialise_document(generated)
+    for family, reading in sorted(pending_direct_families(binding).items()):
+        # Not an error of this tool; tools/generate_registry.py refuses the
+        # record until the reading is recorded.
+        print(
+            f"note: {family}: the engine-differential reading {reading} is "
+            "pending; the entry carries repair without engine_differential",
+            file=sys.stderr,
+        )
     if arguments.check:
         problems = []
         for path in (DEFAULT_REGISTRY, PACKAGED_REGISTRY):

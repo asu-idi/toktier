@@ -584,3 +584,104 @@ def test_engine_differential_beside_a_carry_over_is_refused(tree: Path) -> None:
         problem.startswith("mimo_v2_6: engine_differential belongs to the directly")
         for problem in problems
     )
+
+
+# -- registered before the reading exists (pending) --------------------------
+
+
+def _make_pending(tree: Path) -> None:
+    """The face registered with its reading's path but no digest yet."""
+
+    def drop(document: dict[str, Any]) -> None:
+        del _row(document, FAMILY)["backends"]["fast_cpu"]["engine_differential"]
+
+    _edit_registry(tree, drop)
+    binding_path = tree / "tools" / "fast_cpu_binding.json"
+    binding = _load(binding_path)
+    binding["direct_families"][FAMILY] = {"reading": READING, "sha256": None}
+    _dump(binding_path, binding)
+    (tree / READING).unlink()
+
+
+def _writer_without_identity(
+    monkeypatch: pytest.MonkeyPatch, binding: dict[str, Any]
+) -> None:
+    """Set aside the build identity checks of the binding tool.
+
+    Before the rebind the tree's fast CPU identity is not the recorded one,
+    so the tool refuses every input on that ground first; the pending
+    branch is what is read here.
+    """
+    monkeypatch.setattr(update_fast_cpu_registry, "_verify_identity", lambda _b: None)
+    monkeypatch.setattr(
+        update_fast_cpu_registry,
+        "source_digest_v2",
+        lambda _name: binding["source_digest_v2"],
+    )
+
+
+def test_a_pending_reading_is_named_and_refused(tree: Path) -> None:
+    _make_pending(tree)
+    problems = _problems(tree)
+    assert problems == [
+        f"{FAMILY}: the engine-differential reading is pending ({READING}); "
+        "the fast CPU binding records no digest for it yet"
+    ]
+    # D5 is still read for a pending face.
+    parity_path = tree / "readings" / "fast_cpu_native_frontend_parity.json"
+    parity = _load(parity_path)
+    parity["rows"] = parity["rows"][:-1]
+    _dump(parity_path, parity)
+    problems = _problems(tree)
+    assert len(problems) == 2
+    assert any("does not list the face" in p for p in problems)
+
+
+def test_a_record_ahead_of_a_pending_binding_is_refused(tree: Path) -> None:
+    """The record names a reading the binding has not recorded."""
+    binding_path = tree / "tools" / "fast_cpu_binding.json"
+    binding = _load(binding_path)
+    binding["direct_families"][FAMILY]["sha256"] = None
+    _dump(binding_path, binding)
+    assert any(
+        "engine_differential differs from the fast CPU binding" in p
+        for p in _problems(tree)
+    )
+
+
+def test_the_binding_tool_writes_a_pending_face_without_engine_differential(
+    tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _make_pending(tree)
+    parity_path = tree / "readings" / "fast_cpu_native_frontend_parity.json"
+    parity = _load(parity_path)
+    parity["rows"] = parity["rows"][:-1]
+    parity["unique_artifacts"] -= 1
+    parity["model_families"] -= 1
+    _dump(parity_path, parity)
+    binding = _load(tree / "tools" / "fast_cpu_binding.json")
+    _writer_without_identity(monkeypatch, binding)
+    assert update_fast_cpu_registry.pending_direct_families(binding) == {
+        FAMILY: READING
+    }
+    document = _load(_registry(tree))
+    generated = update_fast_cpu_registry.augmented_document(document, binding)
+    entry = _row(generated, FAMILY)["backends"]["fast_cpu"]
+    uniform = _row(generated, "deepseek_v3")["backends"]["fast_cpu"]
+    assert entry == {**uniform, "repair": REPAIR}
+    # A pending face's parity row may be present; it is then checked.
+    fingerprint = forms.registry_fingerprints(document)[FAMILY]
+    parity["rows"].append(_parity_row(_row(document, FAMILY), fingerprint))
+    parity["unique_artifacts"] += 1
+    parity["model_families"] += 1
+    del parity["rows"][-1]["literal_segments"]
+    _dump(parity_path, parity)
+    with pytest.raises(Exception, match="carries no literal_segments column"):
+        update_fast_cpu_registry.augmented_document(document, binding)
+
+
+def test_a_pending_family_still_names_its_reading_path(tree: Path) -> None:
+    binding = _load(tree / "tools" / "fast_cpu_binding.json")
+    binding["direct_families"][FAMILY] = {"reading": None, "sha256": None}
+    with pytest.raises(Exception, match="names its reading under readings/"):
+        update_fast_cpu_registry.pending_direct_families(binding)

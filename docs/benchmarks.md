@@ -158,9 +158,11 @@ marked as not covered wherever a public-API reading sits beside them.
 
 ## F3 — per-session state to resume tokenization
 
-What the store durably keeps per session (sealed block records +
-session record, exported bytes) vs holding the same information in
-plain Python structures. Memory is machine-independent; token counts
+What the store durably keeps per session (the session record with its
+sealed blocks, exported bytes) vs holding the same information in plain
+Python structures. Neither store column counts the in-memory per-block
+records the 0.3.2 release notes list under Fixed: a directory store never
+wrote them, and the core's resident estimate does not include them. Memory is machine-independent; token counts
 from the pinned llama_3_1_8b artifact. The `toktier durable` column is
 what the store writes and is readable from the public facade; `store
 approx (mem)` is the store core's own resident estimate, taken from

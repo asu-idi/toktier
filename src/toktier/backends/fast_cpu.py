@@ -503,7 +503,7 @@ class FastCpuBackend:
             # PyO3 and never needed the live object. That runtime did not
             # start in this process (for example a GPU kernel delivery
             # already loaded through another host), so the Python store
-            # asked for the callback-lane components instead. Refuse in the
+            # asked for the callback components instead. Refuse in the
             # typed form the store's caller turns into the reference path.
             raise BackendExecutionFault(
                 f"fast CPU session repair for family {self._family!r} is "

@@ -45,7 +45,7 @@ enum Mode {
         literals: Vec<String>,
         rule: OnceLock<Result<(NfcRule, LiteralGuard), String>>,
     },
-    /// Any other normalizer, or a normalizer this lane cannot inspect: no
+    /// Any other normalizer, or a normalizer the caller cannot inspect: no
     /// candidate is admitted.
     Closed,
 }
@@ -86,7 +86,7 @@ impl SealCutRule {
         SealCutRule { mode }
     }
 
-    /// A rule that admits no candidate, for a lane that cannot see the
+    /// A rule that admits no candidate, for a caller that cannot see the
     /// face normalizer.
     pub fn closed() -> Self {
         SealCutRule { mode: Mode::Closed }

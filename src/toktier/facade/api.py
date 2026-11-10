@@ -1861,8 +1861,8 @@ class Tokenizer:
         """The native reference engine whose normalizer the seal consults.
 
         ``None`` when the reference backend has no native handle (an
-        injected test backend); the store then seals nothing on the
-        Python-owned lane rather than decide a boundary on raw characters.
+        injected test backend); the Python-owned store then seals nothing
+        rather than decide a boundary on raw characters.
         """
         native_reference = getattr(self._backend, "native_engine", None)
         if not callable(native_reference):

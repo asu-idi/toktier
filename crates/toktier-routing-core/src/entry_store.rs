@@ -199,9 +199,10 @@ impl NativeEntryStore {
             // `import_node_item` or the session sidecar pair, so a block
             // chain would only be written. A zero cap takes the existing
             // "skip the node and detach" branch at the first completed
-            // block: no node is created, and ids, seals, records and
-            // counters are as before. A change that makes this owner call
-            // one of those readers needs to revisit this setting.
+            // block: no node is created; ids, seals, records and counters
+            // are as before, except the store's `chain_detaches` and
+            // `nodes_skipped_tail_cap`. A change that makes this owner call
+            // one of those functions needs to revisit this setting.
             node_tail_cap_bytes: 0,
             ..StoreConfig::default()
         })?;

@@ -2,9 +2,9 @@
   "schema": "toktier.rust_api.matrix.v1",
   "requested_device": "cpu",
   "architecture": null,
-  "runtime_source_digest": "c023b873df7c2d0e303ddadfc2aab0b2cb17f5388c969fa756e1e18a3d0c4915",
-  "fast_cpu_source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
-  "native_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+  "runtime_source_digest": "3a8386307fb85a80e4f3c431be32a79baee64a9031410e23b67ef47776129437",
+  "fast_cpu_source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
+  "native_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
   "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
   "build_flags": [
     "profile=release",
@@ -72,7 +72,7 @@
     {
       "family": "hy4",
       "artifact_sha256": "ff67615de6e6ee073a20bd1fe3a776053e821573f4ae566aeb8e9d43de801201",
-      "backend": "HuggingFace",
+      "backend": "FastCpu",
       "documents": 7,
       "token_checks": 39954,
       "mismatches": 0
@@ -136,7 +136,7 @@
     {
       "family": "muse_spark",
       "artifact_sha256": "ac2f41ef2444dec82fdc90e334f80543f298535005fe78aec7e8311ef86f84d0",
-      "backend": "HuggingFace",
+      "backend": "FastCpu",
       "documents": 7,
       "token_checks": 37906,
       "mismatches": 0
@@ -152,7 +152,7 @@
     {
       "family": "nemotron_super_vl",
       "artifact_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
-      "backend": "HuggingFace",
+      "backend": "FastCpu",
       "documents": 7,
       "token_checks": 47126,
       "mismatches": 0
@@ -184,7 +184,7 @@
     {
       "family": "step5_preview",
       "artifact_sha256": "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0",
-      "backend": "HuggingFace",
+      "backend": "FastCpu",
       "documents": 7,
       "token_checks": 39954,
       "mismatches": 0

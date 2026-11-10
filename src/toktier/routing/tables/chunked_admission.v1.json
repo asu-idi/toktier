@@ -4,16 +4,40 @@
   "generated_by": {
     "tool": "tools/update_chunked_admission.py",
     "tool_version": "1.0.0",
-    "source_commit": "98cd71b52aa73140d66e8056c8a1af7dc849a0c1",
-    "generated_at": "2026-11-08T13:42:05Z"
+    "source_commit": "76706f76b16b6511439e758fcb4daa5359fa2dbd",
+    "generated_at": "2026-11-10T16:40:54Z"
   },
-  "chunked_identity": "sha256:a3da80d03fd46140936abfedd54edbc17ad3d6d14f8e885f8aee195adac19c21",
-  "fast_cpu_source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
+  "chunked_identity": "sha256:ec4641ebc35f5bf9847268ccb0d7ae62a1fbdf85cc31cd39949577d4922ea700",
+  "fast_cpu_source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
   "rows": [
     {
       "family": "deepseek_v3",
       "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
       "loader_face_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
+      "normalizer": "none",
+      "status": "certified",
+      "paths": [
+        "python",
+        "native"
+      ],
+      "evidence": {
+        "python": [
+          "adversarial",
+          "corpus"
+        ],
+        "native": [
+          "adversarial",
+          "corpus"
+        ]
+      },
+      "evidence_id": "ev-chunked-cuts-v1",
+      "corpus_docs": 102400000,
+      "adversarial_strings": 20000
+    },
+    {
+      "family": "deepseek_v4_1_flash",
+      "artifact_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+      "loader_face_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
       "normalizer": "none",
       "status": "certified",
       "paths": [
@@ -129,6 +153,30 @@
       "evidence_id": "ev-chunked-cuts-v1",
       "corpus_docs": 102400000,
       "adversarial_strings": 20000
+    },
+    {
+      "family": "mimo_v2_6",
+      "artifact_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+      "loader_face_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+      "normalizer": "nfc",
+      "status": "certified",
+      "paths": [
+        "python",
+        "native"
+      ],
+      "evidence": {
+        "python": [
+          "adversarial",
+          "corpus"
+        ],
+        "native": [
+          "adversarial",
+          "corpus"
+        ]
+      },
+      "evidence_id": "ev-chunked-cuts-v1",
+      "corpus_docs": 102400000,
+      "adversarial_strings": 100000
     },
     {
       "family": "minimax_m3",
@@ -275,5 +323,5 @@
       "adversarial_strings": 100000
     }
   ],
-  "root_digest": "sha256:66b9c169295e5387bfe51edcd6ab2504c5b8607708aa8a7a22722bf1c2d63c6a"
+  "root_digest": "sha256:cb59da1aac8c85a763fdeedd49fd6d6962c6c1fc0bfb0c8f9c2065f2f297d6e4"
 }

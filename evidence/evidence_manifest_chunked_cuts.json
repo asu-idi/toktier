@@ -4,12 +4,12 @@
   "generated_by": {
     "tool": "tools/update_chunked_admission.py",
     "tool_version": "1.0.0",
-    "source_commit": "98cd71b52aa73140d66e8056c8a1af7dc849a0c1",
-    "generated_at": "2026-11-08T13:42:05Z"
+    "source_commit": "76706f76b16b6511439e758fcb4daa5359fa2dbd",
+    "generated_at": "2026-11-10T16:40:54Z"
   },
   "run": {
-    "run_id": "chunked-cuts-20261108",
-    "date": "2026-11-08",
+    "run_id": "chunked-cuts-032",
+    "date": "2026-11-10",
     "suite_version": "chunked-cuts-four-way-v1"
   },
   "oracle": {
@@ -20,6 +20,10 @@
     {
       "artifact_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41",
       "family": "deepseek_v3"
+    },
+    {
+      "artifact_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+      "family": "deepseek_v4_1_flash"
     },
     {
       "artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
@@ -36,6 +40,10 @@
     {
       "artifact_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa",
       "family": "llama_3_1_8b"
+    },
+    {
+      "artifact_sha256": "ff15eb925890d6b71b5160de4b846fbd13178438ab463b38ecc953e8cd1dcb3e",
+      "family": "mimo_v2_6"
     },
     {
       "artifact_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e",
@@ -81,35 +89,35 @@
       "sc003",
       "sc004",
       "sc005",
-      "sc007",
-      "sc008",
-      "sc018",
-      "sc019",
-      "sc022",
-      "sc024",
-      "sc025",
-      "sc028",
+      "sc016",
       "sc030",
-      "sc032",
-      "sc043",
+      "sc031",
+      "sc035",
+      "sc046",
+      "sc048",
+      "sc049",
       "sc059",
-      "sc061",
-      "sc062",
-      "sc075",
-      "sc076",
-      "sc078",
-      "sc079",
-      "sc086",
-      "sc087",
+      "sc066",
+      "sc068",
+      "sc070",
+      "sc077",
+      "sc081",
+      "sc082",
       "sc088",
-      "sc090",
       "sc091",
       "sc092",
-      "sc093",
-      "sc095",
-      "sc110",
-      "sc111"
+      "sc097",
+      "sc100",
+      "sc103",
+      "sc109",
+      "sc111",
+      "scc009",
+      "scc011",
+      "scc056",
+      "scc057",
+      "scc058",
+      "scg029"
     ]
   },
-  "root_digest": "sha256:7913c07e626bc7cba6bf4752b5c68e9a52c906fcdfb9bed1285b8853d0ce4eef"
+  "root_digest": "sha256:c70fb6f64f69ee63d6039099bb17c30ccdf58d20bfee112cc067c8b048352c85"
 }

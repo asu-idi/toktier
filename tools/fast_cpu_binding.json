@@ -6,8 +6,8 @@
   "engine_distribution": "toktier",
   "engine_module": "toktier._native",
   "engine_delivery": "integrated",
-  "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
-  "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
+  "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
+  "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
   "source_digest_of": "domain-separated, path-bound source/build set enumerated identically by tools/fast_cpu_source_identity.py and crates/toktier-py/build.rs",
   "build_flags": [
     "profile=release",
@@ -92,19 +92,19 @@
   "direct_families": {
     "hy4": {
       "reading": "readings/fast_cpu_engine_differential_hy4.json",
-      "sha256": null
+      "sha256": "3f1a5c7c5f197355dc43326e38bf36a38010dbee93aedcf71b2bce87cf0747d3"
     },
     "step5_preview": {
       "reading": "readings/fast_cpu_engine_differential_step5_preview.json",
-      "sha256": null
+      "sha256": "28922212458eca6750af89bc3ab226339989d9030ad5891969404f65f5be1e10"
     },
     "muse_spark": {
       "reading": "readings/fast_cpu_engine_differential_muse_spark.json",
-      "sha256": null
+      "sha256": "f9860f5efb8de5979090e6409075f925d4101a503472e2f81f36ecf295b83183"
     },
     "nemotron_super_vl": {
       "reading": "readings/fast_cpu_engine_differential_nemotron_super_vl.json",
-      "sha256": null
+      "sha256": "ce813062f4852d0dc204d7961e7a3527a9732f18a54561254e30e557344bbabb"
     }
   }
 }

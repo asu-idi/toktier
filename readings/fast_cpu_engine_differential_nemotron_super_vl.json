@@ -1,0 +1,156 @@
+{
+ "append_replay": {
+  "documents": 95002976,
+  "mismatches": 0,
+  "repair_paths": {
+   "gigatoken_repair": 89657147,
+   "hf_full_window_covers_all": 5345829
+  },
+  "retry_histogram": {
+   "0": 95002961,
+   "1": 14,
+   "2": 1
+  },
+  "sampling": "1 in 40 documents per face: row kept when the first 8 bytes of sha256('a7ev-b|<face>|<relpath>|<row>') (little-endian) are 0 mod 40; cut at a seeded position inside the document (next 8 bytes); seed then the whole text through one NativeRuntime(['fast_cpu','hf']) session; final row against the archived digest; repeated on an engine with effective_l_max 128",
+  "threshold_decisive": 2
+ },
+ "bridging_check": {
+  "build": {
+   "build_flags": [
+    "profile=release",
+    "opt-level=3",
+    "target=x86_64-unknown-linux-gnu",
+    "rustflags=",
+    "pyo3=abi3-py310+extension-module"
+   ],
+   "commit": "1084186c5f9fe99ff6e7e4e3c148d6f4c417a025",
+   "entry_point": "toktier._native.CallbackEncoder.native_fast_cpu(tokenizer_json, family, sha256, margin, effective_l_max, has_normalizer, pclass_table()).encode(text); arm (b): NativeRuntime(['fast_cpu','hf']).encode(seed, session) then encode(full, session)",
+   "platform_tag": "manylinux_2_28_x86_64",
+   "source_digest": "707e566699bd4ee67c26d5696f3840a4c325e2d93e3a7a68ea625f0831aef22a",
+   "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
+   "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+   "wheel_sha256": "1d82599c3513f7e600360577f768fe9e337c9c44cda3dae9e00e35db0ade87ed"
+  },
+  "documents": 37996235,
+  "mismatches_append": 0,
+  "mismatches_full": 0,
+  "path_class_changes_literal_free": 0,
+  "sample_share": 0.01
+ },
+ "build": {
+  "build_flags": [
+   "profile=release",
+   "opt-level=3",
+   "target=x86_64-unknown-linux-gnu",
+   "rustflags=",
+   "pyo3=abi3-py310+extension-module"
+  ],
+  "commit": "3c88758ff4d96ae444270658efca10b77de6b6bf",
+  "entry_point": "toktier._native.CallbackEncoder.native_fast_cpu(tokenizer_json, family, sha256, margin, effective_l_max, has_normalizer, pclass_table()).encode(text)",
+  "platform_tag": "manylinux_2_28_x86_64",
+  "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+  "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
+  "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+  "wheel_sha256": "24e777c5734a8f5907483fe566318909990a960fdd36d6edcc9c09f4c92aed24"
+ },
+ "constructed_arm": {
+  "build": {
+   "build_flags": [
+    "profile=release",
+    "opt-level=3",
+    "target=x86_64-unknown-linux-gnu",
+    "rustflags=",
+    "pyo3=abi3-py310+extension-module"
+   ],
+   "source_digest": "707e566699bd4ee67c26d5696f3840a4c325e2d93e3a7a68ea625f0831aef22a",
+   "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
+   "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+  },
+  "comparison_l_max": 128,
+  "generator_sha256": "0d9b717c33b81f06be79b9c0dc709addf83f79eae7cb0bcea5222f6ae2a0958b",
+  "mismatches": 0,
+  "strings": 1000000,
+  "threshold_decisive": 103698
+ },
+ "corpus": {
+  "characters": 12328592579973,
+  "containers_sha256": "9596ea77079b161a2fb5c5e31d4d0a9aa5556baa7d472fadef0e282b4e19343a",
+  "documents": 3800016491,
+  "harness_sha256": "d59311e131bc098e238eb788097c8ebef17f37751e8d8012e175f297ba34b85e",
+  "manifest_sha256": "1020ae98ba29e01b0658abcd347a1f53f0182aad56bad375817f63ffe54659f4",
+  "oracle_version": "0.22.2",
+  "truncation_rule": "t[:1000000] characters"
+ },
+ "engine_core": {
+  "core_content_sha256": "b26c200b1d6c8e4e6621100548ce16f526a8a6acdfe952b170f711645c2e3503",
+  "engine_patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
+  "git_tree_id": "7dfabd6ec438ef84b4c185869382c3c994d83605",
+  "repair_families_sha256": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
+  "repair_pclass_sha256": "f72a41cd8d27cd951c037b0a1e1a8ce45a7faf91870e01e19c8f61a2373ead47"
+ },
+ "main_pass": {
+  "characters": 12328592579973,
+  "documents": 3800016491,
+  "mismatches": 0,
+  "path_classes": {
+   "gigatoken_full": 3799752216,
+   "hf_full_added_token": 264275,
+   "hf_full_engine_guard": 0
+  },
+  "residue": {
+   "count": 264275,
+   "list_sha256": "e130ea17ee643d916f4748aa66a5022a4ce44a1328707b3bdcd4225405cb1fa2",
+   "path": "residue_nemotron_super_vl.json"
+  }
+ },
+ "residue_supplement": {
+  "build": {
+   "build_flags": [
+    "profile=release",
+    "opt-level=3",
+    "target=x86_64-unknown-linux-gnu",
+    "rustflags=",
+    "pyo3=abi3-py310+extension-module"
+   ],
+   "commit": "1084186c5f9fe99ff6e7e4e3c148d6f4c417a025",
+   "entry_point": "toktier._native.CallbackEncoder.native_fast_cpu(tokenizer_json, family, sha256, margin, effective_l_max, has_normalizer, pclass_table()).encode(text); arm (b): NativeRuntime(['fast_cpu','hf']).encode(seed, session) then encode(full, session)",
+   "platform_tag": "manylinux_2_28_x86_64",
+   "source_digest": "707e566699bd4ee67c26d5696f3840a4c325e2d93e3a7a68ea625f0831aef22a",
+   "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
+   "toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+   "wheel_sha256": "1d82599c3513f7e600360577f768fe9e337c9c44cda3dae9e00e35db0ade87ed"
+  },
+  "documents": 264275,
+  "mismatches_append": 0,
+  "mismatches_full": 0,
+  "path_classes": {
+   "gigatoken_full": 0,
+   "gigatoken_segmented": 264275,
+   "hf_added_token": 0,
+   "hf_engine_guard": 0
+  },
+  "reference_answered": {
+   "count": 0,
+   "list_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "path": "reference_answered_nemotron_super_vl.json"
+  }
+ },
+ "schema": "toktier.fast_cpu.engine_differential.v1",
+ "sensitivity_limit": {
+  "per_document": 7.9e-08,
+  "statement": "The bridging sample re-ran n = 37,996,235 documents (the fixed 1 % rule over all 2,481 corpus files; the rule hashes file and row only, so it is independent of content) on the frozen build in both arms: 0 full-encode mismatches, 0 append-replay mismatches in 950,519 replays, and 0 path-class changes among 37,993,602 literal-free documents. If the frozen routing layer changed the ids or the literal-free path class of a share p of the corpus documents, the chance that a uniform sample of n documents shows none of them is (1 - p)^n <= exp(-p n); for p >= 3 / n = 7.896e-08 this is at most exp(-3) = 0.0498. So the sample resolves a per-document rate of 7.9e-08 (rounded up) at 95 % confidence and says nothing about rarer behaviour of the routing layer; for the replay arm the same arithmetic gives 3 / 950,519 = 3.156e-06 per replayed document. The engine core itself is covered on every corpus document by the main pass (build of 3c88758, engine core equal to the frozen tree's), and every residue document of the main pass was re-run on the frozen build in both arms."
+ },
+ "subject": {
+  "artifact_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
+  "class_table_sha256": "74a60b464f878c92f2b9a571ac8ee45a2bbe8efd630d8648cd07785a0e4056ed",
+  "family": "nemotron_super_vl",
+  "loader_face_sha256": "d0432ad8b1c2984a2e2dca82e1933e3fd5628df6e95c51fba4c3ee9950dce299",
+  "longest_vocabulary_token_chars": 76,
+  "repair": {
+   "effective_l_max": 76,
+   "has_normalizer": false,
+   "margin": 18,
+   "source_table_sha256": "c0653c288fb29adc064eec3ee9d0f62d3d19bbda8fce569f15e1577866d9da14"
+  }
+ }
+}

@@ -6,7 +6,7 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:cfdac70f78d4874ea11736caadcecad2500ce60c92251822778d433ec6cb1a1e",
+  "root_digest": "sha256:09f7cb497483cc2ee79c01fe14ded8d5e8f7851af38127dee21fa04bb7005bfe",
   "oracles": [
     {
       "oracle_id": "tokenizers",
@@ -254,7 +254,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -274,7 +274,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -302,7 +302,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -311,13 +311,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -334,7 +334,7 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6"
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3"
         }
       },
       "loader_face_sha256": "621ac2e32d0dba658404412318818aaa8ce8cda492e59830109d8da6b517fb41"
@@ -379,7 +379,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -399,7 +399,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -427,7 +427,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -436,13 +436,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -459,7 +459,7 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
           "repair": {
             "margin": 36,
             "effective_l_max": 128,
@@ -504,7 +504,7 @@
         "from_artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
         "engine_parity": {
           "path": "readings/fast_cpu_carryover_parity_deepseek_v4_1_flash.json",
-          "sha256": "61548270421d407737ab3524ebdae8c61d0f7b35fd5ad28976030bfe847e8a83",
+          "sha256": "d7409df45294006d3a4968d22aad51ef77d80b3139c9fffed69024465f4c0697",
           "docs": 8680,
           "mismatches": 0
         },
@@ -551,7 +551,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -571,7 +571,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -599,7 +599,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -608,13 +608,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -631,7 +631,7 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6"
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3"
         }
       },
       "loader_face_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf"
@@ -676,7 +676,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -696,7 +696,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -724,7 +724,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -733,13 +733,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -756,7 +756,7 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6"
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3"
         }
       },
       "loader_face_sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d"
@@ -801,7 +801,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -821,7 +821,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -849,7 +849,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -858,13 +858,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -881,7 +881,7 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6"
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3"
         }
       },
       "loader_face_sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3"
@@ -926,7 +926,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -946,7 +946,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -974,7 +974,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -983,7 +983,7 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
@@ -1039,7 +1039,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1059,7 +1059,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -1087,7 +1087,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1096,13 +1096,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -1119,12 +1119,18 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
           "repair": {
             "margin": 29,
             "effective_l_max": 33,
             "has_normalizer": true,
             "source_table_sha256": "aaa934b6fd13a56a2921f3d4e761984669f3b9ad860a95589ec58c70d67d4cd1"
+          },
+          "engine_differential": {
+            "reading": "readings/fast_cpu_engine_differential_hy4.json",
+            "sha256": "3f1a5c7c5f197355dc43326e38bf36a38010dbee93aedcf71b2bce87cf0747d3",
+            "documents": 3800016491,
+            "mismatches": 0
           }
         }
       },
@@ -1170,7 +1176,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1190,7 +1196,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -1218,7 +1224,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1227,7 +1233,7 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
@@ -1283,7 +1289,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1303,7 +1309,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -1331,7 +1337,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1340,7 +1346,7 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
@@ -1396,7 +1402,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1416,7 +1422,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -1444,7 +1450,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1453,7 +1459,7 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
@@ -1509,7 +1515,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1529,7 +1535,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -1557,7 +1563,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1566,13 +1572,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -1589,7 +1595,7 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6"
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3"
         }
       },
       "loader_face_sha256": "76e48799b099d43365bd24ccd8ecc5aedac831718da780552f03b0a6eb4412aa"
@@ -1634,7 +1640,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1654,7 +1660,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -1682,7 +1688,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1691,13 +1697,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -1714,7 +1720,7 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
           "repair": {
             "margin": 20,
             "effective_l_max": 128,
@@ -1747,7 +1753,7 @@
         "from_artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
         "engine_parity": {
           "path": "readings/fast_cpu_carryover_parity_mimo_v2_6.json",
-          "sha256": "4b96f2255a5250e2f556b174422fdae865e2d01bb6b0f0e655bc5cb77de4219f",
+          "sha256": "053b4a21c1f5921acfc429cad98dc2e3e962bfa0f4f844ab424baa134ac98e6c",
           "docs": 8680,
           "mismatches": 0
         },
@@ -1794,7 +1800,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1814,7 +1820,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -1842,7 +1848,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1851,13 +1857,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -1874,7 +1880,7 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6"
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3"
         }
       },
       "loader_face_sha256": "bb1f1626cf01448f1e3b6036d0a061ffc66c91d9046aada14ea23a5441b5ad6e"
@@ -1919,7 +1925,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -1939,7 +1945,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -1967,7 +1973,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -1976,13 +1982,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -1999,7 +2005,7 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6"
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3"
         }
       },
       "loader_face_sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135"
@@ -2044,7 +2050,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -2064,7 +2070,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -2092,7 +2098,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -2101,13 +2107,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -2124,12 +2130,18 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
           "repair": {
             "margin": 33,
             "effective_l_max": 113,
             "has_normalizer": false,
             "source_table_sha256": "4c62ff8699a631ec60bf4d334c7f7f2deda25fe4dccc2f76a4dc858b7fae2e8d"
+          },
+          "engine_differential": {
+            "reading": "readings/fast_cpu_engine_differential_muse_spark.json",
+            "sha256": "f9860f5efb8de5979090e6409075f925d4101a503472e2f81f36ecf295b83183",
+            "documents": 3800016491,
+            "mismatches": 0
           }
         }
       },
@@ -2175,7 +2187,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -2195,7 +2207,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -2223,7 +2235,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -2232,13 +2244,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -2255,7 +2267,7 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6"
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3"
         }
       },
       "loader_face_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7"
@@ -2300,7 +2312,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -2320,7 +2332,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -2348,7 +2360,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -2357,13 +2369,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -2380,12 +2392,18 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
           "repair": {
             "margin": 18,
             "effective_l_max": 76,
             "has_normalizer": false,
             "source_table_sha256": "c0653c288fb29adc064eec3ee9d0f62d3d19bbda8fce569f15e1577866d9da14"
+          },
+          "engine_differential": {
+            "reading": "readings/fast_cpu_engine_differential_nemotron_super_vl.json",
+            "sha256": "ce813062f4852d0dc204d7961e7a3527a9732f18a54561254e30e557344bbabb",
+            "documents": 3800016491,
+            "mismatches": 0
           }
         }
       },
@@ -2431,7 +2449,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -2451,7 +2469,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -2479,7 +2497,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -2488,13 +2506,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -2511,7 +2529,7 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6"
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3"
         }
       },
       "loader_face_sha256": "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca"
@@ -2556,7 +2574,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -2576,7 +2594,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -2604,7 +2622,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -2613,13 +2631,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -2636,7 +2654,7 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6"
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3"
         }
       },
       "config_added_tokens": {
@@ -2708,7 +2726,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -2728,7 +2746,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -2756,7 +2774,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -2765,13 +2783,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -2788,7 +2806,7 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6"
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3"
         }
       },
       "loader_face_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
@@ -2833,7 +2851,7 @@
                 "sm_120"
               ],
               "direct_source_digest": "8f4a57468969d277f86bb9c2346b9f0563a7ae5294f46f7700ff1ec6099fc4a1",
-              "direct_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "direct_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "direct_build_flags": [
                 "-fatbin",
                 "-O3",
@@ -2853,7 +2871,7 @@
                   "evidence_id": "ev-rust-direct-jit-sm120-plan160-v1"
                 }
               ],
-              "direct_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "direct_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             },
             "prebuilt": {
               "status": "certified",
@@ -2881,7 +2899,7 @@
                 "sm_90": "d6a94d76c317a5431f5e10c3df19820b0b982154713899964fc8f849c6a988bf"
               },
               "driver_min": "580.65.06",
-              "host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
+              "host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
               "host_build_flags": [
                 "profile=release",
                 "opt-level=3",
@@ -2890,13 +2908,13 @@
                 "pyo3=abi3-py310+extension-module"
               ],
               "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
-              "host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5"
+              "host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2"
             }
           }
         },
         "fast_cpu": {
           "status": "certified_source",
-          "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
+          "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
           "build_flags": [
             "profile=release",
             "opt-level=3",
@@ -2913,12 +2931,18 @@
           "patch_sha256": "19345bea9a7a5440c3aa1dcebe19a6090685e07e1d0ddce65f773c8dbbcfb506",
           "config_id": "toktier-fast-repair-v1",
           "config_digest": "8801781427f98456a7dfce6d9cc8f8ddd8dd4ec31c1ff37b71913d83182f3853",
-          "source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
+          "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
           "repair": {
             "margin": 23,
             "effective_l_max": 128,
             "has_normalizer": true,
             "source_table_sha256": "2d9fdf68706e86bda932c43620e39d5548674410570aa18a209dc325b7655914"
+          },
+          "engine_differential": {
+            "reading": "readings/fast_cpu_engine_differential_step5_preview.json",
+            "sha256": "28922212458eca6750af89bc3ab226339989d9030ad5891969404f65f5be1e10",
+            "documents": 3800016491,
+            "mismatches": 0
           }
         }
       },
@@ -3056,12 +3080,12 @@
   "runtime_builds": [
     {
       "runtime": "rust_api",
-      "source_digest": "c023b873df7c2d0e303ddadfc2aab0b2cb17f5388c969fa756e1e18a3d0c4915",
-      "fast_cpu_source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
-      "native_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
-      "source_digest_v2": "ab74254bd58e1dff7a19e3c5c33f78bb12cd64e1103866cdde2ef849f0ce37d5",
-      "fast_cpu_source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
-      "native_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5",
+      "source_digest": "3a8386307fb85a80e4f3c431be32a79baee64a9031410e23b67ef47776129437",
+      "fast_cpu_source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
+      "native_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
+      "source_digest_v2": "61e17b4567909c7a13519c49e10f7598d9be1cd081783086f38bd94ce8802b13",
+      "fast_cpu_source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
+      "native_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2",
       "build_flags": [
         "profile=release",
         "opt-level=3",
@@ -3076,12 +3100,12 @@
     },
     {
       "runtime": "rust_api",
-      "source_digest": "c023b873df7c2d0e303ddadfc2aab0b2cb17f5388c969fa756e1e18a3d0c4915",
-      "fast_cpu_source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
-      "native_host_source_digest": "d114131b1086daf7947031b73ab9a2a8922c0089a0d37c0c1f565d406d62eff6",
-      "source_digest_v2": "ab74254bd58e1dff7a19e3c5c33f78bb12cd64e1103866cdde2ef849f0ce37d5",
-      "fast_cpu_source_digest_v2": "2226504a42b4d15fdb37e87802707f2484e44b0bc831b9de6a196f432790c2a6",
-      "native_host_source_digest_v2": "902e861c8ffc0a4cd6f1bd4351ce1ba3c601163df5c4fa5c5a0564d493bfd1d5",
+      "source_digest": "3a8386307fb85a80e4f3c431be32a79baee64a9031410e23b67ef47776129437",
+      "fast_cpu_source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
+      "native_host_source_digest": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
+      "source_digest_v2": "61e17b4567909c7a13519c49e10f7598d9be1cd081783086f38bd94ce8802b13",
+      "fast_cpu_source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
+      "native_host_source_digest_v2": "5d0b9ad5204ec10d2683c3c7a2cf35c19b086cc3726616d8ddef3077c351b5d2",
       "build_flags": [
         "profile=release",
         "opt-level=3",

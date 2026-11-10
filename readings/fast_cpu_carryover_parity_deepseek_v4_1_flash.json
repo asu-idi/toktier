@@ -8,8 +8,9 @@
   },
   "engine": {
     "backend": "fast_cpu",
-    "source_digest": "58127bdf081cea05c26780a3c169ba73289cd7c859b0c281e52f67adb4c994e4",
-    "toktier_version": "0.3.1"
+    "source_digest": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
+    "source_digest_v2": "b8dcc25d588f751e38db7ea50a589ae8991b9444775473819609ef2276282db3",
+    "toktier_version": "0.3.2"
   },
   "oracle": {
     "package": "tokenizers",
@@ -80,7 +81,7 @@
           "equal": 380
         }
       },
-      "routed_to_reference_on_added_token_input": 157
+      "routed_to_reference_on_added_token_input": 0
     },
     "fast_engine_direct": {
       "documents": 8680,
@@ -99,14 +100,14 @@
     }
   },
   "provenance": {
-    "measured_on": "2026-11-07",
+    "measured_on": "2026-11-10",
     "tree": "taken on a tree whose fast CPU engine source identity is the one recorded above, with the repair parameters this artifact's registry record carries, CPU, one process, memory bound to nodes 0-1",
     "script_sha256": "47f96ca9772c619cfe8cc2b56e262c9b4a769e2223ec0d536c4fa76bc0a1aad2",
-    "raw_reading_sha256": "048dcf5976885161257306bcec35cabecddb83ce76c57774cbe0096d56ab30d6",
+    "raw_reading_sha256": "c2e028912215c2f783869f7f34bd1f6a6bfaadd8e73b8773970d70bf879a8c4a",
     "note": "Smoke-scale engine parity of the carried artifact (evidence-carryover.md Section 3.1, C7). The raw reading is kept verbatim below.",
     "raw_reading": {
       "tokenizers": "0.22.2",
-      "toktier": "0.3.1",
+      "toktier": "0.3.2",
       "artifact_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
       "documents": 8680,
       "characters": 123745406,
@@ -197,7 +198,7 @@
           "from_artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
           "engine_parity": {
             "path": "readings/fast_cpu_carryover_parity_deepseek_v4_1_flash.json",
-            "sha256": "5fa6b2b9cd883cdad5c8be1c6a2ea1257c1c605f1e0682c1bdebf33d493434ec",
+            "sha256": "61548270421d407737ab3524ebdae8c61d0f7b35fd5ad28976030bfe847e8a83",
             "docs": 8680,
             "mismatches": 0
           },
@@ -223,23 +224,18 @@
                 "sm_120": "certified",
                 "sm_80": "certified",
                 "sm_89": "certified",
+                "sm_90": "certified",
                 "sm_100": "experimental",
                 "sm_75": "experimental",
-                "sm_86": "experimental",
-                "sm_90": "experimental"
+                "sm_86": "experimental"
               }
             }
           }
         }
       },
-      "fallback_counts_after_encode": {
-        "R_INPUT_ADDED_TOKEN": 157
-      },
-      "fallback_counts_after_sessions": {
-        "R_INPUT_ADDED_TOKEN": 162,
-        "R_INPUT_POSTPROCESS_ROUTED": 780
-      },
-      "seconds": 129.7
+      "fallback_counts_after_encode": {},
+      "fallback_counts_after_sessions": {},
+      "seconds": 154.1
     }
   }
 }

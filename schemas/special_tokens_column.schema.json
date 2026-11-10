@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:toktier:schema:special-tokens-column:1",
   "title": "toktier parity reading: the add_special_tokens=True column of one family",
-  "description": "Per-family column of a native-front-end parity reading (CPU or GPU) for add_special_tokens=True. It compares Tokenizer.encode(t, add_special_tokens=True).ids with the reference oracle on the same documents as the parity pass. add_special_tokens=True means the post-processor of the reference document the reference route executes (the loader face). postprocessor_class is the facade's classification of that post-processor: identity (no token is inserted), prefix (one special-token id before the core stream) or reference (any other form, served by the reference route). served_by counts how each document was answered. surface names the entry point the column was taken on: facade (Tokenizer.encode of the Python facade, the default when absent) or native_route (the native router called directly, which does not apply the facade's prefix rule). The vacuity guard is judged on the facade surface only: there, on an identity or prefix face every document has to be answered by the facade (served_by.reference == 0), otherwise a silent fallback to the reference would read as zero mismatches; on the native_route surface the reference may answer, the column is then a reference-route reading (evidence_role reference_route allowed) and the count is reported as a note. evidence_role states what the column shows: on an identity face it compares a core stream with a core stream and is a regression guard, not new evidence (regression_guard); on a prefix face it is evidence for the prefix rule (prefix_rule). loader_true_equal is informative and not a gate: the pinned loader's own object compared with the reference document under add_special_tokens=True on a few thousand strings. Checked by tools/check_reading_forms.py.",
+  "description": "Per-family column of a native-front-end parity reading (CPU or GPU) for add_special_tokens=True. It compares Tokenizer.encode(t, add_special_tokens=True).ids with the reference oracle on the same documents as the parity pass. add_special_tokens=True means the post-processor of the reference document the reference route executes (the loader face). postprocessor_class is the facade's classification of that post-processor: identity (no token is inserted), prefix (one special-token id before the core stream) or reference (any other form, served by the reference route). served_by counts how each document was answered. surface names the entry point the column was taken on: facade (Tokenizer.encode of the Python facade, the default when absent) or native_route (the native router called directly, which does not apply the facade's prefix rule). The vacuity guard is judged on the facade surface only: there, on an identity or prefix face every document has to be answered by the facade (served_by.reference == 0), otherwise a silent fallback to the reference would read as zero mismatches; on the native_route surface the reference may answer, the column is then a reference-route reading (evidence_role reference_route allowed) and the count is reported as a note. evidence_role states what the column shows: on an identity face it compares a core stream with a core stream and is a regression guard, not new evidence (regression_guard); on a prefix face it is evidence for the prefix rule (prefix_rule). executed_by counts the executions of the native request runtime during the column's calls by the engine that produced the core stream (fast_cpu, gpu, hf; the runtime's execution_counts read around the column). It is the engine-level vacuity record: served_by only says the facade applied the prefix rule, not which engine encoded the core stream, and under a policy that plans the reference every core stream comes from the reference while served_by.facade still counts every document. On the facade surface, on an identity or prefix face, the arm's engine (fast_cpu in the CPU arm, gpu in the GPU arm; either when the arm is not known) has to account for at least half of the executions. loader_true_equal is informative and not a gate: the pinned loader's own object compared with the reference document under add_special_tokens=True on a few thousand strings. Checked by tools/check_reading_forms.py.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -11,7 +11,8 @@
     "documents",
     "mismatches",
     "served_by",
-    "evidence_role"
+    "evidence_role",
+    "executed_by"
   ],
   "properties": {
     "postprocessor_class": {"enum": ["identity", "prefix", "reference"]},
@@ -33,6 +34,17 @@
       }
     },
     "evidence_role": {"enum": ["regression_guard", "prefix_rule", "reference_route"]},
+    "executed_by": {
+      "description": "Executions of the native request runtime during the column's calls, by the engine that produced the core stream.",
+      "type": "object",
+      "required": ["fast_cpu", "gpu", "hf"],
+      "properties": {
+        "fast_cpu": {"type": "integer", "minimum": 0},
+        "gpu": {"type": "integer", "minimum": 0},
+        "hf": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
     "loader_true_equal": {
       "description": "Informative, not a gate: the pinned loader's object against the reference document under add_special_tokens=True.",
       "type": "object",

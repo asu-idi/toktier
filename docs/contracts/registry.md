@@ -515,7 +515,12 @@ generator binds, and `tools/generate_registry.py --check` and
   `literal_segments` column (`schemas/literal_segments_column.schema.json`)
   on every certified fast CPU row and on every GPU parity row.
   `special_tokens` has to be taken on the facade (`surface` = `facade`;
-  the native router's own column does not stand for it), and
+  the native router's own column does not stand for it) and records in
+  `executed_by` which engine produced the core streams; on an identity or
+  prefix face the arm's engine (`fast_cpu` in the CPU arm, `gpu` in the
+  GPU arm) accounts for at least half of them, so a column whose core
+  streams the reference made (for example under a policy that does not
+  bind the accelerated engine) does not pass; and
   `literal_segments.literal_class` has to equal the face's class
   (`served` for every shipped face). A parity reading that records
   `engine.source_digest_v2` also carries the per-build

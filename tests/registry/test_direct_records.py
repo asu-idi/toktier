@@ -166,6 +166,7 @@ def _parity_row(artifact: dict[str, Any], fingerprint: str) -> dict[str, Any]:
             "documents": documents,
             "mismatches": 0,
             "served_by": {"facade": documents, "reference": 0},
+            "executed_by": {"fast_cpu": documents, "gpu": 0, "hf": 0},
             "evidence_role": "regression_guard",
         },
         "literal_segments": {

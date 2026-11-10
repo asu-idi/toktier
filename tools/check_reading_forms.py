@@ -19,8 +19,15 @@ checks a column has to pass beyond its schema:
     a reference-route reading and the count is printed as a note. On an
     ``identity`` face the column compares a core stream
     with a core stream, so it is a regression guard and says so
-    (``evidence_role``). ``loader_true_equal`` is informative: it is
-    reported, never a reason to refuse.
+    (``evidence_role``). ``executed_by`` records which engine produced
+    the core streams (the native request runtime's execution counts read
+    around the column): ``served_by`` alone cannot show it, and under a
+    policy that plans the reference the facade still applies the prefix
+    rule to reference-made core streams. On the facade surface, on an
+    ``identity`` or ``prefix`` face, the arm's engine accounts for at
+    least :data:`SPECIAL_TOKENS_ENGINE_SHARE` of the executions.
+    ``loader_true_equal`` is informative: it is reported, never a reason
+    to refuse.
 
 ``literal_segments`` (``schemas/literal_segments_column.schema.json``)
     Documents holding added-token literals, per measured entry point of
@@ -162,6 +169,16 @@ RIDER_MIN_DOCUMENTS = 1
 #: harness that writes ``unserved``, does not pass as an unserved face.
 EXPECTED_LITERAL_CLASS = "served"
 
+#: On the facade surface, on an identity or prefix face, the share of the
+#: ``special_tokens`` column's executions the arm's engine has to account
+#: for (lane RCP measured a column answered entirely by the reference, on a
+#: build the registry does not bind yet, under the default policy).
+SPECIAL_TOKENS_ENGINE_SHARE = 0.5
+
+#: The engines that count as the arm's own in the ``special_tokens`` and
+#: rider engine records (any accelerated engine when the arm is unknown).
+ARM_ENGINES = {"cpu": ("fast_cpu",), "gpu": ("gpu",), None: ("fast_cpu", "gpu")}
+
 #: What the ``True`` column shows, by post-processor class.
 EVIDENCE_ROLE = {
     "identity": "regression_guard",
@@ -207,12 +224,18 @@ def _schema_problems(label: str, value: object, schema_path: Path) -> list[str]:
 
 
 def special_tokens_problems(
-    family: str, column: object, *, documents: int | None = None
+    family: str,
+    column: object,
+    *,
+    documents: int | None = None,
+    arm: str | None = None,
 ) -> list[str]:
     """Problems of one family's ``special_tokens`` column (empty: it passes).
 
     ``documents`` is the parity row's document count; the column is taken
     on the same documents, so the two must be equal when it is given.
+    ``arm`` (``cpu`` or ``gpu``) names the engine the executions have to
+    come from; when it is not given, either accelerated engine counts.
     """
     label = f"{family}: special_tokens"
     problems = _schema_problems(label, column, SPECIAL_TOKENS_SCHEMA)
@@ -258,6 +281,12 @@ def special_tokens_problems(
         )
     if int(column["mismatches"]) != 0:
         problems.append(f"{label}: {column['mismatches']} mismatch(es)")
+    problems += _engine_share_problems(
+        label,
+        column["executed_by"],
+        arm=arm,
+        judged=surface == "facade" and kind != "reference",
+    )
     loader = column.get("loader_true_equal")
     if isinstance(loader, Mapping):
         strings, equal = int(loader["strings"]), int(loader["equal"])
@@ -277,6 +306,41 @@ def special_tokens_problems(
         ):
             problems.append(f"{label}: loader_true_equal fixed_affix names no affix")
     return problems
+
+
+def _engine_share_problems(
+    label: str,
+    executed: Mapping[str, Any],
+    *,
+    arm: str | None,
+    judged: bool,
+    documents: int | None = None,
+) -> list[str]:
+    """The engine-level vacuity guard of a ``True`` column or rider arm.
+
+    ``executed`` counts executions by the engine that produced the core
+    stream. A column with no execution recorded speaks about nothing; when
+    ``judged`` (an identity or prefix face on the facade surface), the
+    arm's engines (:data:`ARM_ENGINES`) account for at least
+    :data:`SPECIAL_TOKENS_ENGINE_SHARE` of them (or of ``documents``, when
+    each document records one execution).
+    """
+    total = sum(int(value) for value in executed.values())
+    if total < 1:
+        return [f"{label}: executed_by records no execution"]
+    if not judged:
+        return []
+    engines = ARM_ENGINES.get(arm, ARM_ENGINES[None])
+    own = sum(int(executed.get(engine, 0)) for engine in engines)
+    base = total if documents is None else max(total, documents)
+    if own < SPECIAL_TOKENS_ENGINE_SHARE * base:
+        return [
+            f"{label}: {own} of {base} core stream(s) came from "
+            f"{'/'.join(engines)}, below {SPECIAL_TOKENS_ENGINE_SHARE:.0%}; the "
+            f"column reads another engine ({dict(executed)}), e.g. the reference "
+            "under a policy that does not bind the accelerated engine"
+        ]
+    return []
 
 
 def special_tokens_notes(family: str, column: object) -> list[str]:
@@ -521,7 +585,7 @@ def column_problems(
     problems: list[str] = []
     if "special_tokens" in row:
         problems += special_tokens_problems(
-            family, row["special_tokens"], documents=count
+            family, row["special_tokens"], documents=count, arm=arm
         )
     if "literal_segments" in row:
         problems += literal_segments_problems(

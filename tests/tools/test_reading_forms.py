@@ -40,6 +40,11 @@ def _true_column(kind: str = "prefix", documents: int = 100) -> dict[str, Any]:
             else {"facade": documents, "reference": 0}
         ),
         "evidence_role": forms.EVIDENCE_ROLE[kind],
+        "executed_by": (
+            {"fast_cpu": 0, "gpu": 0, "hf": documents}
+            if kind == "reference"
+            else {"fast_cpu": documents, "gpu": 0, "hf": 0}
+        ),
         "loader_true_equal": {
             "loader": {"package": "transformers", "version": "4.57.6"},
             "strings": 3000,
@@ -498,6 +503,12 @@ def _complete_row(
 ) -> dict[str, Any]:
     out = copy.deepcopy(row)
     out["special_tokens"] = _true_column("identity", int(row["documents"]))
+    if arm == "gpu":
+        out["special_tokens"]["executed_by"] = {
+            "fast_cpu": 0,
+            "gpu": int(row["documents"]),
+            "hf": 0,
+        }
     out["literal_segments"] = _segments_column(
         arm, fingerprint=fingerprints[str(row["family"])]
     )
@@ -890,3 +901,63 @@ def test_the_span_guard_class_is_a_required_key() -> None:
     column = _segments_column("gpu")
     del column["entry_points"][0]["paths"]["hf_span_guard"]
     assert forms.literal_segments_problems("f", column, arm="gpu")
+
+
+# -- special_tokens: which engine produced the core streams ------------------
+
+
+@pytest.mark.parametrize("kind", ["identity", "prefix"])
+def test_a_column_answered_by_the_reference_engine_is_refused(kind: str) -> None:
+    """Lane RCP's case: the facade served every document (served_by), but
+    every core stream came from the reference (a build the registry does not
+    bind yet, under the default policy)."""
+    column = _true_column(kind)
+    column["executed_by"] = {"fast_cpu": 0, "gpu": 0, "hf": 100}
+    for arm in ("cpu", "gpu", None):
+        problems = forms.special_tokens_problems("f", column, documents=100, arm=arm)
+        assert any("below 50%" in p for p in problems), problems
+    # ... and through the row form a parity reading uses.
+    row = {"family": "f", "documents": 100, "special_tokens": column}
+    assert any("below 50%" in p for p in forms.column_problems(row, arm="cpu"))
+
+
+def test_the_arms_engine_carries_the_column() -> None:
+    column = _true_column("prefix")
+    column["executed_by"] = {"fast_cpu": 51, "gpu": 0, "hf": 49}
+    assert forms.special_tokens_problems("f", column, arm="cpu") == []
+    problems = forms.special_tokens_problems("f", column, arm="gpu")
+    assert any("came from gpu" in p for p in problems)
+    column["executed_by"] = {"fast_cpu": 49, "gpu": 0, "hf": 51}
+    assert any(
+        "49 of 100 core stream(s) came from fast_cpu" in p
+        for p in forms.special_tokens_problems("f", column, arm="cpu")
+    )
+    # The GPU arm: short documents below the crossover may run on the CPU
+    # engine; the GPU has to carry at least half.
+    column["executed_by"] = {"fast_cpu": 40, "gpu": 60, "hf": 0}
+    assert forms.special_tokens_problems("f", column, arm="gpu") == []
+    assert forms.special_tokens_problems("f", column) == []
+
+
+def test_the_engine_record_is_required_and_not_empty() -> None:
+    column = _true_column("identity")
+    del column["executed_by"]
+    assert any("executed_by" in p for p in forms.special_tokens_problems("f", column))
+    column["executed_by"] = {"fast_cpu": 0, "gpu": 0, "hf": 0}
+    assert any(
+        "records no execution" in p for p in forms.special_tokens_problems("f", column)
+    )
+
+
+def test_the_engine_floor_does_not_apply_to_reference_routes() -> None:
+    # A reference face is served by the reference engine by design ...
+    assert (
+        forms.special_tokens_problems("f", _true_column("reference"), arm="cpu") == []
+    )
+    # ... and a native-route column is a reference-route reading.
+    column = _true_column("identity")
+    column["surface"] = "native_route"
+    column["served_by"] = {"facade": 0, "reference": 100}
+    column["evidence_role"] = "reference_route"
+    column["executed_by"] = {"fast_cpu": 0, "gpu": 0, "hf": 100}
+    assert forms.special_tokens_problems("f", column, arm="cpu") == []

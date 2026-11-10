@@ -338,9 +338,14 @@ impl ReferenceEngine {
     /// with token byte endpoints in a single forward stream instead of
     /// materializing a byte-to-character map for every input byte. Both
     /// share the pair bridge's premises and failure behavior case for
-    /// case: the input must be normalization-stable for the artifact
-    /// (otherwise token bytes cannot close over the given text and the
-    /// same fail-closed closure error is returned), byte-fallback tokens
+    /// case: the row must encode `text` itself, which for a row of the
+    /// normalized text means the input must be normalization-stable for
+    /// the artifact. When it is not, the token bytes usually fail to close
+    /// over the given text and the same fail-closed closure error is
+    /// returned; when the normalizer's length changes cancel they do
+    /// close, and the spans come out shifted, so a caller that adopts a
+    /// row it did not encode itself also runs
+    /// [`Self::require_normalization_stable`]. Byte-fallback tokens
     /// whose byte interval lies inside one code point share that
     /// character's span, and unknown-ID, zero-length, overflow, bounds,
     /// and closure errors carry the same messages. The pair bridge

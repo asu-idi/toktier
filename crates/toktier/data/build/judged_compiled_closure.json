@@ -783,38 +783,38 @@
       "criterion": "R0",
       "name": "toktier",
       "tier": "core",
-      "version": "0.3.1"
+      "version": "0.3.2"
     },
     {
       "criterion": "R0",
       "name": "toktier-cuda-driver",
       "tier": "core",
-      "version": "0.3.1"
+      "version": "0.3.2"
     },
     {
       "criterion": "R0",
       "name": "toktier-gigatoken-core",
       "tier": "core",
-      "version": "0.3.1"
+      "version": "0.3.2"
     },
     {
       "criterion": "R0",
       "name": "toktier-routing-core",
       "tier": "core",
-      "version": "0.3.1"
+      "version": "0.3.2"
     },
     {
       "criterion": "R0",
       "name": "toktier-store-core",
       "tier": "core",
-      "version": "0.3.1"
+      "version": "0.3.2"
     },
     {
       "criterion": "R0",
       "name": "toktier-store-sqlite",
       "optional": true,
       "tier": "core",
-      "version": "0.3.1"
+      "version": "0.3.2"
     },
     {
       "criterion": "periphery:reachable-not-text-semantics",

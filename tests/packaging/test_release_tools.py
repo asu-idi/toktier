@@ -168,7 +168,7 @@ def test_requirement_key_reads_both_marker_spellings() -> None:
 REAL_WHEEL_METADATA = b"""\
 Metadata-Version: 2.4
 Name: toktier
-Version: 0.3.1
+Version: 0.3.2
 Classifier: Programming Language :: Rust
 Requires-Dist: tokenizers>=0.22.2,<0.24
 Requires-Dist: transformers>=4.57.6,<6
@@ -176,6 +176,7 @@ Requires-Dist: huggingface-hub>=0.30
 Requires-Dist: platformdirs>=3.0
 Requires-Dist: tomli>=2.0 ; python_full_version < '3.11'
 Requires-Dist: toktier-fastokens==0.3.1.2 ; extra == 'fastokens'
+Requires-Dist: tokenizers==0.22.2 ; extra == 'fastokens'
 Requires-Dist: torch~=2.11 ; extra == 'gpu'
 Requires-Dist: numpy>=1.24 ; extra == 'gpu'
 Requires-Dist: torch~=2.11 ; extra == 'gpu-jit'

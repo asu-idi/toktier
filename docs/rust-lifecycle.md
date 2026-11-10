@@ -57,7 +57,7 @@ Network acquisition lives behind the `network` feature, which is **not** in
 the default set from 0.2.5 on. Add it when a build has to fetch:
 
 ```toml
-toktier = { version = "0.3.1", features = ["network"] }
+toktier = { version = "0.3.2", features = ["network"] }
 ```
 
 Everything else in this document works without it: a verified artifact

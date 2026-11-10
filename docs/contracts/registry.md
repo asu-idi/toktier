@@ -527,7 +527,7 @@ generator binds, and `tools/generate_registry.py --check` and
   `engine.source_digest` the executing extension reported.
 - **The literal segments column.** Each measured entry point (`id_route`
   required, `state_route` when measured) counts every document once in
-  one of six path classes: `gigatoken_segmented`, `gpu_segmented`,
+  one of the path classes: `gigatoken_segmented`, `gpu_segmented`,
   `hf_added_token`, `hf_engine_guard`, `hf_segments_below_crossover` and
   `hf_span_guard`. On a served face `hf_added_token` is 0 (that class is
   an unserved face or a fail-closed premise), and the reference encodes
@@ -537,11 +537,25 @@ generator binds, and `tools/generate_registry.py --check` and
   text segment below the crossover) and the span-guard documents
   (`span_guard_documents`, with their bytes; the GPU arm's state route
   only, a device row the state-route acceptance refused because the text
-  is not stable under the face's normalizer). Floors beside the ratios: at least 1,000
+  is not stable under the face's normalizer). A seventh class,
+  `hf_device_declined`, is optional (absent reads 0): a document whose
+  text segment the device itself declined, and that the reference then
+  encoded whole (runtime path `hf_full` on the ID route,
+  `hf_no_certified_span_bridge` on the state route). It stands only in the
+  GPU arm, on a served face, when both of these hold: the chain is
+  exactly `gpu` then `hf` (no CPU engine between the device and the
+  reference), and the execution record shows the device's own decline
+  (fallback `R_EXEC_FAULT` from the `gpu` backend, scope `segment`). Such
+  documents are listed in `device_declined_documents` with their bytes,
+  the chain and the event; their bytes count toward the reference's, and
+  they count toward the guard documents' bounds. Every document of the
+  column is compared with the reference whatever path answered it.
+  Floors beside the ratios: at least 1,000
   documents per entry point and 10,000 battery strings; guard documents
-  at most 1 % of the documents (rounded down, so a small reading allows
-  none) and at most 1 % of the segment bytes; on the GPU arm's ID route
-  a GPU byte share of at least 0.5.
+  (together with device-declined documents) at most 1 % of the documents
+  (rounded down, so a small reading allows none) and at most 1 % of the
+  segment bytes; on the GPU arm's ID route a GPU byte share of at least
+  0.5.
 - **The engine differential of a directly judged face**
   (`schemas/engine_differential_reading.schema.json`). The constructed
   arm records its comparison window `comparison_l_max` (128) and decides

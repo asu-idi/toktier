@@ -97,8 +97,11 @@ def jit_facade_config(
     config = Config(home=base / "home", offline=True)
     directory = artifact_cache_dir(config) / entry.directory_name
     directory.mkdir(parents=True)
+    # Every file the manifest names for the family: the loader resolves
+    # them all, and an offline cache missing one is refused.
+    for item in entry.files:
+        (directory / item.name).write_bytes(handle.path(item.name).read_bytes())
     tokenizer_json = directory / TOKENIZER_FILE
-    tokenizer_json.write_bytes(handle.path(TOKENIZER_FILE).read_bytes())
     return {"config": config, "tokenizer_json": tokenizer_json}
 
 

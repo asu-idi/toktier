@@ -22,7 +22,6 @@ device, the JIT toolchain or the artifacts (as in
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -30,6 +29,7 @@ from pathlib import Path
 
 import pytest
 
+from .test_facade_jit_lifetime import _child_environment
 from .test_gpu_state_nfc_closure import _artifact_source, _cuda_or_skip
 
 pytestmark = pytest.mark.gpu
@@ -53,7 +53,7 @@ def load(store=None):
 def sealed(directory):
     return [records.decode_record(p.read_bytes()).stable_prefix_byte_length
             for p in sorted(pathlib.Path(directory, "entries").glob("*.rec"))]
-out = {"cases": []}
+out = {"cases": [], "toktier_file": toktier.__file__}
 for name, letter in (("u0958", "\u0958"), ("u095b", "\u095b"), ("u09dc", "\u09dc"),
                      ("control_x", "x")):
     store = pathlib.Path(root) / name
@@ -120,11 +120,14 @@ def test_a_jit_session_seals_where_the_reference_agrees(
         ],
         capture_output=True,
         text=True,
-        env=dict(os.environ),
+        env=_child_environment(),
         timeout=3600,
     )
     assert done.returncode == 0, done.stderr[-4000:]
     result = json.loads(done.stdout.strip().splitlines()[-1])
+    # The child tested the package of this tree, not an installed one.
+    tree_source = str(Path(__file__).resolve().parents[2] / "src")
+    assert result["toktier_file"].startswith(tree_source), result
     if "unavailable" in result:
         pytest.skip(f"the JIT delivery is unavailable: {result['unavailable']}")
     assert result["chain"] == ["gpu", "fast_cpu", "hf"], result

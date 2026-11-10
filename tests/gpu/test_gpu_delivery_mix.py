@@ -20,7 +20,6 @@ in ``test_gpu_state_nfc_closure.py``. The file stays ASCII.
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -28,6 +27,7 @@ from pathlib import Path
 
 import pytest
 
+from .test_facade_jit_lifetime import _child_environment
 from .test_gpu_state_nfc_closure import _artifact_source, _cuda_or_skip
 
 pytestmark = pytest.mark.gpu
@@ -41,7 +41,7 @@ import toktier
 from toktier.config import Config
 home, store = sys.argv[1], sys.argv[2]
 config = Config(home=home, offline=True)
-out = {}
+out = {"toktier_file": toktier.__file__}
 try:
     first = toktier.load("llama_3_1_8b", config=config, device="cuda",
                          gpu_delivery="jit", gpu_min_bytes=256, policy="experimental")
@@ -110,11 +110,14 @@ def test_prebuilt_after_jit_answers_stored_state_through_the_reference(
         [sys.executable, "-c", _CHILD, str(tmp_path / "home"), str(tmp_path / "store")],
         capture_output=True,
         text=True,
-        env=dict(os.environ),
+        env=_child_environment(),
         timeout=3600,
     )
     assert done.returncode == 0, done.stderr[-4000:]
     result = json.loads(done.stdout.strip().splitlines()[-1])
+    # The child tested the package of this tree, not an installed one.
+    tree_source = str(Path(__file__).resolve().parents[2] / "src")
+    assert result["toktier_file"].startswith(tree_source), result
     if "jit_unavailable" in result:
         pytest.skip(f"the JIT delivery is unavailable: {result['jit_unavailable']}")
     if "prebuilt_unavailable" in result:

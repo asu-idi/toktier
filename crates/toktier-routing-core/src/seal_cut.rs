@@ -26,7 +26,12 @@
 //! On a face without an effective normalizer, and on ASCII text under an
 //! NFC normalizer, the condition holds for every candidate and costs
 //! nothing. A face with an effective normalizer other than NFC seals
-//! nothing (no packaged face has one).
+//! nothing (no packaged face has one), and neither does a face the chunk
+//! planner refuses structurally (`ReferenceEngine::structural_refusal`, the
+//! planner's own predicate: an added token that sets `lstrip`, `rstrip` or
+//! `single_word`, or an NFC face with a normalized added token), since next
+//! to such a literal the raw text does not decide how the literal is
+//! matched. No packaged face has such a literal.
 
 use std::cell::Cell;
 use std::sync::{Arc, OnceLock};
@@ -67,7 +72,9 @@ impl std::fmt::Debug for SealCutRule {
 impl SealCutRule {
     /// The rule for the face `reference` executes.
     pub fn for_reference(reference: Arc<ReferenceEngine>) -> Self {
-        let mode = if !reference.has_effective_normalizer() {
+        let mode = if reference.structural_refusal().is_some() {
+            Mode::Closed
+        } else if !reference.has_effective_normalizer() {
             Mode::Identity
         } else if reference.normalizer_is_nfc() {
             let literals = reference
@@ -206,6 +213,10 @@ mod tests {
     }
 
     fn reference(face: Face) -> Arc<ReferenceEngine> {
+        reference_with(face, &[])
+    }
+
+    fn reference_with(face: Face, added: &[tokenizers::AddedToken]) -> Arc<ReferenceEngine> {
         let mut vocab = Vocab::default();
         for (index, value) in ByteLevel::alphabet().into_iter().enumerate() {
             vocab.insert(value.to_string(), index as u32);
@@ -226,6 +237,9 @@ mod tests {
             Face::Lowercase => {
                 tokenizer.with_normalizer(Some(Lowercase));
             }
+        }
+        if !added.is_empty() {
+            tokenizer.add_tokens(added);
         }
         let json = tokenizer.to_string(false).unwrap();
         Arc::new(ReferenceEngine::from_bytes(json.as_bytes()).unwrap())
@@ -305,6 +319,52 @@ mod tests {
         let decomposed = "ab \u{0915}\u{093c}.com";
         assert_eq!(cut_at(raw(decomposed, u64::MAX)), Some(2));
         assert_eq!(cut_at(sealed(&rule, decomposed, u64::MAX)), Some(2));
+    }
+
+    #[test]
+    fn a_face_the_chunk_planner_refuses_structurally_never_seals() {
+        use tokenizers::AddedToken;
+        let text = "plain ascii. text 12 and more words here";
+        // `from(_, false)` makes a normalized literal by default; the plain
+        // one is matched on the raw text.
+        let plain = AddedToken::from("<|lit|>", false).normalized(false);
+        // Plain literals: the rule is the face's usual one.
+        for (face, mode) in [(Face::Plain, "identity"), (Face::Nfc, "nfc")] {
+            let rule =
+                SealCutRule::for_reference(reference_with(face, std::slice::from_ref(&plain)));
+            assert_eq!(rule.mode_name(), mode);
+            assert!(cut_at(sealed(&rule, text, u64::MAX)).is_some());
+        }
+        // A stripping or single_word literal, on either face: closed.
+        for flagged in [
+            plain.clone().lstrip(true),
+            plain.clone().rstrip(true),
+            plain.clone().single_word(true),
+        ] {
+            for face in [Face::Plain, Face::Nfc] {
+                let reference = reference_with(face, std::slice::from_ref(&flagged));
+                assert_eq!(
+                    reference.structural_refusal(),
+                    Some(crate::chunked::ADDED_TOKEN_FLAGS_REFUSAL)
+                );
+                let rule = SealCutRule::for_reference(reference);
+                assert_eq!(rule.mode_name(), "closed");
+                assert_eq!(sealed(&rule, text, u64::MAX), None);
+            }
+        }
+        // A normalized literal: closed on the NFC face (the planner's
+        // refusal), unchanged on a face without a normalizer.
+        let normalized = plain.clone().normalized(true);
+        let nfc = reference_with(Face::Nfc, std::slice::from_ref(&normalized));
+        assert_eq!(
+            nfc.structural_refusal(),
+            Some("nfc_with_normalized_added_tokens")
+        );
+        let rule = SealCutRule::for_reference(nfc);
+        assert_eq!(rule.mode_name(), "closed");
+        assert_eq!(sealed(&rule, text, u64::MAX), None);
+        let rule = SealCutRule::for_reference(reference_with(Face::Plain, &[normalized]));
+        assert_eq!(rule.mode_name(), "identity");
     }
 
     #[test]

@@ -208,6 +208,16 @@ impl ReferenceEngine {
         self.has_normalizer() && !self.normalizer_is_identity
     }
 
+    /// The chunk planner's structural refusal of this face, the same
+    /// predicate (`chunked::normalizer_mode`): a normalizer shape it does
+    /// not admit, an added token that sets `lstrip`, `rstrip` or
+    /// `single_word`, or an NFC face with a normalized added token. `None`
+    /// when the planner admits the face. The session seal is closed on a
+    /// refused face (`seal_cut.rs`).
+    pub fn structural_refusal(&self) -> Option<&str> {
+        self.document.structural_refusal.as_deref()
+    }
+
     /// Whether the artifact normalizer is exactly `NFC` (not a sequence or
     /// any other normalizer). The session seal decides its candidates on
     /// normalized characters only for this shape (`seal_cut.rs`).
@@ -529,6 +539,9 @@ enum NormalizerShape {
 pub(crate) struct DocumentFacts {
     rows: Result<Vec<DocumentRow>, String>,
     shape: Result<NormalizerShape, String>,
+    /// The chunk planner's structural refusal of the face
+    /// (`chunked::normalizer_mode`), or `None` when it admits the face.
+    structural_refusal: Option<String>,
 }
 
 impl DocumentFacts {
@@ -537,10 +550,12 @@ impl DocumentFacts {
             None => Self {
                 rows: Err("the face document could not be read".to_owned()),
                 shape: Err("the face document could not be read".to_owned()),
+                structural_refusal: Some("the face document could not be read".to_owned()),
             },
             Some(document) => Self {
                 rows: document_rows(document),
                 shape: face_shape(document),
+                structural_refusal: crate::chunked::normalizer_mode(document).err(),
             },
         }
     }

@@ -18,6 +18,7 @@ from registry_common import (
     load_json,
     schema_violations,
     serialise_document,
+    sha256_of_file,
     with_root_digest,
 )
 from rust_api_source_identity import source_digest as rust_api_source_digest
@@ -27,6 +28,7 @@ REGISTRY = ROOT / "tables" / "support_registry.json"
 PACKAGED_REGISTRY = ROOT / "src/toktier/routing/tables/support_registry.v1.json"
 SCHEMA = ROOT / "schemas/support_registry.schema.json"
 BINDING = ROOT / "tools/rust_api_binding.json"
+FAST_CPU_BINDING = ROOT / "tools/fast_cpu_binding.json"
 CPU_READING = ROOT / "readings/fast_cpu_native_frontend_parity.json"
 GPU_READINGS = {
     "sm_80": ROOT / "readings/gpu_native_frontend_sm80_parity.json",
@@ -61,10 +63,173 @@ MATRIX_DOCUMENTS = MATRIX_FAMILIES * 7
 #: Families the GPU parity readings cover; the same roster.
 GPU_FAMILIES = MATRIX_FAMILIES
 
-#: Backend roster the CPU venue must observe: the artifacts with a certified
-#: Gigatoken row run there (a roster row, or the registry-held repair member
-#: of a carried record), and the rest answer through the reference engine.
-CPU_MATRIX_BACKENDS = {"FastCpu": 13, "HuggingFace": 8}
+#: The CPU venue's backend roster and the CPU parity reading's counts are
+#: not written here: both follow from ``tools/fast_cpu_binding.json`` (see
+#: :func:`fast_cpu_route` and :func:`cpu_matrix_backends`).
+
+
+def _digest(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def fast_cpu_route(fast_binding: dict[str, Any]) -> dict[str, set[str]]:
+    """The families the fast CPU binding places on the integrated CPU engine.
+
+    Three classes run there: the loadable families the campaign judged, the
+    families carried from one of them, and the directly judged families
+    whose own engine-differential reading is recorded (path and SHA-256)
+    and present with that digest. A directly judged family registered
+    before its reading exists (``"sha256": null``) is not on the route yet
+    and answers through the reference engine. Any other shape is refused.
+    """
+    loadable_raw = fast_binding.get("loadable_families")
+    if (
+        not isinstance(loadable_raw, list)
+        or not loadable_raw
+        or not all(isinstance(item, str) and item for item in loadable_raw)
+        or len(set(loadable_raw)) != len(loadable_raw)
+    ):
+        raise GenerationError(
+            "fast CPU binding loadable_families must be a non-empty list of "
+            "distinct family names"
+        )
+    loadable = set(loadable_raw)
+    carried_raw = fast_binding.get("carried_families") or {}
+    if not isinstance(carried_raw, dict) or not all(
+        isinstance(family, str) and family and isinstance(anchor, str)
+        for family, anchor in carried_raw.items()
+    ):
+        raise GenerationError(
+            "fast CPU binding carried_families must map a family to its anchor"
+        )
+    for family, anchor in sorted(carried_raw.items()):
+        if anchor not in loadable:
+            raise GenerationError(
+                f"fast CPU binding carries {family} from {anchor}, which is not "
+                "a loadable family"
+            )
+    carried = set(carried_raw)
+    direct_raw = fast_binding.get("direct_families") or {}
+    if not isinstance(direct_raw, dict):
+        raise GenerationError(
+            "fast CPU binding direct_families must map a family to its reading"
+        )
+    direct: set[str] = set()
+    pending: set[str] = set()
+    for family, node in sorted(direct_raw.items()):
+        reading = node.get("reading") if isinstance(node, dict) else None
+        if (
+            not isinstance(family, str)
+            or not family
+            or not isinstance(node, dict)
+            or not isinstance(reading, str)
+            or not reading.startswith("readings/")
+        ):
+            raise GenerationError(
+                f"fast CPU binding direct_families.{family} must name its "
+                "reading under readings/"
+            )
+        recorded = node.get("sha256")
+        if recorded is None:
+            pending.add(family)
+            continue
+        if not _digest(recorded):
+            raise GenerationError(
+                f"fast CPU binding direct_families.{family}.sha256 is not a "
+                "SHA-256 digest"
+            )
+        path = ROOT / reading
+        if not path.is_file():
+            raise GenerationError(
+                f"{family}: the fast CPU binding records the engine-differential "
+                f"reading {reading}, and the file is missing"
+            )
+        observed = sha256_of_file(path)
+        if observed != recorded:
+            raise GenerationError(
+                f"{family}: engine-differential reading digest {observed} does "
+                f"not match the recorded {recorded}"
+            )
+        direct.add(family)
+    classes = (loadable, carried, direct | pending)
+    if any(
+        first & second
+        for index, first in enumerate(classes)
+        for second in classes[index + 1 :]
+    ):
+        raise GenerationError(
+            "fast CPU binding lists a family in more than one of the loadable, "
+            "carried and directly judged classes"
+        )
+    return {
+        "loadable": loadable,
+        "carried": carried,
+        "direct": direct,
+        "pending": pending,
+    }
+
+
+def cpu_parity_counts(fast_binding: dict[str, Any]) -> dict[str, Any]:
+    """What the CPU native-front-end parity reading has to read.
+
+    Its rows are the loadable families and the directly judged families on
+    the route (carried families inherit their anchor's row), so
+    ``unique_artifacts`` is their number. ``model_families`` is the
+    binding's coverage count of the judged campaign (which includes the
+    exact-artifact inheritance) plus one for each directly judged family.
+    """
+    route = fast_cpu_route(fast_binding)
+    coverage = fast_binding.get("coverage")
+    if not isinstance(coverage, dict):
+        raise GenerationError("fast CPU binding has no coverage object")
+    unique = coverage.get("unique_tokenizer_artifacts")
+    families = coverage.get("model_families")
+    if (
+        not isinstance(unique, int)
+        or isinstance(unique, bool)
+        or not isinstance(families, int)
+        or isinstance(families, bool)
+        or unique != len(route["loadable"])
+        or families < unique
+    ):
+        raise GenerationError(
+            "fast CPU binding coverage does not count its loadable families "
+            f"(unique_tokenizer_artifacts={unique!r}, model_families={families!r}, "
+            f"loadable={len(route['loadable'])})"
+        )
+    rows = route["loadable"] | route["direct"]
+    return {
+        "rows": rows,
+        "unique_artifacts": len(rows),
+        "model_families": families + len(route["direct"]),
+    }
+
+
+def cpu_matrix_backends(
+    fast_binding: dict[str, Any], roster: set[str]
+) -> dict[str, str]:
+    """The backend each roster family answers through at the CPU venue.
+
+    A family on the fast CPU route (:func:`fast_cpu_route`) runs on the
+    integrated engine (``FastCpu``); every other certified family answers
+    through the reference engine (``HuggingFace``).
+    """
+    route = fast_cpu_route(fast_binding)
+    on_route = route["loadable"] | route["carried"] | route["direct"]
+    outside = on_route - roster
+    if outside:
+        raise GenerationError(
+            "fast CPU binding places families outside the certified roster on "
+            f"the CPU route: {sorted(outside)}"
+        )
+    return {
+        family: ("FastCpu" if family in on_route else "HuggingFace")
+        for family in roster
+    }
 
 
 def _mapping(value: object, *, label: str) -> dict[str, Any]:
@@ -132,10 +297,34 @@ def verify_binding(binding: dict[str, Any]) -> None:
 def verify_shared_evidence(binding: dict[str, Any]) -> None:
     cpu = _mapping(load_json(CPU_READING), label="CPU native-front-end reading")
     engine = _mapping(cpu.get("engine"), label="CPU engine facts")
+    expected = cpu_parity_counts(
+        _mapping(load_json(FAST_CPU_BINDING), label="fast CPU binding")
+    )
+    rows = cpu.get("rows")
+    listed = (
+        [str(row.get("family")) for row in rows if isinstance(row, dict)]
+        if isinstance(rows, list)
+        else []
+    )
+    if (
+        not isinstance(rows, list)
+        or len(listed) != len(rows)
+        or len(set(listed)) != len(listed)
+        or set(listed) != expected["rows"]
+    ):
+        raise GenerationError(
+            "CPU native-front-end reading rows are not the fast CPU route "
+            f"(outside it: {sorted(set(listed) - expected['rows'])}, "
+            f"missing: {sorted(expected['rows'] - set(listed))})"
+        )
+    for key in ("unique_artifacts", "model_families"):
+        if cpu.get(key) != expected[key]:
+            raise GenerationError(
+                f"CPU native-front-end reading {key} is {cpu.get(key)!r}; the "
+                f"fast CPU binding gives {expected[key]}"
+            )
     if (
         cpu.get("schema") != "toktier.fast_cpu.native_frontend_parity.v1"
-        or cpu.get("unique_artifacts") != 11
-        or cpu.get("model_families") != 12
         or cpu.get("mismatches") != 0
         or cpu.get("all_ids_equal_hf") is not True
         or engine.get("source_digest") != binding["fast_cpu_source_digest"]
@@ -192,6 +381,7 @@ def verify_public_matrix(
             f"support registry certifies {len(roster)} artifacts; the Rust API "
             f"matrix roster is {MATRIX_FAMILIES}"
         )
+    cpu_route_binding = _mapping(load_json(FAST_CPU_BINDING), label="fast CPU binding")
     for target, path in MATRIX_READINGS.items():
         reading = _mapping(load_json(path), label=f"Rust API {target} matrix")
         if (
@@ -226,21 +416,28 @@ def verify_public_matrix(
                 f"roster (outside it: {sorted(set(families) - roster)}, "
                 f"missing: {sorted(roster - set(families))})"
             )
+        expected_backends = (
+            cpu_matrix_backends(cpu_route_binding, roster)
+            if target == "cpu"
+            else dict.fromkeys(roster, "Gpu")
+        )
         backend_counts: dict[str, int] = {}
+        expected_counts: dict[str, int] = {}
+        for backend in expected_backends.values():
+            expected_counts[backend] = expected_counts.get(backend, 0) + 1
+        differing: list[str] = []
         for row in rows:
             if not isinstance(row, dict) or row.get("mismatches") != 0:
                 raise GenerationError(f"Rust API {target} matrix has a failing row")
             backend = str(row.get("backend"))
             backend_counts[backend] = backend_counts.get(backend, 0) + 1
-        expected = (
-            dict(CPU_MATRIX_BACKENDS)
-            if target == "cpu"
-            else {"Gpu": MATRIX_FAMILIES}
-        )
-        if backend_counts != expected:
+            if backend != expected_backends[str(row.get("family"))]:
+                differing.append(str(row.get("family")))
+        if backend_counts != expected_counts or differing:
             raise GenerationError(
                 f"Rust API {target} matrix backend roster is {backend_counts}, "
-                f"expected {expected}"
+                f"expected {expected_counts} (families on another backend: "
+                f"{sorted(differing)})"
             )
 
 

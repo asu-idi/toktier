@@ -63,6 +63,17 @@ this tree's chunked source (and, when a native path is admitted, on this
 tree's engine identity), and which roster families still have no row. A
 family that is absent is reported, not invented; the exit status is
 nonzero so the release notes have to acknowledge it.
+
+The readings name the routing policy the campaign units ran under
+(``policy``; null, or absent in readings written before the campaign tool
+recorded it, is the default policy). The admission claims one policy for
+its evidence, ``--evidence-policy`` (default: ``default``). Every mode
+prints a note when the readings' policy is not the default or was not
+recorded; ``--release-check`` refuses readings taken under another policy
+than the claimed one, so a reading taken under ``experimental`` (before
+the rebind) is admitted to a release only when the admission says so
+(``--evidence-policy experimental``), and the release notes carry the
+default-policy confirmation that goes with it.
 """
 
 from __future__ import annotations
@@ -481,12 +492,42 @@ def absent_families(
     return sorted(set(_roster(registry)) - present - excluded)
 
 
+#: The policies the admission may claim for its evidence.
+EVIDENCE_POLICIES = ("default", "experimental")
+
+
+def readings_policy(readings: dict[str, Any]) -> tuple[str, bool]:
+    """``(policy, recorded)`` of a campaign reading: null is the default."""
+    if "policy" not in readings:
+        return "default", False
+    value = readings.get("policy")
+    return ("default" if value is None else str(value)), True
+
+
+def policy_notes(readings: dict[str, Any]) -> list[str]:
+    """The note every mode prints about the readings' policy (or none)."""
+    policy, recorded = readings_policy(readings)
+    if not recorded:
+        return [
+            "note: the readings do not record the policy their units ran under; "
+            "they are read as taken under the default policy"
+        ]
+    if policy != "default":
+        return [
+            f"note: the readings were taken under policy {policy!r}, not the "
+            "default; a release admits them only with --evidence-policy "
+            f"{policy} and a default-policy confirmation on the candidate"
+        ]
+    return []
+
+
 def check(
     *,
     readings_path: Path,
     table_path: Path,
     manifest_path: Path,
     release: bool,
+    evidence_policy: str = "default",
 ) -> list[str]:
     """Return the problems ``--check`` (and ``--release-check``) report."""
     problems = verify_file(
@@ -540,6 +581,13 @@ def check(
             )
     if not release:
         return problems
+    policy, recorded = readings_policy(readings)
+    if policy != evidence_policy:
+        problems.append(
+            f"release: the readings were taken under policy {policy!r}"
+            + ("" if recorded else " (not recorded, read as the default)")
+            + f"; the admission claims {evidence_policy!r} (--evidence-policy)"
+        )
     recorded_identity = readings.get("chunked_identity")
     if recorded_identity != identity:
         problems.append(
@@ -579,6 +627,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--table", type=Path, default=TABLE_PATH)
     parser.add_argument("--manifest", type=Path, default=MANIFEST_PATH)
     parser.add_argument("--source-commit")
+    parser.add_argument(
+        "--evidence-policy",
+        choices=EVIDENCE_POLICIES,
+        default="default",
+        help="the routing policy the admission claims its readings were taken "
+        "under; --release-check refuses readings taken under another one",
+    )
     return parser
 
 
@@ -590,7 +645,16 @@ def main(argv: list[str] | None = None) -> int:
             table_path=arguments.table,
             manifest_path=arguments.manifest,
             release=arguments.release_check,
+            evidence_policy=arguments.evidence_policy,
         )
+        if arguments.readings.is_file():
+            try:
+                readings = load_json(arguments.readings)
+            except (OSError, ValueError):
+                readings = None
+            if isinstance(readings, dict):
+                for note in policy_notes(readings):
+                    print(note)
         for problem in problems:
             print(f"error: {problem}", file=sys.stderr)
         if problems:
@@ -616,6 +680,8 @@ def main(argv: list[str] | None = None) -> int:
     evidence_schema = load_json(EVIDENCE_SCHEMA_PATH)
     write_document(arguments.table, table, table_schema, CHUNKED_ADMISSION_DOMAIN_TAG)
     write_document(arguments.manifest, manifest, evidence_schema, EVIDENCE_DOMAIN_TAG)
+    for note in policy_notes(readings):
+        print(note)
     rows = table["rows"]
     certified = sum(row["status"] == "certified" for row in rows)
     native = sum("native" in row["paths"] for row in rows)

@@ -527,6 +527,11 @@ def test_summarize_checks_the_rider_document_it_writes(
         str(out / "shard_0000.json"),
         "--tag",
         "test",
+        # Before the rebind only the experimental policy plans the corrected
+        # CPU route; the rider document checks that the accelerated engine
+        # made the core streams, and records the policy.
+        "--policy",
+        "experimental",
     ]
     assert tool.main(run) == tool.STATUS_OK
     summarize = [
@@ -551,6 +556,9 @@ def test_summarize_checks_the_rider_document_it_writes(
     assert tool.main(summarize) == tool.STATUS_OK
     riders = json.loads((out / "riders.json").read_text(encoding="utf-8"))
     assert riders["riders"] == ["literal_segments", "special_tokens"]
+    assert riders["policy"] == "experimental"
+    readings = json.loads((out / "readings.json").read_text(encoding="utf-8"))
+    assert readings["policy"] == "experimental"
     assert check_reading_forms.riders_problems(riders) == []
     assert riders["families"][family]["special_tokens"]["documents"] == 2
     # The same shards with one arm's answer unreported: refused.

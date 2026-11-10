@@ -557,7 +557,20 @@ generator binds, and `tools/generate_registry.py --check` and
   `tools/run_chunked_cut_campaign.py summarize --riders-out`), checked by
   `tools/check_reading_forms.py riders`: every family ran every
   requested arm on at least one document, with zero mismatches, no
-  vacuous `True` document and no path or `served_by` left unreported.
+  vacuous `True` document and no path, `served_by` or `executed_by` left
+  unreported. On the identity and prefix documents of the `True` arm an
+  accelerated engine made at least half of the core streams
+  (`executed_by`); the literal arm segments at least one document on an
+  accelerated engine, sends none whole to the reference for a literal, and
+  keeps its reference paths (the engine guard and the span guard, each
+  under its own name) to 1 % of its documents and the reference bytes to
+  1 % of the reported bytes. The document, and the campaign reading
+  beside it, record the routing policy the units ran under (`policy`);
+  `tools/update_chunked_admission.py` notes a reading taken under another
+  policy than the default, or one that does not record it, and its
+  `--release-check` refuses readings taken under another policy than the
+  one the admission claims (`--evidence-policy`, `default` unless
+  stated).
 - **Every form.** A non-finite number or a count above what its
   container holds is refused, and a reading path in the registry may not
   hold a `.` or `..` segment.

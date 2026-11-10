@@ -680,6 +680,7 @@ def _riders_document() -> dict[str, Any]:
         "fast_cpu_source_digest_v2": "e" * 64,
         "rider_share": 0.05,
         "units": 3,
+        "policy": "experimental",
         "riders": ["literal_segments", "special_tokens"],
         "families": {
             "qwen3_8b": {
@@ -689,6 +690,7 @@ def _riders_document() -> dict[str, Any]:
                     "served_by": {"facade": 40},
                     "classes": {"identity": 40},
                     "vacuous": 0,
+                    "executed_by": {"fast_cpu": 40},
                 },
                 "literal_segments": {
                     "documents": 40,
@@ -961,3 +963,69 @@ def test_the_engine_floor_does_not_apply_to_reference_routes() -> None:
     column["evidence_role"] = "reference_route"
     column["executed_by"] = {"fast_cpu": 0, "gpu": 0, "hf": 100}
     assert forms.special_tokens_problems("f", column, arm="cpu") == []
+
+
+# -- rider document: engine record, reference paths, policy -------------------
+
+
+def test_the_rider_document_names_its_policy() -> None:
+    document = _riders_document()
+    del document["policy"]
+    assert any("policy" in p for p in forms.riders_problems(document))
+    document["policy"] = None
+    assert forms.riders_problems(document) == []
+
+
+def test_a_rider_true_arm_made_by_the_reference_engine_is_refused() -> None:
+    """served_by reads facade on every document while every core stream came
+    from the reference (lane RCP's default-policy case on an unbound build)."""
+    document = _riders_document()
+    arm = document["families"]["qwen3_8b"]["special_tokens"]
+    arm["executed_by"] = {"hf": 40}
+    problems = forms.riders_problems(document)
+    assert any("0 of 40 identity or prefix document(s)" in p for p in problems)
+    arm["executed_by"] = {"fast_cpu": 20, "hf": 20}
+    assert forms.riders_problems(document) == []
+    arm["executed_by"] = {"fast_cpu": 19, "hf": 20, "not_reported": 1}
+    problems = forms.riders_problems(document)
+    assert any("below 50%" in p for p in problems)
+    assert any("executed_by not reported" in p for p in problems)
+    # A reference face is answered by the reference by design.
+    arm["classes"] = {"reference": 40}
+    arm["served_by"] = {"reference": 40}
+    arm["executed_by"] = {"hf": 40}
+    assert forms.riders_problems(document) == []
+
+
+def test_the_rider_literal_arm_bounds_its_reference_paths() -> None:
+    document = _riders_document()
+    arm = document["families"]["qwen3_8b"]["literal_segments"]
+    arm["documents"] = 1000
+    arm["paths"] = {
+        "gigatoken_segmented": 990,
+        "hf_engine_guard": 5,
+        "hf_span_guard": 5,
+    }
+    assert forms.riders_problems(document) == []
+    # The span guard is counted under its own name, and with the engine
+    # guard bounded to 1 % of the documents.
+    arm["paths"] = {
+        "gigatoken_segmented": 988,
+        "hf_engine_guard": 6,
+        "hf_span_guard": 6,
+    }
+    problems = forms.riders_problems(document)
+    assert any("12 document(s) on reference paths" in p for p in problems)
+    assert any("'hf_span_guard': 6" in p for p in problems)
+    # No document goes whole to the reference for a literal.
+    arm["paths"] = {"gigatoken_segmented": 999, "hf_added_token": 1}
+    problems = forms.riders_problems(document)
+    assert any("went whole to the reference for a literal" in p for p in problems)
+    # Reference bytes, and a literal arm that segmented nothing.
+    arm["paths"] = {"gigatoken_segmented": 1000}
+    arm["bytes"] = {"gpu": 0, "fast_cpu": 9000, "hf": 100}
+    assert any("above 1%" in p for p in forms.riders_problems(document))
+    arm["bytes"] = {"gpu": 0, "fast_cpu": 0, "hf": 0}
+    arm["paths"] = {"gigatoken_full": 1000}
+    problems = forms.riders_problems(document)
+    assert any("no document was segmented" in p for p in problems)

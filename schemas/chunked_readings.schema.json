@@ -63,6 +63,10 @@
       "description": "Version-normalized fast_cpu identity of the tree the extension was built from (tools/compute_identity_v2.py fast_cpu); the native path's evidence binds to it.",
       "oneOf": [{ "$ref": "#/$defs/sha256_hex" }, { "type": "null" }]
     },
+    "policy": {
+      "description": "The routing policy every unit was loaded under (run --policy; null: the default policy). Absent in readings written before the campaign tool recorded it, which tools/update_chunked_admission.py reads as the default policy, not recorded.",
+      "type": ["string", "null"]
+    },
     "toktier_version": { "type": "string" },
     "tokenizers": { "type": "string" },
     "transformers": { "type": ["string", "null"] },

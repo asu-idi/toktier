@@ -1077,6 +1077,11 @@ def _zero_rider(name: str) -> dict[str, Any]:
         row["served_by"] = {}
         row["classes"] = {}
         row["vacuous"] = 0
+        # executed_by counts the engine the request's execution record names
+        # (fast_cpu / gpu / hf, not_reported when none): served_by alone
+        # cannot tell a facade-served document whose core stream the
+        # reference made (a policy that does not bind the accelerated engine).
+        row["executed_by"] = {}
     else:
         row["literals"] = 0
         row["paths"] = {}
@@ -1098,6 +1103,18 @@ def _execution_view(tokenizer: Any) -> tuple[Any, Any]:
     if not isinstance(last, dict):
         return None, None
     return last.get("path"), last.get("segments")
+
+
+def _executed_backend(tokenizer: Any) -> str:
+    """The engine the last request's execution record names, or ``not_reported``."""
+    try:
+        report = tokenizer.explain()
+    except Exception:  # pragma: no cover - a diagnostic read never fails a run
+        return "not_reported"
+    runtime = report.get("runtime_policy") if isinstance(report, dict) else None
+    last = runtime.get("last_execution") if isinstance(runtime, dict) else None
+    backend = last.get("executed_backend") if isinstance(last, dict) else None
+    return str(backend) if isinstance(backend, str) and backend else "not_reported"
 
 
 def _special_tokens_view(tokenizer: Any) -> tuple[Any, dict[str, int] | None]:
@@ -1149,6 +1166,7 @@ def ride(
         row = counters["special_tokens"]
         _, before = _special_tokens_view(family.tokenizer)
         ids = list(family.tokenizer.encode(text, add_special_tokens=True).ids)
+        engine = _executed_backend(family.tokenizer)
         kind, after = _special_tokens_view(family.tokenizer)
         oracle = [
             int(i) for i in family.oracle.encode(text, add_special_tokens=True).ids
@@ -1158,6 +1176,7 @@ def ride(
         row["documents"] += 1
         row["served_by"][served] = row["served_by"].get(served, 0) + 1
         row["classes"][kind_key] = row["classes"].get(kind_key, 0) + 1
+        row["executed_by"][engine] = row["executed_by"].get(engine, 0) + 1
         if kind in ("identity", "prefix") and served == "reference":
             row["vacuous"] += 1
         if ids != oracle:
@@ -1502,6 +1521,10 @@ def command_summarize(arguments: argparse.Namespace) -> int:
     os_name = arguments.os
     if os_name is None:
         os_name = _agree({m.get("os") for m in manifests}, "os")
+    # The routing policy the units were loaded under (null: the default).
+    # It travels with the readings: a reading taken under "experimental"
+    # (before the rebind) looks the same as a default-policy one otherwise.
+    policy = _agree({m.get("policy") for m in manifests}, "policy")
 
     def agreed(field: str) -> Any:
         return _agree({u.get(field) for u in unit_specs}, field)
@@ -1527,6 +1550,7 @@ def command_summarize(arguments: argparse.Namespace) -> int:
             "fast_cpu_source_digest",
         ),
         "fast_cpu_source_digest_v2": arguments.fast_cpu_source_digest_v2,
+        "policy": policy,
         "toktier_version": str(
             _agree({m.get("toktier_version") for m in manifests}, "toktier")
         ),
@@ -1595,6 +1619,7 @@ def command_summarize(arguments: argparse.Namespace) -> int:
             "fast_cpu_source_digest_v2": arguments.fast_cpu_source_digest_v2,
             "rider_share": _agree(shares, "rider_share") if shares else 0.0,
             "units": len(groups),
+            "policy": policy,
             "riders": list(_agree(requested, "riders")) if requested else [],
             "families": riders,
         }

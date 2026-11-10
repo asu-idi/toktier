@@ -877,10 +877,20 @@ def riders_problems(document: object, require: Iterable[str] = ()) -> list[str]:
     arm the document names (and every arm in ``require``) on at least
     :data:`RIDER_MIN_DOCUMENTS` documents; no arm records a mismatch; the
     ``special_tokens`` arm has no vacuous document (an identity or prefix
-    face answered by the reference) and none whose answering counter the
-    facade did not report; the ``literal_segments`` arm has no document
-    whose path was not reported. Otherwise a corpus-scale reading could
-    say "0 mismatches" with every document answered by the reference.
+    face answered by the reference) and none whose answering counter or
+    executing engine the facade did not report, and on its identity and
+    prefix documents an accelerated engine produced at least
+    :data:`SPECIAL_TOKENS_ENGINE_SHARE` of the core streams
+    (``executed_by``); the ``literal_segments`` arm has no document whose
+    path was not reported, segments at least one document on an
+    accelerated engine, sends no document whole to the reference for a
+    literal (every family of the campaign is a served face), and keeps
+    the reference paths -- the engine guard and the span guard, each
+    counted under its own name -- to :data:`GUARD_DOCUMENT_SHARE` of its
+    documents and the reference bytes to :data:`GUARD_BYTE_SHARE` of the
+    reported bytes. Otherwise a corpus-scale reading could say "0
+    mismatches" with every document answered by the reference. The
+    document names the policy the units ran under (``policy``).
     """
     problems = _schema_problems("riders", document, RIDERS_SCHEMA)
     if problems:
@@ -911,7 +921,21 @@ def riders_problems(document: object, require: Iterable[str] = ()) -> list[str]:
                         f"{where}: {row['vacuous']} document(s) of an identity or "
                         "prefix face were answered by the reference"
                     )
-                for key in ("served_by", "classes"):
+                judged = int(row["classes"].get("identity", 0)) + int(
+                    row["classes"].get("prefix", 0)
+                )
+                executed = row["executed_by"]
+                accelerated = int(executed.get("fast_cpu", 0)) + int(
+                    executed.get("gpu", 0)
+                )
+                if judged and accelerated < SPECIAL_TOKENS_ENGINE_SHARE * judged:
+                    problems.append(
+                        f"{where}: {accelerated} of {judged} identity or prefix "
+                        "document(s) had their core stream made by an accelerated "
+                        f"engine, below {SPECIAL_TOKENS_ENGINE_SHARE:.0%} "
+                        f"({dict(executed)})"
+                    )
+                for key in ("served_by", "classes", "executed_by"):
                     counts = row[key]
                     if int(counts.get("not_reported", 0)) != 0:
                         problems.append(
@@ -929,6 +953,45 @@ def riders_problems(document: object, require: Iterable[str] = ()) -> list[str]:
                     )
                 if sum(int(value) for value in paths.values()) != documents:
                     problems.append(f"{where}: paths do not add up")
+                problems += _rider_literal_problems(where, row, documents)
+    return problems
+
+
+def _rider_literal_problems(
+    where: str, row: Mapping[str, Any], documents: int
+) -> list[str]:
+    """The reference-path bounds of a rider document's literal arm."""
+    problems: list[str] = []
+    paths = row["paths"]
+    segment_bytes = row["bytes"]
+    if int(paths.get("hf_added_token", 0)) != 0:
+        problems.append(
+            f"{where}: {paths['hf_added_token']} document(s) went whole to the "
+            "reference for a literal"
+        )
+    reference = {
+        key: int(value)
+        for key, value in paths.items()
+        if key.startswith("hf_") and key != "hf_added_token" and int(value)
+    }
+    if sum(reference.values()) > int(documents * GUARD_DOCUMENT_SHARE):
+        problems.append(
+            f"{where}: {sum(reference.values())} document(s) on reference paths "
+            f"{reference}, above {GUARD_DOCUMENT_SHARE:.0%} of the documents"
+        )
+    total = sum(int(value) for value in segment_bytes.values())
+    if int(segment_bytes["hf"]) > GUARD_BYTE_SHARE * total:
+        problems.append(
+            f"{where}: the reference encoded {segment_bytes['hf']} of {total} "
+            f"reported bytes, above {GUARD_BYTE_SHARE:.0%}"
+        )
+    segmented = int(paths.get("gigatoken_segmented", 0)) + int(
+        paths.get("gpu_segmented", 0)
+    )
+    if segmented < 1 or int(segment_bytes["fast_cpu"]) + int(segment_bytes["gpu"]) < 1:
+        problems.append(
+            f"{where}: no document was segmented on an accelerated engine"
+        )
     return problems
 
 

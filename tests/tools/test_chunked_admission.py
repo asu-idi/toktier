@@ -530,3 +530,99 @@ def test_chunked_identity_is_tools_only_and_covers_the_three_files() -> None:
     assert "chunked" not in compute_identity_v2.DOMAINS
     assert list_synchronization_problems() == []
     assert tool.chunked_identity() == "sha256:" + chunked.source_digest()
+
+
+# -- the policy the readings were taken under ---------------------------------
+
+
+def _with_policy(tmp_path: Path, policy: object) -> Path:
+    readings = _readings()
+    if policy == "absent":
+        readings.pop("policy", None)
+    else:
+        readings["policy"] = policy
+    path = tmp_path / f"readings_{policy}.json"
+    path.write_bytes(
+        serialise_document(with_root_digest(readings, CHUNKED_READINGS_DOMAIN_TAG))
+    )
+    return path
+
+
+def _policy_problems(path: Path, claim: str = "default") -> list[str]:
+    return [
+        problem
+        for problem in tool.check(
+            readings_path=path,
+            table_path=tool.TABLE_PATH,
+            manifest_path=tool.MANIFEST_PATH,
+            release=True,
+            evidence_policy=claim,
+        )
+        if "taken under policy" in problem
+    ]
+
+
+def test_null_and_absent_policies_read_as_the_default() -> None:
+    assert tool.readings_policy({}) == ("default", False)
+    assert tool.readings_policy({"policy": None}) == ("default", True)
+    assert tool.readings_policy({"policy": "experimental"}) == ("experimental", True)
+    assert tool.policy_notes({"policy": None}) == []
+    assert "do not record the policy" in tool.policy_notes({})[0]
+    assert "--evidence-policy experimental" in (
+        tool.policy_notes({"policy": "experimental"})[0]
+    )
+
+
+def test_release_check_refuses_readings_taken_under_another_policy(
+    tmp_path: Path,
+) -> None:
+    """A reading taken under ``experimental`` (before the rebind) reads like
+    a default-policy one otherwise; the release check refuses it unless the
+    admission claims that policy, and refuses a default reading under an
+    ``experimental`` claim alike."""
+    experimental = _with_policy(tmp_path, "experimental")
+    problems = _policy_problems(experimental)
+    assert len(problems) == 1
+    assert "taken under policy 'experimental'" in problems[0]
+    assert "the admission claims 'default'" in problems[0]
+    assert _policy_problems(experimental, "experimental") == []
+    for value in (None, "absent"):
+        default = _with_policy(tmp_path, value)
+        assert _policy_problems(default) == []
+        assert len(_policy_problems(default, "experimental")) == 1
+    # --check reads the policy too, but only notes it (the sweep gate is about
+    # the derivation; the release check is where the claim is made).
+    assert not any(
+        "taken under policy" in problem
+        for problem in tool.check(
+            readings_path=experimental,
+            table_path=tool.TABLE_PATH,
+            manifest_path=tool.MANIFEST_PATH,
+            release=False,
+        )
+    )
+    result = _run("--check", "--readings", str(experimental))
+    assert "taken under policy 'experimental', not the default" in result.stdout
+    result = _run("--release-check", "--readings", str(experimental))
+    assert "the admission claims 'default' (--evidence-policy)" in result.stderr
+    result = _run(
+        "--release-check",
+        "--readings",
+        str(experimental),
+        "--evidence-policy",
+        "experimental",
+    )
+    assert "taken under policy" not in result.stderr
+
+
+def test_the_readings_schema_admits_the_policy() -> None:
+    schema = load_json(tool.READINGS_SCHEMA_PATH)
+    for value in (None, "experimental"):
+        readings = with_root_digest(
+            dict(_readings(), policy=value), CHUNKED_READINGS_DOMAIN_TAG
+        )
+        assert registry_common.schema_violations(readings, schema) == []
+    readings = with_root_digest(
+        dict(_readings(), policy=1), CHUNKED_READINGS_DOMAIN_TAG
+    )
+    assert registry_common.schema_violations(readings, schema)

@@ -119,9 +119,12 @@ tok.explain()                                # full plan, reasons, counters
   `close()` for prompt release. Resident memory is not promised to fall
   back at once: the allocator may keep freed memory for reuse. Calling
   `close()` while another thread is inside a call on the same tokenizer
-  is safe: `close()` does not raise, the call in flight ends with its
-  answer or with `RuntimeError`, and the release completes when that
-  call has ended.
+  is safe: `close()` does not wait and does not raise, the engines are
+  closed at once, the call in flight ends with its answer or with
+  `RuntimeError`, and the stored state is released when that call has
+  ended. `explain()` is not promised to answer while another thread is
+  inside a call: on the Python entry store it may raise `RuntimeError`
+  until that call has ended.
 - `Encoding` is immutable and carries at least `.ids`
   (`tuple[int, ...]`). Additional diagnostic attributes may appear
   within 0.x; `.ids` is stable.

@@ -699,12 +699,13 @@ impl NativeReferenceEngine {
 /// * `append_cb(tail_text, tail_ids, tail_spans, delta) -> (ids, spans,
 ///   kept_tokens, path)` -- incremental append over the whole tail;
 ///   optional, defaults to a full re-encode through `encode_cb`.
-/// * `boundary_cb(tail_text, tail_ids, tail_spans, floor_char,
-///   ceil_char) -> (cut_tokens, cut_char) | None` -- certified boundary
-///   probe; optional, defaults to never sealing.
+/// * `boundary_cb` -- accepted for signature compatibility and never
+///   called: a cut named by Python carries neither the class predicate nor
+///   `SealCutRule`, so an encoder without `bpe_sync_pclass` certifies no
+///   boundary and its store never seals.
 /// * `bpe_sync_pclass` -- the frozen 0x110000-byte O/S/L/N/M property
-///   table. When present, the boundary probe runs directly in Rust and
-///   `boundary_cb` is only a compatibility fallback.
+///   table. When present, the boundary probe runs directly in Rust; it is
+///   the only way a callback encoder certifies a boundary.
 /// * `seal_reference` -- the reference engine of the face, whose
 ///   normalizer the boundary probe consults (`SealCutRule`). Without it a
 ///   probe running on `bpe_sync_pclass` certifies no boundary, so the store
@@ -722,7 +723,6 @@ enum EncoderImpl {
         witness: WitnessCategory,
         encode_cb: Py<PyAny>,
         append_cb: Option<Py<PyAny>>,
-        boundary_cb: Option<Py<PyAny>>,
         bpe_sync: Option<BpeSyncBoundary>,
         seal_rule: SealCutRule,
     },
@@ -750,6 +750,9 @@ impl CallbackEncoder {
     ) -> PyResult<Self> {
         let witness = WitnessCategory::from_u16(witness_category)
             .map_err(|_| PyValueError::new_err("unknown witness category"))?;
+        // Never consulted: a boundary is certified only by the class table
+        // and the seal rule (see the type's documentation).
+        drop(boundary_cb);
         let bpe_sync = bpe_sync_pclass
             .map(|raw| {
                 BpeSyncBoundary::new(raw.as_bytes().to_vec())
@@ -770,7 +773,6 @@ impl CallbackEncoder {
                 witness,
                 encode_cb,
                 append_cb,
-                boundary_cb,
                 bpe_sync,
                 seal_rule,
             },
@@ -1054,7 +1056,6 @@ impl SessionEncoder for CallbackEncoder {
             return engine.last_certified_boundary(tail, floor_char, ceil_char);
         }
         let EncoderImpl::Python {
-            boundary_cb,
             bpe_sync,
             seal_rule,
             ..
@@ -1078,24 +1079,9 @@ impl SessionEncoder for CallbackEncoder {
                     cut_char: cut.cut_char,
                 }));
         }
-        let Some(cb) = boundary_cb else {
-            return Ok(None);
-        };
-        Python::with_gil(|py| {
-            let args = (
-                tail.text(),
-                tail.ids().to_vec(),
-                tail.spans(),
-                floor_char,
-                ceil_char,
-            );
-            let out = cb.call1(py, args).map_err(engine_err)?;
-            let cut: Option<(usize, u64)> = out.extract(py).map_err(engine_err)?;
-            Ok(cut.map(|(cut_tokens, cut_char)| BoundaryCut {
-                cut_tokens,
-                cut_char,
-            }))
-        })
+        // Without the class table no boundary is certified: the store does
+        // not seal on a cut it cannot check.
+        Ok(None)
     }
 
     fn witness_category(&self) -> WitnessCategory {

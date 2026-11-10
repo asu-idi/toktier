@@ -64,6 +64,8 @@ class CallbackEncoder:
         witness_category: int,
         encode_cb: _EncodeCb,
         append_cb: _AppendCb | None = None,
+        # Accepted and never called: a boundary is certified only through
+        # bpe_sync_pclass and seal_reference; without the table, none is.
         boundary_cb: _BoundaryCb | None = None,
         bpe_sync_pclass: bytes | None = None,
         seal_reference: ReferenceEngine | None = None,

@@ -819,6 +819,14 @@ digest, bounded tail, and content checkpoints all match. Persistent stores
 therefore contain transcript plaintext and must be protected as application
 data.
 
+A durable store (one file per family and home) holds at most 1,024 named
+sessions. Creating one more returns `ErrorCode::StoreCorrupt` and seals the
+store until restart, and the restart reloads the same 1,024; a
+`Tokenizer::lookup` hit while the store holds exactly 1,024 has the same
+effect at the next session write. `delete()` makes room, so keep each store
+at 1,023 named sessions or fewer ([0.3.2 release notes](releases/v0.3.2.md),
+Known issues).
+
 Memory of a long-lived runtime. The session store keeps one record per
 completed 4,096-character block of every text a session stores (`seed`,
 `append`, `overwrite`, `encode_transcript`, and a `Tokenizer::lookup` hit

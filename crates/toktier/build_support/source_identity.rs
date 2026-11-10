@@ -1496,6 +1496,7 @@ pub fn fast_cpu_source_paths(root: &Path) -> Vec<PathBuf> {
             "crates/toktier-routing-core/src/lib.rs",
             "crates/toktier-routing-core/src/reference.rs",
             "crates/toktier-routing-core/src/runtime.rs",
+            "crates/toktier-routing-core/src/seal_cut.rs",
             "crates/toktier-store-core/Cargo.toml",
             "crates/toktier-py/Cargo.toml",
             "crates/toktier-py/build.rs",

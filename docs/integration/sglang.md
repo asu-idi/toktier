@@ -99,8 +99,10 @@ exist only in the `TokenizerManager` process (with
 `--tokenizer-worker-num N`, once in each of the N worker processes).
 
 The wrapper (`src/toktier/integrations/sglang.py`) is a duck-typed
-tokenizer: `__call__` and `encode` run on toktier's certified CPU route,
-every other attribute (`eos_token_id`, `apply_chat_template`, `decode`,
+tokenizer: `__call__` and `encode` run on toktier's routes for the
+configured device (the certified CPU route by default;
+`TOKTIER_SGLANG_DEVICE=cuda` or `cuda:N` adds the GPU route, with short
+inputs and short segments on the CPU engine), every other attribute (`eos_token_id`, `apply_chat_template`, `decode`,
 chat template, vocabulary) is delegated to the wrapped Hugging Face object,
 and calls with arguments the wrapper does not model (text pairs,
 truncation, `return_token_type_ids`) are delegated whole. Session state can
@@ -132,7 +134,21 @@ memory threshold.
 The same wrapper can be attached without patching anything, for evaluation:
 a `sitecustomize` on `PYTHONPATH` calls
 `attach_to_tokenizer_manager(TokenizerManager)` once the module is
-imported. That is how the numbers below were taken. The patch produces the
+imported. That is how the numbers below were taken. A minimal injector:
+
+```python
+# sitecustomize.py, in a directory on the server process's PYTHONPATH
+from sglang.srt.managers.tokenizer_manager import TokenizerManager
+from toktier.integrations.sglang import attach_to_tokenizer_manager
+
+attach_to_tokenizer_manager(TokenizerManager, log=print)
+```
+
+Start the server with that directory on `PYTHONPATH`
+(`PYTHONPATH=<that directory> python -m sglang.launch_server --model-path
+...`); the wrapper's `stats()["sglang_shape"]` reads `"verified"` once the
+attach has taken place, and a shape that does not match is reported as
+described under the version check below. The patch produces the
 same wrapper through the supported option, at the same place: the
 attach form wraps the `TokenizerManager`'s tokenizer once its
 constructor returns, the patch does so inside the constructor right
@@ -470,7 +486,7 @@ way:
 
 ```
 pip install "sglang==<version>"
-pip install toktier==0.3.1
+pip install toktier==0.3.2
 pip check
 ```
 
@@ -528,14 +544,13 @@ that set runs on the reference route and is reported as such
 `toktier doctor`).
 This release ships three certified reference versions: `tokenizers`
 0.22.2, 0.23.2 and 0.23.3. They cover both of SGLang's pins, 0.22.2 for
-SGLang 0.5.19 to 0.5.21 and 0.23.2 for SGLang's main branch. The two 0.23
-releases were certified on readings taken with each of them installed
-beside `transformers` 5.19.0: the fast CPU engine on 1,437,469 documents
-and the prebuilt GPU engine on sm_120 (23,156,175 documents) and on sm_89
-(2,100,000 documents), every id equal to the installed release's, and the
-chunk-parallel path's adversarial battery (460,000 strings over eleven
-artifacts), with no difference in any comparison. The parity readings
-ship in `readings/oracle_compat/`.
+SGLang 0.5.19 to 0.5.21 and 0.23.2 for SGLang's main branch. In 0.3.2 the
+two 0.23 releases were read again with each of them installed: the fast CPU
+reading and the prebuilt GPU readings on sm_120 and sm_89, on the same
+artifacts, documents and characters as the certification readings they
+accompany, every id equal to the installed release's (figures in the
+[0.3.2 release notes](../releases/v0.3.2.md), Hardware readings). The parity
+readings ship in `readings/oracle_compat/`.
 For every packaged artifact
 except `qwen3_5_08b`, toktier executes the verified artifact file itself;
 `qwen3_5_08b` declares added tokens in its configuration file, so its

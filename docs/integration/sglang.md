@@ -148,22 +148,26 @@ from toktier.integrations.sglang import attach_to_tokenizer_manager
 attach_to_tokenizer_manager(TokenizerManager, log=print)
 ```
 
-Start the server with that directory on `PYTHONPATH`
-(`PYTHONPATH=<that directory> python -m sglang.launch_server --model-path
-...`); the wrapper's `stats()["sglang_shape"]` reads `"verified"` once the
-attach has taken place, and a shape that does not match is reported as
-described under the version check below. The patch produces the
-same wrapper through the supported option, at the same place: the
-attach form wraps the `TokenizerManager`'s tokenizer once its
-constructor returns, the patch does so inside the constructor right
-after loading it, and neither touches the tokenizers of SGLang's other
-processes. We checked this on 2026-10-13 with each patch applied to the
-published wheels of 0.5.19, 0.5.20 and 0.5.21, running SGLang's own
-tokenizer-loading code of each process on the CPU side, without a model
-server: the `TokenizerManager` holds the wrapper and the one worker
-pool, its dynamic-batch tokenizer holds the same wrapper, and the loads
-of the scheduler, the TP worker and the detokenizer return the plain
-Hugging Face tokenizer.
+Start the server with that directory on `PYTHONPATH` (`PYTHONPATH=<that
+directory> python -m sglang.launch_server --model-path ...`). When
+`--model-path` names a local directory rather than a model-hub repository
+id, set `TOKTIER_SGLANG_FAMILY` to the toktier family id as well (for
+example `TOKTIER_SGLANG_FAMILY=qwen3_8b`): without it the adapter passes the
+directory's path to `toktier.from_pretrained`, which resolves repository
+ids, and the server stops at start-up with `ArtifactNotFound` (settings
+table below). The wrapper's `stats()["sglang_shape"]` reads `"verified"`
+once the attach has taken place, and a shape that does not match is reported
+as described under the version check below. The patch produces the same
+wrapper through the supported option, at the same place: the attach form
+wraps the `TokenizerManager`'s tokenizer once its constructor returns, the
+patch does so inside the constructor right after loading it, and neither
+touches the tokenizers of SGLang's other processes. We checked this on
+2026-10-13 with each patch applied to the published wheels of 0.5.19, 0.5.20
+and 0.5.21, running SGLang's own tokenizer-loading code of each process on
+the CPU side, without a model server: the `TokenizerManager` holds the
+wrapper and the one worker pool, its dynamic-batch tokenizer holds the same
+wrapper, and the loads of the scheduler, the TP worker and the detokenizer
+return the plain Hugging Face tokenizer.
 
 Two things the wrapper deliberately does not do. It does not touch
 `--tokenizer-worker-num` semantics: each worker process gets its own

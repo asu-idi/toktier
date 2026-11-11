@@ -757,14 +757,17 @@ where families differ: one whose CPU lane is the reference engine reads
 `hf` below the crossover while the installation-level field, correctly,
 reads `fast_cpu`.
 
-So a `toktier[gpu-jit]` install on an unjudged compiler reports
-`automatic_gpu_candidate: true` beside `jit_toolchain_satisfied: false`, and
-then answers for the policy in effect: under the default `SUPPORTED` policy
-`automatic_gpu_eligible: true` and `automatic_effective_backend: gpu`, because
-that policy runs the unjudged combination and labels it `supported_untested`;
-under `CERTIFIED` the same machine reads `false` and `fast_cpu`. Either way it
-is the conclusion `toktier gpu compile` and the next request reach, before you
-run them.
+So when a `toktier[gpu-jit]` install takes the JIT delivery, because prebuilt
+cannot serve this host (`automatic_gpu_delivery` reads `jit`), on an unjudged
+compiler it reports `automatic_gpu_candidate: true` beside
+`jit_toolchain_satisfied: false`, and then answers for the policy in effect:
+under the default `SUPPORTED` policy `automatic_gpu_eligible: true` and
+`automatic_effective_backend: gpu`, because that policy runs the unjudged
+combination and labels it `supported_untested`; under `CERTIFIED` the same
+machine reads `false` and `fast_cpu`. Either way it is the conclusion `toktier
+gpu compile` and the next request reach, before you run them. Where prebuilt
+serves, `automatic_gpu_delivery` reads `prebuilt`, `jit_toolchain_satisfied`
+reads `null`, and the local compiler does not matter.
 
 `certified_cpu_profile_ready` says whether the installed engine reported its
 facts and the installed `tokenizers` is one of the certified reference

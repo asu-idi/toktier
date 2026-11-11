@@ -649,13 +649,15 @@ CUDA 运行时绑定是否已安装；`cuda_hardware_present` 报告设备探测
 路径上使用参考实现的 family，低于 crossover 时对应后端为 `hf`，而安装层面的
 字段（同样属实）为 `fast_cpu`。
 
-因此，在未经评审的编译器上安装 `toktier[gpu-jit]`，会同时报告
+因此，当 `toktier[gpu-jit]` 安装因预编译无法服务这台主机而走 JIT 交付
+（`automatic_gpu_delivery` 为 `jit`），且编译器未经评审时，会同时报告
 `automatic_gpu_candidate: true` 与 `jit_toolchain_satisfied: false`，随后按当前
 生效的策略作答：在默认的 `SUPPORTED` 策略下为 `automatic_gpu_eligible: true`
 与 `automatic_effective_backend: gpu`——该策略会运行这一未经评审的组合，并把
 它标为 `supported_untested`；在 `CERTIFIED` 下，同一台机器则读到 `false` 与
 `fast_cpu`。两种情形下，这个结论都与 `toktier gpu compile` 以及下一次请求所走
-的路一致，而且无需先运行它们。
+的路一致，而且无需先运行它们。预编译能服务时，`automatic_gpu_delivery` 为
+`prebuilt`，`jit_toolchain_satisfied` 为 `null`，本机编译器无关。
 
 `certified_cpu_profile_ready` 说的是本机引擎已报出自身事实、且本机装的
 `tokenizers` 属于已认证的参考版本集合，而不是某条路由是否开启。

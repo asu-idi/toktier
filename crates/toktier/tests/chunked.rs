@@ -665,10 +665,11 @@ const CARRIED: [(&str, &str); 2] = [
 /// admission passes the roster and structural steps and is decided by the
 /// shipped table exactly as a roster family's is: without a row it is
 /// refused for want of evidence, and with a certified row on the same
-/// face it is admitted. Nothing on this face names the two families, so a
-/// table that carries their rows admits them with no change here; until
-/// then the table step is the only refusal, which `Policy::Experimental`
-/// lifts, and the chunked ids then equal the reference engine's.
+/// face it is admitted. Nothing on this face names the two families: the
+/// table that ships with this release carries a certified row for each,
+/// so both are admitted with no change here. Under `Policy::Experimental`,
+/// which lifts the table step, the chunked ids equal the reference
+/// engine's.
 #[test]
 fn carried_records_reach_the_table_step_like_roster_families() {
     let rows = table();

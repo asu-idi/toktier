@@ -66,12 +66,14 @@ respectively, both on driver 595.71.05, against the architecture images
 the shipped fatbin already carried. What the two rows claim is what was
 measured on that hardware, and no more.
 
-`sm_90` is certified on a reading of the 0.3.1 host build taken on an
+`sm_90` is certified on a reading of the 0.3.2 host build taken on an
 `H200` (driver 595.71.05), on the same bounded spot check as `sm_80` and
 `sm_89`: 21 families, 100,000 documents per family, 8,546,619,858
-characters, zero mismatches. 0.3.0 did not certify `sm_90`, because the 0.2.9 reading was
-bound to the earlier host build and no Hopper reading of the 0.3.0 build
-was taken.
+characters, zero mismatches, binding the same host build identity as the
+`sm_80`, `sm_89` and `sm_120` rows. 0.3.0 did not certify `sm_90`, because
+the 0.2.9 reading was bound to the earlier host build and no Hopper
+reading of the 0.3.0 build was taken; 0.3.1 certified it again on a
+reading of its own host build.
 
 ## Certified CPU fast repair
 

@@ -914,7 +914,8 @@ accepts it the same way.
 **Admission.** `admission()` reads four things in order and reports
 them, with the refusal in the vocabulary the Python facade's
 `chunked.admission(tokenizer)["refusal"]` uses: the certified repair
-roster (`artifact_not_in_certified_repair_roster`); the native
+roster with the records carried from it
+(`artifact_not_in_certified_repair_roster`); the native
 encoder's structural rule over the artifact file this crate executes,
 a normalizer shape the rule reasons about and no added token with a
 strip or single-word flag (`normalizer_not_supported[:<type>]`,
@@ -955,10 +956,12 @@ once it holds both, and the same label is carried by
 `ChunkedStats::evidence_label` and by every `ChunkedEncoding` that was
 cut (a serial result's ids are the plain route's, and it carries none).
 The label is a function of the row alone, for a refused tokenizer as
-well. In this release all eleven roster artifacts have certified rows
-that hold both levels for the native path as well, and the label reads
-`None`, as on the Python face; ten are admitted under the default
-policy, and `qwen3_5_08b` is refused by the loader-face rule above.
+well. In this release the table has thirteen rows, for the eleven roster
+artifacts and the two records carried from them (`deepseek_v4_1_flash`,
+`mimo_v2_6`), all certified and holding both levels for the native path
+as well, so the label reads `None`, as on the Python face; twelve are
+admitted under the default policy, and `qwen3_5_08b` is refused by the
+loader-face rule above.
 Either way the ids equal the serial encode.
 `Policy::Experimental` lifts the table step,
 the way the campaign tool lifts it to collect the evidence a row is
@@ -1074,8 +1077,8 @@ enum is `#[non_exhaustive]`, so a `match` on it needs a catch-all arm.
 | `RuntimeShutdown` / `RUNTIME_SHUTDOWN` | A request arrived after the serving pool began shutting down. |
 | `BackendExecutionFault` / `BACKEND_EXECUTION_FAULT` | A backend failed on an input in a way the router may recover from, and the store's `ENGINE_ERROR` when the session encoder reports one. |
 | `SessionRevisionConflict` / `SESSION_REVISION_CONFLICT` | An optimistic write met a different stored revision, a session name was seeded twice, or a second writer in this process asked for the same session. Wider than the Python row, which covers the stored-revision case. |
-| `SessionStateMismatch` / `SESSION_STATE_MISMATCH` | Stored state does not belong to this tokenizer or does not extend as claimed: fingerprint or witness-category mismatch, a transcript that is shorter than or diverges from the stored session, a missing recovery transcript. Wider than the Python row. |
-| `StoreCorrupt` / `STORE_CORRUPT` | An explicit integrity operation found a checksum, linkage, or structural failure. On the ordinary read path an integrity failure becomes a counted miss instead: a miss is preferred over a wrong result. |
+| `SessionStateMismatch` / `SESSION_STATE_MISMATCH` | Stored state does not belong to this tokenizer or does not extend as claimed: fingerprint or witness-category mismatch, a transcript that is shorter than or diverges from the stored session, a missing recovery transcript. Wider than the Python row. Also the sealed state of a durable session store after a failed save ("persistent session state is sealed after a failed atomic save; restart to reload the last committed state: ..."): `Tokenizer::lookup` and the session calls return it until the process restarts ([0.3.2 release notes](releases/v0.3.2.md), Known issues). |
+| `StoreCorrupt` / `STORE_CORRUPT` | An explicit integrity operation found a checksum, linkage, or structural failure. On the ordinary read path an integrity failure becomes a counted miss instead: a miss is preferred over a wrong result. A durable session store at its 1,024-session limit also returns it, over an undamaged file, when one more named session is created ("named session ... references unknown handle ..."), and the store is then sealed (row above; [0.3.2 release notes](releases/v0.3.2.md), Known issues). |
 | `StoreFormatUnsupported` / `STORE_FORMAT_UNSUPPORTED` | A record is well-formed but not decodable by this reader (future version, unknown mandatory flag, unknown witness category). Reached through the store conversion, distinct from corruption by design. |
 | `Io` / `IO_ERROR` | A filesystem or process operation failed as attempted -- the underlying `std::io::Error` text is carried. Policy refusals about a path are `ConfigInvalid`, not this. |
 | `Internal` / `INTERNAL` | An invariant of this crate was broken. Never a caller error; report it. |

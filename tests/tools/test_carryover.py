@@ -23,8 +23,8 @@ import verify_carryover  # noqa: E402
 # the registry carries, so these move with every recertification wave.
 CERTIFIED = {
     "fast_cpu": "61736734605277df5896efbcbbf3998be607db569c5239affc56e3fd0e95e360",
-    "native_host": "2890bf29e86fdb88ddab162a56f1ba3eab1830881d7504a270f70114a8cc9e9f",
-    "rust_api": "3a8386307fb85a80e4f3c431be32a79baee64a9031410e23b67ef47776129437",
+    "native_host": "59dee21e2c416a4e9503b320b29bf8d29a587066ecde3da07f12964ec9b3b673",
+    "rust_api": "febc792f57d38b519e899ce45793c0e706821217be9b74604402b9ff42295218",
 }
 
 

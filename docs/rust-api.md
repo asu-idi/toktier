@@ -826,15 +826,22 @@ named sessions, counting the sessions stored now. One more slot is kept for
 the store is full, `seed()` of a new name, `fork()`, and `overwrite()` of a
 name with nothing stored return `ErrorCode::InvalidArgument` ("the durable
 session store holds 1023 named sessions, its capacity; delete a session
-before creating another") before they change anything. The store stays
+before creating another") before they change anything; the number in the
+message is the count of named sessions in the store. `InvalidArgument` is
+shared with other caller errors, so recognise this case by the message,
+which begins "the durable session store holds". The store stays
 usable: `append()`, `encode_transcript()`, `snapshot()`, `close()`,
 reopening a stored name and `overwrite()` of a stored name keep working,
 and after a `delete()` the next new session succeeds, with no restart.
-Nothing is removed from the file to make room. In memory mode (no home)
-nothing is refused: past 1,024 sessions the least recently used one is
-dropped. A name whose session was dropped opens again as a new session
-(`revision()` is `None`) and can be seeded; a `Session` value still held
-when its state was dropped fails `append()` with `InvalidArgument`, and
+Nothing is removed from the file to make room. A store file written by
+another release or build is refused by its key, as before. In memory mode
+(no home) there is no bound on creating sessions: past 1,024 sessions the
+least recently used one is dropped, and a `Tokenizer::lookup` hit on a full
+memory-mode store drops one as well. A name whose session was dropped is a
+new name once it is opened again (`revision()` is `None`) and can be
+seeded; until it is opened, `fork()` into that name is refused as already
+existing (`SessionRevisionConflict`). A `Session` value still held when
+its state was dropped fails `append()` with `InvalidArgument`, and
 `overwrite()` gives it a new state. Before 0.3.2 a durable store at 1,024
 named sessions answered one more with `StoreCorrupt` and sealed itself
 until restart ([0.3.2 release notes](releases/v0.3.2.md), Fixed).
@@ -1067,7 +1074,7 @@ enum is `#[non_exhaustive]`, so a `match` on it needs a catch-all arm.
 
 | Variant / string | Raised when |
 |---|---|
-| `InvalidArgument` / `INVALID_ARGUMENT` | Caller misuse the type system cannot refuse: a batch row out of range, an offset request on the ID-only batch API, a revision that is not an immutable 40-hex commit, a value that does not fit the platform. Also a new named session in a durable session store that holds its 1,023 named sessions (`seed()` of a new name, `fork()`, `overwrite()` of a name with nothing stored): the call changes nothing, the store stays usable, and `delete()` makes room (Delta-native sessions, above). |
+| `InvalidArgument` / `INVALID_ARGUMENT` | Caller misuse the type system cannot refuse: a batch row out of range, an offset request on the ID-only batch API, a revision that is not an immutable 40-hex commit, a value that does not fit the platform. Also a new named session in a durable session store that holds its 1,023 named sessions (`seed()` of a new name, `fork()`, `overwrite()` of a name with nothing stored): the message begins "the durable session store holds", the call changes nothing, the store stays usable, and `delete()` makes room (Delta-native sessions, above). |
 | `ConfigInvalid` / `CONFIG_INVALID` | A configuration value is impossible or self-contradictory: a CPU device with GPU delivery, an empty or zero bound, a URL carrying credentials or control characters, and (since 0.2.4) a **path this crate refuses by policy** -- a parent-directory component, a symbolic-link component, a non-directory component, or a final path that is not a regular directory. Wider than the Python row, which covers configuration values only. |
 | `ArtifactNotFound` / `ARTIFACT_NOT_FOUND` | An artifact cannot be resolved: an unknown family (the message carries the closest valid ids), a missing or non-regular `tokenizer.json`, a missing bundle or bundle member, an empty cache under offline mode. |
 | `AliasConflict` / `ALIAS_CONFLICT` | An artifact cache already holds the alias a bundle is being imported under and the installed tree does not authenticate as that bundle: an undeclared or missing file, something that is not a regular file, or a differing byte count or digest. The cache's own `.toktier-verified.json` marker is not an undeclared file. Added in 0.2.8; the Python facade reports the same code for the same condition. A tree that does authenticate is not an error, and re-import returns it. |

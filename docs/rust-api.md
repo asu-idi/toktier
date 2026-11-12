@@ -819,13 +819,25 @@ digest, bounded tail, and content checkpoints all match. Persistent stores
 therefore contain transcript plaintext and must be protected as application
 data.
 
-A durable store (one file per family and home) holds at most 1,024 named
-sessions. Creating one more returns `ErrorCode::StoreCorrupt` and seals the
-store until restart, and the restart reloads the same 1,024; a
-`Tokenizer::lookup` hit while the store holds exactly 1,024 has the same
-effect at the next session write. `delete()` makes room, so keep each store
-at 1,023 named sessions or fewer ([0.3.2 release notes](releases/v0.3.2.md),
-Known issues).
+A durable store (`home()` or `persistent_sessions(true)`; one file per
+family and home, `<home>/sessions/<family>.sqlite3`) holds at most 1,023
+named sessions, counting the sessions stored now. One more slot is kept for
+`Tokenizer::lookup`, so a lookup hit never removes a stored session. When
+the store is full, `seed()` of a new name, `fork()`, and `overwrite()` of a
+name with nothing stored return `ErrorCode::InvalidArgument` ("the durable
+session store holds 1023 named sessions, its capacity; delete a session
+before creating another") before they change anything. The store stays
+usable: `append()`, `encode_transcript()`, `snapshot()`, `close()`,
+reopening a stored name and `overwrite()` of a stored name keep working,
+and after a `delete()` the next new session succeeds, with no restart.
+Nothing is removed from the file to make room. In memory mode (no home)
+nothing is refused: past 1,024 sessions the least recently used one is
+dropped. A name whose session was dropped opens again as a new session
+(`revision()` is `None`) and can be seeded; a `Session` value still held
+when its state was dropped fails `append()` with `InvalidArgument`, and
+`overwrite()` gives it a new state. Before 0.3.2 a durable store at 1,024
+named sessions answered one more with `StoreCorrupt` and sealed itself
+until restart ([0.3.2 release notes](releases/v0.3.2.md), Fixed).
 
 Memory of a long-lived runtime. The session store keeps one record per
 completed 4,096-character block of every text a session stores (`seed`,
@@ -1055,7 +1067,7 @@ enum is `#[non_exhaustive]`, so a `match` on it needs a catch-all arm.
 
 | Variant / string | Raised when |
 |---|---|
-| `InvalidArgument` / `INVALID_ARGUMENT` | Caller misuse the type system cannot refuse: a batch row out of range, an offset request on the ID-only batch API, a revision that is not an immutable 40-hex commit, a value that does not fit the platform. |
+| `InvalidArgument` / `INVALID_ARGUMENT` | Caller misuse the type system cannot refuse: a batch row out of range, an offset request on the ID-only batch API, a revision that is not an immutable 40-hex commit, a value that does not fit the platform. Also a new named session in a durable session store that holds its 1,023 named sessions (`seed()` of a new name, `fork()`, `overwrite()` of a name with nothing stored): the call changes nothing, the store stays usable, and `delete()` makes room (Delta-native sessions, above). |
 | `ConfigInvalid` / `CONFIG_INVALID` | A configuration value is impossible or self-contradictory: a CPU device with GPU delivery, an empty or zero bound, a URL carrying credentials or control characters, and (since 0.2.4) a **path this crate refuses by policy** -- a parent-directory component, a symbolic-link component, a non-directory component, or a final path that is not a regular directory. Wider than the Python row, which covers configuration values only. |
 | `ArtifactNotFound` / `ARTIFACT_NOT_FOUND` | An artifact cannot be resolved: an unknown family (the message carries the closest valid ids), a missing or non-regular `tokenizer.json`, a missing bundle or bundle member, an empty cache under offline mode. |
 | `AliasConflict` / `ALIAS_CONFLICT` | An artifact cache already holds the alias a bundle is being imported under and the installed tree does not authenticate as that bundle: an undeclared or missing file, something that is not a regular file, or a differing byte count or digest. The cache's own `.toktier-verified.json` marker is not an undeclared file. Added in 0.2.8; the Python facade reports the same code for the same condition. A tree that does authenticate is not an error, and re-import returns it. |
@@ -1077,8 +1089,8 @@ enum is `#[non_exhaustive]`, so a `match` on it needs a catch-all arm.
 | `RuntimeShutdown` / `RUNTIME_SHUTDOWN` | A request arrived after the serving pool began shutting down. |
 | `BackendExecutionFault` / `BACKEND_EXECUTION_FAULT` | A backend failed on an input in a way the router may recover from, and the store's `ENGINE_ERROR` when the session encoder reports one. |
 | `SessionRevisionConflict` / `SESSION_REVISION_CONFLICT` | An optimistic write met a different stored revision, a session name was seeded twice, or a second writer in this process asked for the same session. Wider than the Python row, which covers the stored-revision case. |
-| `SessionStateMismatch` / `SESSION_STATE_MISMATCH` | Stored state does not belong to this tokenizer or does not extend as claimed: fingerprint or witness-category mismatch, a transcript that is shorter than or diverges from the stored session, a missing recovery transcript. Wider than the Python row. Also the sealed state of a durable session store after a failed save ("persistent session state is sealed after a failed atomic save; restart to reload the last committed state: ..."): `Tokenizer::lookup` and the session calls return it until the process restarts ([0.3.2 release notes](releases/v0.3.2.md), Known issues). |
-| `StoreCorrupt` / `STORE_CORRUPT` | An explicit integrity operation found a checksum, linkage, or structural failure. On the ordinary read path an integrity failure becomes a counted miss instead: a miss is preferred over a wrong result. A durable session store at its 1,024-session limit also returns it, over an undamaged file, when one more named session is created ("named session ... references unknown handle ..."), and the store is then sealed (row above; [0.3.2 release notes](releases/v0.3.2.md), Known issues). |
+| `SessionStateMismatch` / `SESSION_STATE_MISMATCH` | Stored state does not belong to this tokenizer or does not extend as claimed: fingerprint or witness-category mismatch, a transcript that is shorter than or diverges from the stored session, a missing recovery transcript. Wider than the Python row. Also the sealed state of a durable session store after a failed atomic save ("persistent session state is sealed after a failed atomic save; restart to reload the last committed state: ..."): `Tokenizer::lookup`, `open_session()` and the session calls that read or change stored state (`seed()`, `append()`, `overwrite()`, `encode_transcript()`, `fork()`, `snapshot()`, `delete()`, and `stats()` of an open session with stored state) return it until the process restarts; `close()` still succeeds, since it only releases the session. |
+| `StoreCorrupt` / `STORE_CORRUPT` | An explicit integrity operation found a checksum, linkage, or structural failure. On the ordinary read path an integrity failure becomes a counted miss instead: a miss is preferred over a wrong result. |
 | `StoreFormatUnsupported` / `STORE_FORMAT_UNSUPPORTED` | A record is well-formed but not decodable by this reader (future version, unknown mandatory flag, unknown witness category). Reached through the store conversion, distinct from corruption by design. |
 | `Io` / `IO_ERROR` | A filesystem or process operation failed as attempted -- the underlying `std::io::Error` text is carried. Policy refusals about a path are `ConfigInvalid`, not this. |
 | `Internal` / `INTERNAL` | An invariant of this crate was broken. Never a caller error; report it. |

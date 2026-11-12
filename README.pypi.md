@@ -57,6 +57,7 @@ the complete sweeps are in [`docs/benchmarks.md`](https://github.com/asu-idi/tok
 
 ## News
 
+- **2026.11.12** 🚀 **toktier 0.3.2** released: prompts rendered from a chat template, or holding any control token, now run on the fast CPU engine and the GPU route, and `add_special_tokens=True` is served on the fast route too. Sessions over text that NFC normalization changes now return the reference ids where earlier releases could differ, and the Python package's session store no longer keeps a record for every block of text it stores. Upgrading from 0.3.1: a persistent session store written by 0.3.1 is not opened by 0.3.2, so point `store=` at a new directory. See the [v0.3.2 release notes](https://github.com/asu-idi/toktier/blob/v0.3.2/docs/releases/v0.3.2.md).
 - **2026.11.08** 🚀 **toktier 0.3.1** released: six more certified tokenizer artifacts (`hy4`, `step5_preview`, `muse_spark`, `nemotron_super_vl`, `deepseek_v4_1_flash`, `mimo_v2_6`), and the prebuilt GPU delivery is now certified on `sm_80` and `sm_90` as well. Upgrading from 0.3.0: a persistent session store written by 0.3.0 is not opened by 0.3.1, so point `store=` at a new directory. See the [v0.3.1 release notes](https://github.com/asu-idi/toktier/blob/v0.3.2/docs/releases/v0.3.1.md).
 - **2026.10.15** 🚀 **toktier 0.3.0** released — one long request can now use
   more than one core on the CPU route without leaving the exact-ID contract.

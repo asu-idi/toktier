@@ -52,6 +52,7 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 
 ## 最新动态
 
+- **2026.11.12** 🚀 **toktier 0.3.2** 发布：由聊天模板渲染、或含任何控制 token 的提示现在走快速 CPU 引擎与 GPU 路由，`add_special_tokens=True` 也走快速路由；在 NFC 规范化会改变的文本上，会话现在返回与参考实现相同的 id（此前的版本可能不同），Python 包的 session store 也不再为存下的每个文本块保留一条记录。从 0.3.1 升级时，0.3.1 写下的持久 session store 不再打开，请换新目录。详见[发布说明](docs/releases/v0.3.2.md)。
 - **2026.11.08** 🚀 **toktier 0.3.1** 发布：新增六个已认证 tokenizer——`hy4`、`step5_preview`、`muse_spark`、`nemotron_super_vl`、`deepseek_v4_1_flash`、`mimo_v2_6`；预编译 GPU 交付新增 `sm_80` 与 `sm_90` 认证。从 0.3.0 升级时，持久 session store 需换新目录。详见[发布说明](docs/releases/v0.3.1.md)。
 - **2026.10.15** 🚀 **toktier 0.3.0** 发布——单个长请求现在可以在 CPU 路由上用到
   多个核，且不离开精确 ID 契约。`toktier.chunked.encode` 在认证过的稳定边界处

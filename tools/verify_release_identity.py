@@ -18,7 +18,7 @@ VERSION_PATTERN = re.compile(
 #: CITATION.cff rather than derived from it, so a release cannot go out
 #: carrying the previous release's date by omission. Moving the release
 #: day means moving both, together.
-RELEASE_DATE = "2026-11-08"
+RELEASE_DATE = "2026-11-12"
 
 
 def project_version() -> str:

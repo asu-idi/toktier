@@ -344,10 +344,27 @@ impl Session {
                     format!("session {name:?} already has a writer in this process"),
                 ));
             }
-            let handle = state.names.get(&name).copied();
-            let revision = handle
+            let mut handle = state.names.get(&name).copied();
+            if state.transcripts.is_none()
+                && handle.is_some_and(|handle| state.store.revision(handle).is_err())
+            {
+                // Memory mode: the core dropped this session to make room
+                // for another, so the name is a new name again.
+                state.names.remove(&name);
+                handle = None;
+            }
+            let revision = match handle
                 .map(|handle| state.store.revision(handle))
-                .transpose()?;
+                .transpose()
+            {
+                Ok(revision) => revision,
+                Err(error) => {
+                    // A failed open keeps no lease, so a later open of the
+                    // same name is not refused as a second writer.
+                    state.leased.remove(&name);
+                    return Err(error.into());
+                }
+            };
             (handle, revision)
         };
         Ok(Self {
@@ -1233,5 +1250,58 @@ mod tests {
                 .unwrap()
                 .ids()
         );
+    }
+
+    #[test]
+    fn an_evicted_name_in_memory_mode_is_a_new_name_again() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        let _capacity = SmallCapacity::set();
+        let (_runtime, tokenizer) = qwen(&root, None);
+        // In memory mode the core keeps its own eviction: past the
+        // capacity the least recently used session, `s0`, is dropped.
+        for index in 0..=SMALL_CAPACITY {
+            seed_new(&tokenizer, &format!("s{index}"), &text(index, 80)).unwrap();
+        }
+        let stats = tokenizer.store_stats();
+        assert_eq!(stats.session_count, SMALL_CAPACITY as u64);
+        assert_eq!(stats.sessions_evicted, 1);
+
+        let mut s0 = tokenizer.open_session("s0").unwrap();
+        assert_eq!(s0.revision(), None);
+        let again = text(50, 80);
+        assert_eq!(
+            s0.seed(&again).unwrap().ids(),
+            tokenizer.encode(&again).unwrap().ids()
+        );
+        s0.close().unwrap();
+        assert_eq!(
+            snapshot_of(&tokenizer, "s0").unwrap(),
+            tokenizer.encode(&again).unwrap().ids()
+        );
+    }
+
+    #[test]
+    fn a_failed_open_keeps_no_lease() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        let _capacity = SmallCapacity::set();
+        let temporary = tempfile::tempdir().unwrap();
+        let (_runtime, tokenizer) = qwen(&root, Some(&temporary.path().join("home")));
+        seed_new(&tokenizer, "s0", &text(0, 80)).unwrap();
+        // A name whose stored session the core no longer holds, which no
+        // public call produces in a durable store: opening it fails.
+        {
+            let mut state = tokenizer.inner.store.lock().unwrap();
+            let handle = state.names["s0"];
+            assert!(state.store.evict(handle));
+        }
+        for _ in 0..2 {
+            let error = tokenizer.open_session("s0").unwrap_err();
+            assert_eq!(error.code(), ErrorCode::InvalidArgument, "{error}");
+            assert!(!tokenizer.inner.store.lock().unwrap().leased.contains("s0"));
+        }
     }
 }

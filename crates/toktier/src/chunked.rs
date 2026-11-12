@@ -26,7 +26,8 @@
 //! and reported by [`Chunked::admission`]:
 //!
 //! 1. Its family and artifact digest are in the certified repair roster
-//!    (refusal `artifact_not_in_certified_repair_roster`).
+//!    or are those of a record carried from it (refusal
+//!    `artifact_not_in_certified_repair_roster`).
 //! 2. Its artifact document has a normalizer shape the cut rule reasons
 //!    about -- none, the empty sequence, or NFC with every added token
 //!    matched on the input text -- and no added token that sets

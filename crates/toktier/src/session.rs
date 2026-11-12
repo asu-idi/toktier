@@ -187,6 +187,48 @@ impl SessionStoreState {
         Ok(())
     }
 
+    /// Session slots the core still has free, for a durable store; `None`
+    /// in memory mode, where the core's own eviction applies.
+    ///
+    /// The core makes room for a new session by dropping its least
+    /// recently used one. A durable store must not let that happen: the
+    /// dropped session's name and transcript would still be in this
+    /// owner's tables, and the next atomic save would refuse them. So a
+    /// durable store asks first and declines the call that needs the slot.
+    fn durable_free_slots(&self) -> Option<usize> {
+        self.transcripts.as_ref()?;
+        Some(
+            self.store
+                .config()
+                .max_sessions
+                .saturating_sub(self.store.list_handles().len()),
+        )
+    }
+
+    /// Whether a content lookup may open its temporary session without
+    /// making the core drop a named one.
+    pub(crate) fn lookup_has_a_slot(&self) -> bool {
+        self.durable_free_slots().is_none_or(|free| free >= 1)
+    }
+
+    /// Decline a new named session when a durable store is at its bound.
+    /// One slot stays free for `Tokenizer::lookup`, whose hit opens a
+    /// temporary session, so the bound on named sessions is one below the
+    /// core's capacity. Nothing has been changed when this returns an
+    /// error, so the store stays usable.
+    fn ensure_room_for_a_named_session(&self) -> Result<()> {
+        match self.durable_free_slots() {
+            Some(free) if free <= 1 => Err(Error::new(
+                ErrorCode::InvalidArgument,
+                format!(
+                    "the durable session store holds {} named sessions, its capacity; delete a session before creating another",
+                    self.names.len()
+                ),
+            )),
+            _ => Ok(()),
+        }
+    }
+
     pub(crate) fn ensure_healthy(&self) -> Result<()> {
         match &self.persistence_fault {
             Some(cause) => Err(Error::new(
@@ -207,8 +249,26 @@ fn ensure_store_home(path: &Path) -> Result<()> {
     crate::fsutil::create_private_dir_all(path)
 }
 
+#[cfg(test)]
+thread_local! {
+    /// A smaller session capacity for the stores this test thread creates,
+    /// so the bound can be reached in a few calls. Test builds only.
+    static TEST_MAX_SESSIONS: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+fn store_config() -> StoreConfig {
+    #[cfg(test)]
+    if let Some(max_sessions) = TEST_MAX_SESSIONS.with(std::cell::Cell::get) {
+        return StoreConfig {
+            max_sessions,
+            ..StoreConfig::default()
+        };
+    }
+    StoreConfig::default()
+}
+
 fn new_store(persistent: bool, seed_digest_overlap: bool) -> Result<SessionStore> {
-    let mut store = SessionStore::new(StoreConfig::default())?;
+    let mut store = SessionStore::new(store_config())?;
     if persistent {
         store.enable_recovery_tracking()?;
     }
@@ -323,6 +383,7 @@ impl Session {
         let (handle, revision, ids, persistence) = {
             let mut state = self.lock_store();
             state.ensure_healthy()?;
+            state.ensure_room_for_a_named_session()?;
             let key = state.key;
             let put = state.store.put(key, text, self.tokenizer.router.as_ref())?;
             state.names.insert(self.name.clone(), put.handle);
@@ -483,6 +544,14 @@ impl Session {
         let (handle, revision, ids) = {
             let mut state = self.lock_store();
             state.ensure_healthy()?;
+            // Replacing a stored session gives its own slot back first, so
+            // only a name with nothing stored needs a free one.
+            let replaces_a_stored_session = self
+                .handle
+                .is_some_and(|old| state.store.revision(old).is_ok());
+            if !replaces_a_stored_session {
+                state.ensure_room_for_a_named_session()?;
+            }
             if let Some(old) = self.handle {
                 state.store.evict(old);
             }
@@ -522,6 +591,7 @@ impl Session {
                     format!("session {new_name:?} already exists"),
                 ));
             }
+            state.ensure_room_for_a_named_session()?;
             let forked = state.store.fork(handle)?;
             state.names.insert(new_name.clone(), forked);
             let forked_transcript = state
@@ -846,5 +916,322 @@ mod tests {
         ] {
             assert_eq!(reason_for_repair_path(path), None, "for {path}");
         }
+    }
+
+    // ---- named sessions at the store's bound -------------------------------
+    //
+    // These tests load a shipped artifact (from `TOKTIER_TEST_ARTIFACTS` or
+    // the default cache, as the lifecycle tests do) and give the stores they
+    // create a session capacity of four, so the bound is reached in a few
+    // calls. A durable store then holds at most three named sessions.
+
+    const SMALL_CAPACITY: usize = 4;
+
+    fn artifact_root() -> Option<PathBuf> {
+        let root = std::env::var_os("TOKTIER_TEST_ARTIFACTS")
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var_os("HOME")
+                    .map(PathBuf::from)
+                    .map(|home| home.join(".cache/toktier/artifacts"))
+            })
+            .filter(|root| root.join("qwen3_8b-b968826d9c46/tokenizer.json").is_file());
+        if root.is_none() {
+            eprintln!("skip: no qwen3_8b artifact under TOKTIER_TEST_ARTIFACTS or the cache");
+        }
+        root
+    }
+
+    /// Sets the test-only capacity for this thread until dropped.
+    struct SmallCapacity;
+
+    impl SmallCapacity {
+        fn set() -> Self {
+            TEST_MAX_SESSIONS.with(|bound| bound.set(Some(SMALL_CAPACITY)));
+            SmallCapacity
+        }
+    }
+
+    impl Drop for SmallCapacity {
+        fn drop(&mut self) {
+            TEST_MAX_SESSIONS.with(|bound| bound.set(None));
+        }
+    }
+
+    fn qwen(root: &Path, home: Option<&Path>) -> (crate::Runtime, crate::Tokenizer) {
+        let mut builder = crate::Runtime::builder()
+            .artifact_cache(root)
+            .device(crate::Device::Cpu);
+        if let Some(home) = home {
+            builder = builder.home(home);
+        }
+        let runtime = builder.build().unwrap();
+        let tokenizer = runtime.load("qwen3_8b").unwrap();
+        assert_eq!(
+            tokenizer
+                .inner
+                .store
+                .lock()
+                .unwrap()
+                .store
+                .config()
+                .max_sessions,
+            SMALL_CAPACITY
+        );
+        (runtime, tokenizer)
+    }
+
+    /// A distinct ASCII text of `len` bytes. A lookup hit needs a sealed
+    /// block, so the texts it is asked about are longer than 4,096.
+    fn text(index: usize, len: usize) -> String {
+        const WORDS: [&str; 8] = [
+            "river", "stone", "maple", "cloud", "lantern", "harbor", "meadow", "copper",
+        ];
+        let mut state = index as u64 ^ 0x9E37_79B9_7F4A_7C15;
+        let mut out = format!("Document {index}. ");
+        while out.len() < len {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            out.push_str(WORDS[(state >> 33) as usize % WORDS.len()]);
+            out.push(if state >> 60 == 0 { '\n' } else { ' ' });
+        }
+        out.truncate(len);
+        out
+    }
+
+    fn seed_new(tokenizer: &crate::Tokenizer, name: &str, text: &str) -> Result<Vec<u32>> {
+        let mut session = tokenizer.open_session(name)?;
+        let ids = session.seed(text)?.ids().to_vec();
+        session.close()?;
+        Ok(ids)
+    }
+
+    /// Seed each (name, text) in order and stop at the first refusal, which
+    /// is returned with the number seeded before it.
+    fn seed_until_declined(
+        tokenizer: &crate::Tokenizer,
+        texts: &[(String, String)],
+    ) -> (usize, Option<Error>) {
+        for (seeded, (name, text)) in texts.iter().enumerate() {
+            match seed_new(tokenizer, name, text) {
+                Ok(ids) => assert_eq!(ids, tokenizer.encode(text).unwrap().ids(), "{name}"),
+                Err(error) => return (seeded, Some(error)),
+            }
+        }
+        (texts.len(), None)
+    }
+
+    fn assert_declined(error: &Error, held: usize) {
+        assert_eq!(error.code(), ErrorCode::InvalidArgument, "{error}");
+        assert_eq!(
+            error.message(),
+            format!(
+                "the durable session store holds {held} named sessions, its capacity; delete a session before creating another"
+            )
+        );
+    }
+
+    fn assert_healthy(tokenizer: &crate::Tokenizer, sessions: u64) {
+        tokenizer
+            .inner
+            .store
+            .lock()
+            .unwrap()
+            .ensure_healthy()
+            .unwrap();
+        let stats = tokenizer.store_stats();
+        assert_eq!(stats.session_count, sessions);
+        assert_eq!(stats.sessions_evicted, 0);
+    }
+
+    fn snapshot_of(tokenizer: &crate::Tokenizer, name: &str) -> Option<Vec<u32>> {
+        let session = tokenizer.open_session(name).unwrap();
+        session
+            .revision()
+            .map(|_| session.snapshot().unwrap().ids().to_vec())
+    }
+
+    #[test]
+    fn a_full_durable_store_declines_new_names_and_keeps_working() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        let _capacity = SmallCapacity::set();
+        let temporary = tempfile::tempdir().unwrap();
+        let home = temporary.path().join("home");
+        let named = |index: usize| (format!("s{index}"), text(index, 80));
+        let expected = {
+            let (_runtime, tokenizer) = qwen(&root, Some(&home));
+            let fill: Vec<_> = (0..=SMALL_CAPACITY).map(named).collect();
+            let (seeded, declined) = seed_until_declined(&tokenizer, &fill);
+            assert_eq!(seeded, SMALL_CAPACITY - 1, "first refusal: {declined:?}");
+            assert_declined(&declined.unwrap(), SMALL_CAPACITY - 1);
+            assert_healthy(&tokenizer, 3);
+
+            // A stored session keeps working.
+            let mut s0 = tokenizer.open_session("s0").unwrap();
+            s0.append(" and one more turn").unwrap();
+            let grown = format!("{} and one more turn", named(0).1);
+            assert_eq!(
+                s0.snapshot().unwrap().ids(),
+                tokenizer.encode(&grown).unwrap().ids()
+            );
+
+            // The other two calls that create a name are declined as well.
+            assert_declined(&s0.fork("f0").unwrap_err(), 3);
+            let mut unseeded = tokenizer.open_session("n0").unwrap();
+            assert_declined(&unseeded.overwrite(&text(40, 80)).unwrap_err(), 3);
+            drop(unseeded);
+            s0.close().unwrap();
+
+            // Replacing a stored name gives its slot back first.
+            let mut s1 = tokenizer.open_session("s1").unwrap();
+            let replaced = text(41, 80);
+            assert_eq!(
+                s1.overwrite(&replaced).unwrap().ids(),
+                tokenizer.encode(&replaced).unwrap().ids()
+            );
+            s1.close().unwrap();
+            assert_healthy(&tokenizer, 3);
+
+            // `delete` makes room, and the declined session value can seed.
+            let mut s3 = tokenizer.open_session("s3").unwrap();
+            assert_declined(&s3.seed(&named(3).1).unwrap_err(), 3);
+            tokenizer.open_session("s2").unwrap().delete().unwrap();
+            assert_eq!(
+                s3.seed(&named(3).1).unwrap().ids(),
+                tokenizer.encode(&named(3).1).unwrap().ids()
+            );
+            s3.close().unwrap();
+            assert_declined(&seed_new(&tokenizer, "s4", &named(4).1).unwrap_err(), 3);
+            assert_healthy(&tokenizer, 3);
+
+            [("s0", grown), ("s1", replaced), ("s3", named(3).1)].map(|(name, text)| {
+                let ids = snapshot_of(&tokenizer, name).unwrap();
+                assert_eq!(ids, tokenizer.encode(&text).unwrap().ids(), "{name}");
+                (name, ids)
+            })
+        };
+
+        // A fresh runtime over the same home reads the same names and ids.
+        let (_runtime, tokenizer) = qwen(&root, Some(&home));
+        assert_healthy(&tokenizer, 3);
+        for (name, ids) in expected {
+            assert_eq!(snapshot_of(&tokenizer, name), Some(ids), "{name}");
+        }
+        for name in ["s2", "s4", "f0", "n0"] {
+            assert_eq!(snapshot_of(&tokenizer, name), None, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_lookup_hit_at_the_bound_evicts_no_named_session() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        let _capacity = SmallCapacity::set();
+        let temporary = tempfile::tempdir().unwrap();
+        let (_runtime, tokenizer) = qwen(&root, Some(&temporary.path().join("home")));
+        // As many names as the core has slots: the last one is declined.
+        let fill: Vec<_> = (0..SMALL_CAPACITY)
+            .map(|index| (format!("s{index}"), text(index, 6000)))
+            .collect();
+        let (seeded, _) = seed_until_declined(&tokenizer, &fill);
+        assert!(seeded >= SMALL_CAPACITY - 1);
+
+        let query = format!("{} and a question that follows", fill[0].1);
+        let hit = tokenizer.lookup(&query).unwrap().expect("a lookup hit");
+        assert_eq!(hit.ids(), tokenizer.encode(&query).unwrap().ids());
+        assert_healthy(&tokenizer, 3);
+
+        let mut s1 = tokenizer.open_session("s1").unwrap();
+        s1.append(" one more turn").unwrap();
+        assert_eq!(
+            s1.snapshot().unwrap().ids(),
+            tokenizer
+                .encode(&format!("{} one more turn", fill[1].1))
+                .unwrap()
+                .ids()
+        );
+        assert_healthy(&tokenizer, 3);
+    }
+
+    #[test]
+    fn a_file_with_every_slot_taken_opens_and_frees_slots_on_delete() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        let _capacity = SmallCapacity::set();
+        let temporary = tempfile::tempdir().unwrap();
+        let home = temporary.path().join("home");
+        let texts: Vec<String> = (0..4).map(|index| text(index, 6000)).collect();
+        {
+            // Write a file in which named sessions take every slot, as a
+            // build without the named-session bound could: three through
+            // the public calls, the fourth straight into the tables, then
+            // one atomic save.
+            let (_runtime, tokenizer) = qwen(&root, Some(&home));
+            for (index, text) in texts.iter().take(3).enumerate() {
+                seed_new(&tokenizer, &format!("s{index}"), text).unwrap();
+            }
+            let mut state = tokenizer.inner.store.lock().unwrap();
+            let key = state.key;
+            let put = state
+                .store
+                .put(key, &texts[3], tokenizer.inner.router.as_ref())
+                .unwrap();
+            state.names.insert("s3".to_owned(), put.handle);
+            state
+                .transcripts
+                .as_mut()
+                .unwrap()
+                .insert("s3".to_owned(), texts[3].clone());
+            state.persist().unwrap();
+        }
+
+        let (runtime, tokenizer) = qwen(&root, Some(&home));
+        assert_healthy(&tokenizer, 4);
+        // A hit would need a fifth slot, so the lookup answers a miss.
+        let query = format!("{} and a question that follows", texts[0]);
+        assert!(tokenizer.lookup(&query).unwrap().is_none());
+        assert_healthy(&tokenizer, 4);
+        assert_declined(&seed_new(&tokenizer, "n0", &texts[0]).unwrap_err(), 4);
+        let s0 = tokenizer.open_session("s0").unwrap();
+        assert_declined(&s0.fork("f0").unwrap_err(), 4);
+        drop(s0);
+        let mut s1 = tokenizer.open_session("s1").unwrap();
+        s1.append(" one more turn").unwrap();
+        s1.close().unwrap();
+        assert_healthy(&tokenizer, 4);
+
+        // One deletion frees the lookup's slot; the next one makes room
+        // for a new name.
+        tokenizer.open_session("s3").unwrap().delete().unwrap();
+        let hit = tokenizer.lookup(&query).unwrap().expect("a lookup hit");
+        assert_eq!(hit.ids(), tokenizer.encode(&query).unwrap().ids());
+        assert_healthy(&tokenizer, 3);
+        assert_declined(&seed_new(&tokenizer, "n0", &texts[3]).unwrap_err(), 3);
+        tokenizer.open_session("s2").unwrap().delete().unwrap();
+        assert_eq!(
+            seed_new(&tokenizer, "n0", &texts[3]).unwrap(),
+            tokenizer.encode(&texts[3]).unwrap().ids()
+        );
+        assert_healthy(&tokenizer, 3);
+        drop((runtime, tokenizer));
+
+        let (_runtime, tokenizer) = qwen(&root, Some(&home));
+        assert_healthy(&tokenizer, 3);
+        assert_eq!(
+            snapshot_of(&tokenizer, "n0").unwrap(),
+            tokenizer.encode(&texts[3]).unwrap().ids()
+        );
+        assert_eq!(
+            snapshot_of(&tokenizer, "s1").unwrap(),
+            tokenizer
+                .encode(&format!("{} one more turn", texts[1]))
+                .unwrap()
+                .ids()
+        );
     }
 }

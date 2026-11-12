@@ -1136,6 +1136,13 @@ impl Tokenizer {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         state.ensure_healthy()?;
+        if !state.lookup_has_a_slot() {
+            // Every slot of a durable store is taken by a named session (a
+            // file written before the named-session bound kept one free). A
+            // hit would make the core drop one of them, so this lookup
+            // answers as a miss until a session is deleted.
+            return Ok(None);
+        }
         let key = state.key;
         let Some(hit) = state.store.lookup(key, text, self.inner.router.as_ref())? else {
             return Ok(None);

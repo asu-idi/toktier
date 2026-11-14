@@ -147,6 +147,7 @@ from pathlib import Path
 from typing import Any
 
 from ..facade.delivery import GPU_DELIVERIES, parse_device
+from ..policy import BACKEND_REFERENCE
 from .sglang_sched import SchedResult, Scheduler, SchedulerConfig, parse_flag
 
 __all__ = [
@@ -798,6 +799,7 @@ class SGLangToktierTokenizer:
                 "mode": self._mode,
                 "family": self.family,
                 "backend": self.planned_backend,
+                "accelerates": self.accelerates,
                 "store_dir": self._store_dir,
                 "template_ok": self._template_ok,
                 "prefix": self._prefix,
@@ -968,6 +970,16 @@ class SGLangToktierTokenizer:
         return None if self._tok is None else self._tok.plan.backend
 
     @property
+    def accelerates(self) -> bool:
+        """Whether toktier answers this wrapper's encodes on an accelerated
+        route: a toktier tokenizer is loaded and its plan's backend is not
+        the reference engine alone. ``False`` in passthrough (configured,
+        declined by the identity check, or latched later) and for a
+        tokenizer toktier knows only as external, whose encodes run on the
+        reference engine. ``is_fast`` keeps the Hugging Face meaning."""
+        return self.planned_backend not in (None, BACKEND_REFERENCE)
+
+    @property
     def is_fast(self) -> bool:
         return True
 
@@ -1043,7 +1055,7 @@ class SGLangToktierTokenizer:
     def __repr__(self) -> str:
         return (
             f"SGLangToktierTokenizer(mode={self._mode!r}, family={self.family!r}, "
-            f"wrapped={type(self._hf).__name__})"
+            f"accelerates={self.accelerates!r}, wrapped={type(self._hf).__name__})"
         )
 
     # -- admission after construction -------------------------------------
@@ -1554,6 +1566,7 @@ class SGLangToktierTokenizer:
         """Counters so far plus the toktier store view when available."""
         out = dict(self._stats)
         out["how"] = dict(self._stats["how"])
+        out["accelerates"] = self.accelerates
         out["ms_mean"] = (
             round(out["ms_total"] / out["calls"], 4) if out["calls"] else None
         )

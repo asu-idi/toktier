@@ -1166,7 +1166,10 @@ impl Tokenizer {
     /// certified before the shared block was completed, its ids up to that
     /// point are reused and only the rest of `text` is encoded; otherwise
     /// the whole text is encoded. A miss returns `Ok(None)` without
-    /// tokenizing. A lookup creates, changes and drops no session.
+    /// tokenizing. A lookup creates and drops no session and changes no
+    /// session's text or ids; in memory mode, a hit that reuses a
+    /// session's ids counts as a use of that session in the store's
+    /// least-recently-used order.
     pub fn lookup(&self, text: &str) -> Result<Option<Encoding>> {
         use crate::prefix_index::{BlockKey, Holder, Walker};
         /// Blocks hashed between two visits to the store lock.

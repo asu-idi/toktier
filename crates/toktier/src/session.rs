@@ -717,8 +717,9 @@ impl Session {
         ))
     }
 
-    /// Fork this session under a new stable name. Sealed content-addressed
-    /// nodes are shared; the new revision lineage starts at zero.
+    /// Fork this session under a new stable name. The fork starts with the
+    /// source's text and ids, and the lookup index counts it on every block
+    /// the source has; the new revision lineage starts at zero.
     pub fn fork(&self, new_name: impl Into<String>) -> Result<Session> {
         self.require_open()?;
         let new_name = new_name.into();
@@ -1384,8 +1385,9 @@ mod tests {
         s1.close().unwrap();
         assert_healthy(&tokenizer, 4);
 
-        // One deletion frees the lookup's slot; the next one makes room
-        // for a new name.
+        // The file holds one named session more than the bound allows: one
+        // deletion brings it to the bound, the next one makes room for a
+        // new name. The lookup needs no slot at either point.
         tokenizer.open_session("s3").unwrap().delete().unwrap();
         let hit = tokenizer.lookup(&query).unwrap().expect("a lookup hit");
         assert_eq!(hit.ids(), tokenizer.encode(&query).unwrap().ids());

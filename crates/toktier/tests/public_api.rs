@@ -388,7 +388,7 @@ fn session_encodings_share_the_store_row_and_survive_mutation_and_drop() {
 }
 
 #[test]
-fn lookup_encodings_outlive_the_evicted_lookup_session() {
+fn lookup_encodings_outlive_the_tokenizer_and_the_runtime() {
     let Some(root) = artifact_root() else {
         return;
     };
@@ -398,19 +398,19 @@ fn lookup_encodings_outlive_the_evicted_lookup_session() {
         .build()
         .unwrap();
     let tokenizer = runtime.load("qwen3_8b").unwrap();
-    // Content lookup needs sealed chain nodes; a session long enough to
-    // cross several 4096-character blocks feeds the prefix cache.
+    // A stored session long enough to cross several 4096-character blocks
+    // gives the lookup index entries for this text.
     let text = "content lookup body with words 0123456789 ".repeat(400);
     let mut session = tokenizer.open_session("wp7-lookup-source").unwrap();
     session.seed(&text).unwrap();
     session.close().unwrap();
     let Some(hit) = tokenizer.lookup(&text).unwrap() else {
-        // A miss is legal (no certified boundary sealed a block); the
-        // lifetime property below is then covered by the session tests.
+        // A miss is legal (an index that holds no entry for this text);
+        // the lifetime property below is then covered by the session tests.
         return;
     };
-    // The lookup's temporary session was evicted before returning; the
-    // shared row must remain readable and exact regardless.
+    // The returned ids belong to the caller: they stay readable and exact
+    // after the tokenizer and the runtime are gone.
     assert_eq!(hit.ids(), tokenizer.encode(&text).unwrap().ids());
     drop(tokenizer);
     runtime.shutdown();

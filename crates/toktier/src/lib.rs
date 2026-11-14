@@ -22,6 +22,9 @@ mod gpu_data;
 mod jit;
 mod manifest;
 mod package_data;
+// Wired into the session store by the next change.
+#[allow(dead_code)]
+mod prefix_index;
 mod runtime;
 #[cfg(feature = "serving")]
 mod serving;

@@ -2552,5 +2552,143 @@ mod tests {
         }
     }
 
+    /// `store_stats().index_bytes` comes from running totals of the
+    /// holder and key slots. Through seeds, appends, overwrites, forks,
+    /// deletes, sessions the core drops at its capacity, blocks declined
+    /// at the index cap, lookups and rejected holders, the totals equal a
+    /// recount over every entry and track after each call (the crate's
+    /// own test builds also compare them inside every `store_stats`).
+    #[test]
+    fn index_size_totals_equal_a_recount_after_every_call() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        let _capacity = SmallCapacity::set();
+        for (seed, index_blocks) in [(41u64, None), (42, Some(12)), (43, Some(3))] {
+            let (_runtime, tokenizer) = experimental(&root, None, index_blocks);
+            let pool: Vec<String> = (0..3u64)
+                .map(|index| {
+                    let flavor = [Flavor::Ascii, Flavor::Multibyte, Flavor::Nfc][index as usize];
+                    prose(seed * 10 + index, 24_000, flavor)
+                })
+                .collect();
+            let mut rng = Rng(seed);
+            let check = |step: usize, what: &str| {
+                let stats = tokenizer.store_stats();
+                let state = tokenizer.inner.store.lock().unwrap();
+                assert_eq!(
+                    stats.index_bytes,
+                    state.index.approx_bytes_by_walk(),
+                    "seed {seed}, step {step} ({what}): index bytes and a recount"
+                );
+                state.index.check_invariants().unwrap();
+            };
+            for step in 0..240 {
+                let name = format!("t{}", rng.below(9));
+                let base = &pool[rng.below(pool.len())];
+                let what = match rng.below(9) {
+                    0 | 1 => {
+                        let text = take_chars(base, 4_000 + rng.below(14_000));
+                        let mut session = tokenizer.open_session(&name).unwrap();
+                        if session.revision().is_none() {
+                            session.seed(&text).unwrap();
+                        } else {
+                            session.overwrite(&text).unwrap();
+                        }
+                        session.close().unwrap();
+                        "seed or overwrite"
+                    }
+                    2..=4 => {
+                        let mut session = tokenizer.open_session(&name).unwrap();
+                        let delta = prose(rng.next(), 300 + rng.below(5_000), Flavor::Ascii);
+                        if session.revision().is_none() {
+                            session.seed(&delta).unwrap();
+                        } else {
+                            session.append(&delta).unwrap();
+                        }
+                        session.close().unwrap();
+                        "append"
+                    }
+                    5 => {
+                        let target = format!("t{}", rng.below(9));
+                        let free = target != name
+                            && tokenizer
+                                .open_session(&target)
+                                .unwrap()
+                                .revision()
+                                .is_none();
+                        let session = tokenizer.open_session(&name).unwrap();
+                        if session.revision().is_some() && free {
+                            session.fork(&target).unwrap().close().unwrap();
+                        }
+                        session.close().unwrap();
+                        "fork"
+                    }
+                    6 => {
+                        let session = tokenizer.open_session(&name).unwrap();
+                        if session.revision().is_some() {
+                            session.delete().unwrap();
+                        } else {
+                            session.close().unwrap();
+                        }
+                        "delete"
+                    }
+                    7 => {
+                        // A listed holder dropped as a reject.
+                        let mut state = tokenizer.inner.store.lock().unwrap();
+                        if let Some(&handle) = state.names.get(&name) {
+                            let text = take_chars(base, 4_096);
+                            let key = crate::prefix_index::Walker::new(state.index.params(), &text)
+                                .next_key()
+                                .map(|(key, _)| key);
+                            if let Some(key) = key {
+                                state.index.reject_holder(&key, handle);
+                            }
+                        }
+                        "reject"
+                    }
+                    _ => {
+                        let query = format!(
+                            "{}{}",
+                            take_chars(base, rng.below(24_000)),
+                            prose(rng.next(), 500, Flavor::Nfc)
+                        );
+                        lookup_checked(&tokenizer, &query);
+                        "lookup"
+                    }
+                };
+                check(step, what);
+            }
+            let stats = tokenizer.store_stats();
+            assert!(
+                stats.sessions_evicted > 0,
+                "seed {seed}: the core dropped sessions"
+            );
+            if index_blocks == Some(3) {
+                assert!(
+                    stats.index_blocks_declined > 0,
+                    "seed {seed}: blocks declined"
+                );
+            }
+            let names: Vec<String> = tokenizer
+                .inner
+                .store
+                .lock()
+                .unwrap()
+                .names
+                .keys()
+                .cloned()
+                .collect();
+            for name in names {
+                let session = tokenizer.open_session(&name).unwrap();
+                if session.revision().is_some() {
+                    session.delete().unwrap();
+                }
+            }
+            check(usize::MAX, "after deleting everything");
+            assert_eq!(tokenizer.store_stats().node_count, 0);
+        }
+    }
+
     // END session memory tests.
 }

@@ -202,6 +202,13 @@ pub(crate) struct PrefixIndex {
     max_blocks: usize,
     entries: HashMap<BlockKey, Entry>,
     tracks: HashMap<SessionHandle, Track>,
+    /// The holder slots the entries have allocated (the sum of their
+    /// lists' capacities), kept where the lists change so that the size
+    /// estimate needs no walk over the entries.
+    holder_slots: usize,
+    /// The key slots the tracks in `tracks` have allocated, kept the same
+    /// way.
+    key_slots: usize,
     pub(crate) counters: IndexCounters,
 }
 
@@ -214,6 +221,8 @@ impl PrefixIndex {
             max_blocks,
             entries: HashMap::new(),
             tracks: HashMap::new(),
+            holder_slots: 0,
+            key_slots: 0,
             counters: IndexCounters::default(),
         }
     }
@@ -237,25 +246,71 @@ impl PrefixIndex {
     }
 
     /// An estimate of the bytes the index holds: its map slots, the
-    /// listed holders and the key lists of the tracks.
+    /// listed holders and the key lists of the tracks. Constant time: the
+    /// holder and key slots are running totals.
     pub(crate) fn approx_bytes(&self) -> u64 {
+        let estimate = self.bytes_for(self.holder_slots, self.key_slots);
+        // The crate's own tests compare the totals with a recount at every
+        // call; other builds do not walk the index here.
+        #[cfg(test)]
+        {
+            let (holder_slots, key_slots) = self.recount_slots();
+            assert_eq!(
+                (self.holder_slots, self.key_slots),
+                (holder_slots, key_slots),
+                "running slot totals differ from a recount"
+            );
+        }
+        estimate
+    }
+
+    fn bytes_for(&self, holder_slots: usize, key_slots: usize) -> u64 {
         let entry_slot = std::mem::size_of::<BlockKey>() + std::mem::size_of::<Entry>() + 1;
         let track_slot = std::mem::size_of::<SessionHandle>() + std::mem::size_of::<Track>() + 1;
-        let holders: usize = self
-            .entries
-            .values()
-            .map(|entry| entry.holders.capacity() * std::mem::size_of::<Holder>())
-            .sum();
-        let keys: usize = self
-            .tracks
-            .values()
-            .map(|track| track.keys.capacity() * std::mem::size_of::<BlockKey>())
-            .sum();
         (std::mem::size_of::<Self>()
             + self.entries.capacity() * entry_slot
-            + holders
+            + holder_slots * std::mem::size_of::<Holder>()
             + self.tracks.capacity() * track_slot
-            + keys) as u64
+            + key_slots * std::mem::size_of::<BlockKey>()) as u64
+    }
+
+    /// The holder and key slots counted by a walk over every entry and
+    /// track, to compare with the running totals.
+    #[cfg(test)]
+    pub(crate) fn recount_slots(&self) -> (usize, usize) {
+        let holders = self
+            .entries
+            .values()
+            .map(|entry| entry.holders.capacity())
+            .sum();
+        let keys = self
+            .tracks
+            .values()
+            .map(|track| track.keys.capacity())
+            .sum();
+        (holders, keys)
+    }
+
+    /// The size estimate computed by a walk over every entry and track.
+    #[cfg(test)]
+    pub(crate) fn approx_bytes_by_walk(&self) -> u64 {
+        let (holder_slots, key_slots) = self.recount_slots();
+        self.bytes_for(holder_slots, key_slots)
+    }
+
+    /// Put `track` in the map, counting its key slots.
+    fn put_track(&mut self, handle: SessionHandle, track: Track) {
+        self.key_slots += track.keys.capacity();
+        if let Some(replaced) = self.tracks.insert(handle, track) {
+            self.key_slots -= replaced.keys.capacity();
+        }
+    }
+
+    /// Take the track of `handle` out of the map, uncounting its key slots.
+    fn take_track(&mut self, handle: SessionHandle) -> Option<Track> {
+        let track = self.tracks.remove(&handle)?;
+        self.key_slots -= track.keys.capacity();
+        Some(track)
     }
 
     /// Whether `handle` has a track.
@@ -294,17 +349,17 @@ impl PrefixIndex {
             attached: true,
         };
         self.extend(handle, &mut track, text, seal_after);
-        self.tracks.insert(handle, track);
+        self.put_track(handle, track);
     }
 
     /// Account for `delta` appended to a session. The blocks it completes
     /// carry the seal the session had before this call.
     pub(crate) fn append(&mut self, handle: SessionHandle, delta: &str, seal_after: Seal) {
-        let Some(mut track) = self.tracks.remove(&handle) else {
+        let Some(mut track) = self.take_track(handle) else {
             return;
         };
         self.extend(handle, &mut track, delta, seal_after);
-        self.tracks.insert(handle, track);
+        self.put_track(handle, track);
     }
 
     fn extend(&mut self, handle: SessionHandle, track: &mut Track, text: &str, seal_after: Seal) {
@@ -319,6 +374,7 @@ impl PrefixIndex {
                     Some(entry) => {
                         entry.refs += 1;
                         if !seal_before.is_zero() {
+                            let slots = entry.holders.capacity();
                             list_holder(
                                 entry,
                                 Holder {
@@ -326,6 +382,8 @@ impl PrefixIndex {
                                     seal: seal_before,
                                 },
                             );
+                            self.holder_slots =
+                                self.holder_slots - slots + entry.holders.capacity();
                         }
                     }
                     None if full => {
@@ -343,6 +401,7 @@ impl PrefixIndex {
                                 seal: seal_before,
                             });
                         }
+                        self.holder_slots += holders.capacity();
                         self.entries.insert(key, Entry { refs: 1, holders });
                     }
                 }
@@ -375,23 +434,29 @@ impl PrefixIndex {
                 .find(|holder| holder.handle == source)
                 .map(|holder| holder.seal);
             if let Some(seal) = listed {
+                let slots = entry.holders.capacity();
                 list_holder(entry, Holder { handle: fork, seal });
+                self.holder_slots = self.holder_slots - slots + entry.holders.capacity();
             }
         }
-        self.tracks.insert(fork, track);
+        self.put_track(fork, track);
     }
 
     /// Release everything `handle` registered.
     pub(crate) fn remove_session(&mut self, handle: SessionHandle) {
-        let Some(track) = self.tracks.remove(&handle) else {
+        let Some(track) = self.take_track(handle) else {
             return;
         };
         for key in &track.keys {
             if let Some(entry) = self.entries.get_mut(key) {
+                let slots = entry.holders.capacity();
                 entry.holders.retain(|holder| holder.handle != handle);
                 entry.refs = entry.refs.saturating_sub(1);
                 if entry.refs == 0 {
                     self.entries.remove(key);
+                    self.holder_slots -= slots;
+                } else {
+                    self.holder_slots = self.holder_slots - slots + entry.holders.capacity();
                 }
             }
         }
@@ -415,7 +480,9 @@ impl PrefixIndex {
     /// Drop a holder that did not agree with the store, and count it.
     pub(crate) fn reject_holder(&mut self, key: &BlockKey, handle: SessionHandle) {
         if let Some(entry) = self.entries.get_mut(key) {
+            let slots = entry.holders.capacity();
             entry.holders.retain(|holder| holder.handle != handle);
+            self.holder_slots = self.holder_slots - slots + entry.holders.capacity();
         }
         self.counters.holder_rejects += 1;
     }
@@ -442,6 +509,13 @@ impl PrefixIndex {
                 "{} entries above the cap {}",
                 self.entries.len(),
                 self.max_blocks
+            ));
+        }
+        if self.recount_slots() != (self.holder_slots, self.key_slots) {
+            return Err(format!(
+                "slot totals {:?}, recount {:?}",
+                (self.holder_slots, self.key_slots),
+                self.recount_slots()
             ));
         }
         if counted.len() != self.entries.len() {

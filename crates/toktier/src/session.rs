@@ -1809,6 +1809,8 @@ mod tests {
         let mut live: HashMap<String, String> = HashMap::new();
         let mut gone: Vec<String> = Vec::new();
         let mut next_name = 0usize;
+        // Lookups made and lookups that hit, to compare with the counters.
+        let (mut lookups, mut hits) = (0u64, 0u64);
         // A text that follows one of the pool texts, or not, from `at`.
         let continuation = |rng: &mut Rng, text: &str| -> String {
             let len = 200 + rng.below(3_000);
@@ -1926,6 +1928,8 @@ mod tests {
                         query.push_str(&prose(rng.next(), rng.below(3_000), Flavor::Nfc));
                     }
                     let found = lookup_checked(&tokenizer, &query);
+                    lookups += 1;
+                    hits += u64::from(found.is_some());
                     let shares_a_block = live.values().any(|text| {
                         take_chars(text, 4_096).chars().count() == 4_096
                             && query.starts_with(&take_chars(text, 4_096))
@@ -1943,6 +1947,15 @@ mod tests {
         assert!(
             reused_ids(&tokenizer) > 0,
             "seed {seed}: lookups reused sealed ids"
+        );
+        let stats = tokenizer.store_stats();
+        assert!(hits > 0, "seed {seed}: lookups hit");
+        assert_eq!(stats.lookups, lookups, "seed {seed}: lookups counted");
+        assert_eq!(stats.lookup_hits, hits, "seed {seed}: hits counted");
+        assert_eq!(
+            stats.lookup_misses,
+            lookups - hits,
+            "seed {seed}: misses counted"
         );
     }
 
@@ -2248,5 +2261,200 @@ mod tests {
         state.ensure_healthy().unwrap();
         assert_eq!(state.store.list_handles().len(), SMALL_CAPACITY - 1);
     }
+    /// A session whose sixth block was completed by a call that made no
+    /// new seal, so that block carries the session's current seal, which
+    /// lies inside it. Returns the text, the handle, that seal, the length
+    /// in characters after the call that crossed into the sixth block, and
+    /// the text's length (the sixth block's end).
+    fn session_with_its_seal_in_the_sixth_block(
+        tokenizer: &crate::Tokenizer,
+        flavor: Flavor,
+    ) -> (String, SessionHandle, Seal, usize, usize) {
+        let mut text = grown_session(tokenizer, "h", 7, 3_000, 9, 1_500, flavor);
+        let mut session = tokenizer.open_session("h").unwrap();
+        let crossed = 5 * 4_096 + 3_000;
+        let first = prose(701, crossed - 16_500, flavor);
+        session.append(&first).unwrap();
+        text.push_str(&first);
+        let end = 6 * 4_096;
+        let second = prose(702, end - crossed, flavor);
+        session.append(&second).unwrap();
+        text.push_str(&second);
+        assert_eq!(session.snapshot().unwrap().ids(), ids_of(tokenizer, &text));
+        session.close().unwrap();
+        let state = tokenizer.inner.store.lock().unwrap();
+        let handle = state.names["h"];
+        let current = seal_of(&state.store, handle).unwrap();
+        assert!(
+            current.chars as usize > 5 * 4_096 && (current.chars as usize) < crossed,
+            "the current seal lies in the sixth block: {current:?}"
+        );
+        (text, handle, current, crossed, end)
+    }
+
+    /// The byte offset of character `chars` of `text`.
+    fn byte_at_char(text: &str, chars: usize) -> usize {
+        text.char_indices()
+            .nth(chars)
+            .map_or(text.len(), |(byte, _)| byte)
+    }
+
+    /// A holder whose seal does not agree with what the store holds is
+    /// dropped and counted, nothing is reused, and the ids are those of
+    /// `encode`. Each case registers the session again with one field of
+    /// its sixth block's seal altered.
+    #[test]
+    fn holders_that_disagree_with_the_store_are_not_used() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        for (which, flavor) in [Flavor::Ascii, Flavor::Multibyte].into_iter().enumerate() {
+            let (_runtime, tokenizer) = experimental(&root, None, None);
+            let (text, handle, current, crossed, end) =
+                session_with_its_seal_in_the_sixth_block(&tokenizer, flavor);
+            assert_eq!(
+                current.bytes as usize,
+                byte_at_char(&text, current.chars as usize)
+            );
+            assert_eq!(text.chars().count(), end);
+            let query = format!("{text}{}", prose(703, 400, flavor));
+            let expected = ids_of(&tokenizer, &query);
+            let rejects = || tokenizer.store_stats().checksum_rejects;
+
+            // As stored: the sixth block carries the current seal, and a
+            // lookup reuses its ids.
+            let before = reused_ids(&tokenizer);
+            assert_eq!(tokenizer.lookup(&query).unwrap().unwrap().ids(), expected);
+            assert_eq!(
+                reused_ids(&tokenizer) - before,
+                current.ids,
+                "flavor {which}: reuse as stored"
+            );
+            assert_eq!(rejects(), 0);
+
+            // Register the session again so that its sixth block carries
+            // `altered`.
+            let register_with = |altered: Seal| {
+                let mut state = tokenizer.inner.store.lock().unwrap();
+                state.index.remove_session(handle);
+                let cut = byte_at_char(&text, crossed);
+                state.index.insert_session(handle, &text[..cut], altered);
+                state.index.append(handle, &text[cut..], current);
+            };
+            let mut cases: Vec<(&str, Seal)> = vec![
+                (
+                    "ids not in the seal log",
+                    Seal {
+                        ids: current.ids - 1,
+                        ..current
+                    },
+                ),
+                (
+                    "chars not in the seal log",
+                    Seal {
+                        chars: current.chars - 1,
+                        ..current
+                    },
+                ),
+                (
+                    "more ids than are sealed",
+                    Seal {
+                        ids: current.ids + 5,
+                        ..current
+                    },
+                ),
+                (
+                    "bytes beyond the stable prefix",
+                    Seal {
+                        bytes: byte_at_char(&text, current.chars as usize + 3) as u64,
+                        ..current
+                    },
+                ),
+            ];
+            if let Some(inside) = (1..current.bytes as usize)
+                .rev()
+                .find(|byte| !text.is_char_boundary(*byte))
+            {
+                cases.push((
+                    "bytes inside a character",
+                    Seal {
+                        bytes: inside as u64,
+                        ..current
+                    },
+                ));
+            }
+            for (what, altered) in cases {
+                register_with(altered);
+                let rejected = rejects();
+                let reused = reused_ids(&tokenizer);
+                let found = tokenizer.lookup(&query).unwrap().expect("a hit");
+                assert_eq!(found.ids(), expected, "flavor {which}, {what}: ids");
+                assert_eq!(
+                    rejects(),
+                    rejected + 1,
+                    "flavor {which}, {what}: counted as a reject"
+                );
+                assert_eq!(
+                    reused_ids(&tokenizer),
+                    reused,
+                    "flavor {which}, {what}: nothing reused"
+                );
+                assert_eq!(tokenizer.lookup(&query).unwrap().unwrap().ids(), expected);
+                assert_eq!(
+                    rejects(),
+                    rejected + 1,
+                    "flavor {which}, {what}: dropped after the reject"
+                );
+            }
+
+            // A seal that lies beyond the block it is listed for (the
+            // second block).
+            {
+                let mut state = tokenizer.inner.store.lock().unwrap();
+                state.index.remove_session(handle);
+                let cut = byte_at_char(&text, 5_000);
+                state.index.insert_session(handle, &text[..cut], current);
+                state.index.append(handle, &text[cut..], current);
+            }
+            let other = format!(
+                "{}{}",
+                &text[..byte_at_char(&text, 8_192)],
+                prose(704, 30_000, flavor)
+            );
+            let expected_other = ids_of(&tokenizer, &other);
+            let rejected = rejects();
+            assert_eq!(
+                tokenizer.lookup(&other).unwrap().unwrap().ids(),
+                expected_other,
+                "flavor {which}: a seal beyond its block"
+            );
+            assert_eq!(
+                rejects(),
+                rejected + 1,
+                "flavor {which}: a seal beyond its block is a reject"
+            );
+
+            // The core no longer holds the session; its track is still
+            // there.
+            register_with(current);
+            assert!(tokenizer.inner.store.lock().unwrap().store.evict(handle));
+            let rejected = rejects();
+            assert_eq!(tokenizer.lookup(&query).unwrap().unwrap().ids(), expected);
+            assert_eq!(
+                rejects(),
+                rejected + 1,
+                "flavor {which}: a session the core dropped is a reject"
+            );
+            tokenizer
+                .inner
+                .store
+                .lock()
+                .unwrap()
+                .index
+                .check_invariants()
+                .unwrap();
+        }
+    }
+
     // END session memory tests.
 }

@@ -370,3 +370,108 @@ def test_closing_a_pool_leaves_no_pipe_thread_or_resource_warning(
     # behind when it exits without running its finalizers (os._exit)
     assert "leaked" not in done.stderr, done.stderr[-3000:]
     assert "resource_tracker" not in done.stderr, done.stderr[-3000:]
+
+
+_OWNER = r"""
+import os, sys, threading, time
+from toktier.integrations.sglang_sched import Scheduler, SchedulerConfig
+
+here, ending, starter = sys.argv[1], sys.argv[2], sys.argv[3]
+box = []
+
+def start():
+    sched = Scheduler(SchedulerConfig(workers=2, loader="_sched_stub:load",
+                                      loader_path=here, start_timeout_s=120.0))
+    sched.start()
+    box.append(sched)
+
+if starter == "thread":
+    # the thread that spawned the workers ends while the owner lives on
+    t = threading.Thread(target=start)
+    t.start()
+    t.join()
+    time.sleep(1.5)
+else:
+    start()
+sched = box[0]
+assert sched.encode_sync("ab", None, timeout=60).ids == [97, 98]
+assert sched.encode_sync("cd", None, timeout=60).ids == [99, 100]
+assert not sched.stats()["dead"], sched.stats()["dead"]
+print("PIDS", os.getpid(), *sched.stats()["worker_pids"].values(), flush=True)
+if ending in ("os_exit", "return"):
+    sys.stdin.readline()  # the test has seen the workers alive
+if ending == "os_exit":
+    os._exit(0)
+if ending == "return":
+    sys.exit(0)
+time.sleep(600)
+"""
+
+
+def _alive(pid: int) -> bool:
+    try:
+        with open(f"/proc/{pid}/stat") as fh:
+            state = fh.read().rsplit(")", 1)[1].split()[0]
+    except OSError:
+        return False
+    return state not in ("Z", "X")
+
+
+@pytest.mark.parametrize(
+    ("ending", "starter"),
+    [
+        ("return", "main"),
+        ("sigkill", "main"),
+        ("sigterm", "main"),
+        ("os_exit", "main"),
+        ("sigkill", "thread"),
+    ],
+)
+def test_pool_workers_leave_when_their_owner_is_gone(ending: str, starter: str) -> None:
+    import signal
+    import subprocess
+    import sys
+    import time
+
+    if not os.path.isdir("/proc/self"):
+        pytest.skip("no /proc on this platform")
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([_SRC, _HERE])
+    owner = subprocess.Popen(
+        [sys.executable, "-c", _OWNER, _HERE, ending, starter],
+        env=env,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    workers: list[int] = []
+    try:
+        assert owner.stdout is not None
+        line = owner.stdout.readline()
+        assert line.startswith("PIDS"), (line, owner.stderr and owner.stderr.read())
+        pids = [int(x) for x in line.split()[1:]]
+        assert pids[0] == owner.pid
+        workers = pids[1:]
+        assert len(workers) == 2 and all(_alive(w) for w in workers)
+        assert owner.stdin is not None
+        if ending in ("os_exit", "return"):
+            owner.stdin.write("go\n")
+            owner.stdin.flush()
+        if ending == "sigkill":
+            owner.send_signal(signal.SIGKILL)
+        elif ending == "sigterm":
+            owner.send_signal(signal.SIGTERM)
+        owner.wait(timeout=60)
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline and any(_alive(w) for w in workers):
+            time.sleep(0.1)
+        left = [w for w in workers if _alive(w)]
+        assert left == [], f"workers alive 5 s after the owner ended: {left}"
+    finally:
+        if owner.poll() is None:
+            owner.kill()
+            owner.wait()
+        for w in workers:
+            if _alive(w):
+                os.kill(w, signal.SIGKILL)

@@ -67,6 +67,8 @@ import heapq
 import importlib
 import multiprocessing
 import os
+import queue
+import signal
 import sys
 import threading
 import time
@@ -651,6 +653,35 @@ def _family_loader(
     return load
 
 
+#: How often an idle worker checks that the process that started it is
+#: still there (seconds); the parent-death signal makes this a second
+#: line on Linux and the only one elsewhere.
+_PARENT_POLL_S = 1.0
+#: ``PR_SET_PDEATHSIG`` of ``prctl(2)``.
+_PR_SET_PDEATHSIG = 1
+
+
+def _leave_with_parent(parent_pid: int | None, arm_signal: bool) -> None:
+    """Arrange for this worker to end when its parent does.
+
+    With ``arm_signal`` (the parent started the pool from its main
+    thread: the signal follows the thread that spawned the child, so a
+    pool started from a thread that later ends would otherwise lose its
+    workers) the kernel is asked to send ``SIGKILL`` when the parent
+    exits, where ``prctl`` exists. Then the parent's pid is compared with
+    ``os.getppid()``, since the parent may have gone before the signal
+    was armed; a worker whose parent is gone leaves at once. The worker's
+    idle wait repeats the comparison (:data:`_PARENT_POLL_S`), which
+    covers a platform without the signal."""
+    if arm_signal and sys.platform.startswith("linux"):
+        with contextlib.suppress(Exception):
+            import ctypes
+
+            ctypes.CDLL(None).prctl(_PR_SET_PDEATHSIG, int(signal.SIGKILL), 0, 0, 0)
+    if parent_pid is not None and os.getppid() != parent_pid:
+        os._exit(0)
+
+
 def _worker_main(
     wid: int,
     core: int | None,
@@ -664,7 +695,11 @@ def _worker_main(
     qin: Any,
     qres: Any,
     gpu_delivery: str = "auto",
+    parent_pid: int | None = None,
+    arm_signal: bool = False,
 ) -> None:
+    # First of all: a worker does not outlive the process that started it.
+    _leave_with_parent(parent_pid, arm_signal)
     # The child sets the native libraries' thread-count variables before
     # anything loads them; it writes the environment and never reads it.
     for name, value in env.items():
@@ -692,7 +727,12 @@ def _worker_main(
         return
     qres.put(("ready", wid, os.getpid(), None))
     while True:
-        item = qin.get()
+        try:
+            item = qin.get(timeout=_PARENT_POLL_S)
+        except queue.Empty:
+            if parent_pid is not None and os.getppid() != parent_pid:
+                os._exit(0)  # the parent is gone; nobody reads an answer
+            continue
         if item[0] == "stop":
             break
         _, rid, index, kind, text, key = item
@@ -802,6 +842,8 @@ class Scheduler:
             "TOKENIZERS_PARALLELISM": "false",
         }
         t0 = _CLOCK()
+        parent_pid = os.getpid()
+        arm_signal = threading.current_thread() is threading.main_thread()
         for wid in range(cfg.workers):
             core = cfg.cores[wid % len(cfg.cores)] if cfg.cores else None
             store = os.path.join(self.store, f"w{wid}") if self.store else None
@@ -821,6 +863,8 @@ class Scheduler:
                     qin,
                     self._qres,
                     self.gpu_delivery,
+                    parent_pid,
+                    arm_signal,
                 ),
                 name=f"toktier-sched-w{wid}",
                 daemon=True,

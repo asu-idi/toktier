@@ -136,6 +136,7 @@ import contextlib
 import contextvars
 import inspect
 import json
+import logging
 import os
 import queue
 import threading
@@ -146,6 +147,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from ..errors import ArtifactNotFound
 from ..facade.delivery import GPU_DELIVERIES, parse_device
 from ..policy import BACKEND_REFERENCE
 from .sglang_sched import SchedResult, Scheduler, SchedulerConfig, parse_flag
@@ -162,6 +164,17 @@ __all__ = [
     "tokenize_texts_with_pool",
     "wrap_tokenizer",
 ]
+
+_LOG = logging.getLogger(__name__)
+
+
+class _NoArtifactName(ValueError):
+    """No family, no repository and no ``name_or_path``: nothing to resolve.
+
+    A ``ValueError``, as the raise was before the wrapper learned to serve
+    such a tokenizer in passthrough (``AdapterConfig.require_artifact``
+    restores it)."""
+
 
 #: "Read the context variable" marker for the explicit-key parameter.
 _KEY_FROM_CONTEXT = object()
@@ -311,6 +324,13 @@ class AdapterConfig:
     ``scheduler`` (a :class:`~toktier.integrations.sglang_sched.
     SchedulerConfig` with ``workers`` > 0) starts the process-pool
     scheduler; ``None`` keeps every encode in this process.
+    ``require_artifact`` decides what happens when no toktier artifact
+    can be resolved for the wrapped tokenizer (a local model directory, a
+    repository without ``tokenizer.json``, a tokenizer with no
+    ``name_or_path``, an offline host whose toktier cache lacks the
+    files): by default the wrapper serves every call with the supplied
+    tokenizer, records the reason and logs one warning; with
+    ``require_artifact`` the wrap raises, as it did before.
     ``device`` and ``gpu_delivery`` are passed to ``toktier.load`` /
     ``toktier.from_pretrained`` as given (``device`` accepts ``"auto"``,
     ``"cpu"``, ``"cuda"`` and ``"cuda:N"``; ``gpu_delivery`` accepts
@@ -342,6 +362,7 @@ class AdapterConfig:
     gpu_delivery: str = "auto"
     identity: str = "require"
     scheduler: SchedulerConfig | None = None
+    require_artifact: bool = False
 
     def __post_init__(self) -> None:
         if self.session_key not in _KEY_MODES:
@@ -384,8 +405,9 @@ class AdapterConfig:
         ``EXPLAIN_EVERY``, ``RID_SEPARATOR``, ``PER_PROCESS_STORE``,
         ``CHUNKED_MIN_CHARS``, ``CHUNKED_K``, ``CHUNKED_WORKERS``,
         ``CHUNKED_WARM``, ``DEVICE``, ``GPU_DELIVERY``,
-        ``IDENTITY``; the last accepts
-        only ``require``, and ``PER_PROCESS_STORE`` and ``CHUNKED_WARM`` accept
+        ``IDENTITY``, ``REQUIRE_ARTIFACT``; ``IDENTITY`` accepts
+        only ``require``, and ``PER_PROCESS_STORE``, ``CHUNKED_WARM`` and
+        ``REQUIRE_ARTIFACT`` accept
         ``1``/``true``/``yes`` and ``0``/``false``/``no`` in any case). With
         ``CHUNKED_WORKERS`` unset or ``0``, a positive ``RAYON_NUM_THREADS``
         in the same mapping is taken as the chunk worker count. An
@@ -457,6 +479,11 @@ class AdapterConfig:
             gpu_delivery=str(get("GPU_DELIVERY", "auto")),
             identity=identity,
             scheduler=scheduler,
+            require_artifact=parse_flag(
+                _ENV_PREFIX + "REQUIRE_ARTIFACT",
+                e.get(_ENV_PREFIX + "REQUIRE_ARTIFACT"),
+                False,
+            ),
         )
 
 
@@ -741,7 +768,8 @@ class SGLangToktierTokenizer:
         self._fingerprint: tuple[Any, ...] | None = None
         self._stale = False
         if self._mode != "passthrough":
-            self._tok = self._load_toktier()
+            self._tok = self._resolve_toktier()
+        if self._tok is not None:
             self._identity = check_core_identity(hf_tokenizer, self._tok)
             if self._identity["status"] != "equivalent":
                 # Not the tokenizer toktier loaded (or not provably so):
@@ -914,6 +942,68 @@ class SGLangToktierTokenizer:
             return None
         return sched
 
+    def _resolve_toktier(self) -> Any:
+        """Load the toktier subject, or ``None`` when no artifact can be
+        resolved for the wrapped tokenizer.
+
+        ``ArtifactNotFound`` from the load, and a tokenizer with no
+        ``name_or_path`` when no family or repository is configured, put
+        the wrapper in passthrough: the reason is recorded in
+        :attr:`identity` (status ``"unresolved"``) and one warning names
+        the settings that resolve a local directory. Two cases still
+        raise: a configured family that toktier does not know (an invalid
+        setting), and any other error of the load (a cache that fails
+        verification, for one). ``require_artifact`` restores the raise
+        for every case.
+        """
+        try:
+            return self._load_toktier()
+        except _NoArtifactName as ex:
+            if self._cfg.require_artifact:
+                raise
+            self._note_unresolved(str(ex))
+            return None
+        except ArtifactNotFound as ex:
+            if self._cfg.require_artifact or not self._known_family():
+                raise
+            self._note_unresolved(f"{type(ex).__name__}: {ex}"[:400])
+            return None
+
+    def _known_family(self) -> bool:
+        """Whether a configured family names a shipped family (``True``
+        when none is configured)."""
+        if not self._cfg.family:
+            return True
+        from ..artifacts.manifest import ArtifactManifest
+        from ..artifacts.tables import ARTIFACT_MANIFEST
+
+        try:
+            ArtifactManifest.load(ARTIFACT_MANIFEST).get(self._cfg.family)
+        except ArtifactNotFound:
+            return False
+        return True
+
+    def _note_unresolved(self, reason: str) -> None:
+        self._identity = {"status": "unresolved", "reason": reason, "sections": []}
+        self._mode = "passthrough"
+        subject = (
+            self._cfg.family
+            or self._cfg.repo_id
+            or getattr(self._hf, "name_or_path", None)
+            or type(self._hf).__name__
+        )
+        _LOG.warning(
+            "toktier could not resolve a tokenizer artifact for %r (%s); every "
+            "call is served by the supplied tokenizer. For a local model "
+            "directory set %sFAMILY to a toktier family id or %sREPO to the "
+            "repository it came from; on an offline host stage the files with "
+            "'toktier artifacts fetch <family>'.",
+            subject,
+            reason,
+            _ENV_PREFIX,
+            _ENV_PREFIX,
+        )
+
     def _load_toktier(self) -> Any:
         import toktier
 
@@ -930,7 +1020,7 @@ class SGLangToktierTokenizer:
             )
         repo = self._cfg.repo_id or getattr(self._hf, "name_or_path", None)
         if not repo:
-            raise ValueError(
+            raise _NoArtifactName(
                 "AdapterConfig.family or repo_id is required when the wrapped "
                 "tokenizer carries no name_or_path"
             )
@@ -1133,12 +1223,16 @@ class SGLangToktierTokenizer:
             or kwargs
             or text is None
         ):
+            # Forward only what the caller passed: a tokenizer outside the
+            # Hugging Face base class (SGLang's MistralCommonBackend, which
+            # passthrough serves) refuses keywords it does not know, even
+            # when they carry their default value.
+            if text_pair is not None:
+                kwargs["text_pair"] = text_pair
+            if return_token_type_ids is not None:
+                kwargs["return_token_type_ids"] = return_token_type_ids
             return self._delegate_call(
-                text,
-                text_pair=text_pair,
-                add_special_tokens=add_special_tokens,
-                return_token_type_ids=return_token_type_ids,
-                **kwargs,
+                text, add_special_tokens=add_special_tokens, **kwargs
             )
         if isinstance(text, str):
             return {"input_ids": self._encode_one(text, add_special_tokens)}
@@ -1621,7 +1715,12 @@ def wrap_tokenizer(
     ``TokenizerManager.init_tokenizer_and_processor``, once per tokenizer
     process. An invalid ``TOKTIER_SGLANG_*`` setting raises ``ValueError``;
     with the backend patch, SGLang then stops at startup instead of serving
-    with the setting ignored.
+    with the setting ignored. A tokenizer for which no toktier artifact can
+    be resolved (a local directory, a repository without
+    ``tokenizer.json``, no ``name_or_path``, an offline host with an empty
+    toktier cache) does not stop the server: the wrapper is returned in
+    passthrough, with the reason in ``identity`` and ``stats()`` and one
+    logged warning (``AdapterConfig.require_artifact`` restores the raise).
     """
     if isinstance(hf_tokenizer, SGLangToktierTokenizer):
         return hf_tokenizer

@@ -37,6 +37,7 @@ ADAPTER_DEFAULTS: dict[str, object] = {
     "gpu_delivery": "auto",
     "identity": "require",
     "scheduler": None,
+    "require_artifact": False,
 }
 
 SCHEDULER_DEFAULTS: dict[str, object] = {

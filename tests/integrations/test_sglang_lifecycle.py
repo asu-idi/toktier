@@ -498,6 +498,19 @@ def test_a_latch_while_the_pool_is_saturated_returns(delay: str) -> None:
     assert result["pending"] == 0 and len(result["outcomes"]) == 16, result
 
 
+@pytest.mark.parametrize("delay", ["0.35", "0.8"])
+def test_requests_in_flight_at_a_latch_are_answered_by_the_supplied_tokenizer(
+    delay: str,
+) -> None:
+    """The latch fails the pool's pending requests while it holds the encode
+    lock and then drops the toktier tokenizer; each of those requests, and
+    any other admitted just before the latch, is answered by the supplied
+    tokenizer rather than meeting the dropped one."""
+    result = _latch_under_load(delay)
+    assert result["returned"] and result["pending"] == 0, result
+    assert result["outcomes"] == ["answered"] * 16, result
+
+
 _OWNER = r"""
 import os, sys, threading, time
 from toktier.integrations.sglang_sched import Scheduler, SchedulerConfig

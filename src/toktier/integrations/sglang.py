@@ -1336,10 +1336,20 @@ class SGLangToktierTokenizer:
 
     def _serial_core(
         self, text: str, key: str | None
-    ) -> tuple[list[int], str, dict[str, Any]]:
-        """The in-process routes: ``(core ids, how, extra facts)``."""
+    ) -> tuple[list[int], str, dict[str, Any]] | None:
+        """The in-process routes: ``(core ids, how, extra facts)``, or
+        ``None`` when passthrough was latched after this call was admitted
+        (the toktier tokenizer is gone; the caller then delegates).
+
+        The test is made under the encode lock, which the latch holds, so
+        it covers every way a call can arrive here after a latch: a pool
+        request that the latch's close failed with ``"closed"``, one that
+        failed for another reason just before the latch, and an
+        in-process call admitted just before it."""
         extra: dict[str, Any] = {}
         with self._lock:
+            if self._tok is None:
+                return None
             # A request that would be a stateless full encode: every
             # request in "off" mode, and a keyless one in "contextvar" mode.
             stateless = key is None and self._mode in ("off", "contextvar")
@@ -1441,13 +1451,14 @@ class SGLangToktierTokenizer:
                     t0,
                 )
             self._note_sched_fallback(result)
-            if self._tok is None:  # passthrough latched while this call waited
-                return list(
-                    self._delegate_call(text, add_special_tokens=add_special_tokens)[
-                        "input_ids"
-                    ]
-                )
-        core, how, extra = self._serial_core(text, key)
+        served = self._serial_core(text, key)
+        if served is None:  # passthrough latched after this call was admitted
+            return list(
+                self._delegate_call(text, add_special_tokens=add_special_tokens)[
+                    "input_ids"
+                ]
+            )
+        core, how, extra = served
         return self._complete(text, add_special_tokens, core, how, extra, key, t0)
 
     async def encode_async(
@@ -1489,13 +1500,14 @@ class SGLangToktierTokenizer:
                 t0,
             )
         self._note_sched_fallback(result)
-        if self._tok is None:  # passthrough latched while this call waited
+        served = self._serial_core(text, key)
+        if served is None:  # passthrough latched after this call was admitted
             return list(
                 self._delegate_call(text, add_special_tokens=add_special_tokens)[
                     "input_ids"
                 ]
             )
-        core, how, extra = self._serial_core(text, key)
+        core, how, extra = served
         return self._complete(text, add_special_tokens, core, how, extra, key, t0)
 
     def _complete(

@@ -9,10 +9,13 @@ whatever the wrapper did around it.
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+import toktier
 from toktier.integrations.sglang import (
     AdapterConfig,
     SGLangToktierTokenizer,
@@ -284,3 +287,86 @@ def test_other_load_errors_still_propagate(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", corrupt)
     with pytest.raises(ArtifactHashMismatch):
         wrap_tokenizer(_StubHf(), AdapterConfig())
+
+
+# -- the pool's processes and queues: closed with the pool, gone with the owner --
+
+_SRC = str(Path(toktier.__file__).resolve().parents[1])
+_HERE = str(Path(__file__).resolve().parent)
+
+
+def _run_owner(script: str, *args: str, timeout: float = 300.0) -> Any:
+    """Run ``script`` in a fresh interpreter that imports this source tree
+    and the scheduler stub, with ResourceWarning shown and made an error."""
+    import subprocess
+    import sys
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([_SRC, _HERE])
+    return subprocess.run(
+        [
+            sys.executable,
+            "-X",
+            "dev",
+            "-W",
+            "error::ResourceWarning",
+            "-c",
+            script,
+            *args,
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+_CYCLES = r"""
+import os, sys, threading
+from toktier.integrations.sglang_sched import Scheduler, SchedulerConfig
+
+here = sys.argv[1]
+cycles = int(sys.argv[2])
+
+def config(workers):
+    return SchedulerConfig(workers=workers, loader="_sched_stub:load",
+                           loader_path=here, start_timeout_s=120.0)
+
+def cycle(workers):
+    sched = Scheduler(config(workers))
+    sched.start()
+    assert sched.encode_sync("ab", None, timeout=60).ids == [97, 98]
+    sched.close()
+
+def fds():
+    return len(os.listdir("/proc/self/fd"))
+
+cycle(2)  # the first start also starts multiprocessing's resource tracker
+before_fds, before_threads = fds(), threading.active_count()
+for _ in range(cycles):
+    cycle(1)
+print("FDS", before_fds, fds(), "THREADS", before_threads, threading.active_count())
+if sys.argv[3] == "os_exit":
+    sys.stdout.flush()
+    os._exit(0)
+"""
+
+
+@pytest.mark.parametrize("ending", ["return", "os_exit"])
+def test_closing_a_pool_leaves_no_pipe_thread_or_resource_warning(
+    ending: str,
+) -> None:
+    if not os.path.isdir("/proc/self/fd"):
+        pytest.skip("no /proc/self/fd on this platform")
+    cycles = "50" if ending == "return" else "3"
+    done = _run_owner(_CYCLES, _HERE, cycles, ending)
+    assert done.returncode == 0, done.stderr[-3000:]
+    line = next(x for x in done.stdout.splitlines() if x.startswith("FDS"))
+    _, fds_before, fds_after, _, threads_before, threads_after = line.split()
+    assert fds_after == fds_before, line
+    assert threads_after == threads_before, line
+    assert "ResourceWarning" not in done.stderr, done.stderr[-3000:]
+    # multiprocessing's resource tracker reports semaphores a process left
+    # behind when it exits without running its finalizers (os._exit)
+    assert "leaked" not in done.stderr, done.stderr[-3000:]
+    assert "resource_tracker" not in done.stderr, done.stderr[-3000:]

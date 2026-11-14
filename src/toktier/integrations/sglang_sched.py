@@ -850,6 +850,7 @@ class Scheduler:
                 failures.append(f"worker {message[1]}: {message[3]}")
         if failures:
             self._terminate_all()
+            self._release_queues(collector_ended=True)
             raise RuntimeError("scheduler pool failed to start: " + "; ".join(failures))
         self._idle = set(range(cfg.workers))
         self._stats["start_s"] = round(_CLOCK() - t0, 3)
@@ -874,8 +875,48 @@ class Scheduler:
                 with contextlib.suppress(Exception):
                     proc.kill()
 
+    def _release_queues(self, *, collector_ended: bool) -> None:
+        """Close the pool's queues and processes once the workers are stopped.
+
+        Each worker's task queue is closed and its feeder thread joined
+        when the worker left on the stop message (everything sent to it
+        was read), or cancelled when it was terminated or killed (data it
+        never read could hold the feeder at the pipe). The result queue
+        is closed and joined only once the collector has ended, which is
+        its one reader (while it runs, nothing is released: it may still
+        dispatch to a task queue). The process handles are closed and every
+        reference dropped, so that the queues' semaphores are released
+        now rather than at interpreter exit: no pipe, thread or
+        semaphore of a closed pool is left behind, and an owner that ends
+        with ``os._exit`` leaves the resource tracker nothing to report.
+        """
+        if not collector_ended:
+            return
+        for wid, qin in enumerate(self._qins):
+            proc = self._procs[wid] if wid < len(self._procs) else None
+            clean = proc is not None and proc.exitcode == 0
+            with contextlib.suppress(Exception):
+                qin.close()
+                if clean:
+                    qin.join_thread()
+                else:
+                    qin.cancel_join_thread()
+        if self._qres is not None:
+            with contextlib.suppress(Exception):
+                self._qres.close()
+                self._qres.join_thread()
+            self._qres = None
+        for proc in self._procs:
+            with contextlib.suppress(Exception):
+                proc.close()  # refused (and kept) while it still runs
+        self._qins = []
+        self._procs = []
+
     def close(self) -> None:
-        """Stop the workers; pending requests fail with ``"closed"``."""
+        """Stop the workers; pending requests fail with ``"closed"``.
+
+        The queues, their feeder threads and the process handles are
+        released as well (:meth:`_release_queues`)."""
         if self._closed:
             return
         self._closed = True
@@ -893,6 +934,10 @@ class Scheduler:
         self._terminate_all()
         if self._collector is not None and self._collector.is_alive():
             self._collector.join(timeout=5)
+        ended = self._collector is None or not self._collector.is_alive()
+        self._release_queues(collector_ended=ended)
+        with contextlib.suppress(Exception):
+            atexit.unregister(self.close)
 
     @property
     def active(self) -> bool:

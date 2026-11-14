@@ -121,7 +121,9 @@ path, stateless ones to the shared queue, long stateless ones as certified
 chunk tasks. Both forms route ``_tokenize_texts`` through
 :func:`tokenize_texts_with_pool`, so a single-string (or list-of-strings)
 request is awaited (:meth:`SGLangToktierTokenizer.encode_async`) instead
-of encoded on the event loop's thread; other entry points use the pool
+of encoded on the event loop's thread (:func:`encode_texts_with_pool` is
+the same path for a caller that passes the tokenizer and the texts
+rather than the manager); other entry points use the pool
 synchronously. Whatever the pool answers passes through
 the same template, shadow and timing path as a serial encode, and a request
 the pool cannot answer is encoded in-process on the route it would have
@@ -160,6 +162,7 @@ __all__ = [
     "bind_session_key",
     "check_core_identity",
     "check_manager_shape",
+    "encode_texts_with_pool",
     "session_key_from_request",
     "tokenize_texts_with_pool",
     "wrap_tokenizer",
@@ -1795,35 +1798,69 @@ def _append_record(path: str | None, record: dict[str, Any]) -> None:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+async def encode_texts_with_pool(
+    tokenizer: Any,
+    texts: Any,
+    *,
+    key: Any = _KEY_FROM_CONTEXT,
+    add_special_tokens: bool = True,
+) -> list[int] | list[list[int]] | None:
+    """Encode ``texts`` on the pool, without blocking the event loop.
+
+    Takes what it needs and nothing else: ``tokenizer`` is the object the
+    caller encodes with and ``texts`` its input. When ``tokenizer`` is
+    this module's wrapper with a running pool scheduler and ``texts`` is
+    a non-empty string or a non-empty list of strings, the encodes are
+    awaited through :meth:`SGLangToktierTokenizer.encode_async` and the
+    rows are returned in the shape of the input: one id list for a
+    string, a list of id lists for a list. Otherwise -- a plain
+    tokenizer, a wrapper without a running pool, or any other input
+    (pairs of a cross-encoder among them) -- it returns ``None`` and the
+    caller encodes as it would without the pool. ``key`` is the session
+    key (by default the bound :data:`SESSION_KEY` is read, as
+    :meth:`~SGLangToktierTokenizer.encode_async` does). The rows are
+    those ``tokenizer(texts)["input_ids"]`` returns; whatever a caller
+    does after its own encode (an EOS it appends, for one) it does after
+    this call as well.
+    """
+    if not isinstance(tokenizer, SGLangToktierTokenizer) or tokenizer.scheduler is None:
+        return None
+    if isinstance(texts, str) and texts:
+        return await tokenizer.encode_async(
+            texts, add_special_tokens=add_special_tokens, key=key
+        )
+    if isinstance(texts, list) and texts and all(isinstance(t, str) for t in texts):
+        special = add_special_tokens
+        rows = await asyncio.gather(
+            *(
+                tokenizer.encode_async(t, add_special_tokens=special, key=key)
+                for t in texts
+            )
+        )
+        return list(rows)
+    return None
+
+
 async def tokenize_texts_with_pool(
     manager: Any, texts: Any, is_cross_encoder: bool = False
 ) -> tuple[Any, None] | None:
     """The pool path of ``TokenizerManager._tokenize_texts`` (forms Z and P).
 
-    When ``manager.tokenizer`` is this module's wrapper with a running pool
-    scheduler and ``texts`` is a non-empty string or a non-empty list of
-    strings, the encodes are awaited through
-    :meth:`SGLangToktierTokenizer.encode_async` (the event loop stays free
-    while a worker encodes) and ``(input_ids, None)`` is returned, the
-    method's ``(input_ids, token_type_ids)`` contract. Otherwise -- a
-    cross-encoder input, an EmbeddingGemma model (SGLang appends EOS
-    there), any other input shape, or no pool -- it returns ``None`` and
-    the caller tokenizes as before.
+    Kept for the attach form (and the 0.3.2 form P hunk), which hand it
+    the manager: it reads ``manager.tokenizer`` and the manager's
+    ``model_config.is_embedding_gemma``, declines a cross-encoder input
+    and an EmbeddingGemma model (SGLang appends EOS there), and otherwise
+    returns ``(rows, None)`` from :func:`encode_texts_with_pool` -- the
+    method's ``(input_ids, token_type_ids)`` contract -- or ``None`` when
+    that declines. A caller that can pass the tokenizer and the texts
+    itself should call :func:`encode_texts_with_pool`.
     """
-    wrapper = getattr(manager, "tokenizer", None)
-    if (
-        not isinstance(wrapper, SGLangToktierTokenizer)
-        or wrapper.scheduler is None
-        or is_cross_encoder
-        or getattr(getattr(manager, "model_config", None), "is_embedding_gemma", False)
+    if is_cross_encoder or getattr(
+        getattr(manager, "model_config", None), "is_embedding_gemma", False
     ):
         return None
-    if isinstance(texts, str) and texts:
-        return await wrapper.encode_async(texts), None
-    if isinstance(texts, list) and texts and all(isinstance(t, str) for t in texts):
-        rows = await asyncio.gather(*(wrapper.encode_async(t) for t in texts))
-        return list(rows), None
-    return None
+    rows = await encode_texts_with_pool(getattr(manager, "tokenizer", None), texts)
+    return None if rows is None else (rows, None)
 
 
 def attach_to_tokenizer_manager(

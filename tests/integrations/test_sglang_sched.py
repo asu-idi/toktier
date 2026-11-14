@@ -31,6 +31,7 @@ from toktier.integrations.sglang import (
     SGLangToktierTokenizer,
     attach_to_tokenizer_manager,
     bind_session_key,
+    encode_texts_with_pool,
     tokenize_texts_with_pool,
     wrap_tokenizer,
 )
@@ -655,6 +656,72 @@ def test_patched_manager_offers_texts_to_the_pool_first(
     # The EmbeddingGemma request took the original path, where the wrapper
     # still serves it (through the pool, synchronously).
     assert wrapped.stats()["how"] == {"sched_auto": 4}
+
+
+def test_pool_helper_takes_the_tokenizer_and_the_texts(
+    wrapped: SGLangToktierTokenizer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The narrow entry point: a tokenizer and texts, nothing of a manager."""
+    w = wrapped
+    assert asyncio.run(encode_texts_with_pool(w, "hi")) == [1, 104, 105]
+    assert asyncio.run(encode_texts_with_pool(w, ["ab", "c"])) == [
+        [1, 97, 98],
+        [1, 99],
+    ]
+    assert asyncio.run(
+        encode_texts_with_pool(w, "ab", add_special_tokens=False)
+    ) == [97, 98]
+    # an explicit key, and the bound context variable when none is given
+    assert asyncio.run(encode_texts_with_pool(w, "abc", key="conv")) == [
+        1,
+        97,
+        98,
+        99,
+    ]
+    with bind_session_key("conv2"):
+        assert asyncio.run(encode_texts_with_pool(w, "abcd")) == [
+            1,
+            97,
+            98,
+            99,
+            100,
+        ]
+    assert w.stats()["how"] == {"sched_auto": 4, "sched_session": 2}
+    # declined: inputs that are not a non-empty string or list of strings
+    for texts in ("", [], ["ab", 7], [["q", "d"]], None, 7, ("ab",)):
+        assert asyncio.run(encode_texts_with_pool(w, texts)) is None
+    # declined: a plain tokenizer, and a wrapper without a running pool
+    assert asyncio.run(encode_texts_with_pool(_StubHf(bos=1), "hi")) is None
+    fake = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
+    serial = wrap_tokenizer(_StubHf(bos=1), AdapterConfig(session_key="contextvar"))
+    try:
+        assert asyncio.run(encode_texts_with_pool(serial, "hi")) is None
+    finally:
+        serial.close()
+    w.close()
+    assert asyncio.run(encode_texts_with_pool(w, "hi")) is None
+    assert w.stats()["how"] == {"sched_auto": 4, "sched_session": 2}
+
+
+def test_manager_helper_reads_only_the_manager_tokenizer_and_gemma_flag(
+    wrapped: SGLangToktierTokenizer,
+) -> None:
+    """The attach form keeps its helper, and it answers as the narrow one."""
+
+    class Manager:
+        def __init__(self, model_config: Any = None) -> None:
+            self.tokenizer = wrapped
+            self.model_config = model_config
+
+    m = Manager()
+    assert asyncio.run(tokenize_texts_with_pool(m, ["ab", "c"])) == (
+        asyncio.run(encode_texts_with_pool(wrapped, ["ab", "c"])),
+        None,
+    )
+    assert asyncio.run(tokenize_texts_with_pool(m, "hi", True)) is None
+    gemma = type("ModelConfig", (), {"is_embedding_gemma": True})()
+    assert asyncio.run(tokenize_texts_with_pool(Manager(gemma), "hi")) is None
 
 
 # -- artifact tier ------------------------------------------------------------

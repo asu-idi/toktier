@@ -291,3 +291,145 @@ def test_added_token_equality_covers_the_content_and_each_flag() -> None:
         assert AddedToken(**base) != AddedToken(**changed), field
         assert {7: AddedToken(**base)} != {7: AddedToken(**changed)}, field
 
+
+# -- short requests: answered by the supplied tokenizer, without the check -----
+
+
+def _count_checks(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    calls: list[int] = []
+    real = sglang_module._surface_unchanged
+
+    def counted(*args: Any) -> bool:
+        calls.append(1)
+        return real(*args)
+
+    monkeypatch.setattr(sglang_module, "_surface_unchanged", counted)
+    return calls
+
+
+def test_the_default_threshold_is_one_character_per_added_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hf = _base()  # two added tokens
+    w = _wrap(monkeypatch, hf)
+    assert w.stats()["short_chars"] == 2 == len(
+        hf.backend_tokenizer.get_added_tokens_decoder()
+    )
+    checks = _count_checks(monkeypatch)
+    # below the threshold: the supplied tokenizer answers, and no check runs
+    assert w.encode("a", add_special_tokens=False) == [97]
+    assert w("b")["input_ids"] == hf("b")["input_ids"]
+    assert checks == [] and w.stats()["how"] == {"off": 1, "short": 2}
+    assert w.toktier is not None and w.toktier.calls == [{"lookup": "off"}]
+    # at the threshold: the accelerated route, after the check
+    assert w.encode("ab", add_special_tokens=False) == [97, 98]
+    assert checks == [1] and w.stats()["how"] == {"off": 2, "short": 2}
+    assert w.accelerates and w.stats()["delegated"] == 0
+
+
+def test_the_setting_overrides_the_threshold_and_zero_turns_it_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert AdapterConfig.from_env({}).short_chars is None
+    unset = AdapterConfig.from_env({"TOKTIER_SGLANG_SHORT_CHARS": ""})
+    assert unset.short_chars is None
+    assert AdapterConfig.from_env({"TOKTIER_SGLANG_SHORT_CHARS": "7"}).short_chars == 7
+    for bad in ("-1", "many", "1.5"):
+        with pytest.raises(ValueError, match="TOKTIER_SGLANG_SHORT_CHARS"):
+            AdapterConfig.from_env({"TOKTIER_SGLANG_SHORT_CHARS": bad})
+    with pytest.raises(ValueError, match="SHORT_CHARS"):
+        AdapterConfig(short_chars=-1)
+    w = _wrap(monkeypatch, _base(), short_chars=5)
+    assert w.stats()["short_chars"] == 5
+    w.encode("abcd", add_special_tokens=False)
+    w.encode("abcde", add_special_tokens=False)
+    assert w.stats()["how"] == {"off": 2, "short": 1}
+    off = _wrap(monkeypatch, _base(), short_chars=0)
+    off.encode("a", add_special_tokens=False)
+    assert off.stats()["short_chars"] == 0 and off.stats()["how"] == {"off": 2}
+
+
+def test_a_change_is_noticed_by_the_first_long_request_after_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hf = _base()
+    w = _wrap(monkeypatch, hf, short_chars=4)
+    hf.backend_tokenizer.add_tokens(["<zz_new>"])
+    for text in ("a", "ab", "abc"):  # short: the supplied tokenizer, by definition
+        assert w.encode(text, add_special_tokens=False) == hf.encode(
+            text, add_special_tokens=False
+        )
+    assert w.stats()["mode"] == "off" and w.stats()["how"]["short"] == 3
+    assert w.encode("abcd", add_special_tokens=False) == hf.encode(
+        "abcd", add_special_tokens=False
+    )
+    assert w.stats()["mode"] == "passthrough" and w.toktier is None
+    assert w.identity["sections"] == ["added_tokens"]
+
+
+def test_batches_are_decided_text_by_text_and_pairs_keep_their_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hf = _base()
+    w = _wrap(monkeypatch, hf, short_chars=3)
+    rows = w(["a", "abc", "ab", "abcd"], add_special_tokens=False)["input_ids"]
+    assert rows == [[97], [97, 98, 99], [97, 98], [97, 98, 99, 100]]
+    assert w.stats()["how"] == {"off": 3, "short": 2}
+    w("a", text_pair="b")  # a pair: delegated as before, not counted as short
+    assert w.stats()["delegated"] == 1 and w.stats()["how"]["short"] == 2
+
+
+def test_a_short_text_does_not_enter_the_session_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from toktier.integrations.sglang import bind_session_key
+
+    hf = _base()
+    w = _wrap(monkeypatch, hf, mode="contextvar", short_chars=3)
+    assert w.toktier is not None
+    with bind_session_key("conversation"):
+        assert w.encode("ab", add_special_tokens=False) == [97, 98]
+        assert w.toktier.calls == [{}]  # the session saw nothing
+        assert w.encode("ab c", add_special_tokens=False) == [97, 98, 32, 99]
+    assert w.toktier.calls == [{}, {"session": "conversation"}]
+    assert w.stats()["how"] == {"auto": 1, "short": 1, "session": 1}
+
+
+def test_an_async_short_request_is_answered_on_the_calling_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    w = _wrap(monkeypatch, _base(), short_chars=3)
+    assert asyncio.run(w.encode_async("ab", add_special_tokens=False)) == [97, 98]
+    assert asyncio.run(w.encode_async("abc", add_special_tokens=False)) == [97, 98, 99]
+    assert w.stats()["how"] == {"off": 2, "short": 1}
+
+
+def test_a_short_text_does_not_go_to_the_pool(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+    from pathlib import Path
+
+    from toktier.integrations.sglang import encode_texts_with_pool
+    from toktier.integrations.sglang_sched import SchedulerConfig
+
+    here = str(Path(__file__).resolve().parent)
+    hf = _base()
+    fake = _FaceOf(hf)
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
+    pool = SchedulerConfig(
+        workers=1, loader="_sched_stub:load", loader_path=here, start_timeout_s=120.0
+    )
+    cfg = AdapterConfig(session_key="off", scheduler=pool, short_chars=3)
+    w = wrap_tokenizer(hf, cfg)
+    try:
+        assert w.scheduler is not None
+        assert asyncio.run(encode_texts_with_pool(w, ["ab", "abcd"])) == [
+            [97, 98],
+            [97, 98, 99, 100],
+        ]
+        assert w.encode("a", add_special_tokens=False) == [97]
+        assert w.stats()["how"] == {"short": 2, "sched_free": 1}
+        assert w.stats()["scheduler"]["submitted"] == 1
+    finally:
+        w.close()

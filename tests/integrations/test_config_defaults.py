@@ -38,6 +38,7 @@ ADAPTER_DEFAULTS: dict[str, object] = {
     "identity": "require",
     "scheduler": None,
     "require_artifact": False,
+    "short_chars": None,
 }
 
 SCHEDULER_DEFAULTS: dict[str, object] = {

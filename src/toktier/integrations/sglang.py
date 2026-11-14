@@ -93,6 +93,17 @@ re-verified) around the core ids; a tokenizer whose template cannot be
 expressed that way makes the wrapper delegate those calls to the wrapped
 tokenizer rather than guess.
 
+Short requests: the per-request check costs about 0.2 microseconds per
+added token, which on a tokenizer with many added tokens is more than the
+supplied tokenizer takes for a short string. A string shorter than
+``AdapterConfig.short_chars`` (env ``TOKTIER_SGLANG_SHORT_CHARS``; by
+default one character per added token, ``0`` turns the rule off) is
+therefore answered by the supplied tokenizer, which is the reference, on
+the calling thread: it takes no check, does not enter the session store,
+does not go to the pool, and is counted as ``how["short"]``. Batches are
+decided text by text; pairs and other non-string inputs keep the
+delegated path they always had.
+
 Long stateless requests: with ``AdapterConfig.chunked_min_chars`` set (env
 ``TOKTIER_SGLANG_CHUNKED_MIN_CHARS``), a request that would otherwise be a
 stateless full encode -- every request in ``"off"`` mode, and a request
@@ -335,6 +346,12 @@ class AdapterConfig:
     files): by default the wrapper serves every call with the supplied
     tokenizer, records the reason and logs one warning; with
     ``require_artifact`` the wrap raises, as it did before.
+    ``short_chars`` is the short-request threshold: a string shorter than
+    that many characters is answered by the supplied tokenizer on the
+    calling thread, without the per-request check (which costs about as
+    much as such a request), counted under ``stats()["how"]["short"]``.
+    ``None`` (the default) takes one character per added token of the
+    admitted tokenizer; ``0`` turns the rule off.
     ``device`` and ``gpu_delivery`` are passed to ``toktier.load`` /
     ``toktier.from_pretrained`` as given (``device`` accepts ``"auto"``,
     ``"cpu"``, ``"cuda"`` and ``"cuda:N"``; ``gpu_delivery`` accepts
@@ -367,6 +384,7 @@ class AdapterConfig:
     identity: str = "require"
     scheduler: SchedulerConfig | None = None
     require_artifact: bool = False
+    short_chars: int | None = None
 
     def __post_init__(self) -> None:
         if self.session_key not in _KEY_MODES:
@@ -396,6 +414,11 @@ class AdapterConfig:
             )
         if self.scheduler is not None and self.scheduler.workers < 1:
             raise ValueError("scheduler, when given, needs at least one worker")
+        if self.short_chars is not None and self.short_chars < 0:
+            raise ValueError(
+                f"{_ENV_PREFIX}SHORT_CHARS (short_chars) must be a non-negative "
+                f"integer (got {self.short_chars!r})"
+            )
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> AdapterConfig:
@@ -409,7 +432,7 @@ class AdapterConfig:
         ``EXPLAIN_EVERY``, ``RID_SEPARATOR``, ``PER_PROCESS_STORE``,
         ``CHUNKED_MIN_CHARS``, ``CHUNKED_K``, ``CHUNKED_WORKERS``,
         ``CHUNKED_WARM``, ``DEVICE``, ``GPU_DELIVERY``,
-        ``IDENTITY``, ``REQUIRE_ARTIFACT``; ``IDENTITY`` accepts
+        ``IDENTITY``, ``REQUIRE_ARTIFACT``, ``SHORT_CHARS``; ``IDENTITY`` accepts
         only ``require``, and ``PER_PROCESS_STORE``, ``CHUNKED_WARM`` and
         ``REQUIRE_ARTIFACT`` accept
         ``1``/``true``/``yes`` and ``0``/``false``/``no`` in any case). With
@@ -487,6 +510,11 @@ class AdapterConfig:
                 _ENV_PREFIX + "REQUIRE_ARTIFACT",
                 e.get(_ENV_PREFIX + "REQUIRE_ARTIFACT"),
                 False,
+            ),
+            short_chars=(
+                None
+                if e.get(_ENV_PREFIX + "SHORT_CHARS") in (None, "")
+                else whole("SHORT_CHARS", 0, non_negative=True)
             ),
         )
 
@@ -672,7 +700,8 @@ def _surface_unchanged(admitted: _Admitted | None, hf_tokenizer: Any) -> bool:
     split flags, truncation and padding, the model's vocabulary size, the
     three component states and the added-token table by dictionary
     equality, cheapest first. Its cost grows with the number of added
-    tokens (about 0.2 microseconds each). A model replaced in place
+    tokens (about 0.2 microseconds each); short requests are spared it
+    altogether (``AdapterConfig.short_chars``). A model replaced in place
     with one of the same size is not seen, as before; it is replaced only
     by an assignment on the backend."""
     if admitted is None:
@@ -811,6 +840,9 @@ class SGLangToktierTokenizer:
             "sections": [],
         }
         self._admitted_surface: _Admitted | None = None
+        # Strings shorter than this are answered by the supplied tokenizer
+        # (set at admission; 0 while nothing is admitted).
+        self._short_chars = 0
         self._stale = False
         self._sched: Scheduler | None = None
         self._sched_note: str | None = None
@@ -843,6 +875,44 @@ class SGLangToktierTokenizer:
         if store and self._cfg.per_process_store:
             store = os.path.join(store, f"pid{os.getpid()}")
         return store or None
+
+    def _default_short_chars(self) -> int:
+        """The short-request threshold: the configured one, or one
+        character per added token of the admitted tokenizer. Near that
+        length the per-request check, whose cost grows with the number of
+        added tokens, costs about what the supplied tokenizer takes for
+        the whole request, so below it the supplied tokenizer is the
+        cheaper answer (and, being the reference, the exact one)."""
+        if self._cfg.short_chars is not None:
+            return self._cfg.short_chars
+        surface = self._admitted_surface
+        return 0 if surface is None else len(surface.decoder)
+
+    def _answer_short(self, text: str, add_special_tokens: bool) -> list[int]:
+        """A short request, answered by the supplied tokenizer on the
+        calling thread: no per-request check, no session store, no pool.
+        Counted under ``how["short"]``."""
+        t0 = time.perf_counter()
+        ids = list(self._hf(text, add_special_tokens=add_special_tokens)["input_ids"])
+        ms = (time.perf_counter() - t0) * 1e3
+        st = self._stats
+        st["calls"] += 1
+        st["chars"] += len(text)
+        st["ids"] += len(ids)
+        st["ms_total"] += ms
+        st["how"]["short"] = st["how"].get("short", 0) + 1
+        self._record(
+            {
+                "kind": "encode",
+                "how": "short",
+                "chars": len(text),
+                "n_ids": len(ids),
+                "ms": round(ms, 4),
+                "key": None,
+                "shadow": None,
+            }
+        )
+        return ids
 
     def _abandon(self) -> None:
         """Close what a wrap that raised had started (best effort)."""
@@ -880,8 +950,10 @@ class SGLangToktierTokenizer:
                 self._mode = "passthrough"
             else:
                 self._admitted_surface = _admitted_surface(hf_tokenizer)
+                self._short_chars = self._default_short_chars()
         self._stats["mode"] = self._mode
         self._stats["identity"] = dict(self._identity)
+        self._stats["short_chars"] = self._short_chars
         self._stats["sched_fallback"] = 0
         self._stats["sglang_version"] = _sglang_version()
         if self._cfg.scheduler is not None and self._tok is not None:
@@ -918,6 +990,7 @@ class SGLangToktierTokenizer:
                 "family": self.family,
                 "backend": self.planned_backend,
                 "accelerates": self.accelerates,
+                "short_chars": self._short_chars,
                 "store_dir": self._store_dir,
                 "template_ok": self._template_ok,
                 "prefix": self._prefix,
@@ -1504,6 +1577,8 @@ class SGLangToktierTokenizer:
     def _encode_one(
         self, text: str, add_special_tokens: bool, key: Any = _KEY_FROM_CONTEXT
     ) -> list[int]:
+        if len(text) < self._short_chars and self._tok is not None:
+            return self._answer_short(text, add_special_tokens)
         if not self._admitted():
             return list(
                 self._delegate_call(text, add_special_tokens=add_special_tokens)[
@@ -1556,8 +1631,11 @@ class SGLangToktierTokenizer:
         does not serve) this is the synchronous encode, as before.
         ``key`` is the session key; by default the bound context
         variable is read, which the form Z hook binds around the
-        request.
+        request. A short request (``AdapterConfig.short_chars``) is
+        answered by the supplied tokenizer on the calling thread.
         """
+        if len(text) < self._short_chars and self._tok is not None:
+            return self._answer_short(text, add_special_tokens)
         if not self._admitted():
             return list(
                 self._delegate_call(text, add_special_tokens=add_special_tokens)[

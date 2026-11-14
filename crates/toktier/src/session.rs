@@ -870,6 +870,18 @@ impl Session {
     }
 }
 
+#[cfg(test)]
+impl Session {
+    /// Test builds only: this session's current seal point (characters,
+    /// ids), as the core reports it.
+    pub(crate) fn seal_for_test(&self) -> (u64, u64) {
+        let handle = self.handle.expect("a seeded session");
+        let state = self.lock_store();
+        let seal = seal_of(&state.store, handle).expect("a stored session");
+        (seal.chars, seal.ids)
+    }
+}
+
 impl Drop for Session {
     fn drop(&mut self) {
         if !self.closed {

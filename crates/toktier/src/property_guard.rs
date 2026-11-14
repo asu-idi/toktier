@@ -708,6 +708,12 @@ impl SessionEncoder for GuardedEncoder<'_> {
     }
 }
 
+/// The guard's routes, sessions and standings through the public calls,
+/// under a standing the test seam forces.
+#[cfg(test)]
+#[path = "property_guard_tests.rs"]
+mod wiring_tests;
+
 #[cfg(test)]
 mod tests {
     use super::{

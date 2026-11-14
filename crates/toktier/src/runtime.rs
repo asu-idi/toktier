@@ -62,6 +62,16 @@ struct RuntimeConfig {
     lookup_index_blocks: usize,
     #[cfg(feature = "jit")]
     jit_compiler: Option<JitCompiler>,
+    /// Test builds only: a property-data standing used in place of this
+    /// build's own, so the guard's routes can be exercised in a workspace
+    /// whose own standing is judged.
+    #[cfg(test)]
+    forced_property_standing: Option<crate::property_guard::Standing>,
+    /// Test builds only: read this tree's sources as the judged ones, so
+    /// the admission of the fast CPU route under the ordinary policies can
+    /// be exercised on a tree the shipped register does not record.
+    #[cfg(test)]
+    forced_sources_judged: bool,
 }
 
 /// Builder for the immutable Rust runtime.
@@ -90,6 +100,10 @@ impl Default for RuntimeBuilder {
                 lookup_index_blocks: crate::session::DEFAULT_LOOKUP_INDEX_BLOCKS,
                 #[cfg(feature = "jit")]
                 jit_compiler: None,
+                #[cfg(test)]
+                forced_property_standing: None,
+                #[cfg(test)]
+                forced_sources_judged: false,
             },
         }
     }
@@ -206,6 +220,24 @@ impl RuntimeBuilder {
             .build()?;
         self.config.jit_compiler = Some(compiler);
         Ok(self)
+    }
+
+    /// Test builds only: build tokenizers under `standing` instead of this
+    /// build's own property-data standing.
+    #[cfg(test)]
+    pub(crate) fn force_property_standing(
+        mut self,
+        standing: crate::property_guard::Standing,
+    ) -> Self {
+        self.config.forced_property_standing = Some(standing);
+        self
+    }
+
+    /// Test builds only: read this tree's sources as judged.
+    #[cfg(test)]
+    pub(crate) fn force_sources_judged(mut self) -> Self {
+        self.config.forced_sources_judged = true;
+        self
     }
 
     pub fn build(mut self) -> Result<Runtime> {
@@ -439,7 +471,11 @@ impl Runtime {
         // host build.
         let runtime_build_certified = self.inner.registry.rust_api_build_certified();
         let accelerated_build_allowed = runtime_build_certified || policy == Policy::Experimental;
+        #[cfg(not(test))]
         let sources_judged = self.inner.registry.rust_api_sources_judged();
+        #[cfg(test)]
+        let sources_judged = self.inner.registry.rust_api_sources_judged()
+            || self.inner.config.forced_sources_judged;
         let fast_cpu_build_allowed = accelerated_build_allowed || sources_judged;
         if !fast_cpu_build_allowed && policy != Policy::Reference {
             reasons.push(ReasonCode::RuntimeBuildUncertified);
@@ -449,7 +485,15 @@ impl Runtime {
         // tabled data runs the route with a reference-only router beside
         // it; data that is not tabled, or a lockfile that was not read,
         // declines the fast CPU route here.
+        #[cfg(not(test))]
         let property_standing = crate::property_guard::standing();
+        #[cfg(test)]
+        let property_standing = self
+            .inner
+            .config
+            .forced_property_standing
+            .as_ref()
+            .unwrap_or_else(|| crate::property_guard::standing());
         let property_handling = if policy == Policy::Reference {
             crate::property_guard::Handling::NoGuard
         } else {

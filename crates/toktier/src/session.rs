@@ -10,6 +10,7 @@ use toktier_store_sqlite::{NamedSessionRef, RecoveredNamedSession, SingleEngine,
 
 use crate::manifest::{LocalArtifact, Registry};
 use crate::prefix_index::{KeyParams, PrefixIndex, Seal};
+use crate::property_guard::GuardedEncoder;
 use crate::{
     Backend, Certification, Encoding, Error, ErrorCode, ExecutionFacts, Policy, ReasonCode, Result,
     RoutePlan, TokenBuffer, TokenPatch,
@@ -20,6 +21,10 @@ pub(crate) struct TokenizerInner {
     pub(crate) artifact: LocalArtifact,
     pub(crate) reference: Arc<ReferenceEngine>,
     pub(crate) router: Arc<NativeRouter>,
+    /// On a tokenizer whose property data is guarded
+    /// (`property_guard::Handling::Guard`), the reference-only router a
+    /// text holding a listed code point goes to; `None` otherwise.
+    pub(crate) guard_router: Option<Arc<NativeRouter>>,
     pub(crate) plan: RoutePlan,
     /// The policy the plan was made under; the chunked path reads it
     /// for its evidence gate.
@@ -39,6 +44,19 @@ pub(crate) struct TokenizerInner {
     pub(crate) gpu_verification_key: Option<crate::verify_local::VerificationKey>,
     #[cfg(feature = "jit")]
     pub(crate) jit_detail: Option<crate::JitArtifact>,
+}
+
+impl TokenizerInner {
+    /// The router `text` goes to, and whether the property-data guard
+    /// sent it there (`property_guard::router_for`).
+    pub(crate) fn router_for(&self, text: &str) -> (&NativeRouter, bool) {
+        crate::property_guard::router_for(&self.router, self.guard_router.as_deref(), text)
+    }
+
+    /// The engine every store operation of this tokenizer runs against.
+    pub(crate) fn session_engine(&self) -> GuardedEncoder<'_> {
+        GuardedEncoder::new(&self.router, self.guard_router.as_deref())
+    }
 }
 
 pub(crate) struct SessionStoreState {
@@ -76,6 +94,7 @@ impl std::fmt::Debug for SessionStoreState {
 impl SessionStoreState {
     pub(crate) fn new(
         router: Arc<NativeRouter>,
+        guard_router: Option<Arc<NativeRouter>>,
         fingerprint: [u8; 32],
         seal_guard: u64,
         database_path: Option<&Path>,
@@ -83,7 +102,7 @@ impl SessionStoreState {
         lookup_index_blocks: usize,
     ) -> Result<Self> {
         #[cfg(not(feature = "sqlite"))]
-        let _ = &router;
+        let _ = (&router, &guard_router);
         #[cfg(feature = "sqlite")]
         if let Some(path) = database_path {
             if let Some(parent) = path.parent() {
@@ -92,8 +111,9 @@ impl SessionStoreState {
             let populated = path.metadata().is_ok_and(|metadata| metadata.len() > 0);
             let database = StoreDb::open(path)?;
             if populated {
+                let engine = GuardedEncoder::new(router.as_ref(), guard_router.as_deref());
                 let (mut store, recovered) =
-                    database.load_named_recoverable(&SingleEngine(router.as_ref()))?;
+                    database.load_named_recoverable(&SingleEngine(&engine))?;
                 set_seed_overlap(&mut store, seed_digest_overlap);
                 let key = store
                     .export_fingerprints()
@@ -506,12 +526,15 @@ impl Session {
                 "seed requires a new session; use overwrite for an existing name",
             ));
         }
+        let guard_routed;
         let (handle, revision, ids, persistence) = {
             let mut state = self.lock_store();
             state.ensure_healthy()?;
             state.ensure_room_for_a_named_session()?;
             let key = state.key;
-            let put = state.store.put(key, text, self.tokenizer.router.as_ref())?;
+            let engine = self.tokenizer.session_engine();
+            let put = state.store.put(key, text, &engine)?;
+            guard_routed = engine.guard_routed();
             state.follow_core_evictions();
             state.names.insert(self.name.clone(), put.handle);
             let seal = seal_of(&state.store, put.handle)?;
@@ -532,7 +555,7 @@ impl Session {
         Ok((
             Encoding::from_buffer(
                 TokenBuffer::from_shared(ids),
-                session_facts(&self.tokenizer, "session_seed", text.len()),
+                session_facts(&self.tokenizer, "session_seed", text.len(), guard_routed),
             ),
             persistence,
         ))
@@ -551,15 +574,16 @@ impl Session {
         let expected_revision = self
             .revision
             .ok_or_else(|| Error::new(ErrorCode::Internal, "seeded session has no revision"))?;
+        let guard_routed;
         let (patch, persistence) = {
             let mut state = self.lock_store();
             state.ensure_healthy()?;
-            let patch = match state.store.append_patch(
-                handle,
-                delta,
-                expected_revision,
-                self.tokenizer.router.as_ref(),
-            ) {
+            let engine = self.tokenizer.session_engine();
+            let appended = state
+                .store
+                .append_patch(handle, delta, expected_revision, &engine);
+            guard_routed = engine.guard_routed();
+            let patch = match appended {
                 Ok(patch) => patch,
                 Err(error) => {
                     // A refused append changes nothing, and the track
@@ -585,7 +609,7 @@ impl Session {
             (patch, persistence_started.elapsed())
         };
         self.revision = Some(patch.revision);
-        let execution = ExecutionFacts {
+        let mut execution = ExecutionFacts {
             backend: backend_for_path(&patch.path),
             path: patch.path.clone(),
             source: Some("native_session".to_owned()),
@@ -593,6 +617,9 @@ impl Session {
             certification: self.tokenizer.plan.certification,
             reason: reason_for_repair_path(&patch.path),
         };
+        if guard_routed {
+            crate::runtime::mark_guard_routed(&mut execution);
+        }
         Ok((
             TokenPatch::new(
                 patch.replace_from,
@@ -674,13 +701,14 @@ impl Session {
         let ids = state.store.shared_all_ids(handle)?;
         Ok(Encoding::from_buffer(
             TokenBuffer::from_shared(ids),
-            session_facts(&self.tokenizer, "session_snapshot", 0),
+            session_facts(&self.tokenizer, "session_snapshot", 0, false),
         ))
     }
 
     /// Replace an existing named session with a new genesis stream.
     pub fn overwrite(&mut self, text: &str) -> Result<Encoding> {
         self.require_open()?;
+        let guard_routed;
         let (handle, revision, ids) = {
             let mut state = self.lock_store();
             state.ensure_healthy()?;
@@ -697,7 +725,9 @@ impl Session {
                 state.index.remove_session(old);
             }
             let key = state.key;
-            let put = state.store.put(key, text, self.tokenizer.router.as_ref())?;
+            let engine = self.tokenizer.session_engine();
+            let put = state.store.put(key, text, &engine)?;
+            guard_routed = engine.guard_routed();
             state.follow_core_evictions();
             state.names.insert(self.name.clone(), put.handle);
             let seal = seal_of(&state.store, put.handle)?;
@@ -713,7 +743,12 @@ impl Session {
         self.revision = Some(revision);
         Ok(Encoding::from_buffer(
             TokenBuffer::from_shared(ids),
-            session_facts(&self.tokenizer, "session_overwrite", text.len()),
+            session_facts(
+                &self.tokenizer,
+                "session_overwrite",
+                text.len(),
+                guard_routed,
+            ),
         ))
     }
 
@@ -855,8 +890,13 @@ fn validate_name(name: &str) -> Result<()> {
     }
 }
 
-fn session_facts(tokenizer: &TokenizerInner, path: &str, input_bytes: usize) -> ExecutionFacts {
-    ExecutionFacts {
+fn session_facts(
+    tokenizer: &TokenizerInner,
+    path: &str,
+    input_bytes: usize,
+    guard_routed: bool,
+) -> ExecutionFacts {
+    let mut facts = ExecutionFacts {
         backend: if tokenizer.plan.backends.contains(&Backend::FastCpu) {
             Backend::FastCpu
         } else {
@@ -867,7 +907,11 @@ fn session_facts(tokenizer: &TokenizerInner, path: &str, input_bytes: usize) -> 
         input_bytes: input_bytes as u64,
         certification: tokenizer.plan.certification,
         reason: reason_for_repair_path(path),
+    };
+    if guard_routed {
+        crate::runtime::mark_guard_routed(&mut facts);
     }
+    facts
 }
 
 /// Why a session repair ran where it did.
@@ -982,6 +1026,7 @@ mod tests {
             drop(
                 SessionStoreState::new(
                     reference_router(),
+                    None,
                     released_key(&artifact, fast_cpu),
                     0,
                     Some(&old),
@@ -992,6 +1037,7 @@ mod tests {
             );
             let refused = SessionStoreState::new(
                 reference_router(),
+                None,
                 current,
                 0,
                 Some(&old),
@@ -1011,6 +1057,7 @@ mod tests {
             drop(
                 SessionStoreState::new(
                     reference_router(),
+                    None,
                     current,
                     0,
                     Some(&own),
@@ -1021,6 +1068,7 @@ mod tests {
             );
             SessionStoreState::new(
                 reference_router(),
+                None,
                 current,
                 0,
                 Some(&own),
@@ -1044,6 +1092,7 @@ mod tests {
         let database_path = store_home.join("test.sqlite3");
         let _state = SessionStoreState::new(
             reference_router(),
+            None,
             [7; 32],
             0,
             Some(&database_path),

@@ -649,7 +649,26 @@ impl<'a> Chunked<'a> {
         let (k, budget) = resolve(options, text)?;
         let admission = self.admission()?;
         let certification = self.inner.plan.certification;
-        let encoded = if admission.admitted {
+        let encoded = if self.inner.guard_router.is_some()
+            && crate::property_guard::holds_moved(text)
+        {
+            // A guarded tokenizer (`property_guard`) sends a document that
+            // holds a listed code point to its reference-only router whole:
+            // the serial encode, under the existing reason for an input
+            // whose route does not start at the corrected CPU engine.
+            let started = Instant::now();
+            let (router, _) = self.inner.router_for(text);
+            let routed = router
+                .encode_ids(text, false)
+                .map_err(|error| Error::new(ErrorCode::BackendExecutionFault, error.to_string()))?;
+            ChunkedEncoding::serial(
+                routed.ids,
+                k,
+                ReasonCode::ChunkRouteNotFastCpu,
+                certification,
+                started.elapsed(),
+            )
+        } else if admission.admitted {
             let encoded = self
                 .inner
                 .router
@@ -697,6 +716,12 @@ impl<'a> Chunked<'a> {
         if !admission.cpu_route {
             return Err(no_cpu_route(&admission.family));
         }
+        // A warm-up text that holds a listed code point on a guarded
+        // tokenizer is not run on the corrected CPU workers; the workers
+        // are forked without it.
+        let text = text.filter(|text| {
+            self.inner.guard_router.is_none() || !crate::property_guard::holds_moved(text)
+        });
         self.inner
             .router
             .chunked_warm(workers.unwrap_or_else(default_chunk_workers), text)

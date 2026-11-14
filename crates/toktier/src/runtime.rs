@@ -439,15 +439,33 @@ impl Runtime {
         // host build.
         let runtime_build_certified = self.inner.registry.rust_api_build_certified();
         let accelerated_build_allowed = runtime_build_certified || policy == Policy::Experimental;
-        let fast_cpu_build_allowed =
-            accelerated_build_allowed || self.inner.registry.rust_api_sources_judged();
+        let sources_judged = self.inner.registry.rust_api_sources_judged();
+        let fast_cpu_build_allowed = accelerated_build_allowed || sources_judged;
         if !fast_cpu_build_allowed && policy != Policy::Reference {
             reasons.push(ReasonCode::RuntimeBuildUncertified);
         }
+        // The property data the fast CPU engine reads its character
+        // classes from (`property_guard`): judged data changes nothing;
+        // tabled data runs the route with a reference-only router beside
+        // it; data that is not tabled, or a lockfile that was not read,
+        // declines the fast CPU route here.
+        let property_standing = crate::property_guard::standing();
+        let property_handling = if policy == Policy::Reference {
+            crate::property_guard::Handling::NoGuard
+        } else {
+            crate::property_guard::handling(property_standing, policy)
+        };
+        let property_declined = match &property_handling {
+            crate::property_guard::Handling::Decline(reason) => {
+                reasons.push(reason.clone());
+                true
+            }
+            _ => false,
+        };
         let fast_cpu_route = if policy == Policy::Reference {
             reasons.push(ReasonCode::ReferenceRequested);
             None
-        } else if !fast_cpu_build_allowed {
+        } else if !fast_cpu_build_allowed || property_declined {
             None
         } else {
             self.build_fast_cpu(&artifact, Arc::clone(&reference), &mut reasons)?
@@ -659,6 +677,7 @@ impl Runtime {
         let special_tokens = special_token_plan(&bytes, &reference);
         let postprocessor_adds_tokens = special_tokens.kind != PostprocessorKind::Identity;
         let repair_fast_cpu = fast_cpu.is_some();
+        let has_gpu = gpu.is_some();
         let router = Arc::new(
             NativeRouter::new(
                 chain,
@@ -676,6 +695,30 @@ impl Runtime {
             )
             .map_err(|error| Error::new(ErrorCode::ConfigInvalid, error.to_string()))?,
         );
+        // On a guarded tokenizer, the router a text holding a listed code
+        // point goes to: built the way `Policy::Reference` builds its one
+        // (the reference chain alone, the same reference engine, the same
+        // post-processor and diagnostics flags). Only an accelerated plan
+        // needs one; a judged build never builds it.
+        let guard_router = if property_handling == crate::property_guard::Handling::Guard
+            && (fast_cpu.is_some() || has_gpu)
+        {
+            Some(Arc::new(
+                NativeRouter::new(
+                    vec!["hf".to_owned()],
+                    vec![0],
+                    Arc::clone(&reference),
+                    None,
+                    false,
+                    None,
+                    postprocessor_adds_tokens,
+                    self.inner.config.diagnostics,
+                )
+                .map_err(|error| Error::new(ErrorCode::ConfigInvalid, error.to_string()))?,
+            ))
+        } else {
+            None
+        };
         let fingerprint = semantic_fingerprint(
             artifact.identity().tokenizer_sha256.as_bytes(),
             repair_fast_cpu,
@@ -705,6 +748,7 @@ impl Runtime {
         };
         let store = SessionStoreState::new(
             Arc::clone(&router),
+            guard_router.clone(),
             fingerprint,
             seal_guard,
             store_path.as_deref(),
@@ -752,6 +796,7 @@ impl Runtime {
                 artifact,
                 reference,
                 router,
+                guard_router,
                 plan,
                 policy: self.inner.config.policy,
                 registry: Arc::clone(&self.inner.registry),
@@ -1053,9 +1098,8 @@ impl Tokenizer {
             ));
         }
         let (router_flag, prefix) = self.special_token_service(options.add_special_tokens);
-        let mut routed = self
-            .inner
-            .router
+        let (router, guard_routed) = self.inner.router_for(text);
+        let mut routed = router
             .encode_ids(text, router_flag)
             .map_err(|error| Error::new(ErrorCode::BackendExecutionFault, error.to_string()))?;
         if let Some(prefix) = prefix {
@@ -1084,7 +1128,7 @@ impl Tokenizer {
             })
             .transpose()
             .map_err(|error| Error::new(ErrorCode::BackendExecutionFault, error.to_string()))?;
-        let facts = facts_from_routed(
+        let mut facts = facts_from_routed(
             &routed.backend,
             routed.path.as_deref(),
             routed.source,
@@ -1092,6 +1136,9 @@ impl Tokenizer {
             self.inner.plan.certification,
             routed.reason,
         );
+        if guard_routed {
+            mark_guard_routed(&mut facts);
+        }
         Ok(Encoding::new(routed.ids, offsets, facts))
     }
 
@@ -1112,16 +1159,66 @@ impl Tokenizer {
         }
         let texts = documents.iter().map(AsRef::as_ref).collect::<Vec<_>>();
         let (router_flag, prefix) = self.special_token_service(options.add_special_tokens);
-        let routed = self
-            .inner
-            .router
-            .encode_batch_ids(&texts, router_flag)
-            .map_err(|error| Error::new(ErrorCode::BackendExecutionFault, error.to_string()))?;
+        // On a guarded tokenizer the rows that hold a listed code point
+        // go to the reference-only router, the others to the ordinary one
+        // as one batch, and the rows are put back in the caller's order.
+        // With no such row this is the one batch call of a judged build.
+        let hits: Vec<bool> = match &self.inner.guard_router {
+            Some(_) => texts
+                .iter()
+                .map(|text| crate::property_guard::holds_moved(text))
+                .collect(),
+            None => Vec::new(),
+        };
+        let routed = match self.inner.guard_router.as_deref() {
+            Some(reference_only) if hits.contains(&true) => {
+                let pick = |hit: bool| {
+                    texts
+                        .iter()
+                        .zip(&hits)
+                        .filter(|(_, row_hit)| **row_hit == hit)
+                        .map(|(text, _)| *text)
+                        .collect::<Vec<_>>()
+                };
+                let fault = |error: toktier_store_core::EngineError| {
+                    Error::new(ErrorCode::BackendExecutionFault, error.to_string())
+                };
+                let mut guarded = reference_only
+                    .encode_batch_ids(&pick(true), router_flag)
+                    .map_err(fault)?
+                    .into_iter();
+                let mut ordinary = self
+                    .inner
+                    .router
+                    .encode_batch_ids(&pick(false), router_flag)
+                    .map_err(fault)?
+                    .into_iter();
+                hits.iter()
+                    .map(|&hit| {
+                        let row = if hit { guarded.next() } else { ordinary.next() };
+                        row.map(|row| (row, hit)).ok_or_else(|| {
+                            Error::new(
+                                ErrorCode::Internal,
+                                "a batch encode returned fewer rows than it was given",
+                            )
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?
+            }
+            _ => self
+                .inner
+                .router
+                .encode_batch_ids(&texts, router_flag)
+                .map_err(|error| Error::new(ErrorCode::BackendExecutionFault, error.to_string()))?
+                .into_iter()
+                .map(|row| (row, false))
+                .collect(),
+        };
         let rows = routed
             .into_iter()
             .zip(texts)
-            .map(|(row, text)| {
-                let facts = facts_from_routed(
+            .map(|((row, guard_routed), text)| {
+                let mut facts = facts_from_routed(
                     &row.backend,
                     row.path.as_deref(),
                     row.source,
@@ -1129,6 +1226,9 @@ impl Tokenizer {
                     self.inner.plan.certification,
                     row.reason,
                 );
+                if guard_routed {
+                    mark_guard_routed(&mut facts);
+                }
                 let ids = match prefix {
                     Some(prefix) => prepend(prefix, row.ids),
                     None => row.ids,
@@ -1279,11 +1379,13 @@ impl Tokenizer {
             }
             break reused;
         };
-        // The rest is encoded outside the lock, by the call `encode` makes.
+        // The rest is encoded outside the lock, by the call `encode` makes:
+        // on a guarded tokenizer a rest that holds a listed code point goes
+        // to the reference-only router. The reused prefix needs no check;
+        // its seal was certified under the same rule.
         let (mut ids, from) = reused.unwrap_or((Vec::new(), 0));
-        let routed = self
-            .inner
-            .router
+        let (router, guard_routed) = self.inner.router_for(&text[from..]);
+        let routed = router
             .encode_ids(&text[from..], false)
             .map_err(|error| Error::new(ErrorCode::BackendExecutionFault, error.to_string()))?;
         if ids.is_empty() {
@@ -1291,7 +1393,7 @@ impl Tokenizer {
         } else {
             ids.extend_from_slice(&routed.ids);
         }
-        let facts = ExecutionFacts {
+        let mut facts = ExecutionFacts {
             backend: Backend::FastCpu,
             path: "content_lookup".to_owned(),
             source: Some("native_store".to_owned()),
@@ -1301,6 +1403,9 @@ impl Tokenizer {
             // admitted route, not a decision that moved off it.
             reason: None,
         };
+        if guard_routed {
+            mark_guard_routed(&mut facts);
+        }
         Ok(Some(Encoding::new(ids, None, facts)))
     }
 
@@ -1383,6 +1488,13 @@ thread_local! {
     /// that bound the work it does under the store lock.
     pub(crate) static SEALED_PREFIX_COUNTED: std::cell::Cell<u64> =
         const { std::cell::Cell::new(0) };
+}
+
+/// What a call the property-data guard sent to the reference engine
+/// reports: the reference backend, for the existing guard reason.
+pub(crate) fn mark_guard_routed(facts: &mut ExecutionFacts) {
+    facts.backend = Backend::HuggingFace;
+    facts.reason = Some(ReasonCode::InputGuardRouted);
 }
 
 pub(crate) fn facts_from_routed(

@@ -1107,15 +1107,19 @@ class SGLangToktierTokenizer:
         """Load the toktier subject, or ``None`` when no artifact can be
         resolved for the wrapped tokenizer.
 
-        ``ArtifactNotFound`` from the load, and a tokenizer with no
-        ``name_or_path`` when no family or repository is configured, put
-        the wrapper in passthrough: the reason is recorded in
-        :attr:`identity` (status ``"unresolved"``) and one warning names
-        the settings that resolve a local directory. Two cases still
-        raise: a configured family that toktier does not know (an invalid
-        setting), and any other error of the load (a cache that fails
-        verification, for one). ``require_artifact`` restores the raise
-        for every case.
+        For a tokenizer the operator did not name -- no family and no
+        repository configured -- ``ArtifactNotFound`` from the load, and a
+        tokenizer with no ``name_or_path``, put the wrapper in
+        passthrough: the reason is recorded in :attr:`identity` (status
+        ``"unresolved"``) and one warning names the settings that resolve
+        a local directory. A family or repository that the operator named
+        (``AdapterConfig.family`` / ``repo_id``, ``TOKTIER_SGLANG_FAMILY``
+        / ``TOKTIER_SGLANG_REPO``) and that does not resolve raises
+        ``ArtifactNotFound`` naming the setting, so that a mistyped name
+        or files not staged stop the server instead of going unnoticed.
+        Any other error of the load (a cache that fails verification, for
+        one) raises as well. ``require_artifact`` restores the raise for
+        every case.
         """
         try:
             return self._load_toktier()
@@ -1125,24 +1129,30 @@ class SGLangToktierTokenizer:
             self._note_unresolved(str(ex))
             return None
         except ArtifactNotFound as ex:
-            if self._cfg.require_artifact or not self._known_family():
+            if self._cfg.require_artifact:
                 raise
+            named = self._named_setting()
+            if named is not None:
+                variable, value = named
+                raise ArtifactNotFound(
+                    f"{ex} ({variable}={value!r} was set and names no tokenizer "
+                    "toktier can resolve here: check the name, or on an offline "
+                    "host stage the files with 'toktier artifacts fetch "
+                    "<family>'; unset it to serve this tokenizer with the "
+                    "supplied one)",
+                    details={**dict(ex.details), "setting": variable},
+                ) from ex
             self._note_unresolved(f"{type(ex).__name__}: {ex}"[:400])
             return None
 
-    def _known_family(self) -> bool:
-        """Whether a configured family names a shipped family (``True``
-        when none is configured)."""
-        if not self._cfg.family:
-            return True
-        from ..artifacts.manifest import ArtifactManifest
-        from ..artifacts.tables import ARTIFACT_MANIFEST
-
-        try:
-            ArtifactManifest.load(ARTIFACT_MANIFEST).get(self._cfg.family)
-        except ArtifactNotFound:
-            return False
-        return True
+    def _named_setting(self) -> tuple[str, str] | None:
+        """The family or repository the operator configured, as
+        ``(variable, value)``; ``None`` when neither is set."""
+        if self._cfg.family:
+            return _ENV_PREFIX + "FAMILY", self._cfg.family
+        if self._cfg.repo_id:
+            return _ENV_PREFIX + "REPO", self._cfg.repo_id
+        return None
 
     def _note_unresolved(self, reason: str) -> None:
         self._identity = {"status": "unresolved", "reason": reason, "sections": []}

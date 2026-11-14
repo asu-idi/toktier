@@ -185,7 +185,7 @@ def test_a_certified_hub_id_with_an_empty_offline_cache_is_served_in_passthrough
     monkeypatch: pytest.MonkeyPatch, tmp_path: Any, caplog: pytest.LogCaptureFixture
 ) -> None:
     # The review's S9: a certified repository, an offline host, toktier's own
-    # artifact cache empty. The same holds for a configured family.
+    # artifact cache empty, and nothing named by the operator.
     _offline_home(monkeypatch, tmp_path)
     hf = _saved_fast_tokenizer(tmp_path / "model-dir")
     hf.name_or_path = "Qwen/Qwen3-8B"
@@ -193,10 +193,38 @@ def test_a_certified_hub_id_with_an_empty_offline_cache_is_served_in_passthrough
     w = wrap_tokenizer(hf, AdapterConfig())
     _assert_unresolved_passthrough(w, hf)
     _one_warning(caplog)
-    caplog.clear()
-    w2 = wrap_tokenizer(hf, AdapterConfig(family="qwen3_8b"))
-    _assert_unresolved_passthrough(w2, hf)
-    _one_warning(caplog)
+
+
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [
+        ("FAMILY", "qwen3_8b"),  # a shipped family whose files are not staged
+        ("FAMILY", "qwen3_8bb"),  # a mistyped family
+        ("REPO", "Qwen/Qwen3-8BB"),  # a mistyped repository
+        ("REPO", "Qwen/Qwen3-8B"),  # a certified repository, files not staged
+    ],
+)
+def test_a_named_family_or_repository_that_cannot_be_resolved_raises(
+    setting: str,
+    value: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """What the operator named and toktier cannot resolve stops the wrap,
+    and the message names the setting; nothing named stays passthrough
+    (the two tests above)."""
+    from toktier.errors import ArtifactNotFound
+
+    _offline_home(monkeypatch, tmp_path)
+    hf = _saved_fast_tokenizer(tmp_path / "model-dir")
+    caplog.set_level("WARNING", logger="toktier.integrations.sglang")
+    variable = "TOKTIER_SGLANG_" + setting
+    with pytest.raises(ArtifactNotFound, match=variable) as raised:
+        wrap_tokenizer(hf, AdapterConfig.from_env({variable: value}))
+    assert repr(value) in str(raised.value)
+    assert raised.value.details["setting"] == variable
+    assert not [r for r in caplog.records if r.levelname == "WARNING"]
 
 
 def test_a_tokenizer_without_a_name_is_served_in_passthrough(

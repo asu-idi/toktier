@@ -9,6 +9,7 @@ use toktier_store_core::{ContentDigest, KeyId, SessionHandle, SessionStore, Stor
 use toktier_store_sqlite::{NamedSessionRef, RecoveredNamedSession, SingleEngine, StoreDb};
 
 use crate::manifest::{LocalArtifact, Registry};
+use crate::prefix_index::{KeyParams, PrefixIndex, Seal};
 use crate::{
     Backend, Certification, Encoding, Error, ErrorCode, ExecutionFacts, Policy, ReasonCode, Result,
     RoutePlan, TokenBuffer, TokenPatch,
@@ -27,6 +28,11 @@ pub(crate) struct TokenizerInner {
     /// The chunk-parallel admission and counters, built on first use.
     pub(crate) chunked: crate::chunked::State,
     pub(crate) store: std::sync::Mutex<SessionStoreState>,
+    /// What a lookup computes its block keys from: the store's semantic
+    /// fingerprint and block size, readable without the store lock.
+    pub(crate) prefix_key: KeyParams,
+    /// Whether that index keeps anything (`lookup_index_blocks > 0`).
+    pub(crate) prefix_index_on: bool,
     pub(crate) gpu_detail: Option<(String, i32)>,
     /// What a local verification of this route would be filed under,
     /// when the route is one a campaign has not judged.
@@ -39,6 +45,11 @@ pub(crate) struct SessionStoreState {
     pub(crate) store: SessionStore,
     pub(crate) key: KeyId,
     names: HashMap<String, SessionHandle>,
+    /// The index `Tokenizer::lookup` reads: the completed blocks of the
+    /// sessions this store holds.
+    pub(crate) index: PrefixIndex,
+    /// The core's `sessions_evicted` when the tables last followed it.
+    seen_evictions: u64,
     leased: HashSet<String>,
     /// Full plaintext is retained only for durable named sessions. Store-v1
     /// intentionally omits sealed-prefix text, so restart-safe delta appends
@@ -69,6 +80,7 @@ impl SessionStoreState {
         seal_guard: u64,
         database_path: Option<&Path>,
         seed_digest_overlap: bool,
+        lookup_index_blocks: usize,
     ) -> Result<Self> {
         #[cfg(not(feature = "sqlite"))]
         let _ = &router;
@@ -97,6 +109,16 @@ impl SessionStoreState {
                     .iter()
                     .map(|session| (session.name.clone(), session.handle))
                     .collect();
+                let mut index = new_index(&store, fingerprint, lookup_index_blocks);
+                for session in &recovered {
+                    // The seals a stored session had when each of its
+                    // blocks was completed are not in the file, so these
+                    // blocks offer no seal; the session's current seal
+                    // serves the blocks it completes from now on.
+                    let seal = seal_of(&store, session.handle)?;
+                    index.insert_session(session.handle, &session.transcript, seal);
+                }
+                let seen_evictions = store.stats().sessions_evicted;
                 let transcripts = recovered
                     .into_iter()
                     .map(
@@ -109,6 +131,8 @@ impl SessionStoreState {
                     store,
                     key,
                     names,
+                    index,
+                    seen_evictions,
                     leased: HashSet::new(),
                     transcripts: Some(transcripts),
                     persistence_fault: None,
@@ -117,10 +141,13 @@ impl SessionStoreState {
             }
             let mut store = new_store(true, seed_digest_overlap)?;
             let key = store.register_fingerprint(fingerprint, seal_guard)?;
+            let index = new_index(&store, fingerprint, lookup_index_blocks);
             let mut state = Self {
                 store,
                 key,
                 names: HashMap::new(),
+                index,
+                seen_evictions: 0,
                 leased: HashSet::new(),
                 transcripts: Some(HashMap::new()),
                 persistence_fault: None,
@@ -139,10 +166,13 @@ impl SessionStoreState {
 
         let mut store = new_store(false, seed_digest_overlap)?;
         let key = store.register_fingerprint(fingerprint, seal_guard)?;
+        let index = new_index(&store, fingerprint, lookup_index_blocks);
         Ok(Self {
             store,
             key,
             names: HashMap::new(),
+            index,
+            seen_evictions: 0,
             leased: HashSet::new(),
             transcripts: None,
             persistence_fault: None,
@@ -205,17 +235,10 @@ impl SessionStoreState {
         )
     }
 
-    /// Whether a content lookup may open its temporary session without
-    /// making the core drop a named one.
-    pub(crate) fn lookup_has_a_slot(&self) -> bool {
-        self.durable_free_slots().is_none_or(|free| free >= 1)
-    }
-
     /// Decline a new named session when a durable store is at its bound.
-    /// One slot stays free for `Tokenizer::lookup`, whose hit opens a
-    /// temporary session, so the bound on named sessions is one below the
-    /// core's capacity. Nothing has been changed when this returns an
-    /// error, so the store stays usable.
+    /// The bound on named sessions is one below the core's capacity (the
+    /// 0.3.2 bound, kept as it is). Nothing has been changed when this
+    /// returns an error, so the store stays usable.
     fn ensure_room_for_a_named_session(&self) -> Result<()> {
         match self.durable_free_slots() {
             Some(free) if free <= 1 => Err(Error::new(
@@ -226,6 +249,55 @@ impl SessionStoreState {
                 ),
             )),
             _ => Ok(()),
+        }
+    }
+
+    /// Follow the core after a call that may have made it drop its least
+    /// recently used session to make room (`put` and `fork`, memory mode):
+    /// release what each dropped session registered in the index and, in
+    /// memory mode, forget the names that point at dropped sessions.
+    fn follow_core_evictions(&mut self) {
+        let evicted = self.store.stats().sessions_evicted;
+        if evicted == self.seen_evictions {
+            return;
+        }
+        self.seen_evictions = evicted;
+        let store = &self.store;
+        for handle in self.index.tracked_handles() {
+            if store.revision(handle).is_err() {
+                self.index.remove_session(handle);
+            }
+        }
+        if self.transcripts.is_none() {
+            self.names
+                .retain(|_, handle| store.revision(*handle).is_ok());
+        }
+    }
+
+    /// Register what a successful `append_patch` of `delta` added, and
+    /// release the session's track when the core's text length does not
+    /// agree with what the index was fed (the index then offers nothing
+    /// for that session rather than something unchecked).
+    fn index_after_append(&mut self, handle: SessionHandle, delta: &str) -> Result<()> {
+        let seal = seal_of(&self.store, handle)?;
+        self.index.append(handle, delta, seal);
+        self.index_check_length(handle);
+        Ok(())
+    }
+
+    /// Release `handle`'s track unless the index was fed exactly as many
+    /// bytes as the core holds for it.
+    fn index_check_length(&mut self, handle: SessionHandle) {
+        let Some(fed) = self.index.tracked_bytes(handle) else {
+            return;
+        };
+        let held = self
+            .store
+            .session_info(handle)
+            .ok()
+            .and_then(|info| info.stable_prefix_bytes.checked_add(info.tail_bytes));
+        if held != Some(fed) {
+            self.index.remove_session(handle);
         }
     }
 
@@ -256,15 +328,52 @@ thread_local! {
     static TEST_MAX_SESSIONS: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
 }
 
+/// The core's configuration. `node_tail_cap_bytes: 0` makes the core
+/// write no block record: it takes the core's existing "skip the record
+/// and detach the chain" branch at a session's first completed block.
+/// The crate finds stored prefixes through its own index of the live
+/// sessions (`prefix_index`) and calls none of the core functions that
+/// read records (`SessionStore::lookup`, `export_node_items`,
+/// `import_node_item`), so the records would only be written; ids, seals
+/// and session records are unchanged by the setting.
 fn store_config() -> StoreConfig {
     #[cfg(test)]
     if let Some(max_sessions) = TEST_MAX_SESSIONS.with(std::cell::Cell::get) {
         return StoreConfig {
             max_sessions,
+            node_tail_cap_bytes: 0,
             ..StoreConfig::default()
         };
     }
-    StoreConfig::default()
+    StoreConfig {
+        node_tail_cap_bytes: 0,
+        ..StoreConfig::default()
+    }
+}
+
+/// The default of `RuntimeBuilder::lookup_index_blocks`: entries of
+/// 4,096-character blocks, about 1.07 billion characters of live session
+/// text.
+pub(crate) const DEFAULT_LOOKUP_INDEX_BLOCKS: usize = 262_144;
+
+fn new_index(store: &SessionStore, fingerprint: [u8; 32], max_blocks: usize) -> PrefixIndex {
+    PrefixIndex::new(
+        KeyParams {
+            fingerprint,
+            block_chars: store.config().block_chars,
+        },
+        max_blocks,
+    )
+}
+
+/// The session's current seal point, as the core reports it.
+pub(crate) fn seal_of(store: &SessionStore, handle: SessionHandle) -> Result<Seal> {
+    let info = store.session_info(handle)?;
+    Ok(Seal {
+        chars: info.safe_char,
+        bytes: info.stable_prefix_bytes,
+        ids: info.sealed_tokens,
+    })
 }
 
 fn new_store(persistent: bool, seed_digest_overlap: bool) -> Result<SessionStore> {
@@ -403,7 +512,10 @@ impl Session {
             state.ensure_room_for_a_named_session()?;
             let key = state.key;
             let put = state.store.put(key, text, self.tokenizer.router.as_ref())?;
+            state.follow_core_evictions();
             state.names.insert(self.name.clone(), put.handle);
+            let seal = seal_of(&state.store, put.handle)?;
+            state.index.insert_session(put.handle, text, seal);
             if let Some(transcripts) = &mut state.transcripts {
                 transcripts.insert(self.name.clone(), text.to_owned());
             }
@@ -442,12 +554,23 @@ impl Session {
         let (patch, persistence) = {
             let mut state = self.lock_store();
             state.ensure_healthy()?;
-            let patch = state.store.append_patch(
+            let patch = match state.store.append_patch(
                 handle,
                 delta,
                 expected_revision,
                 self.tokenizer.router.as_ref(),
-            )?;
+            ) {
+                Ok(patch) => patch,
+                Err(error) => {
+                    // A refused append changes nothing, and the track
+                    // stays. Should the core have taken some of the text
+                    // before failing, the lengths no longer agree and
+                    // the track is released.
+                    state.index_check_length(handle);
+                    return Err(error.into());
+                }
+            };
+            state.index_after_append(handle, delta)?;
             if let Some(transcripts) = &mut state.transcripts {
                 let transcript = transcripts.get_mut(&self.name).ok_or_else(|| {
                     Error::new(
@@ -571,10 +694,14 @@ impl Session {
             }
             if let Some(old) = self.handle {
                 state.store.evict(old);
+                state.index.remove_session(old);
             }
             let key = state.key;
             let put = state.store.put(key, text, self.tokenizer.router.as_ref())?;
+            state.follow_core_evictions();
             state.names.insert(self.name.clone(), put.handle);
+            let seal = seal_of(&state.store, put.handle)?;
+            state.index.insert_session(put.handle, text, seal);
             if let Some(transcripts) = &mut state.transcripts {
                 transcripts.insert(self.name.clone(), text.to_owned());
             }
@@ -610,6 +737,8 @@ impl Session {
             }
             state.ensure_room_for_a_named_session()?;
             let forked = state.store.fork(handle)?;
+            state.index.fork(handle, forked);
+            state.follow_core_evictions();
             state.names.insert(new_name.clone(), forked);
             let forked_transcript = state
                 .transcripts
@@ -645,6 +774,7 @@ impl Session {
             state.ensure_healthy()?;
             if let Some(handle) = self.handle {
                 state.store.evict(handle);
+                state.index.remove_session(handle);
             }
             state.names.remove(&self.name);
             if let Some(transcripts) = &mut state.transcripts {
@@ -855,11 +985,19 @@ mod tests {
                     0,
                     Some(&old),
                     false,
+                    DEFAULT_LOOKUP_INDEX_BLOCKS,
                 )
                 .unwrap(),
             );
-            let refused = SessionStoreState::new(reference_router(), current, 0, Some(&old), false)
-                .unwrap_err();
+            let refused = SessionStoreState::new(
+                reference_router(),
+                current,
+                0,
+                Some(&old),
+                false,
+                DEFAULT_LOOKUP_INDEX_BLOCKS,
+            )
+            .unwrap_err();
             assert_eq!(refused.code(), ErrorCode::SessionStateMismatch);
             assert!(
                 refused
@@ -870,9 +1008,25 @@ mod tests {
             );
             let own = temporary.path().join("sessions/own.sqlite3");
             drop(
-                SessionStoreState::new(reference_router(), current, 0, Some(&own), false).unwrap(),
+                SessionStoreState::new(
+                    reference_router(),
+                    current,
+                    0,
+                    Some(&own),
+                    false,
+                    DEFAULT_LOOKUP_INDEX_BLOCKS,
+                )
+                .unwrap(),
             );
-            SessionStoreState::new(reference_router(), current, 0, Some(&own), false).unwrap();
+            SessionStoreState::new(
+                reference_router(),
+                current,
+                0,
+                Some(&own),
+                false,
+                DEFAULT_LOOKUP_INDEX_BLOCKS,
+            )
+            .unwrap();
         }
     }
 
@@ -887,9 +1041,15 @@ mod tests {
 
         let store_home = temporary.path().join("runtime-home/sessions");
         let database_path = store_home.join("test.sqlite3");
-        let _state =
-            SessionStoreState::new(reference_router(), [7; 32], 0, Some(&database_path), false)
-                .unwrap();
+        let _state = SessionStoreState::new(
+            reference_router(),
+            [7; 32],
+            0,
+            Some(&database_path),
+            false,
+            DEFAULT_LOOKUP_INDEX_BLOCKS,
+        )
+        .unwrap();
 
         assert_eq!(permission_bits(&store_home), 0o700);
         assert_eq!(permission_bits(&database_path), 0o600);
@@ -1209,9 +1369,11 @@ mod tests {
 
         let (runtime, tokenizer) = qwen(&root, Some(&home));
         assert_healthy(&tokenizer, 4);
-        // A hit would need a fifth slot, so the lookup answers a miss.
+        // A lookup needs no session slot: it hits, with exact ids, and
+        // drops nothing.
         let query = format!("{} and a question that follows", texts[0]);
-        assert!(tokenizer.lookup(&query).unwrap().is_none());
+        let hit = tokenizer.lookup(&query).unwrap().expect("a lookup hit");
+        assert_eq!(hit.ids(), tokenizer.encode(&query).unwrap().ids());
         assert_healthy(&tokenizer, 4);
         assert_declined(&seed_new(&tokenizer, "n0", &texts[0]).unwrap_err(), 4);
         let s0 = tokenizer.open_session("s0").unwrap();
@@ -1304,4 +1466,787 @@ mod tests {
             assert!(!tokenizer.inner.store.lock().unwrap().leased.contains("s0"));
         }
     }
+
+    // ---- the lookup index and the store's memory --------------------------
+    //
+    // BEGIN session memory tests. The helpers right below read what the
+    // index change added; every test after them goes through them or the
+    // public calls, so the same tests can be compiled against a tree
+    // without the change by giving these helpers stand-in bodies.
+
+    fn reused_ids(tokenizer: &crate::Tokenizer) -> u64 {
+        tokenizer.store_stats().lookup_reused_ids
+    }
+
+    fn index_bytes(tokenizer: &crate::Tokenizer) -> u64 {
+        tokenizer.store_stats().index_bytes
+    }
+
+    fn with_index_blocks(builder: crate::RuntimeBuilder, blocks: usize) -> crate::RuntimeBuilder {
+        builder.lookup_index_blocks(blocks)
+    }
+
+    /// The index equals one rebuilt from the sessions the store holds
+    /// now (`texts` gives the current text of every name), and keeps its
+    /// own invariants.
+    fn assert_index_matches(tokenizer: &crate::Tokenizer, texts: &HashMap<String, String>) {
+        let state = tokenizer.inner.store.lock().unwrap();
+        state.index.check_invariants().unwrap();
+        let mut rebuilt = PrefixIndex::new(state.index.params(), usize::MAX);
+        for (name, handle) in &state.names {
+            assert!(
+                state.store.revision(*handle).is_ok(),
+                "{name} names a session the core does not hold"
+            );
+            let text = texts
+                .get(name)
+                .unwrap_or_else(|| panic!("no text for {name}"));
+            rebuilt.insert_session(*handle, text, Seal::default());
+        }
+        assert_eq!(
+            state.store.list_handles().len(),
+            state.names.len(),
+            "every session the core holds is named"
+        );
+        assert!(
+            rebuilt.shape() == state.index.shape(),
+            "the index differs from one rebuilt from the live sessions"
+        );
+    }
+
+    fn core_node_count(tokenizer: &crate::Tokenizer) -> u64 {
+        tokenizer
+            .inner
+            .store
+            .lock()
+            .unwrap()
+            .store
+            .stats()
+            .node_count
+    }
+
+    // ---- shared setup ---------------------------------------------------------
+
+    /// A runtime that runs the fast CPU engine whatever the registry's
+    /// binding of this tree is, so sessions get seal points.
+    fn experimental(
+        root: &Path,
+        home: Option<&Path>,
+        index_blocks: Option<usize>,
+    ) -> (crate::Runtime, crate::Tokenizer) {
+        experimental_family(root, home, index_blocks, "qwen3_8b")
+    }
+
+    fn experimental_family(
+        root: &Path,
+        home: Option<&Path>,
+        index_blocks: Option<usize>,
+        family: &str,
+    ) -> (crate::Runtime, crate::Tokenizer) {
+        let mut builder = crate::Runtime::builder()
+            .artifact_cache(root)
+            .device(crate::Device::Cpu)
+            .policy(Policy::Experimental);
+        if let Some(home) = home {
+            builder = builder.home(home);
+        }
+        if let Some(blocks) = index_blocks {
+            builder = with_index_blocks(builder, blocks);
+        }
+        let runtime = builder.build().unwrap();
+        let tokenizer = runtime.load(family).unwrap();
+        assert!(
+            tokenizer.plan().backends.contains(&Backend::FastCpu),
+            "the experimental plan runs the fast CPU engine"
+        );
+        (runtime, tokenizer)
+    }
+
+    /// A small deterministic generator (SplitMix64).
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = self.0;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^ (z >> 31)
+        }
+
+        fn below(&mut self, bound: usize) -> usize {
+            (self.next() % bound.max(1) as u64) as usize
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    enum Flavor {
+        Ascii,
+        Multibyte,
+        /// Pieces that NFC normalization changes (decomposed accents,
+        /// conjoining Hangul jamo, the Angstrom sign).
+        Nfc,
+    }
+
+    /// `chars` characters of word-like text.
+    fn prose(seed: u64, chars: usize, flavor: Flavor) -> String {
+        const ASCII: [&str; 10] = [
+            "river ",
+            "stone ",
+            "maple, ",
+            "cloud ",
+            "lantern. ",
+            "harbor ",
+            "meadow ",
+            "copper ",
+            "42 ",
+            "\n",
+        ];
+        const MULTIBYTE: [&str; 6] = [
+            "caf\u{e9} ",
+            "\u{65e5}\u{672c}\u{8a9e}\u{306e}\u{6587}\u{7ae0} ",
+            "\u{41f}\u{440}\u{438}\u{432}\u{435}\u{442} ",
+            "\u{1f642} ",
+            "na\u{ef}ve ",
+            "\u{3b1}\u{3b2}\u{3b3} ",
+        ];
+        const NFC: [&str; 5] = [
+            "e\u{301}te\u{301} ",
+            "A\u{30a}ngstro\u{308}m ",
+            "\u{1100}\u{1161}\u{11a8} ",
+            "\u{212b} ",
+            "u\u{308}ber ",
+        ];
+        let mut rng = Rng(seed ^ 0x51ED_2701);
+        let mut out = String::new();
+        let mut count = 0usize;
+        while count < chars {
+            let piece = match (flavor, rng.below(4)) {
+                (Flavor::Multibyte, 0) | (Flavor::Nfc, 0) => MULTIBYTE[rng.below(MULTIBYTE.len())],
+                (Flavor::Nfc, 1) => NFC[rng.below(NFC.len())],
+                _ => ASCII[rng.below(ASCII.len())],
+            };
+            out.push_str(piece);
+            count += piece.chars().count();
+        }
+        out.chars().take(chars).collect()
+    }
+
+    fn take_chars(text: &str, chars: usize) -> String {
+        text.chars().take(chars).collect()
+    }
+
+    fn ids_of(tokenizer: &crate::Tokenizer, text: &str) -> Vec<u32> {
+        tokenizer.encode(text).unwrap().ids().to_vec()
+    }
+
+    /// A lookup's answer: `None`, or ids that must equal `encode`.
+    fn lookup_checked(tokenizer: &crate::Tokenizer, query: &str) -> Option<Vec<u32>> {
+        let found = tokenizer.lookup(query).unwrap()?;
+        assert_eq!(found.ids(), ids_of(tokenizer, query), "lookup ids");
+        Some(found.ids().to_vec())
+    }
+
+    /// Seed `name` with `first` and grow it by `turns` appends of
+    /// `turn_chars` characters; every snapshot equals `encode`.
+    fn grown_session(
+        tokenizer: &crate::Tokenizer,
+        name: &str,
+        seed: u64,
+        first: usize,
+        turns: usize,
+        turn_chars: usize,
+        flavor: Flavor,
+    ) -> String {
+        let mut text = prose(seed, first, flavor);
+        let mut session = tokenizer.open_session(name).unwrap();
+        session.seed(&text).unwrap();
+        for turn in 0..turns {
+            let delta = prose(seed * 1_000 + turn as u64, turn_chars, flavor);
+            session.append(&delta).unwrap();
+            text.push_str(&delta);
+            assert_eq!(
+                session.snapshot().unwrap().ids(),
+                ids_of(tokenizer, &text),
+                "{name} after turn {turn}"
+            );
+        }
+        session.close().unwrap();
+        text
+    }
+
+    #[test]
+    fn the_core_writes_no_block_record() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        let (_runtime, tokenizer) = experimental(&root, None, None);
+        let a = grown_session(&tokenizer, "a", 1, 6_000, 6, 1_500, Flavor::Ascii);
+        assert_eq!(core_node_count(&tokenizer), 0, "after seeds and appends");
+        seed_new(&tokenizer, "b", &prose(2, 20_000, Flavor::Multibyte)).unwrap();
+        let source = tokenizer.open_session("a").unwrap();
+        let mut fork = source.fork("a-fork").unwrap();
+        fork.append(&prose(3, 9_000, Flavor::Ascii)).unwrap();
+        fork.close().unwrap();
+        source.close().unwrap();
+        assert_eq!(core_node_count(&tokenizer), 0, "after a fork");
+        for query in [format!("{a} and a question"), take_chars(&a, 9_000)] {
+            lookup_checked(&tokenizer, &query).expect("a hit");
+        }
+        assert_eq!(core_node_count(&tokenizer), 0, "after lookups");
+        assert!(reused_ids(&tokenizer) > 0);
+    }
+
+    #[test]
+    fn deleted_overwritten_and_dropped_sessions_release_their_entries() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        {
+            let (_runtime, tokenizer) = experimental(&root, None, None);
+            let empty = index_bytes(&tokenizer);
+            let mut texts = Vec::new();
+            for index in 0..6u64 {
+                let name = format!("s{index}");
+                let flavor = if index % 2 == 0 {
+                    Flavor::Ascii
+                } else {
+                    Flavor::Nfc
+                };
+                texts.push((
+                    name.clone(),
+                    grown_session(&tokenizer, &name, 10 + index, 5_000, 4, 2_000, flavor),
+                ));
+            }
+            assert!(tokenizer.store_stats().node_count > 0);
+            assert!(index_bytes(&tokenizer) > empty);
+            for (name, _) in &texts {
+                tokenizer.open_session(name).unwrap().delete().unwrap();
+            }
+            let stats = tokenizer.store_stats();
+            assert_eq!(stats.node_count, 0, "entries after every delete");
+            assert_eq!(stats.session_count, 0);
+            assert_eq!(
+                index_bytes(&tokenizer),
+                empty,
+                "index bytes after every delete"
+            );
+            for (name, text) in &texts {
+                assert!(
+                    lookup_checked(&tokenizer, &format!("{text} and more")).is_none(),
+                    "{name} was deleted"
+                );
+            }
+
+            // `overwrite`: the old text misses, the new one hits.
+            let old = grown_session(&tokenizer, "o", 20, 5_000, 3, 2_000, Flavor::Ascii);
+            let new = prose(21, 12_000, Flavor::Multibyte);
+            let mut session = tokenizer.open_session("o").unwrap();
+            assert_eq!(
+                session.overwrite(&new).unwrap().ids(),
+                ids_of(&tokenizer, &new)
+            );
+            session.close().unwrap();
+            assert!(lookup_checked(&tokenizer, &format!("{old} and more")).is_none());
+            lookup_checked(&tokenizer, &format!("{new} and more")).expect("a hit");
+            assert_eq!(tokenizer.store_stats().node_count, 2);
+            assert_index_matches(&tokenizer, &HashMap::from([("o".to_owned(), new.clone())]));
+        }
+
+        // Sessions the core drops at its capacity (memory mode).
+        let _capacity = SmallCapacity::set();
+        let (_runtime, tokenizer) = experimental(&root, None, None);
+        let mut texts = HashMap::new();
+        for index in 0..=SMALL_CAPACITY as u64 {
+            let name = format!("c{index}");
+            texts.insert(
+                name.clone(),
+                grown_session(
+                    &tokenizer,
+                    &name,
+                    30 + index,
+                    5_000,
+                    2,
+                    2_000,
+                    Flavor::Ascii,
+                ),
+            );
+        }
+        let stats = tokenizer.store_stats();
+        assert_eq!(stats.sessions_evicted, 1);
+        assert_eq!(
+            stats.node_count,
+            2 * SMALL_CAPACITY as u64,
+            "entries of the live sessions only"
+        );
+        assert!(lookup_checked(&tokenizer, &format!("{} and more", texts["c0"])).is_none());
+        texts.remove("c0");
+        lookup_checked(&tokenizer, &format!("{} and more", texts["c1"])).expect("a hit");
+        assert_index_matches(&tokenizer, &texts);
+    }
+
+    /// A random replay of every session call and of lookups over texts
+    /// that share prefixes; ids equal `encode` at every step.
+    #[test]
+    fn a_random_replay_keeps_ids_exact_and_the_index_consistent() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        for seed in [11u64, 12, 13] {
+            replay(&root, seed, 300);
+        }
+    }
+
+    fn replay(root: &Path, seed: u64, steps: usize) {
+        let (_runtime, tokenizer) = experimental(root, None, None);
+        let pool: Vec<String> = (0..3u64)
+            .map(|index| {
+                let flavor = [Flavor::Ascii, Flavor::Multibyte, Flavor::Nfc][index as usize];
+                prose(seed * 10 + index, 26_000, flavor)
+            })
+            .collect();
+        let mut rng = Rng(seed);
+        let mut live: HashMap<String, String> = HashMap::new();
+        let mut gone: Vec<String> = Vec::new();
+        let mut next_name = 0usize;
+        // A text that follows one of the pool texts, or not, from `at`.
+        let continuation = |rng: &mut Rng, text: &str| -> String {
+            let len = 200 + rng.below(3_000);
+            let chars = text.chars().count();
+            let base = &pool[rng.below(pool.len())];
+            if rng.below(3) != 0 && base.starts_with(text) && chars + len <= 26_000 {
+                base.chars().skip(chars).take(len).collect()
+            } else {
+                prose(rng.next(), len, Flavor::Nfc)
+            }
+        };
+        let fresh_text = |rng: &mut Rng| -> String {
+            let base = &pool[rng.below(pool.len())];
+            let mut text = take_chars(base, 1_000 + rng.below(12_000));
+            if rng.below(3) == 0 {
+                text.push_str(&prose(rng.next(), 500, Flavor::Ascii));
+            }
+            text
+        };
+        for step in 0..steps {
+            let names: Vec<String> = {
+                let mut names: Vec<String> = live.keys().cloned().collect();
+                names.sort();
+                names
+            };
+            let pick = |rng: &mut Rng| names[rng.below(names.len())].clone();
+            match rng.below(12) {
+                0 | 1 if live.len() < 12 => {
+                    let name = format!("r{next_name}");
+                    next_name += 1;
+                    let text = fresh_text(&mut rng);
+                    assert_eq!(
+                        seed_new(&tokenizer, &name, &text).unwrap(),
+                        ids_of(&tokenizer, &text)
+                    );
+                    live.insert(name, text);
+                }
+                2..=4 if !names.is_empty() => {
+                    let name = pick(&mut rng);
+                    if live[&name].chars().count() > 30_000 {
+                        continue;
+                    }
+                    let delta = continuation(&mut rng, &live[&name]);
+                    let mut session = tokenizer.open_session(&name).unwrap();
+                    session.append(&delta).unwrap();
+                    let text = live.get_mut(&name).unwrap();
+                    text.push_str(&delta);
+                    assert_eq!(
+                        session.snapshot().unwrap().ids(),
+                        ids_of(&tokenizer, text),
+                        "step {step}"
+                    );
+                    session.close().unwrap();
+                }
+                5 if !names.is_empty() => {
+                    let name = pick(&mut rng);
+                    let delta = continuation(&mut rng, &live[&name]);
+                    let complete = format!("{}{delta}", live[&name]);
+                    let mut session = tokenizer.open_session(&name).unwrap();
+                    assert_eq!(
+                        session.encode_transcript(&complete).unwrap().ids(),
+                        ids_of(&tokenizer, &complete),
+                        "step {step}"
+                    );
+                    session.close().unwrap();
+                    live.insert(name, complete);
+                }
+                6 if !names.is_empty() => {
+                    let name = pick(&mut rng);
+                    let text = fresh_text(&mut rng);
+                    let mut session = tokenizer.open_session(&name).unwrap();
+                    assert_eq!(
+                        session.overwrite(&text).unwrap().ids(),
+                        ids_of(&tokenizer, &text)
+                    );
+                    session.close().unwrap();
+                    gone.push(std::mem::replace(live.get_mut(&name).unwrap(), text));
+                }
+                7 if !names.is_empty() && live.len() < 12 => {
+                    let source = pick(&mut rng);
+                    let name = format!("r{next_name}");
+                    next_name += 1;
+                    let session = tokenizer.open_session(&source).unwrap();
+                    let fork = session.fork(&name).unwrap();
+                    assert_eq!(
+                        fork.snapshot().unwrap().ids(),
+                        ids_of(&tokenizer, &live[&source])
+                    );
+                    fork.close().unwrap();
+                    session.close().unwrap();
+                    live.insert(name, live[&source].clone());
+                }
+                8 if !names.is_empty() => {
+                    let name = pick(&mut rng);
+                    tokenizer.open_session(&name).unwrap().delete().unwrap();
+                    gone.push(live.remove(&name).unwrap());
+                }
+                9 if !names.is_empty() => {
+                    let name = pick(&mut rng);
+                    assert_eq!(
+                        snapshot_of(&tokenizer, &name).unwrap(),
+                        ids_of(&tokenizer, &live[&name])
+                    );
+                }
+                _ => {
+                    // A lookup: a live, gone or pool text, cut or extended.
+                    let source = match rng.below(3) {
+                        0 if !names.is_empty() => live[&pick(&mut rng)].clone(),
+                        1 if !gone.is_empty() => gone[rng.below(gone.len())].clone(),
+                        _ => pool[rng.below(pool.len())].clone(),
+                    };
+                    let chars = source.chars().count();
+                    let mut query = take_chars(&source, rng.below(chars + 1));
+                    if rng.below(2) == 0 {
+                        query.push_str(&prose(rng.next(), rng.below(3_000), Flavor::Nfc));
+                    }
+                    let found = lookup_checked(&tokenizer, &query);
+                    let shares_a_block = live.values().any(|text| {
+                        take_chars(text, 4_096).chars().count() == 4_096
+                            && query.starts_with(&take_chars(text, 4_096))
+                    });
+                    assert_eq!(
+                        found.is_some(),
+                        shares_a_block,
+                        "step {step}: hit iff a live session has the first block"
+                    );
+                }
+            }
+        }
+        assert_index_matches(&tokenizer, &live);
+        assert_eq!(core_node_count(&tokenizer), 0);
+        assert!(
+            reused_ids(&tokenizer) > 0,
+            "seed {seed}: lookups reused sealed ids"
+        );
+    }
+
+    #[test]
+    fn a_durable_restart_rebuilds_the_index_and_keeps_no_block_rows() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        let temporary = tempfile::tempdir().unwrap();
+        let home = temporary.path().join("home");
+        let (d0, d1) = {
+            let (_runtime, tokenizer) = experimental(&root, Some(&home), None);
+            let d0 = grown_session(&tokenizer, "d0", 40, 3_000, 8, 1_500, Flavor::Nfc);
+            let d1 = grown_session(&tokenizer, "d1", 41, 3_000, 8, 1_500, Flavor::Ascii);
+            (d0, d1)
+        };
+
+        // The file holds no block rows.
+        let file = home.join("sessions/qwen3_8b.sqlite3");
+        let copy = temporary.path().join("copy.sqlite3");
+        fs::copy(&file, &copy).unwrap();
+        for suffix in ["-wal", "-shm"] {
+            let mut from = file.as_os_str().to_os_string();
+            from.push(suffix);
+            let mut to = copy.as_os_str().to_os_string();
+            to.push(suffix);
+            if Path::new(&from).exists() {
+                fs::copy(&from, &to).unwrap();
+            }
+        }
+        {
+            let (_runtime, tokenizer) = experimental(&root, None, None);
+            let (store, _) = StoreDb::open(&copy)
+                .unwrap()
+                .load(&SingleEngine(tokenizer.inner.router.as_ref()))
+                .unwrap();
+            assert_eq!(
+                store.stats().node_count,
+                0,
+                "block rows in the durable file"
+            );
+            assert_eq!(store.stats().session_count, 2);
+        }
+
+        {
+            let (_runtime, tokenizer) = experimental(&root, Some(&home), None);
+            assert_eq!(core_node_count(&tokenizer), 0);
+            // A hit at once after the restart, exact, with nothing reused
+            // yet: the stored blocks carry no seal.
+            lookup_checked(&tokenizer, &format!("{d0} and a question")).expect("a hit");
+            lookup_checked(&tokenizer, &take_chars(&d1, 10_000)).expect("a hit");
+            assert_eq!(reused_ids(&tokenizer), 0);
+            assert_index_matches(
+                &tokenizer,
+                &HashMap::from([("d0".to_owned(), d0.clone()), ("d1".to_owned(), d1.clone())]),
+            );
+            // Once d0 completes another block, its ids are reused again.
+            let mut session = tokenizer.open_session("d0").unwrap();
+            let delta = prose(42, 5_000, Flavor::Nfc);
+            session.append(&delta).unwrap();
+            session.close().unwrap();
+            let grown = format!("{d0}{delta}");
+            lookup_checked(&tokenizer, &format!("{grown} and a question")).expect("a hit");
+            assert!(reused_ids(&tokenizer) > 0, "reuse after the next block");
+            tokenizer.open_session("d1").unwrap().delete().unwrap();
+        }
+
+        let (_runtime, tokenizer) = experimental(&root, Some(&home), None);
+        assert!(
+            lookup_checked(&tokenizer, &format!("{d1} and a question")).is_none(),
+            "a deleted session misses after a restart"
+        );
+        lookup_checked(&tokenizer, &format!("{d0} and a question")).expect("a hit");
+    }
+
+    /// Creators, deleters, appenders and lookups at once on a full store:
+    /// a durable store at its 1,023 named sessions and a memory store at
+    /// its capacity of 1,024.
+    #[test]
+    fn concurrent_calls_at_the_bound_stay_exact_and_consistent() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        let temporary = tempfile::tempdir().unwrap();
+        for durable in [true, false] {
+            let home = temporary.path().join("home");
+            concurrency_at_the_bound(&root, durable.then_some(home.as_path()));
+        }
+    }
+
+    fn concurrency_at_the_bound(root: &Path, home: Option<&Path>) {
+        use std::sync::{Arc as SyncArc, Barrier, Mutex};
+        let durable = home.is_some();
+        let (_runtime, tokenizer) = experimental(root, home, None);
+        let capacity = tokenizer
+            .inner
+            .store
+            .lock()
+            .unwrap()
+            .store
+            .config()
+            .max_sessions;
+        let fill = if durable { capacity - 1 } else { capacity };
+        let mut texts: HashMap<String, String> = HashMap::new();
+        // Long sessions the lookups and appenders use, then short ones.
+        for index in 0..4u64 {
+            let name = format!("lk{index}");
+            texts.insert(
+                name.clone(),
+                grown_session(
+                    &tokenizer,
+                    &name,
+                    50 + index,
+                    4_000,
+                    3,
+                    1_500,
+                    Flavor::Ascii,
+                ),
+            );
+        }
+        for index in 0..2u64 {
+            let name = format!("ap{index}");
+            texts.insert(
+                name.clone(),
+                grown_session(&tokenizer, &name, 60 + index, 4_000, 2, 1_500, Flavor::Nfc),
+            );
+        }
+        for index in texts.len()..fill {
+            let name = format!("f{index}");
+            let text = text(index, 48);
+            seed_new(&tokenizer, &name, &text).unwrap();
+            texts.insert(name, text);
+        }
+        assert_eq!(tokenizer.store_stats().session_count, fill as u64);
+        let evicted_before = tokenizer.store_stats().sessions_evicted;
+        let queries: Vec<String> = (0..4)
+            .map(|index| texts[&format!("lk{index}")].clone())
+            .collect();
+        let texts = SyncArc::new(Mutex::new(texts));
+        let created = SyncArc::new(std::sync::atomic::AtomicU64::new(0));
+        let threads = 8;
+        let barrier = SyncArc::new(Barrier::new(threads));
+        let (done, finished) = std::sync::mpsc::channel();
+        for worker in 0..threads {
+            let tokenizer = tokenizer.clone();
+            let barrier = SyncArc::clone(&barrier);
+            let texts = SyncArc::clone(&texts);
+            let created = SyncArc::clone(&created);
+            let queries = queries.clone();
+            let done = done.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                match worker {
+                    0 | 1 => {
+                        for turn in 0..4u64 {
+                            let name = format!("c{worker}-{turn}");
+                            let text = prose(100 + worker as u64 * 10 + turn, 6_000, Flavor::Ascii);
+                            match seed_new(&tokenizer, &name, &text) {
+                                Ok(ids) => {
+                                    assert_eq!(ids, ids_of(&tokenizer, &text));
+                                    created.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                                    texts.lock().unwrap().insert(name, text);
+                                }
+                                Err(error) => {
+                                    assert!(durable, "memory mode refuses nothing: {error}");
+                                    assert_eq!(error.code(), ErrorCode::InvalidArgument, "{error}");
+                                }
+                            }
+                        }
+                    }
+                    2 => {
+                        for index in 10..16usize {
+                            let name = format!("f{index}");
+                            tokenizer.open_session(&name).unwrap().delete().unwrap();
+                            texts.lock().unwrap().remove(&name);
+                        }
+                    }
+                    3 | 4 => {
+                        let name = format!("ap{}", worker - 3);
+                        let mut stored = texts.lock().unwrap()[&name].clone();
+                        let mut session = tokenizer.open_session(&name).unwrap();
+                        for turn in 0..4u64 {
+                            let delta = prose(200 + worker as u64 * 10 + turn, 1_500, Flavor::Nfc);
+                            match session.append(&delta) {
+                                Ok(_) => {
+                                    stored.push_str(&delta);
+                                    texts.lock().unwrap().insert(name.clone(), stored.clone());
+                                    match session.snapshot() {
+                                        Ok(snapshot) => {
+                                            assert_eq!(snapshot.ids(), ids_of(&tokenizer, &stored))
+                                        }
+                                        Err(error) => {
+                                            assert!(!durable, "{error}");
+                                            break;
+                                        }
+                                    }
+                                }
+                                Err(error) => {
+                                    // Memory mode: the core may drop this
+                                    // session to make room for a creator's.
+                                    assert!(!durable, "{error}");
+                                    break;
+                                }
+                            }
+                        }
+                        session.close().unwrap();
+                    }
+                    _ => {
+                        let mut rng = Rng(worker as u64);
+                        for _ in 0..12 {
+                            let source = &queries[rng.below(queries.len())];
+                            let chars = source.chars().count();
+                            let mut query =
+                                take_chars(source, 4_096 + rng.below(chars - 4_096 + 1));
+                            query.push_str(&prose(rng.next(), rng.below(2_000), Flavor::Ascii));
+                            let found = lookup_checked(&tokenizer, &query);
+                            if durable {
+                                assert!(found.is_some(), "a stored session's prefix hits");
+                            }
+                        }
+                    }
+                }
+                done.send(worker).unwrap();
+            });
+        }
+        drop(done);
+        for _ in 0..threads {
+            finished
+                .recv_timeout(Duration::from_secs(900))
+                .expect("every worker finishes in time");
+        }
+        let stats = tokenizer.store_stats();
+        let created = created.load(std::sync::atomic::Ordering::SeqCst);
+        if durable {
+            assert_eq!(stats.sessions_evicted, 0);
+        } else {
+            // Each creation past the capacity drops one session; a lookup
+            // drops none.
+            assert!(stats.sessions_evicted - evicted_before <= created);
+        }
+        assert_index_matches(&tokenizer, &texts.lock().unwrap());
+        assert_eq!(core_node_count(&tokenizer), 0);
+    }
+
+    #[test]
+    fn memory_mode_names_follow_the_core() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        let _capacity = SmallCapacity::set();
+        let (_runtime, tokenizer) = experimental(&root, None, None);
+        for index in 0..3 * SMALL_CAPACITY {
+            seed_new(&tokenizer, &format!("s{index}"), &text(index, 80)).unwrap();
+            assert!(tokenizer.inner.store.lock().unwrap().names.len() <= SMALL_CAPACITY);
+        }
+        // `s0` was dropped long ago and never opened again: a fork may
+        // take its name.
+        let source = tokenizer
+            .open_session(format!("s{}", 3 * SMALL_CAPACITY - 1))
+            .unwrap();
+        let fork = source.fork("s0").unwrap();
+        assert_eq!(
+            fork.snapshot().unwrap().ids(),
+            ids_of(&tokenizer, &text(3 * SMALL_CAPACITY - 1, 80))
+        );
+        fork.close().unwrap();
+        source.close().unwrap();
+        assert!(tokenizer.inner.store.lock().unwrap().names.len() <= SMALL_CAPACITY);
+    }
+
+    /// Pins the clause that declines `overwrite` of a session value whose
+    /// state the core no longer holds when a durable store is full.
+    #[test]
+    fn overwrite_of_an_unstored_session_value_is_declined_at_the_bound() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        let _capacity = SmallCapacity::set();
+        let temporary = tempfile::tempdir().unwrap();
+        let (_runtime, tokenizer) = qwen(&root, Some(&temporary.path().join("home")));
+        for index in 0..SMALL_CAPACITY - 1 {
+            seed_new(&tokenizer, &format!("s{index}"), &text(index, 80)).unwrap();
+        }
+        let mut s0 = tokenizer.open_session("s0").unwrap();
+        {
+            // The core loses s0's state and its slot is taken by another
+            // session, which no public call does in a durable store.
+            let mut state = tokenizer.inner.store.lock().unwrap();
+            let handle = state.names["s0"];
+            assert!(state.store.evict(handle));
+            let key = state.key;
+            state
+                .store
+                .put(key, &text(90, 80), tokenizer.inner.router.as_ref())
+                .unwrap();
+        }
+        assert_declined(
+            &s0.overwrite(&text(91, 80)).unwrap_err(),
+            SMALL_CAPACITY - 1,
+        );
+        // Declined before any change: nothing was saved, nothing sealed.
+        let state = tokenizer.inner.store.lock().unwrap();
+        state.ensure_healthy().unwrap();
+        assert_eq!(state.store.list_handles().len(), SMALL_CAPACITY - 1);
+    }
+    // END session memory tests.
 }

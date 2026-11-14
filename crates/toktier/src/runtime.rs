@@ -59,6 +59,7 @@ struct RuntimeConfig {
     diagnostics: bool,
     persistent_sessions: bool,
     seed_digest_overlap: bool,
+    lookup_index_blocks: usize,
     #[cfg(feature = "jit")]
     jit_compiler: Option<JitCompiler>,
 }
@@ -86,6 +87,7 @@ impl Default for RuntimeBuilder {
                 diagnostics: false,
                 persistent_sessions: false,
                 seed_digest_overlap: false,
+                lookup_index_blocks: crate::session::DEFAULT_LOOKUP_INDEX_BLOCKS,
                 #[cfg(feature = "jit")]
                 jit_compiler: None,
             },
@@ -173,6 +175,18 @@ impl RuntimeBuilder {
     /// free. Defaults to off, which keeps the fully serial seed path.
     pub fn seed_digest_overlap(mut self, enabled: bool) -> Self {
         self.config.seed_digest_overlap = enabled;
+        self
+    }
+
+    /// The most entries the index behind [`Tokenizer::lookup`] may hold,
+    /// per tokenizer: one entry per completed 4,096-character block of
+    /// the stored sessions' texts, shared by the sessions that have it.
+    /// Default 262,144. At the limit, a session whose next block would
+    /// need a new entry stops adding blocks, and room returns as sessions
+    /// are deleted. `0` keeps no index: `lookup` then returns `Ok(None)`.
+    /// Token ids do not depend on this value.
+    pub fn lookup_index_blocks(mut self, blocks: usize) -> Self {
+        self.config.lookup_index_blocks = blocks;
         self
     }
 
@@ -686,7 +700,10 @@ impl Runtime {
             seal_guard,
             store_path.as_deref(),
             self.inner.config.seed_digest_overlap,
+            self.inner.config.lookup_index_blocks,
         )?;
+        let prefix_key = store.index.params();
+        let prefix_index_on = store.index.enabled();
         let plan = RoutePlan {
             family: family.clone(),
             artifact_sha256: artifact.identity().tokenizer_sha256.clone(),
@@ -731,6 +748,8 @@ impl Runtime {
                 registry: Arc::clone(&self.inner.registry),
                 chunked: crate::chunked::State::default(),
                 store: std::sync::Mutex::new(store),
+                prefix_key,
+                prefix_index_on,
                 gpu_detail,
                 gpu_verification_key,
                 #[cfg(feature = "jit")]
@@ -978,14 +997,26 @@ impl Tokenizer {
 
     /// Snapshot native store counters without exposing implementation-crate
     /// types or locks.
+    ///
+    /// `node_count` counts the entries of the lookup index, and `lookups`,
+    /// `lookup_hits` and `lookup_misses` count [`Self::lookup`] calls.
     pub fn store_stats(&self) -> StoreStats {
-        self.inner
+        let state = self
+            .inner
             .store
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .store
-            .stats()
-            .into()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut stats: StoreStats = state.store.stats().into();
+        let counters = state.index.counters;
+        stats.node_count = state.index.entry_count() as u64;
+        stats.lookups = counters.lookups;
+        stats.lookup_hits = counters.hits;
+        stats.lookup_misses = counters.misses;
+        stats.checksum_rejects += counters.holder_rejects;
+        stats.index_bytes = state.index.approx_bytes();
+        stats.lookup_reused_ids = counters.reused_ids;
+        stats.index_blocks_declined = counters.blocks_declined;
+        stats
     }
 
     pub fn gpu_facts(&self) -> Option<(&str, i32)> {
@@ -1127,66 +1158,114 @@ impl Tokenizer {
         Session::open(Arc::clone(&self.inner), name.into())
     }
 
-    /// Content-prefix lookup without Python. A hit returns its exact current
-    /// token stream; a miss does not tokenize or mutate the store.
+    /// Content-prefix lookup without Python.
+    ///
+    /// A hit is a text whose first 4,096-character block a session stored
+    /// now also has; it returns the exact ids of `text`, those
+    /// [`Self::encode`] returns. Where that session offers a seal point
+    /// certified before the shared block was completed, its ids up to that
+    /// point are reused and only the rest of `text` is encoded; otherwise
+    /// the whole text is encoded. A miss returns `Ok(None)` without
+    /// tokenizing. A lookup creates, changes and drops no session.
     pub fn lookup(&self, text: &str) -> Result<Option<Encoding>> {
-        let mut state = self
-            .inner
-            .store
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        state.ensure_healthy()?;
-        if !state.lookup_has_a_slot() {
-            // Every slot of a durable store is taken by a named session (a
-            // file written before the named-session bound kept one free). A
-            // hit would make the core drop one of them, so this lookup
-            // answers as a miss until a session is deleted.
-            return Ok(None);
-        }
-        let key = state.key;
-        let Some(hit) = state.store.lookup(key, text, self.inner.router.as_ref())? else {
-            return Ok(None);
+        use crate::prefix_index::{BlockKey, Holder, Walker};
+        /// Blocks hashed between two visits to the store lock.
+        const PROBE_BATCH: usize = 16;
+        let lock = || {
+            self.inner
+                .store
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
         };
-        let matched_chars = usize::try_from(hit.matched_chars).map_err(|_| {
-            Error::new(
-                ErrorCode::Internal,
-                "content-prefix length does not fit this platform",
-            )
-        })?;
-        let total_chars = text.chars().count();
-        if matched_chars > total_chars {
-            return Err(Error::new(
-                ErrorCode::StoreCorrupt,
-                "content-prefix lookup returned a length beyond the query",
-            ));
-        }
-        let suffix_byte = if matched_chars == total_chars {
-            text.len()
+        // The query is hashed outside the lock: the key of its first block
+        // alone decides a miss, in one short visit. With the index off
+        // nothing is hashed.
+        let mut walker = Walker::new(self.inner.prefix_key, text);
+        let first = if self.inner.prefix_index_on {
+            walker.next_key()
         } else {
-            text.char_indices()
-                .nth(matched_chars)
-                .map(|(offset, _)| offset)
-                .ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::StoreCorrupt,
-                        "content-prefix lookup returned a non-existent character boundary",
-                    )
-                })?
+            None
         };
-        if suffix_byte < text.len() {
-            state.store.append_patch(
-                hit.handle,
-                &text[suffix_byte..],
-                hit.revision,
-                self.inner.router.as_ref(),
-            )?;
+        // The listed holder with the most sealed ids over the present
+        // blocks, with its block's key and the byte that block ends at.
+        let mut best: Option<(BlockKey, usize, Holder)> = None;
+        let mut consider = |key: &BlockKey, end: usize, holders: &[Holder]| {
+            for holder in holders {
+                if best.is_none_or(|(_, _, chosen)| holder.seal.ids > chosen.seal.ids) {
+                    best = Some((*key, end, *holder));
+                }
+            }
+        };
+        {
+            let mut state = lock();
+            state.ensure_healthy()?;
+            state.index.counters.lookups += 1;
+            let present =
+                first.and_then(|(key, end)| state.index.probe(&key).map(|h| (key, end, h)));
+            match present {
+                Some((key, end, holders)) => consider(&key, end, holders),
+                None => {
+                    state.index.counters.misses += 1;
+                    return Ok(None);
+                }
+            }
         }
-        let ids = state.store.shared_all_ids(hit.handle)?;
-        // Lookup materializes a temporary session only to complete the
-        // verified prefix. The returned Encoding shares the immutable row
-        // (which outlives the evicted session), so retaining the handle
-        // would only consume the bounded named-session capacity.
-        state.store.evict(hit.handle);
+        // Later blocks are hashed outside the lock, a batch at a time, and
+        // probed in one visit per batch. The walk ends at the first block
+        // no stored session has; the chosen holder is checked against the
+        // store in that last visit.
+        let reused = loop {
+            let mut batch = Vec::with_capacity(PROBE_BATCH);
+            while batch.len() < PROBE_BATCH {
+                match walker.next_key() {
+                    Some(block) => batch.push(block),
+                    None => break,
+                }
+            }
+            let mut state = lock();
+            let mut ended = batch.len() < PROBE_BATCH;
+            for (key, end) in &batch {
+                match state.index.probe(key) {
+                    Some(holders) => consider(key, *end, holders),
+                    None => {
+                        ended = true;
+                        break;
+                    }
+                }
+            }
+            if !ended {
+                continue;
+            }
+            state.index.counters.hits += 1;
+            let reused = best.and_then(|(key, block_end, holder)| {
+                // A holder whose session went since it was probed is no
+                // longer listed: nothing to reuse, and nothing to count.
+                if !state.index.is_listed(&key, holder.handle) {
+                    return None;
+                }
+                let found = sealed_prefix(&mut state.store, holder, text, block_end);
+                if found.is_none() {
+                    state.index.reject_holder(&key, holder.handle);
+                }
+                found
+            });
+            if let Some((ids, _)) = &reused {
+                state.index.counters.reused_ids += ids.len() as u64;
+            }
+            break reused;
+        };
+        // The rest is encoded outside the lock, by the call `encode` makes.
+        let (mut ids, from) = reused.unwrap_or((Vec::new(), 0));
+        let routed = self
+            .inner
+            .router
+            .encode_ids(&text[from..], false)
+            .map_err(|error| Error::new(ErrorCode::BackendExecutionFault, error.to_string()))?;
+        if ids.is_empty() {
+            ids = routed.ids;
+        } else {
+            ids.extend_from_slice(&routed.ids);
+        }
         let facts = ExecutionFacts {
             backend: Backend::FastCpu,
             path: "content_lookup".to_owned(),
@@ -1197,15 +1276,50 @@ impl Tokenizer {
             // admitted route, not a decision that moved off it.
             reason: None,
         };
-        Ok(Some(Encoding::from_buffer(
-            TokenBuffer::from_shared(ids),
-            facts,
-        )))
+        Ok(Some(Encoding::new(ids, None, facts)))
     }
 
     /// Deterministically release this handle. Shared clones and outstanding
     /// sessions continue to own the runtime until they are dropped.
     pub fn shutdown(self) {}
+}
+
+/// The sealed ids a listed holder offers, and the byte of the query they
+/// end at; `None` when the store no longer holds the session or anything
+/// about the holder does not agree with what the store holds. `block_end`
+/// is the byte of the query at which the block that listed the holder
+/// ends: the holder's seal was made on text no longer than that.
+fn sealed_prefix(
+    store: &mut toktier_store_core::SessionStore,
+    holder: crate::prefix_index::Holder,
+    text: &str,
+    block_end: usize,
+) -> Option<(Vec<u32>, usize)> {
+    let seal = holder.seal;
+    let info = store.session_info(holder.handle).ok()?;
+    if seal.ids == 0 || info.stable_prefix_bytes < seal.bytes || info.sealed_tokens < seal.ids {
+        return None;
+    }
+    let sidecar = store.export_session_sidecar(holder.handle).ok()?;
+    let sidecar = toktier_store_core::SessionSidecar::from_bytes(&sidecar).ok()?;
+    if !sidecar
+        .seal_log
+        .iter()
+        .any(|&(chars, ids)| chars == seal.chars && ids == seal.ids)
+    {
+        return None;
+    }
+    let from = usize::try_from(seal.bytes).ok()?;
+    if from > block_end || from > text.len() || !text.is_char_boundary(from) {
+        return None;
+    }
+    let count = usize::try_from(seal.ids).ok()?;
+    let mut ids = store.all_ids(holder.handle).ok()?;
+    if ids.len() < count {
+        return None;
+    }
+    ids.truncate(count);
+    Some((ids, from))
 }
 
 pub(crate) fn facts_from_routed(

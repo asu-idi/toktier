@@ -494,6 +494,17 @@ pub struct StoreStats {
     pub import_rejects: u64,
     pub revision_conflicts: u64,
     pub path_counts: BTreeMap<String, u64>,
+    /// An estimate of the bytes the lookup index holds.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub index_bytes: u64,
+    /// Token ids lookups took from stored sessions instead of encoding
+    /// them.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub lookup_reused_ids: u64,
+    /// Blocks the lookup index did not take because it held
+    /// `RuntimeBuilder::lookup_index_blocks` entries.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub index_blocks_declined: u64,
 }
 
 impl From<toktier_store_core::StatsSnapshot> for StoreStats {
@@ -513,6 +524,9 @@ impl From<toktier_store_core::StatsSnapshot> for StoreStats {
             import_rejects: value.import_rejects,
             revision_conflicts: value.revision_conflicts,
             path_counts: value.path_counts,
+            index_bytes: 0,
+            lookup_reused_ids: 0,
+            index_blocks_declined: 0,
         }
     }
 }

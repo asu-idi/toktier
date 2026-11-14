@@ -1,0 +1,25 @@
+[package]
+name = "toktier-property-dump"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Writes the fast CPU pre-tokenizer's character classes for every code point"
+
+# Kept outside the product workspace, so that adding it changes no source
+# identity. `tools/generate_property_guard.py` builds this program once per
+# admitted `icu_properties` / `icu_properties_data` pair, pinning the pair
+# in a lockfile of its own, and compares each dump with the judged pair's.
+# The lockfile beside this manifest resolves the judged pair.
+[workspace]
+
+# The engine's unicode.rs gates its own exhaustive tests on this feature of
+# its crate; declaring it here keeps the condition a known one.
+[features]
+upstream-tests = []
+
+[[bin]]
+name = "toktier-property-dump"
+path = "src/main.rs"
+
+[dependencies]
+icu_properties = { version = "=2.0.2", features = ["compiled_data"] }

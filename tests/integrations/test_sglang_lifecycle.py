@@ -511,6 +511,133 @@ def test_requests_in_flight_at_a_latch_are_answered_by_the_supplied_tokenizer(
     assert result["outcomes"] == ["answered"] * 16, result
 
 
+_WRAP_RAISES = r"""
+import json, os, sys, threading, time
+from toktier.integrations.sglang import (
+    AdapterConfig, SGLangToktierTokenizer, wrap_tokenizer)
+from toktier.integrations.sglang_sched import Scheduler, SchedulerConfig
+from test_sglang_adapter import _FakeToktier, _StubHf
+
+here, case, tmp = sys.argv[1], sys.argv[2], sys.argv[3]
+
+def alive(pid):
+    try:
+        with open(f"/proc/{pid}/stat") as fh:
+            return fh.read().rsplit(")", 1)[1].split()[0] not in ("Z", "X")
+    except OSError:
+        return False
+
+def children():
+    found = set()
+    for tid in os.listdir("/proc/self/task"):
+        try:
+            with open(f"/proc/self/task/{tid}/children") as fh:
+                found |= {int(p) for p in fh.read().split()}
+        except OSError:
+            pass
+    return sorted(p for p in found if alive(p))
+
+def fds():
+    return len(os.listdir("/proc/self/fd"))
+
+pool = SchedulerConfig(workers=2, loader="_sched_stub:load", loader_path=here,
+                       start_timeout_s=120.0)
+warm = Scheduler(pool)  # the first pool starts multiprocessing's resource tracker
+warm.start()
+warm.close()
+before = {"fds": fds(), "children": children(), "threads": threading.active_count()}
+loaded = []
+
+def load(self):
+    loaded.append(_FakeToktier())
+    return loaded[-1]
+
+SGLangToktierTokenizer._load_toktier = load
+original_start = threading.Thread.start
+if case == "timing_log":
+    blocker = os.path.join(tmp, "a-regular-file")
+    open(blocker, "w").close()
+    cfg = AdapterConfig(session_key="off", scheduler=pool,
+                        timing_log=os.path.join(blocker, "timing.jsonl"))
+else:  # a failure after the pool has started: the shadow thread cannot start
+    def start(thread):
+        if thread.name == "toktier-sglang-shadow":
+            raise RuntimeError("can't start new thread (injected)")
+        return original_start(thread)
+    threading.Thread.start = start
+    cfg = AdapterConfig(session_key="off", scheduler=pool, shadow="async")
+try:
+    wrap_tokenizer(_StubHf(), cfg)
+    outcome = "returned"
+except BaseException as ex:
+    outcome = type(ex).__name__
+threading.Thread.start = original_start
+deadline = time.monotonic() + 5.0
+while time.monotonic() < deadline and children() != before["children"]:
+    time.sleep(0.1)
+after = {"fds": fds(), "children": children(), "threads": threading.active_count()}
+print("RESULT " + json.dumps({"outcome": outcome, "before": before, "after": after,
+                              "loaded": len(loaded),
+                              "closed": [t.closed for t in loaded]}), flush=True)
+os._exit(0)
+"""
+
+
+@pytest.mark.parametrize("case", ["timing_log", "after_start"])
+def test_a_wrap_that_raises_leaves_nothing_running(case: str, tmp_path: Any) -> None:
+    """A timing log that cannot be opened stops the wrap before anything is
+    started; a failure after the pool has started closes what was started.
+    Either way no child process of the owner is alive afterwards and its
+    descriptor and thread counts are what they were."""
+    import json
+
+    done = _run_owner(_WRAP_RAISES, _HERE, case, str(tmp_path), timeout=300.0)
+    assert done.returncode == 0, (done.stdout[-2000:], done.stderr[-3000:])
+    line = next(x for x in done.stdout.splitlines() if x.startswith("RESULT "))
+    result = json.loads(line[len("RESULT ") :])
+    expected = (
+        ("FileExistsError", "NotADirectoryError")  # OSError of the parent path
+        if case == "timing_log"
+        else ("RuntimeError",)
+    )
+    assert result["outcome"] in expected, result
+    assert result["after"] == result["before"], result
+    if case == "timing_log":
+        assert result["loaded"] == 0, result  # nothing was loaded or started
+    else:
+        assert result["loaded"] == 1 and result["closed"] == [True], result
+
+
+def test_a_store_directory_that_cannot_be_created_stops_the_wrap(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """The store directory is created by the wrap, so a path that cannot be
+    created stops it (before anything is loaded) instead of failing the
+    first request; one that can is there when the wrap returns."""
+    loaded: list[Any] = []
+
+    def load(self: Any) -> Any:
+        loaded.append(_FakeToktier())
+        return loaded[-1]
+
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", load)
+    blocker = tmp_path / "a-regular-file"
+    blocker.write_text("")
+    with pytest.raises(OSError):
+        wrap_tokenizer(
+            _StubHf(), AdapterConfig(session_key="off", store=str(blocker / "store"))
+        )
+    assert loaded == []
+    w = wrap_tokenizer(
+        _StubHf(), AdapterConfig(session_key="off", store=str(tmp_path / "store"))
+    )
+    try:
+        assert (tmp_path / "store" / f"pid{os.getpid()}").is_dir()
+        assert w.encode("ab", add_special_tokens=False) == [97, 98]
+    finally:
+        w.close()
+
+
 _OWNER = r"""
 import os, sys, threading, time
 from toktier.integrations.sglang_sched import Scheduler, SchedulerConfig

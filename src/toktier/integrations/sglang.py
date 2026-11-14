@@ -770,6 +770,62 @@ class SGLangToktierTokenizer:
         }
         self._fingerprint: tuple[Any, ...] | None = None
         self._stale = False
+        self._sched: Scheduler | None = None
+        self._sched_note: str | None = None
+        self._shadow_ref: Any = None
+        self._shadow_q: queue.Queue[Any] | None = None
+        self._shadow_thread: threading.Thread | None = None
+        # What can fail on the operator's paths is opened before anything
+        # is started: the timing log, and the session store's directory
+        # (which would otherwise fail on the first request).
+        self._log_fh = None
+        if self._cfg.timing_log:
+            Path(self._cfg.timing_log).parent.mkdir(parents=True, exist_ok=True)
+            self._log_fh = open(  # noqa: SIM115 - lives as long as the wrapper
+                self._cfg.timing_log, "a", buffering=1
+            )
+        try:
+            store = self._store_path()
+            if store is not None and self._mode != "passthrough":
+                Path(store).mkdir(parents=True, exist_ok=True)
+            self._construct(hf_tokenizer, shadow_reference)
+        except BaseException:
+            # Nothing started by a wrap that raises outlives it: the pool's
+            # workers, the toktier tokenizer, the shadow thread, the log.
+            self._abandon()
+            raise
+
+    def _store_path(self) -> str | None:
+        """The session store directory this process uses (``None``: none)."""
+        store = self._cfg.store
+        if store and self._cfg.per_process_store:
+            store = os.path.join(store, f"pid{os.getpid()}")
+        return store or None
+
+    def _abandon(self) -> None:
+        """Close what a wrap that raised had started (best effort)."""
+        sched, self._sched = self._sched, None
+        if sched is not None:
+            with contextlib.suppress(Exception):
+                sched.close()
+        if self._shadow_q is not None:
+            with contextlib.suppress(Exception):
+                self._shadow_q.put_nowait(None)
+        tok, self._tok = self._tok, None
+        if tok is not None:
+            with contextlib.suppress(Exception):
+                tok.close()
+        fh, self._log_fh = self._log_fh, None
+        if fh is not None:
+            with contextlib.suppress(Exception):
+                fh.close()
+        with contextlib.suppress(Exception):
+            atexit.unregister(self.flush)
+
+    def _construct(
+        self, hf_tokenizer: Any, shadow_reference: Callable[[], Any] | None
+    ) -> None:
+        """The part of ``__init__`` that loads and starts things."""
         if self._mode != "passthrough":
             self._tok = self._resolve_toktier()
         if self._tok is not None:
@@ -786,19 +842,8 @@ class SGLangToktierTokenizer:
         self._stats["identity"] = dict(self._identity)
         self._stats["sched_fallback"] = 0
         self._stats["sglang_version"] = _sglang_version()
-        self._sched: Scheduler | None = None
-        self._sched_note: str | None = None
         if self._cfg.scheduler is not None and self._tok is not None:
             self._sched = self._start_scheduler(self._cfg.scheduler)
-        self._log_fh = None
-        if self._cfg.timing_log:
-            Path(self._cfg.timing_log).parent.mkdir(parents=True, exist_ok=True)
-            self._log_fh = open(  # noqa: SIM115 - lives as long as the wrapper
-                self._cfg.timing_log, "a", buffering=1
-            )
-        self._shadow_ref: Any = None
-        self._shadow_q: queue.Queue[Any] | None = None
-        self._shadow_thread: threading.Thread | None = None
         self._shadow_mode = self._cfg.shadow
         shadow_note: str | None = None
         if self._shadow_mode == "sync":
@@ -926,9 +971,7 @@ class SGLangToktierTokenizer:
                 )
         except Exception as ex:  # no chunking, but the pool is still worth having
             self._sched_note = f"chunking off: {type(ex).__name__}"
-        store = self._cfg.store
-        if store and self._cfg.per_process_store:
-            store = os.path.join(store, f"pid{os.getpid()}")
+        store = self._store_path()
         try:
             sched = Scheduler(
                 config,
@@ -1010,9 +1053,7 @@ class SGLangToktierTokenizer:
     def _load_toktier(self) -> Any:
         import toktier
 
-        store = self._cfg.store
-        if store and self._cfg.per_process_store:
-            store = os.path.join(store, f"pid{os.getpid()}")
+        store = self._store_path()
         self._store_dir = store
         if self._cfg.family:
             return toktier.load(

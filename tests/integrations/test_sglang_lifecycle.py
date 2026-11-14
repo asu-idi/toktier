@@ -372,6 +372,132 @@ def test_closing_a_pool_leaves_no_pipe_thread_or_resource_warning(
     assert "resource_tracker" not in done.stderr, done.stderr[-3000:]
 
 
+_SATURATED = r"""
+import os, sys, threading, time
+from toktier.integrations.sglang_sched import Scheduler, SchedulerConfig
+
+here = sys.argv[1]
+pad = "x" * (2 << 20)  # 2 MiB per task: far more than a pipe holds (64 KiB)
+for delay in [float(x) for x in sys.argv[2].split(",")]:
+    sched = Scheduler(SchedulerConfig(workers=2, loader="_sched_stub:load",
+                                      loader_path=here, start_timeout_s=120.0))
+    sched.start()
+    seen = []
+    for i in range(14):  # two in service, twelve queued in the parent
+        text = f"slow {i} " + pad
+        sched.submit(text, None, lambda r, text=text: seen.append((r, text)))
+    time.sleep(delay)  # around the moment the first answers come back
+    t0 = time.perf_counter()
+    closer = threading.Thread(target=sched.close, daemon=True)
+    closer.start()
+    closer.join(60.0)
+    took = time.perf_counter() - t0
+    if closer.is_alive():
+        print("HUNG", delay, flush=True)
+        os._exit(3)
+    answered = sum(
+        1 for r, t in seen if r.error is None and r.ids == [ord(c) for c in t])
+    closed = sum(1 for r, _ in seen if r.error == "closed")
+    print("CLOSE", delay, round(took, 3), len(seen), answered, closed, flush=True)
+sys.stdout.flush()
+os._exit(0)
+"""
+
+
+def test_close_of_a_saturated_pool_with_large_tasks_returns() -> None:
+    """``close()`` of a pool whose queued tasks are larger than a pipe:
+    nothing is dispatched after the stop message, no feeder thread is
+    joined without a bound, and every request is either answered or
+    failed with ``"closed"``; over a range of delays around the first
+    answers."""
+    delays = "0.2,0.25,0.3,0.35,0.4,0.5,0.7"
+    done = _run_owner(_SATURATED, _HERE, delays, timeout=600.0)
+    assert done.returncode == 0, (done.stdout[-2000:], done.stderr[-3000:])
+    rows = [x.split() for x in done.stdout.splitlines() if x.startswith("CLOSE")]
+    assert len(rows) == len(delays.split(","))
+    for _, _, took, seen, answered, closed in rows:
+        assert float(took) < 20.0, rows
+        assert int(seen) == 14 and int(answered) + int(closed) == 14, rows
+
+
+_LATCH_UNDER_LOAD = r"""
+import json, os, sys, threading, time
+from toktier.integrations.sglang import (
+    AdapterConfig, SGLangToktierTokenizer, wrap_tokenizer)
+from toktier.integrations.sglang_sched import SchedulerConfig
+from test_sglang_adapter import _FakeToktier, _StubHf
+
+here, delay = sys.argv[1], float(sys.argv[2])
+SGLangToktierTokenizer._load_toktier = lambda self: _FakeToktier()
+hf = _StubHf()
+w = wrap_tokenizer(hf, AdapterConfig(
+    session_key="off",
+    scheduler=SchedulerConfig(workers=2, loader="_sched_stub:load", loader_path=here,
+                              start_timeout_s=120.0, chunk_min_chars=1 << 30)))
+assert w.scheduler is not None
+pad = "x" * (2 << 20)
+outcomes = {}
+
+def request(i):
+    text = f"slow {i} " + pad
+    try:
+        ids = w.encode(text, add_special_tokens=False)
+        same = ids == hf.encode(text, add_special_tokens=False)
+        outcomes[i] = "answered" if same else "differs"
+    except Exception as ex:
+        outcomes[i] = "raised " + type(ex).__name__
+
+threads = [threading.Thread(target=request, args=(i,), daemon=True) for i in range(16)]
+for t in threads:
+    t.start()
+time.sleep(delay)
+# the supplied tokenizer changes while the pool is saturated: the next call
+# latches passthrough, which closes the pool on that call's thread
+hf.backend_tokenizer.add_tokens(["toktierchangedunderload"])
+box = {}
+
+def notice():
+    t0 = time.perf_counter()
+    box["ids_equal"] = w.encode("ab", add_special_tokens=False) == hf.encode(
+        "ab", add_special_tokens=False)
+    box["seconds"] = round(time.perf_counter() - t0, 3)
+
+noticer = threading.Thread(target=notice, daemon=True)
+noticer.start()
+noticer.join(60.0)
+deadline = time.monotonic() + 30.0
+for t in threads:
+    t.join(max(0.0, deadline - time.monotonic()))
+print("RESULT " + json.dumps({
+    "returned": not noticer.is_alive(), **box, "mode": w.stats()["mode"],
+    "pending": sum(t.is_alive() for t in threads),
+    "outcomes": sorted(outcomes.values())}), flush=True)
+os._exit(0)
+"""
+
+
+def _latch_under_load(delay: str) -> dict[str, Any]:
+    import json
+
+    done = _run_owner(_LATCH_UNDER_LOAD, _HERE, delay, timeout=300.0)
+    assert done.returncode == 0, (done.stdout[-2000:], done.stderr[-3000:])
+    line = next(x for x in done.stdout.splitlines() if x.startswith("RESULT "))
+    result: dict[str, Any] = json.loads(line[len("RESULT ") :])
+    return result
+
+
+@pytest.mark.parametrize("delay", ["0.35", "0.8"])
+def test_a_latch_while_the_pool_is_saturated_returns(delay: str) -> None:
+    """The passthrough latch closes the pool under the wrapper's encode
+    lock; with large tasks queued that close returns, so the call that
+    noticed the change, and every request that was in flight, finish."""
+    result = _latch_under_load(delay)
+    assert result["returned"] and result["ids_equal"], result
+    assert result["seconds"] < 20.0, result
+    assert result["mode"] == "passthrough", result
+    assert result["pending"] == 0 and len(result["outcomes"]) == 16, result
+
+
 _OWNER = r"""
 import os, sys, threading, time
 from toktier.integrations.sglang_sched import Scheduler, SchedulerConfig

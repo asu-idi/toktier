@@ -653,6 +653,11 @@ def _family_loader(
     return load
 
 
+#: How long :meth:`Scheduler.close` waits for one queue's feeder thread
+#: to end after the queue is closed (seconds). A feeder with nothing left
+#: to write ends at once; one blocked on a pipe that nobody reads is left
+#: to the interpreter (it is a daemon thread) rather than waited for.
+_FEEDER_WAIT_S = 1.0
 #: How often an idle worker checks that the process that started it is
 #: still there (seconds); the parent-death signal makes this a second
 #: line on Linux and the only one elsewhere.
@@ -922,33 +927,29 @@ class Scheduler:
     def _release_queues(self, *, collector_ended: bool) -> None:
         """Close the pool's queues and processes once the workers are stopped.
 
-        Each worker's task queue is closed and its feeder thread joined
-        when the worker left on the stop message (everything sent to it
-        was read), or cancelled when it was terminated or killed (data it
-        never read could hold the feeder at the pipe). The result queue
-        is closed and joined only once the collector has ended, which is
-        its one reader (while it runs, nothing is released: it may still
-        dispatch to a task queue). The process handles are closed and every
-        reference dropped, so that the queues' semaphores are released
-        now rather than at interpreter exit: no pipe, thread or
-        semaphore of a closed pool is left behind, and an owner that ends
-        with ``os._exit`` leaves the resource tracker nothing to report.
+        Every queue is closed, its feeder thread is released from the
+        join that multiprocessing would otherwise make at exit
+        (``cancel_join_thread``), and the thread is then waited for with a
+        bound (:data:`_FEEDER_WAIT_S`): a feeder with nothing left to write
+        ends at once, and one that is blocked on a pipe that nobody reads
+        any more (a worker that was terminated, or data that arrived after
+        the stop message) can never hold ``close()``. Nothing is
+        dispatched after the stop message (:meth:`close`), so in the
+        ordinary case every feeder ends within the wait. The result queue
+        is released only once the collector has ended, which is its one
+        reader (while it runs, nothing is released). The process handles
+        are closed and every reference dropped, so that the queues'
+        semaphores are released now rather than at interpreter exit: no
+        pipe, thread or semaphore of a closed pool is left behind, and an
+        owner that ends with ``os._exit`` leaves the resource tracker
+        nothing to report.
         """
         if not collector_ended:
             return
-        for wid, qin in enumerate(self._qins):
-            proc = self._procs[wid] if wid < len(self._procs) else None
-            clean = proc is not None and proc.exitcode == 0
-            with contextlib.suppress(Exception):
-                qin.close()
-                if clean:
-                    qin.join_thread()
-                else:
-                    qin.cancel_join_thread()
+        for qin in self._qins:
+            _close_queue(qin)
         if self._qres is not None:
-            with contextlib.suppress(Exception):
-                self._qres.close()
-                self._qres.join_thread()
+            _close_queue(self._qres)
             self._qres = None
         for proc in self._procs:
             with contextlib.suppress(Exception):
@@ -959,23 +960,39 @@ class Scheduler:
     def close(self) -> None:
         """Stop the workers; pending requests fail with ``"closed"``.
 
-        The queues, their feeder threads and the process handles are
-        released as well (:meth:`_release_queues`)."""
-        if self._closed:
-            return
-        self._closed = True
-        self._stop.set()
+        Under the scheduler lock the pool is marked closed, every pending
+        request is failed and the policy's queues are emptied; from then on
+        nothing is dispatched (:meth:`_dispatch` returns at once) and
+        nothing is accepted (:meth:`submit` raises), so no task is ever put
+        after the stop message. The queues, their feeder threads and the
+        process handles are released as well (:meth:`_release_queues`),
+        each wait bounded. A second call, also from another thread while
+        the first is still closing, returns at once.
+
+        The collector keeps reading the result queue until the workers
+        have stopped (what it reads for a failed request is dropped), so
+        a worker's last answer, however large, is taken off the pipe and
+        the worker can leave on the stop message at once; only then is the
+        collector stopped. A worker that does not leave within five
+        seconds is terminated."""
         pending: list[_Request] = []
         with self._lock:
+            if self._closed:
+                return
+            self._closed = True
             for req in self._reqs.values():
                 if not req.finished:
                     req.failed = "closed"
                     req.finished = True
                     pending.append(req)
             self._reqs.clear()
+            self.policy.shared.clear()
+            for local in self.policy.local.values():
+                local.clear()
         for req in pending:
             self._finish(req, now=_CLOCK())
         self._terminate_all()
+        self._stop.set()
         if self._collector is not None and self._collector.is_alive():
             self._collector.join(timeout=5)
         ended = self._collector is None or not self._collector.is_alive()
@@ -1015,6 +1032,8 @@ class Scheduler:
             raise RuntimeError("scheduler is not running")
         now = _CLOCK()
         with self._lock:
+            if self._closed:  # closed after the test above
+                raise RuntimeError("scheduler is not running")
             rid = self._next_rid
             self._next_rid += 1
             req = _Request(rid, "free", key, len(text), now, on_done)
@@ -1069,7 +1088,10 @@ class Scheduler:
     # -- internals -----------------------------------------------------------
 
     def _dispatch(self, now: float) -> None:
-        # Caller holds the lock.
+        # Caller holds the lock. A closed pool dispatches nothing: a task
+        # put after the stop message would never be read.
+        if self._closed:
+            return
         for wid in list(self._idle):
             task = self.policy.next_for(wid)
             if task is None:
@@ -1231,6 +1253,25 @@ class Scheduler:
             out["policy"] = self.policy.summary()
             out["active"] = self.active
         return out
+
+
+def _close_queue(q: Any) -> None:
+    """Close one multiprocessing queue without an unbounded wait.
+
+    ``close()`` tells the feeder thread to end once its buffer is written;
+    ``cancel_join_thread()`` drops the join that multiprocessing would
+    otherwise make at exit; the feeder is then waited for at most
+    :data:`_FEEDER_WAIT_S`. (``_thread`` is the feeder of CPython's
+    ``multiprocessing.queues.Queue``; where it is absent there is nothing
+    to wait for.)"""
+    with contextlib.suppress(Exception):
+        q.close()
+    with contextlib.suppress(Exception):
+        q.cancel_join_thread()
+    feeder = getattr(q, "_thread", None)
+    if isinstance(feeder, threading.Thread):
+        with contextlib.suppress(Exception):
+            feeder.join(timeout=_FEEDER_WAIT_S)
 
 
 def _set_result(future: asyncio.Future[SchedResult], result: SchedResult) -> None:

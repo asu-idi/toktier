@@ -247,6 +247,8 @@ fn block_at(bytes: &[u8], start: usize) -> Option<(u32, usize)> {
 /// it looks at each byte, and a character whose leading byte can start one
 /// is tested first by its 64-code-point block, from its leading bytes, and
 /// only on a block that holds one by decoding it and searching the ranges.
+/// A three-byte character found that way, and the three-byte characters
+/// right after it, take that block test directly, one after the other.
 pub(crate) fn holds_moved(text: &str) -> bool {
     let bytes = text.as_bytes();
     let mut position = 0;
@@ -276,6 +278,34 @@ pub(crate) fn holds_moved(text: &str) -> bool {
             continue;
         };
         // `start` begins a character (a continuation byte never may hold).
+        if bytes[start] & 0xF0 == 0xE0 {
+            // A three-byte character (Devanagari and other Indic scripts,
+            // part of Hangul): it and the three-byte characters that follow
+            // it are tested one after the other, each by the 64-code-point
+            // block its first two bytes name, without returning to the byte
+            // search. A byte from 0xE0 to 0xEF only ever leads a character,
+            // so each step lands on a character boundary.
+            position = start;
+            while let Some(&[lead, next, _]) = bytes.get(position..position + 3) {
+                if lead & 0xF0 != 0xE0 {
+                    break;
+                }
+                let block = (u32::from(lead & 0x0F) << 6) | u32::from(next & 0x3F);
+                if block_holds_moved(block) {
+                    match text.get(position..).and_then(|rest| rest.chars().next()) {
+                        Some(character) if !is_moved(u32::from(character)) => {}
+                        // A hit, or (unreachable for a `str`) no character here.
+                        _ => return true,
+                    }
+                }
+                position += 3;
+            }
+            if position == start {
+                // A sequence cut short, unreachable for a `str`.
+                return true;
+            }
+            continue;
+        }
         let Some((block, width)) = block_at(bytes, start) else {
             // Unreachable for a `str`; answer in the safe direction.
             return true;

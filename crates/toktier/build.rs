@@ -18,14 +18,86 @@ use sha2::{Digest, Sha256};
 mod source_identity;
 
 use source_identity::{
-    closure_statuses, fast_cpu_source_paths, hex, identity_sentinel_enabled, locate_governing_lock,
-    native_host_source_paths, rust_api_source_paths, source_digest, Consumption, GoverningLock,
-    JudgedPackage, Tier, CARGO_LOCK_ENV, FAST_CPU_DOMAIN, IDENTITY_SENTINEL_ENV,
-    IDENTITY_SENTINEL_HEX, JUDGED_CLOSURE_RELATIVE, JUDGED_CLOSURE_SCHEMA, JUDGED_LOCK_RELATIVE,
-    NATIVE_HOST_DOMAIN, RUST_API_DOMAIN,
+    check_lock_format, closure_statuses, fast_cpu_source_paths, hex, identity_sentinel_enabled,
+    locate_governing_lock, native_host_source_paths, parse_lock, rust_api_source_paths,
+    source_digest, Consumption, GoverningLock, JudgedPackage, Tier, CARGO_LOCK_ENV,
+    FAST_CPU_DOMAIN, IDENTITY_SENTINEL_ENV, IDENTITY_SENTINEL_HEX, JUDGED_CLOSURE_RELATIVE,
+    JUDGED_CLOSURE_SCHEMA, JUDGED_LOCK_RELATIVE, NATIVE_HOST_DOMAIN, RUST_API_DOMAIN,
 };
 
 const PACKAGE_IDENTITY_SCHEMA: &str = "toktier.rust_package_source_identity.v1";
+
+/// The two crates whose copies decide the property-data standing
+/// (`src/property_guard.rs`).
+const PROPERTY_CRATES: [&str; 2] = ["icu_properties", "icu_properties_data"];
+/// Between the records of the property-data reading, and between the
+/// fields of one record: the separators `src/property_guard.rs` reads.
+const PROPERTY_RECORD_SEPARATOR: char = '\u{1f}';
+const PROPERTY_FIELD_SEPARATOR: char = '\u{1e}';
+
+/// How the governing lockfile was located, in the word
+/// `src/property_guard.rs` reads: `named` when `TOKTIER_CARGO_LOCK` named
+/// it, `out_dir` when it lies above `OUT_DIR`, `manifest` when it was found
+/// only above this crate's manifest (the search tries `OUT_DIR`'s ancestors
+/// first), `none` when nothing was located or the named file is the
+/// package's own record of the judged build.
+fn located_by(governing: &GoverningLock, out_dir: &Path) -> &'static str {
+    match governing {
+        GoverningLock::Found(_) if env::var_os(CARGO_LOCK_ENV).is_some() => "named",
+        GoverningLock::Found(path)
+            if out_dir
+                .ancestors()
+                .any(|ancestor| ancestor.join("Cargo.lock") == *path) =>
+        {
+            "out_dir"
+        }
+        GoverningLock::Found(_) => "manifest",
+        GoverningLock::JudgedRecordNamed(_) | GoverningLock::Missing => "none",
+    }
+}
+
+/// One record per copy of the two property crates in the governing
+/// lockfile: name, version, source, checksum (empty when absent). A
+/// lockfile that cannot be read gives a one-field record naming why, which
+/// the library refuses as unreadable (untabled), never as judged.
+fn property_data_record(governing: &GoverningLock) -> String {
+    let GoverningLock::Found(path) = governing else {
+        return String::new();
+    };
+    let clean = |value: &str| {
+        value
+            .chars()
+            .map(|character| {
+                if character.is_control() {
+                    ' '
+                } else {
+                    character
+                }
+            })
+            .collect::<String>()
+    };
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) => return clean(&format!("the governing lockfile is unreadable: {error}")),
+    };
+    if let Err(reason) = check_lock_format("the governing lockfile", &text) {
+        return clean(&reason);
+    }
+    parse_lock(&text)
+        .into_iter()
+        .filter(|package| PROPERTY_CRATES.contains(&package.name.as_str()))
+        .map(|package| {
+            [
+                clean(&package.name),
+                clean(&package.version),
+                clean(package.source.as_deref().unwrap_or_default()),
+                clean(package.checksum.as_deref().unwrap_or_default()),
+            ]
+            .join(&PROPERTY_FIELD_SEPARATOR.to_string())
+        })
+        .collect::<Vec<_>>()
+        .join(&PROPERTY_RECORD_SEPARATOR.to_string())
+}
 
 /// The packages the judged build compiled, read from the record that
 /// travels with the crate.
@@ -189,6 +261,24 @@ fn main() {
     let governing = locate_governing_lock(&out_dir, consumption);
     if let GoverningLock::Found(path) | GoverningLock::JudgedRecordNamed(path) = &governing {
         println!("cargo:rerun-if-changed={}", path.display());
+    }
+    // The property-data reading of the same lockfile, for the guard of
+    // the fast CPU route (`src/property_guard.rs`).
+    println!(
+        "cargo:rustc-env=TOKTIER_RUST_API_PROPERTY_DATA={}",
+        property_data_record(&governing)
+    );
+    let located = located_by(&governing, &out_dir);
+    println!("cargo:rustc-env=TOKTIER_RUST_API_LOCK_LOCATED_BY={located}");
+    if matches!(located, "manifest" | "none") {
+        // Cargo shows this for a path or `git` dependency and for this
+        // workspace's own builds, not for a registry dependency; there the
+        // plan's reasons and `doctor()` carry the same reading.
+        println!(
+            "cargo:warning=toktier: no lockfile governing this build was located from OUT_DIR, \
+             so the fast CPU route is not built (ReasonCode::PropertyDataUnread); set \
+             {CARGO_LOCK_ENV} to the Cargo.lock of the build that consumes this crate"
+        );
     }
     // One reading of the two lockfiles, reported five ways: the whole
     // closure as before; the certified core, which is what decides

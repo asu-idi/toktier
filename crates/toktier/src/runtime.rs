@@ -305,6 +305,8 @@ impl Runtime {
             reference_versions: crate::behavior_version::reference_facts(),
             reference_certification_reason:
                 crate::behavior_version::reference_certification_reason().map(str::to_owned),
+            property_data: crate::property_guard::standing().to_string(),
+            property_lock_located_by: crate::property_guard::LOCATED_BY_RECORD.to_owned(),
         };
         let ordinal = match self.inner.config.device {
             Device::Cuda(ordinal) => ordinal,

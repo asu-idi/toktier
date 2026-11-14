@@ -75,6 +75,11 @@ def run_commands(commands: tuple[Command, ...]) -> int:
         environment["CARGO_TARGET_DIR"] = os.path.join(
             temporary_directory, "cargo-target"
         )
+        # The target directory above lies outside the tree, where the
+        # crate's build script cannot tell this workspace's lockfile from
+        # one that does not govern the build; it then declines the fast
+        # CPU route (property-data standing `unread`). Name the lockfile.
+        environment.setdefault("TOKTIER_CARGO_LOCK", str(ROOT / "Cargo.lock"))
         environment["PIP_NO_INDEX"] = "1"
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
         environment["RUSTUP_AUTO_INSTALL"] = "0"

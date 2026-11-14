@@ -23,6 +23,9 @@ mod jit;
 mod manifest;
 mod package_data;
 mod prefix_index;
+// Wired into the routes by the next commit.
+#[allow(dead_code)]
+mod property_guard;
 mod runtime;
 #[cfg(feature = "serving")]
 mod serving;

@@ -30,6 +30,11 @@ mod table;
 
 use std::fmt;
 
+use toktier_routing_core::NativeRouter;
+use toktier_store_core::{
+    AppendReport, BoundaryCut, Encoding, EngineError, SessionEncoder, TailState, WitnessCategory,
+};
+
 pub(crate) use table::{ADMITTED_COPIES, MOVED_CODE_POINTS, MOVED_RANGES};
 
 /// The crate that carries the property code.
@@ -299,6 +304,7 @@ pub(crate) enum LocatedBy {
     /// A `Cargo.lock` above `OUT_DIR`.
     OutDir,
     /// Found only above this crate's manifest (the workspace fallback).
+    /// Never counts as read: see [`decide_standing`].
     Manifest,
     /// No lockfile was located.
     None,
@@ -383,11 +389,13 @@ pub(crate) enum Standing {
 
 impl Standing {
     /// Whether the fast CPU route may run on this build (guarded or not).
+    #[cfg(test)]
     pub(crate) fn admits_fast_route(&self) -> bool {
         matches!(self, Self::Judged | Self::Guarded { .. })
     }
 
     /// Whether texts must be scanned with [`holds_moved`].
+    #[cfg(test)]
     pub(crate) fn is_guarded(&self) -> bool {
         matches!(self, Self::Guarded { .. })
     }
@@ -425,21 +433,25 @@ impl fmt::Display for Standing {
             ),
             Self::Untabled { reason } => write!(
                 formatter,
-                "untabled: {reason}, so the fast CPU route is not built; {}",
+                "untabled: {reason}, so the fast CPU route is not built (under \
+                 Policy::Experimental it runs with every such text on the reference engine); {}",
                 remedy()
             ),
             Self::Unread { located_by } => {
                 let how = match located_by {
                     LocatedBy::Manifest => {
-                        "the only lockfile found lies above this crate's own manifest, which \
-                         does not govern a build that consumes this crate from another tree"
+                        "the only lockfile found lies above this crate's own manifest, and the \
+                         build cannot tell whether that file governs it (it does for a build of \
+                         this crate's own workspace, not for a build that consumes this crate \
+                         from another tree)"
                     }
                     _ => "no lockfile governing this build was located",
                 };
                 write!(
                     formatter,
                     "unread: {how}, so the property data this build resolved is unknown and the \
-                     fast CPU route is not built; {}",
+                     fast CPU route is not built (under Policy::Experimental it runs with every \
+                     text holding a listed code point on the reference engine); {}",
                     remedy()
                 )
             }
@@ -450,23 +462,28 @@ impl fmt::Display for Standing {
 /// Decide a build's standing from what its build script read.
 ///
 /// - `located_by`: how the governing lockfile was located;
-/// - `primary_package`: whether this crate is being compiled as a primary
-///   package (`CARGO_PRIMARY_PACKAGE`), which makes the workspace fallback
-///   the right file;
 /// - `recorded`: the build script's property-data record ([`parse_copies`]);
 /// - `references_certified`: whether the existing reference records of both
 ///   crates read certified. When they do not, the standing is never
 ///   [`Standing::Judged`], whatever this reading says.
+///
+/// A lockfile found only above this crate's own manifest
+/// ([`LocatedBy::Manifest`]) never counts as read. It is the right file for
+/// a build of this crate's own workspace with a target directory outside
+/// the tree, and the wrong one for a path or `git` consumer in the same
+/// layout, and nothing a build can observe tells the two apart in every
+/// case: Cargo hands the library `CARGO_PRIMARY_PACKAGE`, but does not
+/// rebuild the library when that variable changes, so a library compiled
+/// once keeps whichever answer it got first. Such a build reads
+/// [`Standing::Unread`] until `TOKTIER_CARGO_LOCK` names its lockfile.
 pub(crate) fn decide_standing(
     located_by: LocatedBy,
-    primary_package: bool,
     recorded: &str,
     references_certified: bool,
 ) -> Standing {
     let read = match located_by {
         LocatedBy::Named | LocatedBy::OutDir => true,
-        LocatedBy::Manifest => primary_package,
-        LocatedBy::None => false,
+        LocatedBy::Manifest | LocatedBy::None => false,
     };
     if !read {
         return Standing::Unread { located_by };
@@ -524,6 +541,170 @@ pub(crate) fn decide_standing(
     resolved.sort();
     Standing::Guarded {
         resolved: resolved.join(", "),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// This build's standing and what each call does with it
+// ---------------------------------------------------------------------------
+
+/// How the build script located the lockfile it read, as recorded.
+pub(crate) const LOCATED_BY_RECORD: &str = env!("TOKTIER_RUST_API_LOCK_LOCATED_BY");
+/// The build script's property-data record ([`parse_copies`]).
+pub(crate) const PROPERTY_DATA_RECORD: &str = env!("TOKTIER_RUST_API_PROPERTY_DATA");
+
+/// Whether the existing reference records of both property crates read
+/// certified. A crate with no record counts as not certified, so the two
+/// readings can only disagree in the safe direction.
+fn references_certified() -> bool {
+    let records = crate::behavior_version::reference_facts();
+    [PROPERTIES_CRATE, DATA_CRATE].iter().all(|name| {
+        records
+            .iter()
+            .any(|record| record.package == *name && record.certified)
+    })
+}
+
+/// This build's standing, decided once per process from what its build
+/// script read.
+pub(crate) fn standing() -> &'static Standing {
+    static STANDING: std::sync::OnceLock<Standing> = std::sync::OnceLock::new();
+    STANDING.get_or_init(|| {
+        decide_standing(
+            LocatedBy::parse(LOCATED_BY_RECORD),
+            PROPERTY_DATA_RECORD,
+            references_certified(),
+        )
+    })
+}
+
+/// What a tokenizer built under one standing and one policy does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Handling {
+    /// The calls go where they go without the guard: no scan, no second
+    /// router.
+    NoGuard,
+    /// The accelerated routes run, and every text holding a code point of
+    /// the set goes to a reference-only router.
+    Guard,
+    /// The fast CPU route is not built, for this reason.
+    Decline(crate::ReasonCode),
+}
+
+/// The one place an untabled or unread build is handled.
+///
+/// [`Policy::Experimental`](crate::Policy::Experimental) runs both as
+/// guarded builds; every other policy declines the fast CPU route there.
+/// Running an unread build guarded under every policy instead would be the
+/// `Standing::Unread` arm alone.
+pub(crate) fn handling(standing: &Standing, policy: crate::Policy) -> Handling {
+    let experimental = policy == crate::Policy::Experimental;
+    match standing {
+        Standing::Judged => Handling::NoGuard,
+        Standing::Guarded { .. } => Handling::Guard,
+        Standing::Untabled { .. } if experimental => Handling::Guard,
+        Standing::Unread { .. } if experimental => Handling::Guard,
+        Standing::Untabled { .. } => Handling::Decline(crate::ReasonCode::PropertyDataUntabled),
+        Standing::Unread { .. } => Handling::Decline(crate::ReasonCode::PropertyDataUnread),
+    }
+}
+
+/// The router a text goes to, and whether the guard sent it there: the
+/// reference-only router when there is one and `text` holds a code point
+/// of the set, the ordinary router otherwise.
+pub(crate) fn router_for<'a>(
+    ordinary: &'a NativeRouter,
+    reference_only: Option<&'a NativeRouter>,
+    text: &str,
+) -> (&'a NativeRouter, bool) {
+    match reference_only {
+        Some(reference_only) if holds_moved(text) => (reference_only, true),
+        _ => (ordinary, false),
+    }
+}
+
+/// The session engine of a tokenizer: the ordinary router, and on a
+/// guarded tokenizer the reference-only router beside it.
+///
+/// Every store operation that encodes (seed, append, overwrite, and the
+/// durable load) is handed this one type.
+///
+/// - `encode(text)` runs on the reference-only router when `text` holds a
+///   code point of the set;
+/// - `append(tail, delta)` runs on the reference-only router when the
+///   unsealed tail or the delta holds one;
+/// - `last_certified_boundary` answers no boundary for a tail that holds
+///   one, and the ordinary router's answer otherwise;
+/// - `witness_category` is the ordinary router's, so the stored records
+///   keep one category whichever router served a call.
+///
+/// A seal is therefore only ever certified on a tail without such a code
+/// point, by the code a judged build runs on the same characters. The tail
+/// state is text, ids and character spans whichever engine filled it, so
+/// the two routers may take turns on one session. A session whose unsealed
+/// tail holds such a code point keeps its last seal, and every later append
+/// re-encodes that whole tail on the reference engine: exact, at a cost that
+/// grows with the tail until the session is overwritten.
+pub(crate) struct GuardedEncoder<'a> {
+    ordinary: &'a NativeRouter,
+    reference_only: Option<&'a NativeRouter>,
+    routed: std::cell::Cell<bool>,
+}
+
+impl<'a> GuardedEncoder<'a> {
+    pub(crate) fn new(
+        ordinary: &'a NativeRouter,
+        reference_only: Option<&'a NativeRouter>,
+    ) -> Self {
+        Self {
+            ordinary,
+            reference_only,
+            routed: std::cell::Cell::new(false),
+        }
+    }
+
+    /// Whether any call through this value went to the reference-only
+    /// router.
+    pub(crate) fn guard_routed(&self) -> bool {
+        self.routed.get()
+    }
+
+    fn pick(&self, hit: impl FnOnce() -> bool) -> &'a NativeRouter {
+        match self.reference_only {
+            Some(reference_only) if hit() => {
+                self.routed.set(true);
+                reference_only
+            }
+            _ => self.ordinary,
+        }
+    }
+}
+
+impl SessionEncoder for GuardedEncoder<'_> {
+    fn encode(&self, text: &str) -> Result<Encoding, EngineError> {
+        self.pick(|| holds_moved(text)).encode(text)
+    }
+
+    fn append(&self, tail: &mut TailState, delta: &str) -> Result<AppendReport, EngineError> {
+        self.pick(|| holds_moved(tail.text()) || holds_moved(delta))
+            .append(tail, delta)
+    }
+
+    fn last_certified_boundary(
+        &self,
+        tail: &TailState,
+        floor_char: u64,
+        ceil_char: u64,
+    ) -> Result<Option<BoundaryCut>, EngineError> {
+        if self.reference_only.is_some() && holds_moved(tail.text()) {
+            return Ok(None);
+        }
+        self.ordinary
+            .last_certified_boundary(tail, floor_char, ceil_char)
+    }
+
+    fn witness_category(&self) -> WitnessCategory {
+        self.ordinary.witness_category()
     }
 }
 
@@ -712,45 +893,42 @@ mod tests {
     #[test]
     fn a_located_lockfile_with_the_judged_copies_is_judged() {
         for located_by in [LocatedBy::Named, LocatedBy::OutDir] {
-            for primary in [false, true] {
-                assert_eq!(
-                    decide_standing(located_by, primary, &judged_record(), true),
-                    Standing::Judged
-                );
-            }
+            assert_eq!(
+                decide_standing(located_by, &judged_record(), true),
+                Standing::Judged
+            );
         }
-        assert_eq!(
-            decide_standing(LocatedBy::Manifest, true, &judged_record(), true),
-            Standing::Judged
-        );
     }
 
     #[test]
-    fn the_workspace_fallback_counts_only_for_a_primary_package() {
-        for recorded in [judged_record(), guarded_record()] {
+    fn the_workspace_fallback_never_counts_as_read() {
+        // A lockfile found only above this crate's manifest reads Unread
+        // whatever it holds, judged, guarded or off the table.
+        for recorded in [judged_record(), guarded_record(), String::new()] {
+            let standing = decide_standing(LocatedBy::Manifest, &recorded, true);
             assert_eq!(
-                decide_standing(LocatedBy::Manifest, false, &recorded, true),
+                standing,
                 Standing::Unread {
                     located_by: LocatedBy::Manifest
                 }
             );
+            assert!(!standing.admits_fast_route());
+            assert!(standing.to_string().contains("TOKTIER_CARGO_LOCK"));
         }
-        assert!(decide_standing(LocatedBy::Manifest, true, &guarded_record(), true).is_guarded());
+        assert_eq!(LocatedBy::parse("manifest"), LocatedBy::Manifest);
     }
 
     #[test]
     fn no_located_lockfile_is_unread() {
-        for primary in [false, true] {
-            for recorded in [String::new(), judged_record()] {
-                let standing = decide_standing(LocatedBy::None, primary, &recorded, true);
-                assert_eq!(
-                    standing,
-                    Standing::Unread {
-                        located_by: LocatedBy::None
-                    }
-                );
-                assert!(!standing.admits_fast_route());
-            }
+        for recorded in [String::new(), judged_record()] {
+            let standing = decide_standing(LocatedBy::None, &recorded, true);
+            assert_eq!(
+                standing,
+                Standing::Unread {
+                    located_by: LocatedBy::None
+                }
+            );
+            assert!(!standing.admits_fast_route());
         }
         assert_eq!(LocatedBy::parse("elsewhere"), LocatedBy::None);
         assert_eq!(LocatedBy::parse(""), LocatedBy::None);
@@ -758,7 +936,7 @@ mod tests {
 
     #[test]
     fn every_tabled_pair_is_guarded() {
-        let standing = decide_standing(LocatedBy::OutDir, false, &guarded_record(), true);
+        let standing = decide_standing(LocatedBy::OutDir, &guarded_record(), true);
         assert_eq!(
             standing,
             Standing::Guarded {
@@ -771,12 +949,12 @@ mod tests {
             of(judged(PROPERTIES_CRATE)),
             of(tabled(DATA_CRATE, "2.0.0")),
         ]);
-        assert!(decide_standing(LocatedBy::Named, false, &mixed, true).is_guarded());
+        assert!(decide_standing(LocatedBy::Named, &mixed, true).is_guarded());
     }
 
     #[test]
     fn uncertified_reference_records_are_never_judged() {
-        let standing = decide_standing(LocatedBy::OutDir, false, &judged_record(), false);
+        let standing = decide_standing(LocatedBy::OutDir, &judged_record(), false);
         assert!(standing.is_guarded(), "{standing:?}");
     }
 
@@ -787,7 +965,7 @@ mod tests {
             of(judged(DATA_CRATE)),
             of(tabled(DATA_CRATE, "2.4.0")),
         ]);
-        assert!(decide_standing(LocatedBy::OutDir, false, &both_tabled, true).is_guarded());
+        assert!(decide_standing(LocatedBy::OutDir, &both_tabled, true).is_guarded());
         let one_off = records(&[
             of(judged(PROPERTIES_CRATE)),
             of(judged(DATA_CRATE)),
@@ -795,7 +973,6 @@ mod tests {
         ]);
         assert!(untabled(&decide_standing(
             LocatedBy::OutDir,
-            false,
             &one_off,
             true
         )));
@@ -843,17 +1020,10 @@ mod tests {
         ];
         for recorded in &cases {
             for located_by in [LocatedBy::Named, LocatedBy::OutDir] {
-                let standing = decide_standing(located_by, false, recorded, true);
+                let standing = decide_standing(located_by, recorded, true);
                 assert!(untabled(&standing), "{recorded:?}: {standing:?}");
                 assert!(!standing.admits_fast_route());
             }
-            // Read through the primary-package fallback, the same.
-            assert!(untabled(&decide_standing(
-                LocatedBy::Manifest,
-                true,
-                recorded,
-                true
-            )));
         }
     }
 
@@ -873,8 +1043,8 @@ mod tests {
 
     #[test]
     fn the_standing_names_the_remedy() {
-        let untabled = decide_standing(LocatedBy::OutDir, false, "", true).to_string();
-        let unread = decide_standing(LocatedBy::None, false, "", true).to_string();
+        let untabled = decide_standing(LocatedBy::OutDir, "", true).to_string();
+        let unread = decide_standing(LocatedBy::None, "", true).to_string();
         for line in [&untabled, &unread] {
             assert!(line.contains("TOKTIER_CARGO_LOCK"), "{line}");
             assert!(
@@ -885,7 +1055,7 @@ mod tests {
         assert!(untabled.starts_with("untabled: "));
         assert!(unread.starts_with("unread: "));
         assert_eq!(Standing::Judged.to_string(), "judged");
-        let guarded = decide_standing(LocatedBy::OutDir, false, &guarded_record(), true);
+        let guarded = decide_standing(LocatedBy::OutDir, &guarded_record(), true);
         let line = guarded.to_string();
         assert!(line.starts_with("guarded: "), "{line}");
         assert!(line.contains(&MOVED_CODE_POINTS.to_string()), "{line}");

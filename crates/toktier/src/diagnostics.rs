@@ -184,6 +184,25 @@ pub enum ReasonCode {
     /// [`Policy::Reference`] was asked for, so no accelerated option
     /// was considered.
     ReferenceRequested,
+    /// The governing lockfile names a copy of `icu_properties` or
+    /// `icu_properties_data` that this release has no table for (a
+    /// version published after it, another source, no checksum, a crate
+    /// missing), so the fast CPU route is not built: its character
+    /// classes would come from property data no one has compared with
+    /// the judged data. [`RuntimeBuildFacts::property_data`] says which
+    /// copy and what aligns the lockfile. [`Policy::Experimental`] runs
+    /// the route with every text that holds a listed code point on the
+    /// reference engine instead. Added in 0.3.3.
+    PropertyDataUntabled,
+    /// No lockfile that governs this build was located (a target
+    /// directory outside the consumer's tree, `cargo install`, or this
+    /// crate's own workspace built with such a target directory), so the
+    /// property data this build resolved is unknown and the fast CPU
+    /// route is not built. Naming the lockfile with `TOKTIER_CARGO_LOCK`
+    /// at build time is the remedy; [`Policy::Experimental`] runs the
+    /// route guarded as for [`ReasonCode::PropertyDataUntabled`]. Added
+    /// in 0.3.3.
+    PropertyDataUnread,
     /// A reason the router named that this release has no frozen code
     /// for. The string is the router's own token, passed through rather
     /// than mapped onto a code that does not mean it.
@@ -418,6 +437,26 @@ pub struct RuntimeBuildFacts {
     /// The version of the text semantics this binary carries, per unit,
     /// beside the version the evidence was taken on.
     pub behavior_versions: Vec<BehaviorVersion>,
+    /// What the build script read about the Unicode property data the
+    /// fast CPU engine takes its character classes from, and what the
+    /// crate does with it. `"judged"`: the judged copies, every call goes
+    /// where it always has. `"guarded: ..."`: copies whose differences
+    /// from the judged data are tabled; texts that hold one of the listed
+    /// code points are encoded on the reference engine (such a call
+    /// reports [`Backend::HuggingFace`] with
+    /// [`ReasonCode::InputGuardRouted`]). `"untabled: ..."` and
+    /// `"unread: ..."`: the fast CPU route is not built
+    /// ([`ReasonCode::PropertyDataUntabled`],
+    /// [`ReasonCode::PropertyDataUnread`]), and the line names the
+    /// remedy. Added in 0.3.3.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub property_data: String,
+    /// How the build script located the lockfile it read: `named`
+    /// (`TOKTIER_CARGO_LOCK`), `out_dir` (a `Cargo.lock` above the build's
+    /// `OUT_DIR`), `manifest` (found only above this crate's own manifest,
+    /// which does not count as read) or `none`. Added in 0.3.3.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub property_lock_located_by: String,
 }
 
 /// The version of one text-semantics unit, as this binary reads it and

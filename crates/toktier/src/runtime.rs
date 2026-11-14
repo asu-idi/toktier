@@ -1186,6 +1186,9 @@ impl Tokenizer {
         } else {
             None
         };
+        // The byte at which each hashed block of the query ends: block `k`
+        // ends after `(k + 1) * block_chars` characters.
+        let mut block_ends: Vec<usize> = first.iter().map(|&(_, end)| end).collect();
         // The listed holder with the most sealed ids over the present
         // blocks, with its block's key and the byte that block ends at.
         let mut best: Option<(BlockKey, usize, Holder)> = None;
@@ -1218,7 +1221,10 @@ impl Tokenizer {
             let mut batch = Vec::with_capacity(PROBE_BATCH);
             while batch.len() < PROBE_BATCH {
                 match walker.next_key() {
-                    Some(block) => batch.push(block),
+                    Some(block) => {
+                        block_ends.push(block.1);
+                        batch.push(block);
+                    }
                     None => break,
                 }
             }
@@ -1243,7 +1249,14 @@ impl Tokenizer {
                 if !state.index.is_listed(&key, holder.handle) {
                     return None;
                 }
-                let found = sealed_prefix(&mut state.store, holder, text, block_end);
+                let found = sealed_prefix(
+                    &mut state.store,
+                    holder,
+                    text,
+                    block_end,
+                    &block_ends,
+                    self.inner.prefix_key.block_chars,
+                );
                 if found.is_none() {
                     state.index.reject_holder(&key, holder.handle);
                 }
@@ -1289,11 +1302,15 @@ impl Tokenizer {
 /// about the holder does not agree with what the store holds. `block_end`
 /// is the byte of the query at which the block that listed the holder
 /// ends: the holder's seal was made on text no longer than that.
+/// `block_ends` holds the byte at which each hashed block of the query
+/// ends; every block is `block_chars` characters.
 fn sealed_prefix(
     store: &mut toktier_store_core::SessionStore,
     holder: crate::prefix_index::Holder,
     text: &str,
     block_end: usize,
+    block_ends: &[usize],
+    block_chars: u64,
 ) -> Option<(Vec<u32>, usize)> {
     let seal = holder.seal;
     let info = store.session_info(holder.handle).ok()?;
@@ -1310,7 +1327,21 @@ fn sealed_prefix(
         return None;
     }
     let from = usize::try_from(seal.bytes).ok()?;
-    if from > block_end || from > text.len() || !text.is_char_boundary(from) {
+    if from > block_end {
+        return None;
+    }
+    // The seal log holds characters and ids, not bytes, so the byte offset
+    // is confirmed on the query itself: it must be the character boundary
+    // `seal.chars` characters in. The characters before the start of the
+    // seal's block are known, so at most one block is counted. (`get` is
+    // `None` unless `from` is a character boundary at or after that start.)
+    let block = seal.chars.checked_div(block_chars)?;
+    let start = match usize::try_from(block).ok()? {
+        0 => 0,
+        index => *block_ends.get(index - 1)?,
+    };
+    let counted = text.get(start..from)?.chars().count() as u64;
+    if block.checked_mul(block_chars)?.checked_add(counted) != Some(seal.chars) {
         return None;
     }
     let count = usize::try_from(seal.ids).ok()?;

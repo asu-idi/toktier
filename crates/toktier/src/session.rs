@@ -2456,5 +2456,101 @@ mod tests {
         }
     }
 
+    /// The byte offset is the one field of a holder the seal log does not
+    /// hold: it is confirmed on the query. A holder whose offset is another
+    /// character boundary than the one its seal's character count names is
+    /// dropped and counted, and the ids are those of `encode`; an older
+    /// seal of the log with its own offset is still reused.
+    #[test]
+    fn a_holder_whose_byte_offset_disagrees_with_its_characters_is_not_used() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        for (which, flavor) in [Flavor::Ascii, Flavor::Multibyte].into_iter().enumerate() {
+            let (_runtime, tokenizer) = experimental(&root, None, None);
+            let (text, handle, current, crossed, _end) =
+                session_with_its_seal_in_the_sixth_block(&tokenizer, flavor);
+            let older = {
+                let state = tokenizer.inner.store.lock().unwrap();
+                let sidecar = state.store.export_session_sidecar(handle).unwrap();
+                let log = toktier_store_core::SessionSidecar::from_bytes(&sidecar)
+                    .unwrap()
+                    .seal_log;
+                let (chars, ids) = log
+                    .iter()
+                    .copied()
+                    .filter(|&(chars, ids)| ids > 0 && chars + 3 < current.chars)
+                    .max_by_key(|&(_, ids)| ids)
+                    .expect("an older seal in the log");
+                Seal {
+                    chars,
+                    bytes: byte_at_char(&text, chars as usize) as u64,
+                    ids,
+                }
+            };
+            let query = format!("{text}{}", prose(705, 400, flavor));
+            let expected = ids_of(&tokenizer, &query);
+            let rejects = || tokenizer.store_stats().checksum_rejects;
+            let register_with = |altered: Seal| {
+                let mut state = tokenizer.inner.store.lock().unwrap();
+                state.index.remove_session(handle);
+                let cut = byte_at_char(&text, crossed);
+                state.index.insert_session(handle, &text[..cut], altered);
+                state.index.append(handle, &text[cut..], current);
+            };
+
+            // An older seal of the log, recorded as it was: reused.
+            register_with(older);
+            let reused = reused_ids(&tokenizer);
+            assert_eq!(tokenizer.lookup(&query).unwrap().unwrap().ids(), expected);
+            assert_eq!(
+                reused_ids(&tokenizer) - reused,
+                older.ids,
+                "flavor {which}: an older seal is reused"
+            );
+            assert_eq!(rejects(), 0);
+
+            let cases = [
+                (
+                    "bytes three characters below the seal",
+                    Seal {
+                        bytes: byte_at_char(&text, current.chars as usize - 3) as u64,
+                        ..current
+                    },
+                ),
+                (
+                    "an older seal with bytes three characters above it",
+                    Seal {
+                        bytes: byte_at_char(&text, older.chars as usize + 3) as u64,
+                        ..older
+                    },
+                ),
+            ];
+            for (what, altered) in cases {
+                register_with(altered);
+                let rejected = rejects();
+                let reused = reused_ids(&tokenizer);
+                let found = tokenizer.lookup(&query).unwrap().expect("a hit");
+                assert_eq!(found.ids(), expected, "flavor {which}, {what}: ids");
+                assert_eq!(
+                    rejects(),
+                    rejected + 1,
+                    "flavor {which}, {what}: counted as a reject"
+                );
+                assert_eq!(
+                    reused_ids(&tokenizer),
+                    reused,
+                    "flavor {which}, {what}: nothing reused"
+                );
+                assert_eq!(tokenizer.lookup(&query).unwrap().unwrap().ids(), expected);
+                assert_eq!(
+                    rejects(),
+                    rejected + 1,
+                    "flavor {which}, {what}: dropped after the reject"
+                );
+            }
+        }
+    }
+
     // END session memory tests.
 }

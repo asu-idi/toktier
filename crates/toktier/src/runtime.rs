@@ -354,6 +354,13 @@ impl Runtime {
     }
 
     /// Verify and load a canonical family from one explicit local directory.
+    ///
+    /// `directory` may also name the `tokenizer.json` itself. The path may
+    /// be, or lead through, a symbolic link, as in a Hugging Face hub
+    /// snapshot directory: the link is followed once, at load, and the
+    /// bytes verified against the manifest then are the ones this
+    /// tokenizer serves. Errors and [`LocalArtifact::tokenizer_json`] name
+    /// the path as given.
     pub fn load_local(&self, family: &str, directory: impl AsRef<Path>) -> Result<Tokenizer> {
         let artifact = self.inner.registry.verify_local(
             family,

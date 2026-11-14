@@ -1008,12 +1008,33 @@ impl Registry {
             || cache_root.join(format!("{}-{}", family, &row.revision[..12])),
             Path::to_path_buf,
         );
-        let tokenizer_json = if directory.is_file() {
+        // An explicit path may be, or lead through, a symbolic link (a hub
+        // snapshot directory holds `tokenizer.json` as a link into its blob
+        // store). It is resolved once here; the bytes verified below are
+        // read from the resolved file and are the ones served. The default
+        // cache entry keeps the stricter rule: a regular file, not a link.
+        let given_is_link = explicit.is_some()
+            && fs::symlink_metadata(&directory)
+                .is_ok_and(|metadata| metadata.file_type().is_symlink())
+            && !directory.is_dir();
+        let tokenizer_json = if directory.is_file() || given_is_link {
             directory.clone()
         } else {
             directory.join("tokenizer.json")
         };
-        let metadata = fs::symlink_metadata(&tokenizer_json).map_err(|error| {
+        let resolved = if explicit.is_some() {
+            fs::canonicalize(&tokenizer_json).map_err(|error| {
+                Error::new(
+                    ErrorCode::ArtifactNotFound,
+                    format!("verified tokenizer artifact is unavailable: {error}"),
+                )
+                .with_path(&tokenizer_json)
+                .with_family(family)
+            })?
+        } else {
+            tokenizer_json.clone()
+        };
+        let metadata = fs::symlink_metadata(&resolved).map_err(|error| {
             Error::new(
                 ErrorCode::ArtifactNotFound,
                 format!("verified tokenizer artifact is unavailable: {error}"),
@@ -1022,12 +1043,14 @@ impl Registry {
             .with_family(family)
         })?;
         if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
-            return Err(Error::new(
-                ErrorCode::ArtifactNotFound,
-                "tokenizer artifact must be a regular, non-symlink file",
-            )
-            .with_path(&tokenizer_json)
-            .with_family(family));
+            let message = if explicit.is_some() {
+                "tokenizer artifact must be a regular file"
+            } else {
+                "tokenizer artifact must be a regular, non-symlink file"
+            };
+            return Err(Error::new(ErrorCode::ArtifactNotFound, message)
+                .with_path(&tokenizer_json)
+                .with_family(family));
         }
         if metadata.len() != file.size {
             return Err(Error::new(
@@ -1041,7 +1064,7 @@ impl Registry {
             .with_path(&tokenizer_json)
             .with_family(family));
         }
-        let bytes = fs::read(&tokenizer_json).map_err(|error| {
+        let bytes = fs::read(&resolved).map_err(|error| {
             Error::new(ErrorCode::Io, error.to_string())
                 .with_path(&tokenizer_json)
                 .with_family(family)

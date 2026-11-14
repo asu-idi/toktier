@@ -69,10 +69,11 @@ setting rather than ignored. Admission is not a one-time
 fact: the supplied object can change after construction -- ``add_tokens``
 through the wrapper, an assignment such as ``split_special_tokens = True``,
 or a change made on the retained object directly -- so before every
-accelerated encode the wrapper compares a cheap fingerprint of the
-object's mutable surface (added tokens, the split flag, normalizer,
-pre-tokenizer, post-processor, truncation and padding) with the one taken
-at admission, and a forwarded mutation marks it stale outright; on any
+accelerated encode the wrapper compares the object's mutable surface (the
+backend object itself, the added-token table, the split flags, normalizer,
+pre-tokenizer, post-processor, truncation, padding and the model's
+vocabulary size) with the one admitted, and a forwarded mutation marks it
+stale outright; on any
 difference the full comparison runs again, and a supplied object that is
 no longer equivalent latches passthrough for good (the pool, if any, is
 closed), while one that still is has its shadow reference rebuilt from the
@@ -609,46 +610,87 @@ def _splits_special_tokens(hf_tokenizer: Any) -> bool:
     return bool(getattr(backend, "encode_special_tokens", False))
 
 
-def _live_fingerprint(hf_tokenizer: Any) -> tuple[Any, ...] | None:
-    """A cheap digest of the supplied object's mutable, encode-affecting
-    surface: the added-token table, the split flag, and the serialized
-    normalizer, pre-tokenizer, post-processor, truncation and padding
-    state. Tens of microseconds on a real tokenizer (the model itself is
-    not read; it is replaced only by an assignment the wrapper marks
-    stale). ``None`` when the object does not expose that surface."""
+def _component_states(backend: Any) -> tuple[Any, Any, Any]:
+    """The serialized normalizer, pre-tokenizer and post-processor."""
+
+    def state(component: Any) -> Any:
+        return None if component is None else component.__getstate__()
+
+    return (
+        state(backend.normalizer),
+        state(backend.pre_tokenizer),
+        state(backend.post_processor),
+    )
+
+
+@dataclass(frozen=True)
+class _Admitted:
+    """The supplied object's encode-affecting surface, as admitted.
+
+    ``backend`` is the admitted backend object itself (a replaced one is
+    a change); ``decoder`` its added-token table (index to
+    ``AddedToken``, whose equality covers the content and each of the
+    five flags); ``states`` the serialized normalizer, pre-tokenizer and
+    post-processor; ``truncation`` and ``padding`` the backend's state;
+    ``vocab_size`` the model's own vocabulary size (a model replaced with
+    one of another size). The split flags are off by admission.
+    """
+
+    backend: Any
+    decoder: Any
+    states: tuple[Any, Any, Any]
+    truncation: Any
+    padding: Any
+    vocab_size: int
+
+
+def _admitted_surface(hf_tokenizer: Any) -> _Admitted | None:
+    """Read :class:`_Admitted` from the supplied object (``None`` when its
+    surface cannot be read; every call then takes the full comparison)."""
     backend = getattr(hf_tokenizer, "backend_tokenizer", None)
     if backend is None:
         return None
     try:
-        added = tuple(
-            sorted(
-                (
-                    int(index),
-                    str(token.content),
-                    bool(token.special),
-                    bool(token.normalized),
-                    bool(token.lstrip),
-                    bool(token.rstrip),
-                    bool(token.single_word),
-                )
-                for index, token in backend.get_added_tokens_decoder().items()
-            )
-        )
-
-        def state(component: Any) -> Any:
-            return None if component is None else component.__getstate__()
-
-        return (
-            added,
-            _splits_special_tokens(hf_tokenizer),
-            state(backend.normalizer),
-            state(backend.pre_tokenizer),
-            state(backend.post_processor),
-            repr(backend.truncation),
-            repr(backend.padding),
+        return _Admitted(
+            backend=backend,
+            decoder=backend.get_added_tokens_decoder(),
+            states=_component_states(backend),
+            truncation=backend.truncation,
+            padding=backend.padding,
+            vocab_size=backend.get_vocab_size(False),
         )
     except Exception:
         return None
+
+
+def _surface_unchanged(admitted: _Admitted | None, hf_tokenizer: Any) -> bool:
+    """Whether the supplied object's encode-affecting surface is still the
+    admitted one: the per-request check before every accelerated encode.
+
+    Exact against everything the full comparison reads after admission
+    except the model's content: the backend object's identity, the two
+    split flags, truncation and padding, the model's vocabulary size, the
+    three component states and the added-token table by dictionary
+    equality, cheapest first. Its cost grows with the number of added
+    tokens (about 0.2 microseconds each). A model replaced in place
+    with one of the same size is not seen, as before; it is replaced only
+    by an assignment on the backend."""
+    if admitted is None:
+        return False
+    backend = getattr(hf_tokenizer, "backend_tokenizer", None)
+    if backend is not admitted.backend:
+        return False
+    try:
+        return (
+            not _splits_special_tokens(hf_tokenizer)
+            and backend.truncation == admitted.truncation
+            and backend.padding == admitted.padding
+            and backend.get_vocab_size(False) == admitted.vocab_size
+            and _component_states(backend) == admitted.states
+            and backend.get_added_tokens_decoder() == admitted.decoder
+        )
+    except Exception:
+        return False
 
 
 # -- session key plumbing -------------------------------------------------
@@ -768,7 +810,7 @@ class SGLangToktierTokenizer:
             "reason": None,
             "sections": [],
         }
-        self._fingerprint: tuple[Any, ...] | None = None
+        self._admitted_surface: _Admitted | None = None
         self._stale = False
         self._sched: Scheduler | None = None
         self._sched_note: str | None = None
@@ -837,7 +879,7 @@ class SGLangToktierTokenizer:
                 self._tok = None
                 self._mode = "passthrough"
             else:
-                self._fingerprint = _live_fingerprint(hf_tokenizer)
+                self._admitted_surface = _admitted_surface(hf_tokenizer)
         self._stats["mode"] = self._mode
         self._stats["identity"] = dict(self._identity)
         self._stats["sched_fallback"] = 0
@@ -1197,24 +1239,25 @@ class SGLangToktierTokenizer:
     def _admitted(self) -> bool:
         """Whether the toktier path may answer the next encode.
 
-        Cheap on the common path (a fingerprint compare); the full
-        comparison runs only after a forwarded mutation or a fingerprint
-        change. Drift latches passthrough; an equivalent object rebuilds
-        the shadow reference.
+        Cheap on the common path (:func:`_surface_unchanged`); the full
+        comparison runs only after a forwarded mutation or a change of
+        that surface (a replaced backend object that is an equal copy is
+        re-admitted after one full comparison). Drift latches
+        passthrough; an equivalent object rebuilds the shadow reference.
         """
         if self._tok is None:
             return False
         with self._lock:
             if self._tok is None:
                 return False
-            if not self._stale:
-                current = _live_fingerprint(self._hf)
-                if current == self._fingerprint:
-                    return True
+            if not self._stale and _surface_unchanged(
+                self._admitted_surface, self._hf
+            ):
+                return True
             verdict = check_core_identity(self._hf, self._tok)
             self._stale = False
             if verdict["status"] == "equivalent":
-                self._fingerprint = _live_fingerprint(self._hf)
+                self._admitted_surface = _admitted_surface(self._hf)
                 self._refresh_shadow_reference()
                 return True
             self._latch_passthrough(verdict)

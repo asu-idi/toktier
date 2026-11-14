@@ -1,6 +1,6 @@
 """The SGLang adapter's lifecycle: what the wrapper says about itself, when
-it gives way to the supplied tokenizer, and how its pool and its encoder
-state are kept and closed.
+it gives way to the supplied tokenizer, and how its pool is kept and
+closed.
 
 None of these tests asks for different ids: each one checks that a call
 returns what the supplied tokenizer (or the stub it stands for) returns,
@@ -769,3 +769,150 @@ def test_pool_workers_leave_when_their_owner_is_gone(ending: str, starter: str) 
         for w in workers:
             if _alive(w):
                 os.kill(w, signal.SIGKILL)
+
+
+# -- tests the review asked for beside the fixes (P4, P5, P6) -----------------
+
+
+def _stub_pool_config(**kw: Any) -> Any:
+    from toktier.integrations.sglang_sched import SchedulerConfig
+
+    return SchedulerConfig(
+        workers=2,
+        loader="_sched_stub:load",
+        loader_path=_HERE,
+        start_timeout_s=120.0,
+        **kw,
+    )
+
+
+def test_the_pool_helper_takes_a_key_and_the_special_tokens_switch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Behaviour only ``encode_texts_with_pool`` has (the module is imported
+    here, not at the top, so without the helper only this test fails): an
+    explicit key takes the session route of its home worker, and
+    ``add_special_tokens=False`` leaves the template off."""
+    import asyncio
+
+    from toktier.integrations import sglang as sglang_module
+
+    helper = sglang_module.encode_texts_with_pool
+    monkeypatch.setattr(
+        SGLangToktierTokenizer, "_load_toktier", lambda self: _FakeToktier()
+    )
+    w = wrap_tokenizer(
+        _StubHf(bos=1),
+        AdapterConfig(session_key="contextvar", scheduler=_stub_pool_config()),
+    )
+    try:
+        assert w.scheduler is not None
+        assert asyncio.run(helper(w, "ab", key="k1", add_special_tokens=False)) == [
+            97,
+            98,
+        ]
+        assert asyncio.run(helper(w, ["ab", "c"], key="k2")) == [[1, 97, 98], [1, 99]]
+        assert w.stats()["how"] == {"sched_session": 3}
+        assert asyncio.run(helper(w, "ab")) == [1, 97, 98]  # no key: content lookup
+        assert w.stats()["how"] == {"sched_session": 3, "sched_auto": 1}
+    finally:
+        w.close()
+
+
+def test_close_twice_and_from_two_threads_at_once() -> None:
+    import threading
+
+    from toktier.integrations.sglang_sched import Scheduler
+
+    sched = Scheduler(_stub_pool_config())
+    sched.start()
+    seen: list[Any] = []
+    sched.submit("slow one", None, seen.append)
+    closers = [threading.Thread(target=sched.close) for _ in range(2)]
+    for t in closers:
+        t.start()
+    for t in closers:
+        t.join(30.0)
+    assert not any(t.is_alive() for t in closers)
+    sched.close()  # a third time: returns at once
+    assert not sched.active and [r.error for r in seen] == ["closed"]
+    with pytest.raises(RuntimeError, match="not running"):
+        sched.submit("after", None, seen.append)
+
+
+@pytest.mark.parametrize("face", ["sync", "async"])
+def test_requests_in_flight_when_the_pool_closes_are_answered_in_process(
+    face: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import asyncio
+    import threading
+    import time
+
+    fake = _FakeToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
+    w = wrap_tokenizer(
+        _StubHf(), AdapterConfig(session_key="off", scheduler=_stub_pool_config())
+    )
+    texts = [f"slow {i}" for i in range(6)]
+    got: dict[str, Any] = {}
+
+    def sync_requests() -> None:
+        threads = [
+            threading.Thread(
+                target=lambda t=t: got.__setitem__(
+                    t, w.encode(t, add_special_tokens=False)
+                )
+            )
+            for t in texts
+        ]
+        for t in threads:
+            t.start()
+        time.sleep(0.2)
+        assert w._sched is not None
+        w._sched.close()
+        for t in threads:
+            t.join(30.0)
+
+    async def async_requests() -> None:
+        tasks = [
+            asyncio.ensure_future(w.encode_async(t, add_special_tokens=False))
+            for t in texts
+        ]
+        await asyncio.sleep(0.2)
+        assert w._sched is not None
+        w._sched.close()
+        for t, ids in zip(texts, await asyncio.gather(*tasks), strict=True):
+            got[t] = ids
+
+    try:
+        if face == "sync":
+            sync_requests()
+        else:
+            asyncio.run(async_requests())
+        assert got == {t: [ord(c) for c in t] for t in texts}
+        how = w.stats()["how"]
+        assert how.get("sched_free", 0) + how.get("off", 0) == 6, how
+        assert how.get("off", 0) >= 1 and w.stats()["sched_fallback"] == how["off"]
+    finally:
+        w.close()
+
+
+def test_idle_workers_of_a_living_owner_stay_through_several_polls() -> None:
+    """The parent check of an idle worker (once a second) must not take a
+    living parent for gone."""
+    import time
+
+    from toktier.integrations.sglang_sched import Scheduler
+
+    sched = Scheduler(_stub_pool_config())
+    sched.start()
+    try:
+        pids = dict(sched.stats()["worker_pids"])
+        time.sleep(3.5)
+        for pid in pids.values():
+            assert _alive(pid)
+        assert sched.encode_sync("ab", None, timeout=30).ids == [97, 98]
+        assert sched.encode_sync("cd", None, timeout=30).ids == [99, 100]
+        assert sched.stats()["dead"] == {} and sched.stats()["worker_pids"] == pids
+    finally:
+        sched.close()

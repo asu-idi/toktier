@@ -437,23 +437,50 @@ impl Standing {
     }
 }
 
-/// An untabled standing whose remedy is to align the lockfile.
-fn untabled(reason: String) -> Standing {
+/// An untabled standing whose remedy is to align the lockfile; `copies`
+/// are the copies of major version 2 the lockfile holds, as far as known.
+fn untabled(reason: String, copies: &[LockCopy]) -> Standing {
     Standing::Untabled {
         reason,
-        remedy: remedy(),
+        remedy: remedy_for(copies),
     }
+}
+
+/// The major version of the property crates the engine links: its
+/// requirement is a caret one on 2.0.2.
+const LINKED_MAJOR: &str = "2";
+
+/// Whether a copy is of the major version the engine links. A copy of
+/// another major version (an `icu_properties` 1.5 that an older dependency
+/// brings in, say) is a separate crate to Cargo and is never the one the
+/// engine reads its classes from.
+fn is_linked_major(copy: &LockCopy) -> bool {
+    copy.version.split(['.', '-', '+']).next() == Some(LINKED_MAJOR)
 }
 
 /// What to do about an untabled or unread build, in one sentence.
 fn remedy() -> String {
+    remedy_for(&[])
+}
+
+/// The same, naming each resolved copy of major version 2 in `copies` by
+/// its version (`--package icu_properties@2.4.0`), so that the command is
+/// not ambiguous when the lockfile also holds a copy of another major
+/// version.
+fn remedy_for(copies: &[LockCopy]) -> String {
     let judged: Vec<String> = ADMITTED_COPIES
         .iter()
         .filter(|copy| copy.judged)
-        .map(|copy| {
+        .map(|judged| {
+            let package = match copies.iter().find(|copy| copy.name == judged.name) {
+                Some(copy) if copy.version != judged.version => {
+                    format!("{}@{}", judged.name, copy.version)
+                }
+                _ => judged.name.to_owned(),
+            };
             format!(
-                "`cargo update --package {} --precise {}`",
-                copy.name, copy.version
+                "`cargo update --package {package} --precise {}`",
+                judged.version
             )
         })
         .collect();
@@ -538,52 +565,85 @@ pub(crate) fn decide_standing(
     }
     let copies = match parse_copies(recorded) {
         Ok(copies) => copies,
-        Err(reason) => return untabled(reason),
+        Err(reason) => return untabled(reason, &[]),
     };
+    if let Some(copy) = copies
+        .iter()
+        .find(|copy| copy.name != PROPERTIES_CRATE && copy.name != DATA_CRATE)
+    {
+        return untabled(
+            format!(
+                "the property-data record names another crate ({} {})",
+                copy.name, copy.version
+            ),
+            &[],
+        );
+    }
+    // Only copies of the major version the engine links decide; the others
+    // stay in the record and are named beside the resolved copies.
+    let (linked, others): (Vec<&LockCopy>, Vec<&LockCopy>) =
+        copies.iter().partition(|copy| is_linked_major(copy));
+    let linked_copies: Vec<LockCopy> = linked.iter().map(|copy| (*copy).clone()).collect();
     for name in [PROPERTIES_CRATE, DATA_CRATE] {
-        if !copies.iter().any(|copy| copy.name == name) {
-            return untabled(format!("the governing lockfile holds no copy of {name}"));
+        if !linked.iter().any(|copy| copy.name == name) {
+            return untabled(
+                format!(
+                    "the governing lockfile holds no copy of {name} at major version \
+                     {LINKED_MAJOR}, the one the engine links"
+                ),
+                &linked_copies,
+            );
         }
     }
     let mut all_judged = true;
-    for copy in &copies {
+    for copy in &linked {
         let label = format!("{} {}", copy.name, copy.version);
-        if copy.name != PROPERTIES_CRATE && copy.name != DATA_CRATE {
-            return untabled(format!(
-                "the property-data record names another crate ({label})"
-            ));
-        }
         if copy.source.as_deref() != Some(table::REGISTRY_SOURCE) {
-            return untabled(format!("{label} does not come from the crates.io registry"));
+            return untabled(
+                format!("{label} does not come from the crates.io registry"),
+                &linked_copies,
+            );
         }
         let Some(checksum) = copy.checksum.as_deref() else {
-            return untabled(format!(
-                "the governing lockfile gives no checksum for {label}"
-            ));
+            return untabled(
+                format!("the governing lockfile gives no checksum for {label}"),
+                &linked_copies,
+            );
         };
         let Some(admitted) = ADMITTED_COPIES.iter().find(|admitted| {
             admitted.name == copy.name
                 && admitted.version == copy.version
                 && admitted.checksum == checksum
         }) else {
-            return untabled(format!(
-                "{label} (checksum {checksum}) is not among the property-data copies this \
+            return untabled(
+                format!(
+                    "{label} (checksum {checksum}) is not among the property-data copies this \
                      release was judged against"
-            ));
+                ),
+                &linked_copies,
+            );
         };
         all_judged &= admitted.judged;
     }
     if all_judged && references_certified {
         return Standing::Judged;
     }
-    let mut resolved: Vec<String> = copies
-        .iter()
-        .map(|copy| format!("{} {}", copy.name, copy.version))
-        .collect();
-    resolved.sort();
-    Standing::Guarded {
-        resolved: resolved.join(", "),
+    let label = |copies: &[&LockCopy]| {
+        let mut labels: Vec<String> = copies
+            .iter()
+            .map(|copy| format!("{} {}", copy.name, copy.version))
+            .collect();
+        labels.sort();
+        labels.join(", ")
+    };
+    let mut resolved = label(&linked);
+    if !others.is_empty() {
+        resolved.push_str(&format!(
+            " (beside {}, which the engine does not link)",
+            label(&others)
+        ));
     }
+    Standing::Guarded { resolved }
 }
 
 /// Decide a build's standing as [`decide_standing`] does, first asking
@@ -1049,16 +1109,95 @@ mod tests {
             of(tabled(DATA_CRATE, "2.4.0")),
         ]);
         assert!(decide_standing(LocatedBy::OutDir, &both_tabled, true).is_guarded());
+        // A copy at major version 2 off the table is untabled.
         let one_off = records(&[
             of(judged(PROPERTIES_CRATE)),
             of(judged(DATA_CRATE)),
-            record(PROPERTIES_CRATE, "1.5.1", REGISTRY, &"a".repeat(64)),
+            record(PROPERTIES_CRATE, "2.9.0", REGISTRY, &"a".repeat(64)),
         ]);
         assert!(untabled(&decide_standing(
             LocatedBy::OutDir,
             &one_off,
             true
         )));
+    }
+
+    #[test]
+    fn only_copies_of_major_version_two_decide() {
+        // Copies of another major version, as an older dependency brings
+        // them in (with or without a registry source or checksum).
+        let old = [
+            record(PROPERTIES_CRATE, "1.5.1", REGISTRY, &"a".repeat(64)),
+            record(DATA_CRATE, "1.5.1", REGISTRY, &"d".repeat(64)),
+            record(PROPERTIES_CRATE, "3.0.0", "", ""),
+        ];
+        // Beside the judged pair: judged.
+        let mut beside_judged = vec![of(judged(PROPERTIES_CRATE)), of(judged(DATA_CRATE))];
+        beside_judged.extend(old.iter().cloned());
+        assert_eq!(
+            decide_standing(LocatedBy::OutDir, &records(&beside_judged), true),
+            Standing::Judged
+        );
+        // Beside a listed newer pair: guarded, the others named.
+        let mut beside_newer = vec![
+            of(tabled(PROPERTIES_CRATE, "2.4.0")),
+            of(tabled(DATA_CRATE, "2.4.0")),
+        ];
+        beside_newer.extend(old.iter().cloned());
+        let standing = decide_standing(LocatedBy::Named, &records(&beside_newer), true);
+        assert_eq!(
+            standing,
+            Standing::Guarded {
+                resolved: "icu_properties 2.4.0, icu_properties_data 2.4.0 (beside \
+                           icu_properties 1.5.1, icu_properties 3.0.0, icu_properties_data \
+                           1.5.1, which the engine does not link)"
+                    .to_owned()
+            }
+        );
+        // No copy of major version 2 at all: untabled.
+        for alone in [
+            records(&old[..2]),
+            records(&[record(PROPERTIES_CRATE, "3.0.0", REGISTRY, &"e".repeat(64))]),
+            records(&[
+                of(judged(PROPERTIES_CRATE)),
+                record(DATA_CRATE, "1.5.1", REGISTRY, &"d".repeat(64)),
+            ]),
+        ] {
+            let standing = decide_standing(LocatedBy::OutDir, &alone, true);
+            assert!(untabled(&standing), "{alone:?}: {standing:?}");
+            assert!(
+                standing.to_string().contains("major version 2"),
+                "{standing}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_remedy_names_the_resolved_copy_by_its_version() {
+        let newer = records(&[
+            of(judged(PROPERTIES_CRATE)),
+            record(DATA_CRATE, "2.9.0", REGISTRY, &"b".repeat(64)),
+            record(PROPERTIES_CRATE, "1.5.1", REGISTRY, &"a".repeat(64)),
+        ]);
+        let line = decide_standing(LocatedBy::OutDir, &newer, true).to_string();
+        let data = judged(DATA_CRATE);
+        let code = judged(PROPERTIES_CRATE);
+        assert!(
+            line.contains(&format!(
+                "`cargo update --package icu_properties_data@2.9.0 --precise {}`",
+                data.version
+            )),
+            "{line}"
+        );
+        // The code crate already resolves at the judged version.
+        assert!(
+            line.contains(&format!(
+                "`cargo update --package icu_properties --precise {}`",
+                code.version
+            )),
+            "{line}"
+        );
+        assert!(!line.contains("icu_properties@1.5.1"), "{line}");
     }
 
     #[test]

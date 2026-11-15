@@ -1692,7 +1692,25 @@ class SGLangToktierTokenizer:
         key: str | None,
         t0: float,
     ) -> list[int]:
-        """Template, counters, timing record and shadow check, one place."""
+        """Template, counters, timing record and shadow check, one place.
+
+        A result is accepted only while the wrapper has not latched
+        passthrough: the test is made under the encode lock, which the
+        latch holds. A result of the pool, the chunked route or a session
+        append that finished before a latch and arrives here after it is
+        set aside, and the supplied tokenizer answers instead, as it does
+        for every call after the latch. The decision is taken under the
+        lock; the supplied tokenizer is called after the lock is released,
+        since it needs nothing the lock protects and a long encode there
+        should not hold up other requests."""
+        with self._lock:
+            latched = self._tok is None
+        if latched:
+            return list(
+                self._delegate_call(text, add_special_tokens=add_special_tokens)[
+                    "input_ids"
+                ]
+            )
         ids = (self._prefix + core + self._suffix) if add_special_tokens else core
         ms = (time.perf_counter() - t0) * 1e3
         self._calls += 1

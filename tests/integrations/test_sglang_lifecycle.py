@@ -539,6 +539,76 @@ def test_requests_in_flight_at_a_latch_are_answered_by_the_supplied_tokenizer(
     assert result["outcomes"] == ["answered"] * 16, result
 
 
+@pytest.mark.parametrize("route", ["serial", "pool_sync", "pool_async"])
+def test_a_result_finished_before_a_latch_is_not_returned_after_it(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A request whose encode has finished but whose result is accepted
+    only after another request latched passthrough is answered by the
+    supplied tokenizer as it now stands, not with the finished ids. The
+    request is held at the point where its result is accepted; the
+    supplied tokenizer then changes (and answers differently), and a
+    second request notices the change and latches."""
+    import asyncio
+    import threading
+
+    from toktier.integrations.sglang_sched import SchedulerConfig
+
+    monkeypatch.setattr(
+        SGLangToktierTokenizer, "_load_toktier", lambda self: _FakeToktier()
+    )
+    hf = _StubHf()
+    pool = None
+    if route != "serial":
+        pool = SchedulerConfig(
+            workers=1,
+            loader="_sched_stub:load",
+            loader_path=_HERE,
+            start_timeout_s=120.0,
+            chunk_min_chars=1 << 30,
+        )
+    w = wrap_tokenizer(
+        hf, AdapterConfig(session_key="off", short_chars=0, scheduler=pool)
+    )
+    try:
+        assert (w.scheduler is None) == (pool is None)
+        text = "a request in flight at the latch"
+        reached, release = threading.Event(), threading.Event()
+        accept = w._complete
+
+        def held(*args: Any, **kwargs: Any) -> Any:
+            if threading.current_thread().name == "inflight":
+                reached.set()
+                assert release.wait(30.0)
+            return accept(*args, **kwargs)
+
+        w._complete = held  # type: ignore[method-assign]
+        box: dict[str, Any] = {}
+
+        def request() -> None:
+            if route == "pool_async":
+                box["ids"] = asyncio.run(
+                    w.encode_async(text, add_special_tokens=False)
+                )
+            else:
+                box["ids"] = w.encode(text, add_special_tokens=False)
+
+        inflight = threading.Thread(target=request, name="inflight", daemon=True)
+        inflight.start()
+        assert reached.wait(60.0)
+        # The supplied tokenizer changes, and now answers differently.
+        hf.backend_tokenizer.add_tokens(["<changed_in_flight>"])
+        hf._core = lambda s: [7] * len(s)  # type: ignore[method-assign]
+        assert w.encode("abc", add_special_tokens=False) == [7, 7, 7]
+        assert w.stats()["mode"] == "passthrough" and w.toktier is None
+        release.set()
+        inflight.join(30.0)
+        assert not inflight.is_alive()
+        assert box["ids"] == [7] * len(text)
+    finally:
+        w.close()
+
+
 _WRAP_RAISES = r"""
 import json, os, sys, threading, time
 from toktier.integrations.sglang import (

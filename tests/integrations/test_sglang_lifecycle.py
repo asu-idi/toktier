@@ -678,6 +678,43 @@ def test_a_result_finished_before_a_latch_is_not_returned_after_it(
         w.close()
 
 
+class _ClosingToktier(_FakeToktier):
+    """Refuses every encode once closed, as ``toktier.Tokenizer`` does."""
+
+    def encode(self, text: str, **kwargs: object) -> Any:
+        if self.closed:
+            raise RuntimeError("backend is closed")
+        return super().encode(text, **kwargs)
+
+
+def test_modeled_calls_after_close_raise_whatever_their_length(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After ``close()`` a modeled call raises ``RuntimeError('backend is
+    closed')`` through ``__call__``, ``encode`` and ``encode_async``, short
+    or long, also when the short-request rule had started before."""
+    import asyncio
+
+    fake = _ClosingToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
+    w = wrap_tokenizer(_StubHf(), AdapterConfig(session_key="off", short_chars=8))
+    assert w.encode("a long request", add_special_tokens=False)
+    assert w.encode("abc", add_special_tokens=False) == [97, 98, 99]
+    assert w.stats()["how"] == {"off": 1, "short": 1}  # the rule had started
+    w.close()
+    faces = {
+        "call": lambda t: w(t)["input_ids"],
+        "encode": lambda t: w.encode(t),
+        "async": lambda t: asyncio.run(w.encode_async(t)),
+    }
+    for text in ("", "abc", "a long request after close"):
+        for face, call in faces.items():
+            with pytest.raises(RuntimeError, match="backend is closed"):
+                call(text)
+                pytest.fail(f"{face} answered {text!r} after close()")
+    assert w.stats()["how"] == {"off": 1, "short": 1}
+
+
 _WRAP_RAISES = r"""
 import json, os, sys, threading, time
 from toktier.integrations.sglang import (

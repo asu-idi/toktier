@@ -852,6 +852,8 @@ class SGLangToktierTokenizer:
         # encode always opens the engine and the session store.
         self._short_chars = 0
         self._short_active = False
+        # Set by close(): the rule does not start again afterwards.
+        self._closed = False
         self._stale = False
         self._sched: Scheduler | None = None
         self._sched_note: str | None = None
@@ -1723,7 +1725,7 @@ class SGLangToktierTokenizer:
         should not hold up other requests."""
         with self._lock:
             latched = self._tok is None
-            if not latched:
+            if not latched and not self._closed:
                 # The short-request rule starts here, after the first
                 # encode completed on the accelerated route.
                 self._short_active = True
@@ -1922,6 +1924,12 @@ class SGLangToktierTokenizer:
                 self._log_fh.flush()
 
     def close(self) -> None:
+        # From here on a modeled call meets the closed toktier tokenizer,
+        # whatever its length (RuntimeError, as before the short-request
+        # rule existed): the rule ends and does not start again.
+        with self._lock:
+            self._closed = True
+            self._short_active = False
         self.flush()
         if self._sched is not None:
             self._sched.close()

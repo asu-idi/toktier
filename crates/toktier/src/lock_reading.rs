@@ -150,6 +150,18 @@ pub fn located_by(governing: &GoverningLock, named: bool, out_dir: &Path) -> &'s
     }
 }
 
+/// The lockfile the closure readings compare: the one located, except that
+/// a lockfile found only above this crate's own manifest (`located` is
+/// `manifest`) is taken as missing there as well, as the property-data
+/// standing takes it. Every reading of one build then says the same.
+pub fn for_closure_readings(governing: GoverningLock, located: &str) -> GoverningLock {
+    if located == "manifest" {
+        GoverningLock::Missing
+    } else {
+        governing
+    }
+}
+
 /// Why the build reads no lockfile, for the build warning: `refusal` when
 /// the variable was refused, `named` the value of the variable, `foreign`
 /// a lockfile that was located but holds no package of this crate
@@ -198,7 +210,8 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        holds_package, located_by, refuse_named, unread_reason, GoverningLock, LockPackage, Refusal,
+        for_closure_readings, holds_package, located_by, refuse_named, unread_reason,
+        GoverningLock, LockPackage, Refusal,
     };
 
     /// A crate directory with a `Cargo.lock` and a `data/` record inside it,
@@ -364,6 +377,29 @@ mod tests {
             );
             assert_eq!(located_by(&GoverningLock::Missing, named, out_dir), "none");
         }
+    }
+
+    #[test]
+    fn the_closure_readings_never_read_the_workspace_fallback() {
+        let path = || PathBuf::from("/src/toktier/Cargo.lock");
+        assert!(matches!(
+            for_closure_readings(GoverningLock::Found(path()), "manifest"),
+            GoverningLock::Missing
+        ));
+        for located in ["named", "out_dir"] {
+            assert!(matches!(
+                for_closure_readings(GoverningLock::Found(path()), located),
+                GoverningLock::Found(found) if found == path()
+            ));
+        }
+        assert!(matches!(
+            for_closure_readings(GoverningLock::JudgedRecordNamed(path()), "none"),
+            GoverningLock::JudgedRecordNamed(_)
+        ));
+        assert!(matches!(
+            for_closure_readings(GoverningLock::Missing, "none"),
+            GoverningLock::Missing
+        ));
     }
 
     fn package(name: &str, version: &str, source: Option<&str>) -> LockPackage {

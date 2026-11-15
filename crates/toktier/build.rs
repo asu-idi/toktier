@@ -333,7 +333,11 @@ fn main() {
     // reference libraries judged by crate version, each with the version
     // this build resolved beside its certified reference versions. The
     // judged behaviour versions travel with them so the runtime has both
-    // sides of that comparison.
+    // sides of that comparison. A lockfile found only above this crate's
+    // manifest is not read for these readings either, so `doctor()` does
+    // not report the reference versions of that file as certified beside a
+    // property-data line that reads `unread`.
+    let governing = lock_reading::for_closure_readings(governing, located);
     let statuses = closure_statuses(&judged_lock, &judged_closure, &governing);
     println!(
         "cargo:rustc-env=TOKTIER_RUST_API_DEPENDENCY_CLOSURE={}",

@@ -194,9 +194,10 @@ pub enum ReasonCode {
     /// the judged data. [`RuntimeBuildFacts::property_data`] says which
     /// copy, or that the variable was set, and what makes the build one
     /// the table speaks for (aligning the lockfile, or unsetting the
-    /// variable). [`Policy::Experimental`] runs
-    /// the route with every text that holds a listed code point on the
-    /// reference engine instead. Added in 0.3.3.
+    /// variable). Under [`Policy::Experimental`] the route runs and only
+    /// texts holding a listed code point go to the reference engine; the
+    /// list was not made for this data, so the other ids are unchecked.
+    /// Added in 0.3.3.
     PropertyDataUntabled,
     /// No lockfile that governs this build was read, so the property
     /// data this build resolved is unknown and the fast CPU route is not
@@ -214,9 +215,10 @@ pub enum ReasonCode {
     /// install --path` needs `--locked` (without it Cargo resolves the
     /// graph again and the lockfile beside the project no longer describes
     /// the build), and an outside target directory must not lie under
-    /// another project's tree. [`Policy::Experimental`] runs the route
-    /// guarded as for [`ReasonCode::PropertyDataUntabled`]. Added in
-    /// 0.3.3.
+    /// another project's tree. Under [`Policy::Experimental`] the route
+    /// runs as for [`ReasonCode::PropertyDataUntabled`]: only texts holding
+    /// a listed code point go to the reference engine, and the list may not
+    /// have been made for the data this build compiled. Added in 0.3.3.
     PropertyDataUnread,
     /// A reason the router named that this release has no frozen code
     /// for. The string is the router's own token, passed through rather
@@ -459,11 +461,14 @@ pub struct RuntimeBuildFacts {
     /// from the judged data are tabled; texts that hold one of the listed
     /// code points are encoded on the reference engine (such a call
     /// reports [`Backend::HuggingFace`] with
-    /// [`ReasonCode::InputGuardRouted`]). `"untabled: ..."` and
-    /// `"unread: ..."`: the fast CPU route is not built
-    /// ([`ReasonCode::PropertyDataUntabled`],
+    /// [`ReasonCode::InputGuardRouted`], the reason the fast engine's own
+    /// input guard also reports, so this field is what says the build is
+    /// guarded). `"untabled: ..."` and `"unread: ..."`: the fast CPU route
+    /// is not built ([`ReasonCode::PropertyDataUntabled`],
     /// [`ReasonCode::PropertyDataUnread`]), and the line names the
-    /// remedy. Added in 0.3.3.
+    /// remedy: aligning the lockfile, setting `TOKTIER_CARGO_LOCK` to the
+    /// absolute path of the lockfile of the consuming build, or unsetting
+    /// `ICU4X_DATA_DIR`. Added in 0.3.3.
     #[cfg_attr(feature = "serde", serde(default))]
     pub property_data: String,
     /// How the build script located the lockfile it read: `named`

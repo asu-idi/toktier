@@ -491,6 +491,11 @@ fn remedy_for(copies: &[LockCopy]) -> String {
     )
 }
 
+/// What `Policy::Experimental` does on an untabled or unread build.
+const EXPERIMENTAL: &str = "under Policy::Experimental the route runs and only texts holding a \
+                            listed code point go to the reference engine; the list was not \
+                            made for this data, so the other ids are unchecked";
+
 impl fmt::Display for Standing {
     /// The standing as `RuntimeBuildFacts` reports it.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -498,14 +503,13 @@ impl fmt::Display for Standing {
             Self::Judged => formatter.write_str("judged"),
             Self::Guarded { resolved } => write!(
                 formatter,
-                "guarded: the property data resolves to {resolved}; texts holding one of \
-                 {MOVED_CODE_POINTS} code points whose class differs from the judged data's \
-                 are encoded on the reference engine"
+                "guarded: the property data resolves to {resolved}; texts holding one of the \
+                 {MOVED_CODE_POINTS} listed code points (every code point whose class differs \
+                 from the judged data's in some listed copy) are encoded on the reference engine"
             ),
             Self::Untabled { reason, remedy } => write!(
                 formatter,
-                "untabled: {reason}, so the fast CPU route is not built (under \
-                 Policy::Experimental it runs with every such text on the reference engine); \
+                "untabled: {reason}, so the fast CPU route is not built ({EXPERIMENTAL}); \
                  {remedy}"
             ),
             Self::Unread { located_by } => {
@@ -525,8 +529,7 @@ impl fmt::Display for Standing {
                 write!(
                     formatter,
                     "unread: {how}, so the property data this build resolved is unknown and the \
-                     fast CPU route is not built (under Policy::Experimental it runs with every \
-                     text holding a listed code point on the reference engine); {}",
+                     fast CPU route is not built ({EXPERIMENTAL}); {}",
                     remedy()
                 )
             }

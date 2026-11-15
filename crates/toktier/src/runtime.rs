@@ -713,9 +713,20 @@ impl Runtime {
             && fast_cpu.is_none()
             && gpu.is_none()
         {
+            // A route declined for the property data says so, since the
+            // plan's reasons are not part of the error.
+            let why = if property_declined {
+                format!(
+                    "; the fast CPU route was not built because of this build's property data \
+                     ({property_standing}); Runtime::doctor() reports it as \
+                     runtime_build.property_data"
+                )
+            } else {
+                String::new()
+            };
             return Err(Error::new(
                 ErrorCode::UncertifiedTokenizer,
-                format!("family {family} has no certified accelerated route on this runtime"),
+                format!("family {family} has no certified accelerated route on this runtime{why}"),
             ));
         }
         // How a request with special tokens is served (`RoutePlan::

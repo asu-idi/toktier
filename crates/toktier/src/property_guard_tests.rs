@@ -7,8 +7,8 @@
 //! engine agree on every text, so what a test of the routes can observe
 //! here is where a call ran (backend and reason), whether a seal moved,
 //! and that the ids equal the reference engine's; the ids themselves
-//! differ only on a build that resolves newer property data, which the
-//! consumer builds of the evidence lane cover.
+//! differ only on a build that resolves newer property data, which
+//! consumer builds outside this workspace cover.
 
 use std::path::{Path, PathBuf};
 
@@ -467,6 +467,10 @@ fn untabled_and_unread_builds_decline_the_fast_cpu_route() {
             .load(family)
             .unwrap_err();
         assert_eq!(refused.code(), ErrorCode::UncertifiedTokenizer, "{refused}");
+        // The refusal says why and where to look.
+        let message = refused.to_string();
+        assert!(message.contains("property data"), "{message}");
+        assert!(message.contains("runtime_build.property_data"), "{message}");
         // `Policy::Experimental` runs the route guarded.
         let experimental = forced(&root, family, standing.clone());
         assert!(experimental.inner.guard_router.is_some());

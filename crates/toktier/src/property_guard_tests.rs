@@ -12,7 +12,9 @@
 
 use std::path::{Path, PathBuf};
 
-use super::{LocatedBy, Standing, MOVED_CODE_POINTS};
+use toktier_store_core::SessionEncoder;
+
+use super::{GuardedEncoder, LocatedBy, Standing, MOVED_CODE_POINTS};
 use crate::{Backend, Device, ErrorCode, Policy, ReasonCode, Runtime, RuntimeBuilder, Tokenizer};
 
 /// The texts of the review that found the difference, and one for the
@@ -264,7 +266,15 @@ fn guarded_one_shot_batch_lookup_and_chunked_calls_send_hits_to_the_reference_en
                 );
             }
         }
-        // A warm-up text with a hit is not run on the workers.
+        // A warm-up text with a hit is not run on the workers; a clean one
+        // is.
+        for text in HITS {
+            assert_eq!(chunked.warm_text(Some(text)), None, "{family} {text:?}");
+        }
+        for text in CLEAN {
+            assert_eq!(chunked.warm_text(Some(text)), Some(*text), "{family}");
+        }
+        assert_eq!(chunked.warm_text(None), None);
         chunked.warm(Some(1), Some(HITS[0])).unwrap();
     }
 }
@@ -500,6 +510,8 @@ fn a_judged_build_builds_no_second_router_and_routes_as_before() {
         .unwrap();
     assert_eq!(seeded.execution().backend, Backend::FastCpu);
     assert_eq!(seeded.execution().reason, None);
+    // A warm-up text with a hit runs on the workers as before.
+    assert_eq!(tokenizer.chunked().warm_text(Some(HITS[0])), Some(HITS[0]));
     // The unforced tokenizer of this workspace is the same.
     let own = load(builder(&root, Policy::Experimental), family);
     assert!(own.inner.guard_router.is_none());
@@ -639,4 +651,64 @@ fn a_lookup_reuses_sealed_prefixes_and_scans_the_rest() {
     );
     assert_eq!(found.execution().backend, Backend::FastCpu);
     assert_eq!(found.execution().reason, None);
+}
+
+/// The session engine's `encode`, which the store calls for the tail check
+/// of a durable load and for an append whose unsealed tail is over the
+/// store's hard cap: a text that holds a listed code point goes to the
+/// reference-only router, a clean one does not, and without a
+/// reference-only router nothing is routed.
+#[test]
+fn the_session_engine_encodes_hit_texts_on_the_reference_engine() {
+    let family = "qwen3_8b";
+    let Some(root) = artifact_root(family) else {
+        return;
+    };
+    let tokenizer = forced(&root, family, guarded());
+    let judge = reference(&root, family);
+    let ordinary = tokenizer.inner.router.as_ref();
+    let reference_only = tokenizer.inner.guard_router.as_deref();
+    assert!(reference_only.is_some());
+    for text in HITS {
+        let engine = GuardedEncoder::new(ordinary, reference_only);
+        let encoded = engine.encode(text).unwrap();
+        assert!(engine.guard_routed(), "{text:?}");
+        assert_eq!(encoded.ids, ids(&judge, text), "{text:?}");
+    }
+    for text in CLEAN {
+        let engine = GuardedEncoder::new(ordinary, reference_only);
+        engine.encode(text).unwrap();
+        assert!(!engine.guard_routed(), "{text:?}");
+    }
+    let unguarded = GuardedEncoder::new(ordinary, None);
+    unguarded.encode(HITS[0]).unwrap();
+    assert!(!unguarded.guard_routed());
+}
+
+/// An append to a session whose unsealed tail is over the store's hard cap
+/// re-encodes tail and delta through the session engine's `encode`. With a
+/// listed code point in that tail (which never seals while it holds one)
+/// the call is guard-routed.
+#[test]
+fn an_append_over_the_hard_cap_with_a_hit_in_the_tail_is_guard_routed() {
+    const HARD_CAP: usize = 1_048_576;
+    let family = "qwen3_8b";
+    let Some(root) = artifact_root(family) else {
+        return;
+    };
+    let tokenizer = forced(&root, family, guarded());
+    let judge = reference(&root, family);
+    let mut text = format!("{}{}", HITS[0], prose(81, 1_000));
+    while text.len() <= HARD_CAP + 4_096 {
+        text.push_str(&prose(text.len() as u64, 50_000));
+    }
+    let mut session = tokenizer.open_session("over-the-cap").unwrap();
+    assert_guard_routed(session.seed(&text).unwrap().execution(), "seed with a hit");
+    assert_eq!(session.seal_for_test(), (0, 0), "no seal over a hit");
+    let delta = prose(82, 200);
+    let patch = session.append(&delta).unwrap();
+    assert_eq!(patch.execution().path, "degraded_full_reencode");
+    assert_guard_routed(patch.execution(), "an append over the hard cap");
+    text.push_str(&delta);
+    assert_eq!(session.snapshot().unwrap().ids(), ids(&judge, &text));
 }

@@ -716,16 +716,20 @@ impl<'a> Chunked<'a> {
         if !admission.cpu_route {
             return Err(no_cpu_route(&admission.family));
         }
-        // A warm-up text that holds a listed code point on a guarded
-        // tokenizer is not run on the corrected CPU workers; the workers
-        // are forked without it.
-        let text = text.filter(|text| {
-            self.inner.guard_router.is_none() || !crate::property_guard::holds_moved(text)
-        });
+        let text = self.warm_text(text);
         self.inner
             .router
             .chunked_warm(workers.unwrap_or_else(default_chunk_workers), text)
             .map_err(|error| Error::new(ErrorCode::BackendExecutionFault, error.to_string()))
+    }
+
+    /// The warm-up text the new workers run: a text that holds a listed
+    /// code point on a guarded tokenizer is not run on the corrected CPU
+    /// workers, which are then forked without it.
+    pub(crate) fn warm_text<'t>(&self, text: Option<&'t str>) -> Option<&'t str> {
+        text.filter(|text| {
+            self.inner.guard_router.is_none() || !crate::property_guard::holds_moved(text)
+        })
     }
 
     /// The counters this surface keeps for the tokenizer, with the

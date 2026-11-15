@@ -519,7 +519,13 @@ impl Runtime {
         // admitted is supported, or locally verified when a check this
         // machine ran compared the two engines and they agreed.
         let fast_cpu_certification = fast_cpu_route.as_ref().map(|route| {
-            if runtime_build_certified && route.toolchain_judged {
+            // A route whose property data is not the judged data (guarded,
+            // or run under `Policy::Experimental` on an untabled or unread
+            // build) is never certified by source.
+            if runtime_build_certified
+                && route.toolchain_judged
+                && property_handling == crate::property_guard::Handling::NoGuard
+            {
                 Certification::CertifiedSource
             } else if crate::verify_local::is_locally_verified(&crate::verify_local::cpu_key(
                 &family,

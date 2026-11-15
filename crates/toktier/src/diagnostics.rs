@@ -187,10 +187,14 @@ pub enum ReasonCode {
     /// The governing lockfile names a copy of `icu_properties` or
     /// `icu_properties_data` that this release has no table for (a
     /// version published after it, another source, no checksum, a crate
-    /// missing), so the fast CPU route is not built: its character
+    /// missing), or `ICU4X_DATA_DIR` was set when this crate was built,
+    /// which makes the data crate compile that directory's data whatever
+    /// the lockfile names. The fast CPU route is not built: its character
     /// classes would come from property data no one has compared with
     /// the judged data. [`RuntimeBuildFacts::property_data`] says which
-    /// copy and what aligns the lockfile. [`Policy::Experimental`] runs
+    /// copy, or that the variable was set, and what makes the build one
+    /// the table speaks for (aligning the lockfile, or unsetting the
+    /// variable). [`Policy::Experimental`] runs
     /// the route with every text that holds a listed code point on the
     /// reference engine instead. Added in 0.3.3.
     PropertyDataUntabled,

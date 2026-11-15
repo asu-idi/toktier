@@ -43,6 +43,9 @@ pub(crate) const PROPERTIES_CRATE: &str = "icu_properties";
 pub(crate) const DATA_CRATE: &str = "icu_properties_data";
 /// The variable that names the governing lockfile.
 pub(crate) const CARGO_LOCK_ENV: &str = "TOKTIER_CARGO_LOCK";
+/// The variable with which the ICU4X data crates take their baked data from
+/// a directory instead of their own sources, whatever the lockfile says.
+pub(crate) const DATA_DIR_ENV: &str = "ICU4X_DATA_DIR";
 
 /// Separates the records of the build script's property-data reading. The
 /// two separators are the bytes the build script's other records use
@@ -405,10 +408,13 @@ pub(crate) enum Standing {
         /// The resolved copies, as `name version` joined by `, `.
         resolved: String,
     },
-    /// The lockfile was read and holds a copy the table does not speak for.
+    /// The lockfile was read and holds a copy the table does not speak for,
+    /// or the compiled data was replaced at build time.
     Untabled {
         /// Which copy, and why.
         reason: String,
+        /// What makes the build one the table speaks for.
+        remedy: String,
     },
     /// No lockfile that governs this build was read.
     Unread {
@@ -428,6 +434,14 @@ impl Standing {
     #[cfg(test)]
     pub(crate) fn is_guarded(&self) -> bool {
         matches!(self, Self::Guarded { .. })
+    }
+}
+
+/// An untabled standing whose remedy is to align the lockfile.
+fn untabled(reason: String) -> Standing {
+    Standing::Untabled {
+        reason,
+        remedy: remedy(),
     }
 }
 
@@ -461,11 +475,11 @@ impl fmt::Display for Standing {
                  {MOVED_CODE_POINTS} code points whose class differs from the judged data's \
                  are encoded on the reference engine"
             ),
-            Self::Untabled { reason } => write!(
+            Self::Untabled { reason, remedy } => write!(
                 formatter,
                 "untabled: {reason}, so the fast CPU route is not built (under \
-                 Policy::Experimental it runs with every such text on the reference engine); {}",
-                remedy()
+                 Policy::Experimental it runs with every such text on the reference engine); \
+                 {remedy}"
             ),
             Self::Unread { located_by } => {
                 let how = match located_by {
@@ -524,44 +538,38 @@ pub(crate) fn decide_standing(
     }
     let copies = match parse_copies(recorded) {
         Ok(copies) => copies,
-        Err(reason) => return Standing::Untabled { reason },
+        Err(reason) => return untabled(reason),
     };
     for name in [PROPERTIES_CRATE, DATA_CRATE] {
         if !copies.iter().any(|copy| copy.name == name) {
-            return Standing::Untabled {
-                reason: format!("the governing lockfile holds no copy of {name}"),
-            };
+            return untabled(format!("the governing lockfile holds no copy of {name}"));
         }
     }
     let mut all_judged = true;
     for copy in &copies {
         let label = format!("{} {}", copy.name, copy.version);
         if copy.name != PROPERTIES_CRATE && copy.name != DATA_CRATE {
-            return Standing::Untabled {
-                reason: format!("the property-data record names another crate ({label})"),
-            };
+            return untabled(format!(
+                "the property-data record names another crate ({label})"
+            ));
         }
         if copy.source.as_deref() != Some(table::REGISTRY_SOURCE) {
-            return Standing::Untabled {
-                reason: format!("{label} does not come from the crates.io registry"),
-            };
+            return untabled(format!("{label} does not come from the crates.io registry"));
         }
         let Some(checksum) = copy.checksum.as_deref() else {
-            return Standing::Untabled {
-                reason: format!("the governing lockfile gives no checksum for {label}"),
-            };
+            return untabled(format!(
+                "the governing lockfile gives no checksum for {label}"
+            ));
         };
         let Some(admitted) = ADMITTED_COPIES.iter().find(|admitted| {
             admitted.name == copy.name
                 && admitted.version == copy.version
                 && admitted.checksum == checksum
         }) else {
-            return Standing::Untabled {
-                reason: format!(
-                    "{label} (checksum {checksum}) is not among the property-data copies this \
+            return untabled(format!(
+                "{label} (checksum {checksum}) is not among the property-data copies this \
                      release was judged against"
-                ),
-            };
+            ));
         };
         all_judged &= admitted.judged;
     }
@@ -578,6 +586,37 @@ pub(crate) fn decide_standing(
     }
 }
 
+/// Decide a build's standing as [`decide_standing`] does, first asking
+/// whether `ICU4X_DATA_DIR` was set when this crate was built
+/// (`data_dir_set`).
+///
+/// Every listed version of `icu_properties_data` compiles the baked data of
+/// that directory in place of its own when the variable is set. The
+/// lockfile then still names the copy whose data is not the data compiled,
+/// so no reading of the lockfile speaks for the build: it reads
+/// [`Standing::Untabled`] with a reason and a remedy of its own.
+pub(crate) fn decide_build_standing(
+    data_dir_set: bool,
+    located_by: LocatedBy,
+    recorded: &str,
+    references_certified: bool,
+) -> Standing {
+    if data_dir_set {
+        return Standing::Untabled {
+            reason: format!(
+                "{DATA_DIR_ENV} was set when this crate was built, so the property data \
+                 compiled into it is that directory's and not the data of the copies the \
+                 lockfile names"
+            ),
+            remedy: format!(
+                "unset {DATA_DIR_ENV} and rebuild, so the build compiles the data the lockfile \
+                 names"
+            ),
+        };
+    }
+    decide_standing(located_by, recorded, references_certified)
+}
+
 // ---------------------------------------------------------------------------
 // This build's standing and what each call does with it
 // ---------------------------------------------------------------------------
@@ -586,6 +625,9 @@ pub(crate) fn decide_standing(
 pub(crate) const LOCATED_BY_RECORD: &str = env!("TOKTIER_RUST_API_LOCK_LOCATED_BY");
 /// The build script's property-data record ([`parse_copies`]).
 pub(crate) const PROPERTY_DATA_RECORD: &str = env!("TOKTIER_RUST_API_PROPERTY_DATA");
+/// `set` when `ICU4X_DATA_DIR` was set while this crate was built, empty
+/// otherwise.
+pub(crate) const DATA_DIR_RECORD: &str = env!("TOKTIER_RUST_API_PROPERTY_DATA_DIR");
 
 /// Whether the existing reference records of both property crates read
 /// certified. A crate with no record counts as not certified, so the two
@@ -604,7 +646,8 @@ fn references_certified() -> bool {
 pub(crate) fn standing() -> &'static Standing {
     static STANDING: std::sync::OnceLock<Standing> = std::sync::OnceLock::new();
     STANDING.get_or_init(|| {
-        decide_standing(
+        decide_build_standing(
+            !DATA_DIR_RECORD.is_empty(),
             LocatedBy::parse(LOCATED_BY_RECORD),
             PROPERTY_DATA_RECORD,
             references_certified(),
@@ -751,9 +794,9 @@ mod wiring_tests;
 #[cfg(test)]
 mod tests {
     use super::{
-        decide_standing, holds_moved, is_moved, parse_copies, LocatedBy, Standing, ADMITTED_COPIES,
-        DATA_CRATE, FIELD_SEPARATOR, MOVED_CODE_POINTS, MOVED_RANGES, PROPERTIES_CRATE,
-        RECORD_SEPARATOR,
+        decide_build_standing, decide_standing, holds_moved, is_moved, parse_copies, LocatedBy,
+        Standing, ADMITTED_COPIES, DATA_CRATE, FIELD_SEPARATOR, MOVED_CODE_POINTS, MOVED_RANGES,
+        PROPERTIES_CRATE, RECORD_SEPARATOR,
     };
 
     const REGISTRY: &str = "registry+https://github.com/rust-lang/crates.io-index";
@@ -1065,6 +1108,38 @@ mod tests {
                 assert!(!standing.admits_fast_route());
             }
         }
+    }
+
+    #[test]
+    fn a_replaced_data_directory_is_untabled_with_its_own_remedy() {
+        // Whatever the lockfile says and however it was located.
+        for located_by in [
+            LocatedBy::Named,
+            LocatedBy::OutDir,
+            LocatedBy::Manifest,
+            LocatedBy::None,
+        ] {
+            for recorded in [judged_record(), guarded_record(), String::new()] {
+                let standing = decide_build_standing(true, located_by, &recorded, true);
+                assert!(untabled(&standing), "{located_by:?}: {standing:?}");
+                assert!(!standing.admits_fast_route());
+                let line = standing.to_string();
+                assert!(
+                    line.starts_with("untabled: ICU4X_DATA_DIR was set"),
+                    "{line}"
+                );
+                assert!(line.contains("unset ICU4X_DATA_DIR"), "{line}");
+                assert!(!line.contains("cargo update"), "{line}");
+            }
+        }
+        // Unset, the lockfile decides as before.
+        assert_eq!(
+            decide_build_standing(false, LocatedBy::OutDir, &judged_record(), true),
+            Standing::Judged
+        );
+        assert!(
+            decide_build_standing(false, LocatedBy::Named, &guarded_record(), true).is_guarded()
+        );
     }
 
     #[test]

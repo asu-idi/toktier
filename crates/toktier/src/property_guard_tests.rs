@@ -45,6 +45,7 @@ fn untabled() -> Standing {
         reason: "icu_properties_data 2.9.0 (checksum 00) is not among the property-data \
                  copies this release was judged against"
             .to_owned(),
+        remedy: "align the lockfile with the judged property data".to_owned(),
     }
 }
 

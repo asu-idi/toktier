@@ -37,6 +37,9 @@ const PACKAGE_IDENTITY_SCHEMA: &str = "toktier.rust_package_source_identity.v1";
 /// The two crates whose copies decide the property-data standing
 /// (`src/property_guard.rs`).
 const PROPERTY_CRATES: [&str; 2] = ["icu_properties", "icu_properties_data"];
+/// The variable with which the ICU4X data crates compile the baked data of
+/// a directory in place of their own.
+const DATA_DIR_ENV: &str = "ICU4X_DATA_DIR";
 /// Between the records of the property-data reading, and between the
 /// fields of one record: the separators `src/property_guard.rs` reads.
 const PROPERTY_RECORD_SEPARATOR: char = '\u{1f}';
@@ -284,6 +287,25 @@ fn main() {
         "cargo:rustc-env=TOKTIER_RUST_API_PROPERTY_DATA={}",
         property_data_record(&governing)
     );
+    // `ICU4X_DATA_DIR` makes the ICU4X data crates compile the baked data of
+    // that directory in place of their own, while the lockfile still names
+    // the copy; the library then reads the standing as untabled. Taken as
+    // set whenever it is present, which is a little wider than the data
+    // crates' own test and so on the safe side.
+    println!("cargo:rerun-if-env-changed={DATA_DIR_ENV}");
+    let data_dir_set = env::var_os(DATA_DIR_ENV).is_some();
+    println!(
+        "cargo:rustc-env=TOKTIER_RUST_API_PROPERTY_DATA_DIR={}",
+        if data_dir_set { "set" } else { "" }
+    );
+    if data_dir_set {
+        println!(
+            "cargo:warning=toktier: {DATA_DIR_ENV} is set, so the property data compiled into \
+             this build is that directory's rather than the data of the copies the lockfile \
+             names, and the fast CPU route is not built (ReasonCode::PropertyDataUntabled); \
+             unset {DATA_DIR_ENV} to build the data the lockfile names"
+        );
+    }
     let located = lock_reading::located_by(&governing, named.is_some(), &out_dir);
     println!("cargo:rustc-env=TOKTIER_RUST_API_LOCK_LOCATED_BY={located}");
     if matches!(located, "manifest" | "none") {

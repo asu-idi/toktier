@@ -448,6 +448,75 @@ def test_close_of_a_saturated_pool_with_large_tasks_returns() -> None:
         assert int(seen) == 14 and int(answered) + int(closed) == 14, rows
 
 
+_HALF_DONE = r"""
+import os, signal, sys, threading, time
+from toktier.integrations.sglang_sched import Scheduler, SchedulerConfig
+
+here, case, mark = sys.argv[1], sys.argv[2], sys.argv[3]
+os.environ["TOKTIER_TEST_STALL_MARK"] = mark
+
+def config(loader):
+    return SchedulerConfig(workers=1, loader=loader, loader_path=here,
+                           start_timeout_s=120.0)
+
+def fds():
+    return len(os.listdir("/proc/self/fd"))
+
+warm = Scheduler(config("_sched_stub:load"))
+warm.start()  # the first start also starts multiprocessing's resource tracker
+warm.close()
+before = (fds(), threading.active_count())
+seen = []
+if case == "result":
+    # the worker stops in the middle of writing its answer
+    sched = Scheduler(config("_sched_stub:load_stalling_result"))
+    sched.start()
+    sched.submit("x" * (2 << 20), None, seen.append)
+    deadline = time.monotonic() + 60.0
+    while not os.path.exists(mark) and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert os.path.exists(mark)
+else:
+    # the worker is stopped before it reads a task larger than the pipe
+    sched = Scheduler(config("_sched_stub:load"))
+    sched.start()
+    os.kill(sched.stats()["worker_pids"][0], signal.SIGSTOP)
+    sched.submit("x" * (8 << 20), None, seen.append)
+    time.sleep(0.2)
+t0 = time.monotonic()
+sched.close()
+took = time.monotonic() - t0
+time.sleep(0.2)
+print("AFTER", before[0], fds(), before[1], threading.active_count(),
+      round(took, 3), [r.error for r in seen], flush=True)
+os._exit(0)  # the resource tracker then reports any semaphore left behind
+"""
+
+
+@pytest.mark.parametrize("case", ["result", "input"])
+def test_close_after_a_transfer_a_worker_left_half_done(
+    case: str, tmp_path: Any
+) -> None:
+    """``close()`` when a worker stopped in the middle of writing its answer
+    (the collector is inside that message) or before reading a task larger
+    than the pipe (a feeder thread is inside that write): it returns within
+    its bounded waits, and afterwards the descriptor and thread counts
+    equal those before the pool started, nothing is printed, and no
+    semaphore is left for the resource tracker to report."""
+    if not os.path.isdir("/proc/self/fd"):
+        pytest.skip("no /proc/self/fd on this platform")
+    mark = str(tmp_path / "stalled")
+    done = _run_owner(_HALF_DONE, _HERE, case, mark, timeout=300.0)
+    assert done.returncode == 0, (done.stdout[-2000:], done.stderr[-3000:])
+    line = next(x for x in done.stdout.splitlines() if x.startswith("AFTER"))
+    _, fds_before, fds_after, threads_before, threads_after, took, *_ = line.split()
+    assert fds_after == fds_before and threads_after == threads_before, line
+    assert float(took) < 20.0 and line.endswith("['closed']"), line
+    assert "Traceback" not in done.stderr, done.stderr[-3000:]
+    assert "leaked" not in done.stderr, done.stderr[-3000:]
+    assert "resource_tracker" not in done.stderr, done.stderr[-3000:]
+
+
 _LATCH_UNDER_LOAD = r"""
 import json, os, sys, threading, time
 from toktier.integrations.sglang import (

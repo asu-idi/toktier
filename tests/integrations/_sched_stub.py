@@ -67,3 +67,29 @@ def load_exiting(family: str | None, store: str | None, device: str) -> StubToke
 
     tokenizer._encode_ids = encode_ids  # type: ignore[method-assign]
     return tokenizer
+
+
+def load_stalling_result(
+    family: str | None, store: str | None, device: str
+) -> StubTokenizer:
+    """Loads; then any message over 1 MiB that this worker sends stops after
+    its header and 4 KiB of its body, as a writer would that is stopped in
+    the middle of a message. The worker writes the path named by
+    ``TOKTIER_TEST_STALL_MARK`` once it has stopped there."""
+    import multiprocessing.connection as connection
+    import struct
+    import threading
+
+    send = connection.Connection._send_bytes  # type: ignore[attr-defined]
+
+    def stalling(self: Any, buf: Any) -> None:
+        if len(buf) > (1 << 20):
+            self._send(struct.pack("!i", len(buf)))
+            self._send(buf[:4096])
+            with open(os.environ["TOKTIER_TEST_STALL_MARK"], "w") as fh:
+                fh.write(str(os.getpid()))
+            threading.Event().wait()
+        send(self, buf)
+
+    connection.Connection._send_bytes = stalling  # type: ignore[attr-defined]
+    return StubTokenizer(store)

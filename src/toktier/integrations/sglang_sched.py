@@ -853,6 +853,10 @@ class Scheduler:
             core = cfg.cores[wid % len(cfg.cores)] if cfg.cores else None
             store = os.path.join(self.store, f"w{wid}") if self.store else None
             qin = ctx.Queue()
+            # A write of this queue's feeder that close() abandons ends
+            # without a report (the switch concurrent.futures sets on its
+            # call queue for the same reason; see _drop_parent_ends).
+            qin._ignore_epipe = True  # type: ignore[attr-defined]
             proc = ctx.Process(
                 target=_worker_main,
                 args=(
@@ -923,6 +927,31 @@ class Scheduler:
             if proc.is_alive():
                 with contextlib.suppress(Exception):
                     proc.kill()
+                    proc.join(timeout=5)
+
+    def _drop_parent_ends(self) -> None:
+        """Close the pipe ends this process holds but never uses, once the
+        workers are stopped and reaped.
+
+        The parent only reads the result queue and only writes the task
+        queues, yet it holds both ends of each pipe. While it holds the
+        result queue's write end, a collector in the middle of a message
+        that a worker never finished (the worker was terminated while
+        writing) waits for the rest for ever; while it holds a task
+        queue's read end, a feeder thread in the middle of a large task
+        that its worker never read waits for room for ever. With those
+        ends closed, the collector reads end-of-file and leaves, and the
+        feeder's write fails with ``EPIPE`` and the feeder ends quietly
+        (each task queue is made with ``_ignore_epipe`` set, see
+        :meth:`start`). ``_reader`` and ``_writer`` are the two ends of
+        CPython's ``multiprocessing.queues.Queue``; where they are absent
+        nothing is closed."""
+        ends = [getattr(self._qres, "_writer", None)] if self._qres is not None else []
+        ends += [getattr(qin, "_reader", None) for qin in self._qins]
+        for end in ends:
+            if end is not None:
+                with contextlib.suppress(Exception):
+                    end.close()
 
     def _release_queues(self, *, collector_ended: bool) -> None:
         """Close the pool's queues and processes once the workers are stopped.
@@ -974,7 +1003,12 @@ class Scheduler:
         a worker's last answer, however large, is taken off the pipe and
         the worker can leave on the stop message at once; only then is the
         collector stopped. A worker that does not leave within five
-        seconds is terminated."""
+        seconds is terminated. Once the workers are stopped and reaped,
+        the pipe ends this process does not use are closed
+        (:meth:`_drop_parent_ends`), so that a transfer a stopped worker
+        left half done ends as well: the collector reads end-of-file, and
+        a feeder thread blocked on a task its worker never read is
+        released."""
         pending: list[_Request] = []
         with self._lock:
             if self._closed:
@@ -993,6 +1027,7 @@ class Scheduler:
             self._finish(req, now=_CLOCK())
         self._terminate_all()
         self._stop.set()
+        self._drop_parent_ends()
         if self._collector is not None and self._collector.is_alive():
             self._collector.join(timeout=5)
         ended = self._collector is None or not self._collector.is_alive()

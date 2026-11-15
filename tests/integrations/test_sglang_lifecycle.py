@@ -1004,10 +1004,22 @@ def test_the_pool_helper_takes_a_key_and_the_special_tokens_switch(
     """Behaviour only ``encode_texts_with_pool`` has (the module is imported
     here, not at the top, so without the helper only this test fails): an
     explicit key takes the session route of its home worker, and
-    ``add_special_tokens=False`` leaves the template off."""
+    ``add_special_tokens=False`` leaves the template off. The keys the
+    pool is actually given are recorded, so a helper that dropped or
+    replaced the caller's key would fail here."""
     import asyncio
 
     from toktier.integrations import sglang as sglang_module
+    from toktier.integrations.sglang_sched import Scheduler
+
+    submitted_keys: list[Any] = []
+    original_submit = Scheduler.submit
+
+    def record_key(self: Any, text: str, key: Any, on_done: Any, **kwargs: Any) -> Any:
+        submitted_keys.append(key)
+        return original_submit(self, text, key, on_done, **kwargs)
+
+    monkeypatch.setattr(Scheduler, "submit", record_key)
 
     helper = sglang_module.encode_texts_with_pool
     monkeypatch.setattr(
@@ -1027,6 +1039,7 @@ def test_the_pool_helper_takes_a_key_and_the_special_tokens_switch(
         assert w.stats()["how"] == {"sched_session": 3}
         assert asyncio.run(helper(w, "ab")) == [1, 97, 98]  # no key: content lookup
         assert w.stats()["how"] == {"sched_session": 3, "sched_auto": 1}
+        assert submitted_keys == ["k1", "k2", "k2", None]
     finally:
         w.close()
 
@@ -1050,6 +1063,54 @@ def test_close_twice_and_from_two_threads_at_once() -> None:
     assert not sched.active and [r.error for r in seen] == ["closed"]
     with pytest.raises(RuntimeError, match="not running"):
         sched.submit("after", None, seen.append)
+
+
+def test_a_submit_that_meets_close_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ``submit()`` that has passed its first test of the pool's state
+    when ``close()`` runs is refused by the test it repeats under the
+    scheduler lock, instead of being accepted on a closed pool whose
+    callback would never run. The submitting thread is held between the
+    two tests (at its clock reading) while the pool closes."""
+    import threading
+
+    from toktier.integrations import sglang_sched
+    from toktier.integrations.sglang_sched import Scheduler
+
+    sched = Scheduler(_stub_pool_config())
+    sched.start()
+    reached, release = threading.Event(), threading.Event()
+    clock = sglang_sched._CLOCK
+
+    def held_clock() -> float:
+        if threading.current_thread().name == "submitter":
+            reached.set()
+            assert release.wait(30.0)
+        return clock()
+
+    monkeypatch.setattr(sglang_sched, "_CLOCK", held_clock)
+    outcome: list[Any] = []
+
+    def submit() -> None:
+        try:
+            sched.submit("ab", None, outcome.append)
+            outcome.append("accepted")
+        except RuntimeError as ex:
+            outcome.append(str(ex))
+
+    submitter = threading.Thread(target=submit, name="submitter", daemon=True)
+    submitter.start()
+    try:
+        assert reached.wait(30.0)
+        sched.close()
+        release.set()
+        submitter.join(30.0)
+        assert not submitter.is_alive()
+        assert outcome == ["scheduler is not running"], outcome
+    finally:
+        release.set()
+        sched.close()
 
 
 @pytest.mark.parametrize("face", ["sync", "async"])

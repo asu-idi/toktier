@@ -763,6 +763,27 @@ if case == "timing_log":
     open(blocker, "w").close()
     cfg = AdapterConfig(session_key="off", scheduler=pool,
                         timing_log=os.path.join(blocker, "timing.jsonl"))
+elif case == "partial_pool":
+    # the first worker starts, the second cannot: the wrap keeps the serial
+    # path, and the first worker must not outlive the failed pool start
+    import multiprocessing.process as mp
+    original_process_start = mp.BaseProcess.start
+    def process_start(proc):
+        if proc.name == "toktier-sched-w1":
+            time.sleep(1.0)
+            raise OSError("the second worker cannot be started (injected)")
+        return original_process_start(proc)
+    mp.BaseProcess.start = process_start
+    cfg = AdapterConfig(session_key="off", scheduler=pool)
+elif case == "eager_warm":
+    # eager chunk warming, after the pool has started, is interrupted
+    from toktier import chunked
+    chunked.admission = lambda tok: {"native_by_default": True}
+    def interrupted(tok, workers=None):
+        raise KeyboardInterrupt("during eager chunk warming (injected)")
+    chunked.warm = interrupted
+    cfg = AdapterConfig(session_key="off", scheduler=pool, chunked_min_chars=100,
+                        chunked_warm=True)
 else:  # a failure after the pool has started: the shadow thread cannot start
     def start(thread):
         if thread.name == "toktier-sglang-shadow":
@@ -770,44 +791,59 @@ else:  # a failure after the pool has started: the shadow thread cannot start
         return original_start(thread)
     threading.Thread.start = start
     cfg = AdapterConfig(session_key="off", scheduler=pool, shadow="async")
+wrapped = []
 try:
-    wrap_tokenizer(_StubHf(), cfg)
+    wrapped.append(wrap_tokenizer(_StubHf(), cfg))
     outcome = "returned"
 except BaseException as ex:
     outcome = type(ex).__name__
 threading.Thread.start = original_start
+if case == "partial_pool":
+    mp.BaseProcess.start = original_process_start
 deadline = time.monotonic() + 5.0
 while time.monotonic() < deadline and children() != before["children"]:
     time.sleep(0.1)
 after = {"fds": fds(), "children": children(), "threads": threading.active_count()}
 print("RESULT " + json.dumps({"outcome": outcome, "before": before, "after": after,
                               "loaded": len(loaded),
-                              "closed": [t.closed for t in loaded]}), flush=True)
+                              "closed": [t.closed for t in loaded],
+                              "pool": [w.scheduler is not None for w in wrapped]}),
+      flush=True)
 os._exit(0)
 """
 
 
-@pytest.mark.parametrize("case", ["timing_log", "after_start"])
+@pytest.mark.parametrize(
+    "case", ["timing_log", "after_start", "partial_pool", "eager_warm"]
+)
 def test_a_wrap_that_raises_leaves_nothing_running(case: str, tmp_path: Any) -> None:
     """A timing log that cannot be opened stops the wrap before anything is
-    started; a failure after the pool has started closes what was started.
-    Either way no child process of the owner is alive afterwards and its
-    descriptor and thread counts are what they were."""
+    started; a failure after the pool has started closes what was started,
+    also when it comes from eager chunk warming (an interrupt there). A
+    pool whose second worker cannot be started is closed, its first worker
+    included, and the wrap keeps the serial path. In every case no child
+    process of the owner is alive afterwards and its descriptor and thread
+    counts are what they were."""
     import json
 
     done = _run_owner(_WRAP_RAISES, _HERE, case, str(tmp_path), timeout=300.0)
     assert done.returncode == 0, (done.stdout[-2000:], done.stderr[-3000:])
     line = next(x for x in done.stdout.splitlines() if x.startswith("RESULT "))
     result = json.loads(line[len("RESULT ") :])
-    expected = (
-        ("FileExistsError", "NotADirectoryError")  # OSError of the parent path
-        if case == "timing_log"
-        else ("RuntimeError",)
-    )
+    expected = {
+        "timing_log": ("FileExistsError", "NotADirectoryError"),  # the parent path
+        "after_start": ("RuntimeError",),
+        "partial_pool": ("returned",),
+        "eager_warm": ("KeyboardInterrupt",),
+    }[case]
     assert result["outcome"] in expected, result
     assert result["after"] == result["before"], result
     if case == "timing_log":
         assert result["loaded"] == 0, result  # nothing was loaded or started
+    elif case == "partial_pool":
+        # the wrap returned, serving in process; the pool is gone
+        assert result["loaded"] == 1 and result["closed"] == [False], result
+        assert result["pool"] == [False], result
     else:
         assert result["loaded"] == 1 and result["closed"] == [True], result
 

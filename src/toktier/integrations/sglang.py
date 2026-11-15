@@ -1080,7 +1080,13 @@ class SGLangToktierTokenizer:
         )
 
     def _start_scheduler(self, config: SchedulerConfig) -> Scheduler | None:
-        """Start the pool; on any failure keep the serial path and say why."""
+        """Start the pool; on any failure keep the serial path and say why.
+
+        A start that raises part-way (the second worker cannot be started,
+        for one) has already started something; the scheduler is closed
+        before this returns, so no worker outlives the failure. An
+        exception that is not an ``Exception`` (``KeyboardInterrupt``) is
+        raised again after that close, and the wrap is abandoned."""
         planner: Callable[[str, int], Sequence[tuple[int, int]]] | None = None
         try:
             from toktier import chunked
@@ -1098,6 +1104,7 @@ class SGLangToktierTokenizer:
         except Exception as ex:  # no chunking, but the pool is still worth having
             self._sched_note = f"chunking off: {type(ex).__name__}"
         store = self._store_path()
+        sched: Scheduler | None = None
         try:
             sched = Scheduler(
                 config,
@@ -1109,7 +1116,12 @@ class SGLangToktierTokenizer:
                 planner=planner,
             )
             sched.start()
-        except Exception as ex:
+        except BaseException as ex:
+            if sched is not None:
+                with contextlib.suppress(Exception):
+                    sched.close()
+            if not isinstance(ex, Exception):
+                raise
             self._sched_note = f"pool not started: {type(ex).__name__}: {ex}"[:300]
             return None
         return sched
@@ -1963,7 +1975,15 @@ def wrap_tokenizer(
     if kwargs:
         cfg = replace(cfg, **kwargs)
     wrapper = SGLangToktierTokenizer(hf_tokenizer, cfg)
-    wrapper._warm_chunk_encoder()
+    try:
+        # Eager warming is part of the wrap: if it raises, what the wrap
+        # started is closed, as for a failure inside the constructor. The
+        # native chunk threads it starts belong to the process (one pool,
+        # shared by every tokenizer in it) and stay.
+        wrapper._warm_chunk_encoder()
+    except BaseException:
+        wrapper._abandon()
+        raise
     return wrapper
 
 

@@ -1008,6 +1008,56 @@ def test_real_tokenizer_drift_after_add_tokens_is_delegated(
         w2("toktierprobeunique")["input_ids"] == hf("toktierprobeunique")["input_ids"]
     )
     assert w2.stats()["mode"] == "passthrough" and w2.stats()["delegated"] == 2
+
+
+def test_a_start_up_probe_opens_the_session_store_whatever_its_length(
+    qwen3_home: Config, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The SGLang helpers check a wrap with one encode, ``encode("toktier")``:
+    seven characters, below Qwen3-8B's default short-request threshold.
+    It is the wrapper's first encode, so it takes the accelerated route
+    and opens the engine and the session store: a store whose metadata
+    cannot be read is reported by that encode, at start-up, as before the
+    short-request rule existed. Once one encode has completed on the
+    accelerated route, short requests are answered by the supplied
+    tokenizer."""
+    import tokenizers
+    from transformers import PreTrainedTokenizerFast
+
+    subject = toktier.load("qwen3_8b", config=qwen3_home, device="cpu")
+    face = subject._backend.materialized_tokenizer_json()
+    subject.close()
+    hf = PreTrainedTokenizerFast(tokenizer_object=tokenizers.Tokenizer.from_str(face))
+    monkeypatch.setenv("TOKTIER_HOME", str(qwen3_home.home))
+    monkeypatch.setenv("TOKTIER_OFFLINE", "1")
+    probe = "toktier"
+    bad = tmp_path / "bad-store"
+    bad.mkdir()
+    (bad / "meta.json").write_text("not valid json\n")
+    w = wrap_tokenizer(
+        hf,
+        AdapterConfig(family="qwen3_8b", store=str(bad), per_process_store=False),
+    )
+    try:
+        assert w.identity["status"] == "equivalent"
+        assert len(probe) < w.stats()["short_chars"]
+        with pytest.raises(Exception, match="metadata"):
+            w.encode(probe)
+    finally:
+        w.close()
+    w = wrap_tokenizer(
+        hf,
+        AdapterConfig(
+            family="qwen3_8b", store=str(tmp_path / "store"), per_process_store=False
+        ),
+    )
+    try:
+        assert w.encode(probe) == hf.encode(probe)
+        assert w.stats()["how"] == {"auto": 1}
+        assert w.encode(probe) == hf.encode(probe)
+        assert w.stats()["how"] == {"auto": 1, "short": 1}
+    finally:
+        w.close()
     w.close()
 
 

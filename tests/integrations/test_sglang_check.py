@@ -424,12 +424,48 @@ def test_a_short_text_does_not_go_to_the_pool(monkeypatch: pytest.MonkeyPatch) -
     w = wrap_tokenizer(hf, cfg)
     try:
         assert w.scheduler is not None
+        # the rule starts after one encode completed on the accelerated route
+        assert w.encode("abcd", add_special_tokens=False) == [97, 98, 99, 100]
         assert asyncio.run(encode_texts_with_pool(w, ["ab", "abcd"])) == [
             [97, 98],
             [97, 98, 99, 100],
         ]
         assert w.encode("a", add_special_tokens=False) == [97]
-        assert w.stats()["how"] == {"short": 2, "sched_free": 1}
-        assert w.stats()["scheduler"]["submitted"] == 1
+        assert w.stats()["how"] == {"short": 2, "sched_free": 2}
+        assert w.stats()["scheduler"]["submitted"] == 2
     finally:
         w.close()
+
+
+def test_the_rule_starts_after_the_first_accelerated_encode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Until one encode has completed on the accelerated route, a short text
+    takes that route, after the check, as it did before the rule existed
+    (so a caller's first encode, whatever its length, opens the engine and
+    the session store and reports what is wrong with them); from then on
+    it is answered by the supplied tokenizer."""
+    hf = _base()
+    fake = _FaceOf(hf)
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
+    w = wrap_tokenizer(hf, AdapterConfig(session_key="off", short_chars=5))
+    checks = _count_checks(monkeypatch)
+    assert w.encode("ab", add_special_tokens=False) == [97, 98]
+    assert checks == [1] and w.stats()["how"] == {"off": 1}
+    assert fake.calls == [{"lookup": "off"}]
+    assert w.encode("ab", add_special_tokens=False) == [97, 98]
+    assert checks == [1] and w.stats()["how"] == {"off": 1, "short": 1}
+    # An accelerated encode that raises does not start the rule: every
+    # short call meets the same error, as before.
+    broken = _FaceOf(hf)
+
+    def refuse(text: str, **kwargs: object) -> Any:
+        raise RuntimeError("the store cannot be read")
+
+    broken.encode = refuse  # type: ignore[method-assign]
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: broken)
+    w2 = wrap_tokenizer(hf, AdapterConfig(session_key="off", short_chars=5))
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match="cannot be read"):
+            w2.encode("ab", add_special_tokens=False)
+    assert "short" not in w2.stats()["how"]

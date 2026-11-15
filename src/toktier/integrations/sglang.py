@@ -102,7 +102,11 @@ therefore answered by the supplied tokenizer, which is the reference, on
 the calling thread: it takes no check, does not enter the session store,
 does not go to the pool, and is counted as ``how["short"]``. Batches are
 decided text by text; pairs and other non-string inputs keep the
-delegated path they always had.
+delegated path they always had. The rule starts once the wrapper has
+completed one encode on its accelerated route; until then every call
+takes the route it took before the rule existed, so a caller's first
+encode (a start-up probe, whatever its length) opens the engine and the
+session store and reports what is wrong with them.
 
 Long stateless requests: with ``AdapterConfig.chunked_min_chars`` set (env
 ``TOKTIER_SGLANG_CHUNKED_MIN_CHARS``), a request that would otherwise be a
@@ -351,7 +355,8 @@ class AdapterConfig:
     calling thread, without the per-request check (which costs about as
     much as such a request), counted under ``stats()["how"]["short"]``.
     ``None`` (the default) takes one character per added token of the
-    admitted tokenizer; ``0`` turns the rule off.
+    admitted tokenizer; ``0`` turns the rule off. The rule starts once
+    the wrapper has completed one encode on its accelerated route.
     ``device`` and ``gpu_delivery`` are passed to ``toktier.load`` /
     ``toktier.from_pretrained`` as given (``device`` accepts ``"auto"``,
     ``"cpu"``, ``"cuda"`` and ``"cuda:N"``; ``gpu_delivery`` accepts
@@ -841,8 +846,12 @@ class SGLangToktierTokenizer:
         }
         self._admitted_surface: _Admitted | None = None
         # Strings shorter than this are answered by the supplied tokenizer
-        # (set at admission; 0 while nothing is admitted).
+        # (set at admission; 0 while nothing is admitted), once the rule is
+        # in force: from the first encode completed on the accelerated
+        # route (set under the lock in _complete), so that the first
+        # encode always opens the engine and the session store.
         self._short_chars = 0
+        self._short_active = False
         self._stale = False
         self._sched: Scheduler | None = None
         self._sched_note: str | None = None
@@ -1587,7 +1596,11 @@ class SGLangToktierTokenizer:
     def _encode_one(
         self, text: str, add_special_tokens: bool, key: Any = _KEY_FROM_CONTEXT
     ) -> list[int]:
-        if len(text) < self._short_chars and self._tok is not None:
+        if (
+            self._short_active
+            and len(text) < self._short_chars
+            and self._tok is not None
+        ):
             return self._answer_short(text, add_special_tokens)
         if not self._admitted():
             return list(
@@ -1642,9 +1655,14 @@ class SGLangToktierTokenizer:
         ``key`` is the session key; by default the bound context
         variable is read, which the form Z hook binds around the
         request. A short request (``AdapterConfig.short_chars``) is
-        answered by the supplied tokenizer on the calling thread.
+        answered by the supplied tokenizer on the calling thread, once
+        an encode on the accelerated route has completed.
         """
-        if len(text) < self._short_chars and self._tok is not None:
+        if (
+            self._short_active
+            and len(text) < self._short_chars
+            and self._tok is not None
+        ):
             return self._answer_short(text, add_special_tokens)
         if not self._admitted():
             return list(
@@ -1705,6 +1723,10 @@ class SGLangToktierTokenizer:
         should not hold up other requests."""
         with self._lock:
             latched = self._tok is None
+            if not latched:
+                # The short-request rule starts here, after the first
+                # encode completed on the accelerated route.
+                self._short_active = True
         if latched:
             return list(
                 self._delegate_call(text, add_special_tokens=add_special_tokens)[

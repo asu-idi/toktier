@@ -1343,7 +1343,19 @@ fn sealed_prefix(
         0 => 0,
         index => *block_ends.get(index - 1)?,
     };
+    // The byte offset is untrusted: cap the range before scanning it.
+    // At an exact block boundary, start == from is valid even when no
+    // following complete block was hashed.
+    let end = block_ends
+        .get(usize::try_from(block).ok()?)
+        .copied()
+        .unwrap_or(start);
+    if from > end {
+        return None;
+    }
     let counted = text.get(start..from)?.chars().count() as u64;
+    #[cfg(test)]
+    SEALED_PREFIX_COUNTED.with(|total| total.set(total.get() + counted));
     if block.checked_mul(block_chars)?.checked_add(counted) != Some(seal.chars) {
         return None;
     }
@@ -1354,6 +1366,14 @@ fn sealed_prefix(
     }
     ids.truncate(count);
     Some((ids, from))
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Characters `sealed_prefix` counted on this thread, for the tests
+    /// that bound the work it does under the store lock.
+    pub(crate) static SEALED_PREFIX_COUNTED: std::cell::Cell<u64> =
+        const { std::cell::Cell::new(0) };
 }
 
 pub(crate) fn facts_from_routed(

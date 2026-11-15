@@ -2554,6 +2554,92 @@ mod tests {
         }
     }
 
+    /// The byte offset of a holder is checked only within its seal's own
+    /// block: an offset past the end of that block is refused before any
+    /// character is counted, so the work under the store lock stays within
+    /// one block however far the offset points. The case is a seal of the
+    /// first block given the byte offset of the current seal in the sixth
+    /// block, which passes every check before the count. A seal recorded
+    /// as it was is still counted from the start of its block and reused.
+    #[test]
+    fn a_holder_byte_offset_beyond_its_seal_block_is_refused_before_counting() {
+        let Some(root) = artifact_root() else {
+            return;
+        };
+        let counted = || crate::runtime::SEALED_PREFIX_COUNTED.with(|total| total.replace(0));
+        for (which, flavor) in [Flavor::Ascii, Flavor::Multibyte].into_iter().enumerate() {
+            let (_runtime, tokenizer) = experimental(&root, None, None);
+            let (text, handle, current, crossed, _end) =
+                session_with_its_seal_in_the_sixth_block(&tokenizer, flavor);
+            let (first_chars, first_ids) = {
+                let state = tokenizer.inner.store.lock().unwrap();
+                let sidecar = state.store.export_session_sidecar(handle).unwrap();
+                toktier_store_core::SessionSidecar::from_bytes(&sidecar)
+                    .unwrap()
+                    .seal_log
+                    .iter()
+                    .copied()
+                    .filter(|&(_, ids)| ids > 0)
+                    .min_by_key(|&(chars, _)| chars)
+                    .expect("a seal in the log")
+            };
+            assert!(
+                first_chars < 4_096,
+                "flavor {which}: the first seal lies in the first block: {first_chars}"
+            );
+            let query = format!("{text}{}", prose(706, 400, flavor));
+            let expected = ids_of(&tokenizer, &query);
+            let rejects = || tokenizer.store_stats().checksum_rejects;
+            let register_with = |altered: Seal| {
+                let mut state = tokenizer.inner.store.lock().unwrap();
+                state.index.remove_session(handle);
+                let cut = byte_at_char(&text, crossed);
+                state.index.insert_session(handle, &text[..cut], altered);
+                state.index.append(handle, &text[cut..], current);
+            };
+
+            // The current seal, as recorded: counted within its own block
+            // and reused.
+            register_with(current);
+            counted();
+            let reused = reused_ids(&tokenizer);
+            assert_eq!(tokenizer.lookup(&query).unwrap().unwrap().ids(), expected);
+            assert_eq!(reused_ids(&tokenizer) - reused, current.ids);
+            assert_eq!(
+                counted(),
+                current.chars - 5 * 4_096,
+                "flavor {which}: a recorded seal is counted from the start of its block"
+            );
+            assert_eq!(rejects(), 0);
+
+            // The first seal with the current seal's byte offset.
+            let altered = Seal {
+                chars: first_chars,
+                ids: first_ids,
+                bytes: current.bytes,
+            };
+            register_with(altered);
+            let reused = reused_ids(&tokenizer);
+            let found = tokenizer.lookup(&query).unwrap().expect("a hit");
+            let scanned = counted();
+            eprintln!(
+                "flavor {which}: seal at {first_chars} characters with the byte offset of {} characters: {scanned} characters counted",
+                current.chars
+            );
+            assert_eq!(found.ids(), expected, "flavor {which}: ids");
+            assert_eq!(rejects(), 1, "flavor {which}: counted as a reject");
+            assert_eq!(
+                reused_ids(&tokenizer),
+                reused,
+                "flavor {which}: nothing reused"
+            );
+            assert_eq!(
+                scanned, 0,
+                "flavor {which}: refused before any character is counted"
+            );
+        }
+    }
+
     /// `store_stats().index_bytes` comes from running totals of the
     /// holder and key slots. Through seeds, appends, overwrites, forks,
     /// deletes, sessions the core drops at its capacity, blocks declined

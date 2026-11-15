@@ -258,6 +258,23 @@ fn main() {
     } else {
         locate_governing_lock(&out_dir, consumption)
     };
+    // A lockfile that holds no package of this crate's name is the lockfile
+    // of another build (an unrelated project above an outside target
+    // directory), and is not read either. It stays watched, so a change to
+    // it reruns this script.
+    let package_name = env::var("CARGO_PKG_NAME").expect("Cargo package name");
+    let mut foreign = None;
+    let governing = match governing {
+        GoverningLock::Found(path) => match fs::read_to_string(&path) {
+            Ok(text) if !lock_reading::holds_package(&parse_lock(&text), &package_name) => {
+                println!("cargo:rerun-if-changed={}", path.display());
+                foreign = Some(path);
+                GoverningLock::Missing
+            }
+            _ => GoverningLock::Found(path),
+        },
+        other => other,
+    };
     if let GoverningLock::Found(path) | GoverningLock::JudgedRecordNamed(path) = &governing {
         println!("cargo:rerun-if-changed={}", path.display());
     }
@@ -276,6 +293,7 @@ fn main() {
         let why = lock_reading::unread_reason(
             refusal.as_ref(),
             named.as_deref().map(Path::new),
+            foreign.as_deref(),
             &governing,
         );
         println!(

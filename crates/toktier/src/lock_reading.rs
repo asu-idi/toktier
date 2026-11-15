@@ -16,9 +16,23 @@
 //!   where it was typed; and nothing inside this crate's directory is a
 //!   lockfile of the build that consumes it (a packaged copy ships the
 //!   lockfile recorded when it was published);
+//! - a lockfile that holds no package of this crate's name is not the
+//!   lockfile of this build ([`holds_package`]) and is not read, whether it
+//!   was named or found by the search. Cargo writes the lockfile before it
+//!   runs any build script and records every package under its own name, a
+//!   renamed dependency and a `[patch]` included. The version is not
+//!   compared: code in the source-identity sets does not read the package
+//!   version (`tools/scan_version_constants.py`);
 //! - [`located_by`] names how the lockfile that was read was found; a
 //!   lockfile found only above this crate's own manifest is reported as
 //!   `manifest`, which the library never counts as read.
+//!
+//! What these rules cannot see is a wrong lockfile that also holds this
+//! crate: another checkout's lockfile named by the variable, a target
+//! directory inside a checkout used by path, a lockfile left from another
+//! version of this crate, or `cargo install --path` without `--locked`,
+//! where Cargo resolves again and leaves the lockfile beside the project as
+//! it was.
 
 use std::ffi::OsStr;
 use std::fmt;
@@ -26,9 +40,9 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 #[cfg(test)]
-use crate::build_support::{GoverningLock, CARGO_LOCK_ENV};
+use crate::build_support::{GoverningLock, LockPackage, CARGO_LOCK_ENV};
 #[cfg(not(test))]
-use crate::source_identity::{GoverningLock, CARGO_LOCK_ENV};
+use crate::source_identity::{GoverningLock, LockPackage, CARGO_LOCK_ENV};
 
 /// Why a value of `TOKTIER_CARGO_LOCK` is not believed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,6 +117,13 @@ pub fn refuse_named(value: &OsStr, manifest_dir: &Path) -> Option<Refusal> {
     inside.then(|| Refusal::InsideCrate(path.to_owned()))
 }
 
+/// Whether a lockfile's packages hold a package named `name` (the build
+/// script's own `CARGO_PKG_NAME`), whatever its source and version. A
+/// lockfile that does not is the lockfile of another build.
+pub fn holds_package(packages: &[LockPackage], name: &str) -> bool {
+    packages.iter().any(|package| package.name == name)
+}
+
 /// How the lockfile the build script read was located, in the word
 /// `src/property_guard.rs` reads.
 ///
@@ -130,15 +151,24 @@ pub fn located_by(governing: &GoverningLock, named: bool, out_dir: &Path) -> &'s
 }
 
 /// Why the build reads no lockfile, for the build warning: `refusal` when
-/// the variable was refused, `named` the value of the variable, `governing`
-/// what the search located.
+/// the variable was refused, `named` the value of the variable, `foreign`
+/// a lockfile that was located but holds no package of this crate
+/// ([`holds_package`]), `governing` what the search located.
 pub fn unread_reason(
     refusal: Option<&Refusal>,
     named: Option<&Path>,
+    foreign: Option<&Path>,
     governing: &GoverningLock,
 ) -> String {
     if let Some(refusal) = refusal {
         return refusal.to_string();
+    }
+    if let Some(path) = foreign {
+        return format!(
+            "the lockfile {} holds no package of this crate, so it is the lockfile of \
+             another build",
+            path.display()
+        );
     }
     match (governing, named) {
         (GoverningLock::JudgedRecordNamed(path), _) => format!(
@@ -167,7 +197,9 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    use super::{located_by, refuse_named, unread_reason, GoverningLock, Refusal};
+    use super::{
+        holds_package, located_by, refuse_named, unread_reason, GoverningLock, LockPackage, Refusal,
+    };
 
     /// A crate directory with a `Cargo.lock` and a `data/` record inside it,
     /// a project beside it with its own lockfile, and a symbolic link from
@@ -334,41 +366,101 @@ mod tests {
         }
     }
 
+    fn package(name: &str, version: &str, source: Option<&str>) -> LockPackage {
+        LockPackage {
+            name: name.to_owned(),
+            version: version.to_owned(),
+            source: source.map(str::to_owned),
+            checksum: None,
+            dependencies: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn only_a_lockfile_that_holds_this_crate_is_read() {
+        let registry = Some("registry+https://github.com/rust-lang/crates.io-index");
+        let git = Some("git+https://example.invalid/toktier#0123");
+        let cases = [
+            // A registry dependency, a path dependency or workspace member
+            // (no source), and a `git` or `[patch]` copy.
+            (
+                vec![
+                    package("app", "0.1.0", None),
+                    package("toktier", "0.3.3", registry),
+                ],
+                true,
+            ),
+            (vec![package("toktier", "0.3.3", None)], true),
+            (vec![package("toktier", "0.3.3", git)], true),
+            // Any version: the version is not compared.
+            (vec![package("toktier", "0.3.3-rc.1+b7", None)], true),
+            (
+                vec![
+                    package("toktier", "0.3.2", registry),
+                    package("toktier", "0.3.3", registry),
+                ],
+                true,
+            ),
+            // An unrelated project's lockfile (a sibling crate's name is
+            // another name), and an empty one.
+            (
+                vec![
+                    package("app", "0.3.3", None),
+                    package("toktier-py", "0.3.3", None),
+                ],
+                false,
+            ),
+            (Vec::new(), false),
+        ];
+        for (packages, expected) in cases {
+            assert_eq!(
+                holds_package(&packages, "toktier"),
+                expected,
+                "{:?}",
+                packages
+                    .iter()
+                    .map(|package| (&package.name, &package.version))
+                    .collect::<Vec<_>>()
+            );
+        }
+    }
+
     #[test]
     fn each_unread_reading_says_why() {
         let refused = Refusal::NotAbsolute(PathBuf::from("Cargo.lock"));
         let named = Path::new("/nonexistent/Cargo.lock");
+        let found = GoverningLock::Found(PathBuf::from("/src/toktier/Cargo.lock"));
+        let judged = GoverningLock::JudgedRecordNamed(named.to_owned());
+        let foreign = Some(Path::new("/elsewhere/Cargo.lock"));
+        let missing = GoverningLock::Missing;
         let cases = [
             (
                 unread_reason(
                     Some(&refused),
                     Some(Path::new("Cargo.lock")),
-                    &GoverningLock::Missing,
+                    None,
+                    &missing,
                 ),
                 "not an absolute path",
             ),
             (
-                unread_reason(None, Some(named), &GoverningLock::Missing),
+                unread_reason(None, Some(named), None, &missing),
                 "which is not a file",
             ),
             (
-                unread_reason(
-                    None,
-                    Some(named),
-                    &GoverningLock::JudgedRecordNamed(named.to_owned()),
-                ),
+                unread_reason(None, None, foreign, &missing),
+                "holds no package of this crate, so",
+            ),
+            (
+                unread_reason(None, Some(named), None, &judged),
                 "record of the judged build",
             ),
             (
-                unread_reason(
-                    None,
-                    None,
-                    &GoverningLock::Found(PathBuf::from("/src/toktier/Cargo.lock")),
-                ),
+                unread_reason(None, None, None, &found),
                 "above this crate's own manifest",
             ),
             (
-                unread_reason(None, None, &GoverningLock::Missing),
+                unread_reason(None, None, None, &missing),
                 "no lockfile governing this build was located",
             ),
         ];

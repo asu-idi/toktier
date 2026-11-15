@@ -194,14 +194,25 @@ pub enum ReasonCode {
     /// the route with every text that holds a listed code point on the
     /// reference engine instead. Added in 0.3.3.
     PropertyDataUntabled,
-    /// No lockfile that governs this build was located (a target
-    /// directory outside the consumer's tree, `cargo install`, or this
-    /// crate's own workspace built with such a target directory), so the
-    /// property data this build resolved is unknown and the fast CPU
-    /// route is not built. Naming the lockfile with `TOKTIER_CARGO_LOCK`
-    /// at build time is the remedy; [`Policy::Experimental`] runs the
-    /// route guarded as for [`ReasonCode::PropertyDataUntabled`]. Added
-    /// in 0.3.3.
+    /// No lockfile that governs this build was read, so the property
+    /// data this build resolved is unknown and the fast CPU route is not
+    /// built. That is the case for a target directory outside the
+    /// consumer's tree (`CARGO_TARGET_DIR`, `build.target-dir`,
+    /// `--target-dir`, or Cargo's `build.build-dir`), for `cargo install`
+    /// from a registry or from `git`, for this crate's own workspace built
+    /// with such a directory, when `TOKTIER_CARGO_LOCK` is refused (empty,
+    /// not an absolute path, or inside this crate's own directory) or
+    /// names no file, and when the lockfile found holds no package of this
+    /// crate. The remedy is to set `TOKTIER_CARGO_LOCK` at
+    /// build time to the absolute path of the `Cargo.lock` of the build
+    /// that consumes this crate. The lockfile that is read is believed as
+    /// it is: the variable must name that build's own lockfile, `cargo
+    /// install --path` needs `--locked` (without it Cargo resolves the
+    /// graph again and the lockfile beside the project no longer describes
+    /// the build), and an outside target directory must not lie under
+    /// another project's tree. [`Policy::Experimental`] runs the route
+    /// guarded as for [`ReasonCode::PropertyDataUntabled`]. Added in
+    /// 0.3.3.
     PropertyDataUnread,
     /// A reason the router named that this release has no frozen code
     /// for. The string is the router's own token, passed through rather

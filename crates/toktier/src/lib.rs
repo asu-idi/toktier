@@ -39,6 +39,11 @@ mod verify_local;
 #[path = "../build_support/source_identity.rs"]
 mod build_support;
 
+// The build script's rules for which lockfile it reads, compiled into the
+// test build so they are tested with the rest of the suite.
+#[cfg(test)]
+mod lock_reading;
+
 pub use artifact::{
     ArtifactInspection, ArtifactManager, ArtifactManagerBuilder, ArtifactSource, BearerToken,
     EnvironmentToken, Revision, SecretProvider,

@@ -444,8 +444,8 @@ fn remedy() -> String {
         })
         .collect();
     format!(
-        "align the lockfile with the judged property data ({}), or name the lockfile that \
-         governs this build with {CARGO_LOCK_ENV}",
+        "align the lockfile with the judged property data ({}), or set {CARGO_LOCK_ENV} at \
+         build time to the absolute path of the lockfile that governs this build",
         judged.join(" and ")
     )
 }
@@ -475,7 +475,11 @@ impl fmt::Display for Standing {
                          this crate's own workspace, not for a build that consumes this crate \
                          from another tree)"
                     }
-                    _ => "no lockfile governing this build was located",
+                    _ => {
+                        "no lockfile governing this build was located, or the value of \
+                         TOKTIER_CARGO_LOCK was refused (it must be an absolute path outside this \
+                         crate's own directory)"
+                    }
                 };
                 write!(
                     formatter,
@@ -1083,6 +1087,7 @@ mod tests {
         let unread = decide_standing(LocatedBy::None, "", true).to_string();
         for line in [&untabled, &unread] {
             assert!(line.contains("TOKTIER_CARGO_LOCK"), "{line}");
+            assert!(line.contains("absolute path"), "{line}");
             assert!(
                 line.contains("cargo update --package icu_properties_data --precise"),
                 "{line}"

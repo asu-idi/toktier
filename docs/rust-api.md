@@ -43,10 +43,8 @@ a symbolic link, as a model-hub snapshot directory is: the link is followed
 once at load, the bytes verified then are the ones served, and errors (and
 `LocalArtifact::tokenizer_json`) name the path as given. The default cache
 entry is still required to be a regular file. Like every load, `load_local`
-executes the `tokenizer.json` alone (next paragraph): a Rust host whose own
-reference tokenizer merges `tokenizer_config.json` should keep
-`qwen3_5_08b` on that tokenizer, or send the prompts that hold one of its
-seven config-only literals to it.
+executes `tokenizer.json` alone; the next paragraph explains the
+consequence for tokens declared only in `tokenizer_config.json`.
 
 One scoping fact belongs here. This crate executes the artifact file itself
 on every route -- it has no `transformers`, so it cannot materialize the
@@ -402,15 +400,16 @@ governing lockfile names (only copies of major version 2, the one the
 engine links, count), and the crate carries, for every published copy it
 lists, the set of code points whose class differs from the judged data's
 (17,811 code points in this release, the union over the listed copies).
-What a build does follows from what it read, reported as
-`runtime_build.property_data` (with `property_lock_located_by`, how the
-lockfile was found):
+The table describes the default `Policy::Supported` on a CPU device.
+`runtime_build.property_data` reports the reading, and
+`property_lock_located_by` reports how the lockfile was found. GPU
+admission is separate; other policies are qualified below:
 
 | What the build read | Standing | What it does |
 |---|---|---|
 | the judged copies, `icu_properties` 2.0.2 with `icu_properties_data` 2.0.1 | judged | nothing is added to any encode call; constructing a tokenizer with a fast CPU engine runs a short check first (below) |
-| the judged copies, but that check finds the fast CPU engine's ids differ from the reference engine's | `untabled: judged property-data reading contradicted by an encode check: ...`, after that construction | the fast CPU route is declined on this `Runtime` under every policy; the plan lists `ReasonCode::PropertyDataContradicted` |
-| a newer copy the release lists | guarded | the fast CPU route stays; a text holding a listed code point goes to the reference engine and reports `Backend::HuggingFace` with `InputGuardRouted` |
+| the judged copies, but a construction probe differs or cannot complete | `untabled: judged property-data reading contradicted by an encode check: ...`, after that construction | the fast CPU route is declined on this `Runtime` under every policy; the plan lists `ReasonCode::PropertyDataContradicted` |
+| a listed copy other than the judged pair | guarded | the fast CPU route stays; a text holding a listed code point goes to the reference engine and reports `Backend::HuggingFace` with `InputGuardRouted` |
 | a copy the release does not list, a copy from another source (a `[patch]`, a path copy), or `ICU4X_DATA_DIR` set at build time | untabled | the fast CPU route is not built; the plan lists `ReasonCode::PropertyDataUntabled` |
 | no governing lockfile (the layouts above) | unread | the fast CPU route is not built; the plan lists `ReasonCode::PropertyDataUnread` |
 
@@ -422,27 +421,30 @@ keeps its last seal and re-encodes that text on the reference engine at
 every append, which grows with the session; `InputGuardRouted` is also the
 reason of the engine's own input guard, so `property_data` is what tells a
 guarded build. On untabled and unread builds `Policy::RequireAccelerated`
-refuses the tokenizer with a message that names the property data and
-points at `Runtime::doctor()`, and the `property_data` line starts with
-`untabled:` or `unread:` and names the remedy: set `TOKTIER_CARGO_LOCK` to
-the absolute path of the build's own `Cargo.lock`, use a target directory
-inside the project, align the lockfile with the two `cargo update`
-commands it prints, or unset `ICU4X_DATA_DIR`. Each command names the copy
-it updates, so that Cargo can select it when the lockfile also holds a
-copy of another major version (an `icu_properties` 1.5 brought in by
-another dependency, for example): with a resolved copy known,
+refuses a tokenizer with no remaining accelerated route, with a message
+that names the property data and points at `Runtime::doctor()`, and the
+`property_data` line starts with `untabled:` or `unread:` and names the
+remedy: set `TOKTIER_CARGO_LOCK` to the absolute path of the build's own
+`Cargo.lock`, use a target directory inside the project, align the lockfile
+with the two `cargo update` commands it prints, or unset `ICU4X_DATA_DIR`.
+Each command names the copy it updates, so that Cargo can select it when the
+lockfile also holds a copy of another major version (an `icu_properties` 1.5
+brought in by another dependency, for example): with a resolved copy known,
 `cargo update --package icu_properties@<resolved version> --precise 2.0.2`
 and `cargo update --package icu_properties_data@<resolved version> --precise 2.0.1`
 (also when that copy is already at the judged version); with none known (an
-unread build), `cargo update --package icu_properties@2 --precise 2.0.2`
-and `cargo update --package icu_properties_data@2 --precise 2.0.1`. The
-bare form `--package icu_properties_data` is refused by Cargo as ambiguous
-when two major versions are present. `Policy::Experimental` keeps the fast
-route on those builds and sends listed code points to the reference engine;
-the list was not made for such data, so the other ids are unchecked there,
-and a route on property data other than the judged one is never labelled
-`CertifiedSource`. A path dependency and this workspace's own builds print
-a `warning: toktier: ...` line naming the reason; Cargo shows build-script
+unread build), `cargo update --package icu_properties@2 --precise 2.0.2` and
+`cargo update --package icu_properties_data@2 --precise 2.0.1`. The bare
+form `--package icu_properties_data` is refused by Cargo as ambiguous when
+two major versions are present. Run the updates in the consuming workspace,
+where its dependency constraints permit those versions, and rebuild.
+`TOKTIER_CARGO_LOCK` is a build-time setting; changing it when running an
+existing binary has no effect. `Policy::Experimental` keeps the fast route
+on those builds and sends listed code points to the reference engine; the
+list was not made for such data, so the other ids are unchecked there, and a
+route on property data other than the judged one is never labelled
+`CertifiedSource`. A path dependency and this workspace's own builds print a
+`warning: toktier: ...` line naming the reason; Cargo shows build-script
 warnings neither for `git` nor for registry dependencies, so a crates.io
 consumer sees the plan reason and the `doctor()` line at run time instead.
 What each standing costs is measured in the
@@ -451,23 +453,27 @@ What each standing costs is measured in the
 **The check at tokenizer construction.** It runs only on a build whose
 property data reads `judged`, and only when a tokenizer is constructed
 with a fast CPU engine (`Runtime::load` and the other constructors, under
-every policy but `Policy::Reference`), before that tokenizer is returned,
-so no request reaches a fast route that has not been confirmed. Four short
-probe texts are encoded on the tokenizer's fast CPU engine and on its
-reference engine, and the id sequences must be equal. The texts hold code
-points that are unassigned in the judged data and assigned in every
-listed later copy (U+11DE1, U+323B0, U+1E6E0 and U+20C1, in number,
-contraction and symbol contexts), so a build that compiled other listed
-property data than its lockfile names gives different ids on at least one
-of them. Builds that read `guarded`, `untabled` or `unread`, tokenizers
-without a fast CPU engine, and `Policy::Reference` run nothing.
+every policy but `Policy::Reference`), before that tokenizer is returned.
+Four short probe texts are checked in order on the tokenizer's fast CPU
+engine and reference engine. The check stops at the first difference or
+error; all four must agree to pass. The texts hold code points that are
+unassigned in the judged data and assigned in the listed 2.1 through 2.4
+copies (U+11DE1, U+323B0, U+1E6E0 and U+20C1, in number, contraction and
+symbol contexts). A mismatch contradicts the reading; a match does not
+establish the identity of the complete data set. Builds that read `guarded`,
+`untabled` or `unread`, tokenizers without a fast CPU engine, and
+`Policy::Reference` run nothing.
 
 If any probe differs, or cannot complete, the fast CPU route is dropped
 for that tokenizer and for every later construction on the same
 `Runtime`, under every policy, `Policy::Experimental` included (a sampled
 mismatch says nothing about whether the listed code points cover this
-data). The plan lists `ReasonCode::PropertyDataContradicted`, and the
-tokenizer runs on the reference engine and returns the reference ids.
+data). The affected non-reference constructions list
+`ReasonCode::PropertyDataContradicted`. This removes only the fast CPU
+route; a GPU route admitted independently remains available, with the
+reference engine as fallback. With no GPU route, the tokenizer uses the
+reference engine. Tokenizers already returned by this `Runtime` are
+unchanged. `Policy::Reference` still records `ReferenceRequested`.
 Under `Policy::RequireAccelerated` a family with no other accelerated
 route fails to load with `UncertifiedTokenizer`, and the message ends with
 "the fast CPU route was not built because of this build's property data
@@ -476,7 +482,9 @@ route fails to load with `UncertifiedTokenizer`, and the message ends with
 `Runtime::doctor()` does not run the check itself. Before any tokenizer
 has been constructed, `runtime_build.property_data` reports what the build
 script read (`judged`); after a construction on that runtime found a
-contradiction, the same field reads, for example:
+contradiction, that field reports it. Other build facts such as
+`certified` still report the registry and build reading. An example of
+the updated `property_data` field is:
 
 ```text
 untabled: judged property-data reading contradicted by an encode check: family llama_3_1_8b, probe "1\u{11de1}2345": fast and reference ids differ; the fast CPU route is declined, including under Policy::Experimental; rebuild with the consuming build's actual lockfile (TOKTIER_CARGO_LOCK must be absolute), use --locked with cargo install --path, or align the actual property data with the judged copies
@@ -487,34 +495,36 @@ gave and nothing more: a `judged` build stays `judged`, and `unread` or
 `untabled` builds are not checked and are never raised to `judged` or
 `guarded` by it. A match is not evidence that the data is the judged data,
 since the fast engine's own reference fallback can also answer a probe.
-It runs once per tokenizer construction on a judged build, 0.18 to 1.24 ms
-per tokenizer in our readings (measured in the
+It runs once per tokenizer construction while the runtime remains judged.
+Release-build measurements on one pinned core of an AMD Ryzen 9 9950X
+took 0.18 to 1.24 ms per tokenizer (medians of nine processes, two
+constructions per process; family-specific results are in the
 [0.3.3 release notes](releases/v0.3.3.md), Fixed), and nothing is added to
 an encode call, a batch, a session or a lookup.
 
-**The ids are correct whenever the lockfile that is read is the one that
-governed the build.** The build script cannot prove that, and some layouts
-read a file that does not describe the build: `cargo install --path`
-without `--locked` (Cargo resolves again and the lockfile beside the
-project no longer describes the build), a `TOKTIER_CARGO_LOCK` that names
-another checkout's lockfile, or a hard link or copy of one, an outside
-target directory placed under another project's tree, a target directory
-inside a checkout used by path (it reads that checkout's lockfile), and a
-lockfile left from an older version of this crate. When such a file reads
-judged but the build compiled a later listed property-data copy, the check
-at tokenizer construction sees the difference: the fast CPU route is
-declined with `PropertyDataContradicted`, the ids are the reference
-engine's, and `Runtime::doctor().runtime_build.property_data` names the
-contradiction and the remedy after the first construction. In our readings
-this held in each of these layouts, built with the copies 2.3.0 and 2.4.0.
-A finite set of probe texts cannot prove exactness on arbitrary data: a
-build whose lockfile was read wrongly and whose data differs from the
-judged data only outside the probe texts is not detected; none is known
-among the released data versions. Use `--locked` with
-`cargo install --path`, name the consuming build's own lockfile by
-absolute path, and keep an outside target directory out of other
-projects' trees. A target directory or build cache copied into another
-checkout keeps the first reading until `cargo clean -p toktier`.
+**The build must read its actual lockfile.** The build script cannot
+prove that the file it finds governed Cargo's resolution. A wrong reading
+can arise from an unlocked path install, another checkout's lockfile
+named directly or through a copy or hard link, an output directory under
+another project's tree, or a stale lockfile that still names `toktier`.
+The pathname, packaged-record and package-name checks reject some such
+files, but do not establish ownership of every accepted one.
+
+In the tested layouts using 2.3.0 and 2.4.0 data, a wrong `judged` reading
+was contradicted when a fast CPU engine was constructed. This is not a
+guarantee for arbitrary data or tokenizers. A wrong `guarded` reading runs
+no construction check; a wrong `judged` reading can pass if the probes do
+not expose the difference, including when the engine's reference fallback
+answers them. Differences outside the guarded set can remain undetected.
+`Policy::Experimental` also permits unknown data with only that set
+guarded.
+
+Use `--locked` with `cargo install --path`, set `TOKTIER_CARGO_LOCK` at
+build time to the absolute path of the actual consuming build's lockfile
+when needed, and keep outside output directories out of other projects'
+trees. Rebuild after correcting the setup. Use `cargo clean -p toktier`
+to force a fresh reading when reusing a copied build cache or after
+creating a previously missing named lockfile.
 
 A durable session store written by an affected build (0.3.0 to 0.3.2 on
 newer data) may hold ids from before the guard for texts with such code
@@ -655,27 +665,28 @@ the first one:
   account of the build now running, so it is not a way to earn a
   certificate. The answer is an `unlocated` line naming both routes above.
 
-`cargo install --locked toktier` is a third case worth naming, because
-`--locked` does make Cargo resolve the judged versions. It still answers
-`unlocated`: `cargo install` unpacks the package under `CARGO_HOME` and builds
-it in a temporary directory, so no lockfile stands above `OUT_DIR`, and a
+With the usual install layout and no valid build-time
+`TOKTIER_CARGO_LOCK` override, `cargo install --locked toktier` uses the
+published lockfile's versions but still answers `unlocated`: `cargo install`
+unpacks the package under `CARGO_HOME` and builds it in a temporary
+directory, so no lockfile stands above `OUT_DIR`, and a
 registry build deliberately does not read the copy sitting beside its own
 manifest -- comparing a packaged file against itself would answer nothing.
-The installed `toktier-rust` binary is usable and exact, but since 0.3.3
-it reads its property data as `unread` too, so it builds no fast CPU route
-and serves every family on the reference engine, and its GPU route is
-refused (`GpuUncertified`, the closure could not be compared).
-(`cargo install --locked --path <unpacked crate>` does report `verified`
-and keeps the fast CPU route, because Cargo then builds under the
-package's own directory and the lockfile it finds there is the one
-`--locked` actually used. Without `--locked`, Cargo resolves again and that
-lockfile no longer describes the build, which the build script cannot see;
-where the property data Cargo then compiled gives other ids on the probe
-texts, the check at tokenizer construction declines the fast CPU route
-with `PropertyDataContradicted`, as described under "Unicode property data
-and the lockfile".) This is the
-`unlocated` rule rather than the tier rule: no comparison was made at all, so
-neither reading can answer, and the advisory has nothing to report.
+Under the default policy, the installed `toktier-rust` binary uses the
+reference engine. Since 0.3.3 it reads its property data as `unread` too,
+so it builds no fast CPU route. Its GPU route is refused (`GpuUncertified`,
+the closure could not be compared).
+(`cargo install --locked --path <unpacked crate>` can report `verified`
+and retain the fast CPU route for eligible families when its build output
+is inside the package and no conflicting override is set: the lockfile
+found there is the one `--locked` used. Without `--locked`, Cargo resolves
+again, so that file need not describe the build; where the property data
+Cargo then compiled gives other ids on the probe texts, the check at
+tokenizer construction declines the fast CPU route with
+`PropertyDataContradicted`, as described under "Unicode property data and
+the lockfile".) This is the `unlocated` rule rather than the tier rule: no
+comparison was made at all, so neither reading can answer, and the advisory
+has nothing to report.
 
 ### Device and toolchain assurance
 
@@ -1020,29 +1031,36 @@ Memory of a long-lived runtime. The session layer's memory follows the
 sessions it holds: deleting a session, or its replacement by
 `overwrite()`, releases what it stored, and so does a session dropped at
 the capacity in memory mode. `Tokenizer::lookup` reads an index of the
-stored sessions with one entry per completed 4,096-character block of
-their texts, shared by the sessions that have the block; an entry holds no
-text and no token ids, takes a few hundred bytes by the crate's own
-estimate, and is released when the last session with that block is.
+stored sessions. Entries identify prefixes ending at completed
+4,096-character blocks and are shared by sessions that registered the
+same prefix. An entry holds no text or token ids, takes a few hundred
+bytes in the measured workloads, and is released with its last indexed
+owner.
 `RuntimeBuilder::lookup_index_blocks(n)` caps the entries per tokenizer
-(default 262,144, about 36 to 86 MB by `index_bytes` in our readings; `0`
-keeps no index and makes `lookup` return `None`). At the cap, a session
-whose next block would need a new entry stops adding blocks for the rest
-of its life (an `overwrite()` gives it a new start; a fork of it stays out
-too), blocks whose entry exists are still counted, lookups keep working on
-what is indexed, and nothing is evicted to make room. `store_stats()`
-reports `node_count` (the entries; it falls when sessions are deleted),
+(default 262,144; `0` keeps no index and makes `lookup` return `None`).
+The measured shapes project to about 36 to 86 MB at that cap by
+`index_bytes`; it is an entry limit, not a byte budget, since per-session
+key lists and allocated map capacity also consume memory. At the cap, a
+session whose next block would need a new entry stops adding blocks for the
+rest of its life (an `overwrite()` gives it a new start; a fork of it stays
+out too). Sessions still attached to the index can add references to
+existing entries at the cap. Lookups keep working on what is indexed, and
+nothing is evicted to make room. `store_stats()` reports `node_count` (the
+entries; an entry disappears when its last indexed owner is removed),
 `index_bytes` (an estimate of the index's size), `lookup_reused_ids` (ids
 lookups took from stored sessions instead of encoding them) and
-`index_blocks_declined` (blocks not indexed at the cap); `checksum_rejects`
-also counts listed sessions a lookup set aside because they no longer
-agreed with the store, and should read 0. `Tokenizer::encode`,
-`encode_batch` and the chunked encoder store nothing. Before 0.3.3 the
-crate kept a record with a copy of the text for every block ever stored
+`index_blocks_declined` (the first block refused when each session detaches
+at the cap, excluding later skipped blocks); `checksum_rejects` also counts
+listed sessions a lookup set aside because they no longer agreed with the
+store, and should read 0. `Tokenizer::encode`, `encode_batch` and the
+chunked encoder create no session or index entry. Before 0.3.3 the crate
+kept a record with a copy of the text for every block ever stored
 ([0.3.3 release notes](releases/v0.3.3.md), Fixed).
 
-Content lookup. `lookup(text)` is a hit when a session stored now has the
-text's first 4,096-character block. A hit returns the exact ids of `text`,
+Content lookup. `lookup(text)` is a hit when the index contains the
+text's first complete 4,096-character block. A stored session alone does
+not ensure a hit: the index may be disabled or capped, and texts shorter
+than one block miss. A hit returns the exact ids of `text`,
 those `encode` returns: where a session that has the shared blocks offers
 a seal point certified before the shared block was completed, its
 ids up to that point are reused and only the rest of `text` is encoded;
@@ -1052,19 +1070,22 @@ corrected CPU route (the reference route issues no seal points); text
 stored in one call, a system prompt sent with the first turn for one,
 offers nothing to reuse, and `lookup_reused_ids` beside `lookup_hits`
 tells the two apart. The index lists up to four sessions per block, the
-most recent ones, so when those are deleted while older sessions with the
-block live on, hits on the block stop reusing ids and stay exact. A miss
-returns `None` without tokenizing. Text whose sessions were all deleted,
-overwritten or dropped is a miss, unless its first block is shared with a
-live session. A lookup never creates, changes or drops a session; in
-memory mode, a hit that reuses a session's ids counts as a use of that
-session in the least-recently-used order.
+most recent ones with usable seals. Deleting those holders removes that
+entry's reuse opportunity even if older owners remain. A lookup can
+still reuse ids from another shared block with a listed holder; otherwise
+it encodes the whole text. A miss returns `None` without tokenizing. Text
+whose sessions were all deleted, overwritten or dropped is a miss, unless
+its first block is shared with a live session. A lookup never creates,
+changes or drops a session; in memory mode, a hit that reuses a session's
+ids counts as a use of that session in the least-recently-used order.
 
 A durable store's file holds the sessions and their transcripts, and no
 block records; the lookup index is rebuilt from the transcripts at start.
-A lookup after a restart finds every stored session and returns exact
-ids; it starts reusing a session's ids again once that session completes
-its next 4,096-character block.
+The rebuild obeys the entry cap. A lookup can hit when its first full
+block was indexed, but rebuilt entries initially offer no ids to reuse.
+An append can restore reuse when it registers a new complete block
+carrying the session's prior nonzero seal. Merely seeding the whole text
+again does not restore that reuse; reference-only sessions have no seal.
 
 ## Bounded concurrent serving
 
@@ -1095,13 +1116,14 @@ materialization separately.
 
 ## Concurrency
 
-One `Tokenizer` serves one single-text encode or session call at a time:
-the engine's state and the session store each sit behind one lock, so
-threads that share one tokenizer (or clones of it) queue, and the wait is
-uneven. In one reading on `qwen3_8b` with 100,000-character texts and four
-threads on one tokenizer, the slowest of 240 encodes took 61.5 ms and the
-slowest of 160 session seeds 178 ms, against 9.2 and 16.9 ms with one
-tokenizer per thread. What to use instead:
+Single-text calls sharing the fast CPU engine contend for its state
+lock, and session calls share a store lock. Sharing a `Tokenizer` or its
+clones can therefore serialize work and make waits uneven. This is not
+a single mutex around every operation: reference encodes use a separate
+path, and batch encoding uses worker states. In one reading on `qwen3_8b`
+with 100,000-character texts and four threads on one tokenizer, the slowest
+of 240 encodes took 61.5 ms and the slowest of 160 session seeds 178 ms,
+against 9.2 and 16.9 ms with one tokenizer per thread. What to use instead:
 
 - For requests without sessions, `encode_batch` or `ServingPool`
   (above): a batch is encoded on parallel engine states.
@@ -1109,8 +1131,10 @@ tokenizer per thread. What to use instead:
   pinned to one of them by its session key, so its session and its lookups
   stay on the tokenizer that holds them.
 
-An extra tokenizer costs about 120 MiB of memory and 0.9 s to load on
-`qwen3_8b`. In durable mode each tokenizer needs a home of its own. A pool of engine states inside one tokenizer,
+In that separate concurrency reading, an extra `qwen3_8b` tokenizer cost
+about 120 MiB of memory and 0.9 s to load. In durable mode, independently
+loaded tokenizers for the same family need separate homes. A pool of
+engine states inside one tokenizer,
 and encoding outside the session store's lock, are registered for a later
 release.
 

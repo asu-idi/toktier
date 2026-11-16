@@ -4,7 +4,7 @@
   "architecture_digest": "ac9bc14564e2d3970ba631405fbf248a49dadbcb4c0e4ee944fe7d93be370ec5",
   "characters": 73777507776,
   "devices": [
-    "NVIDIA RTX PRO 6000 Blackwell Server Edition, 12.0, 595.71.05, 00000000:61:00.0, GPU-80d288ee-1a39-f2e2-2cc9-368227cc90b7"
+    "NVIDIA GeForce RTX 5090, 12.0, 620.70.06, 00000000:01:00.0, GPU-4b1be532-9912-1f1d-2fcb-5d7215607894"
   ],
   "documents": 23156175,
   "families": 21,
@@ -19,7 +19,7 @@
       "rustflags=",
       "pyo3=abi3-py310+extension-module"
     ],
-    "host_source_digest": "59dee21e2c416a4e9503b320b29bf8d29a587066ecde3da07f12964ec9b3b673",
+    "host_source_digest": "064995a537ad87b1f654c46360a4a344e4dd1e510c4b9daa9889fca7d2734be6",
     "host_source_digest_v2": "9ece8e7175db44c8da2f4a1c99d4e3c9dad2c9d602b53e6b68b105ca17c9dc7a",
     "host_toolchain": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
   },

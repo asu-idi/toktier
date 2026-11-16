@@ -1114,6 +1114,11 @@ does not claim that a CUDA launch or committed SQLite transaction was rolled
 back. Timings report queue, engine, durable-store, and result-view
 materialization separately.
 
+Increasing `worker_threads` (1 by default) can overlap batch collection
+and session work, but concurrent fast CPU batches on one tokenizer
+reuse the same states and can wait on their mutexes ("Concurrency",
+below).
+
 ## Concurrency
 
 Single-text calls sharing the fast CPU engine contend for its state
@@ -1125,29 +1130,50 @@ with 100,000-character texts and four threads on one tokenizer, the slowest
 of 240 encodes took 61.5 ms and the slowest of 160 session seeds 178 ms,
 against 9.2 and 16.9 ms with one tokenizer per thread. What to use instead:
 
-- For requests without sessions, `encode_batch` or `ServingPool`
-  (above): a batch is encoded on parallel engine states.
-- For sessions, one `Tokenizer` per worker thread, with each conversation
-  pinned to one of them by its session key, so its session and its lookups
-  stay on the tokenizer that holds them.
+- For requests without sessions on the fast CPU route, `encode_batch`
+  uses up to one state per 64 KiB of total UTF-8 input, rounding up
+  (at least one for a nonempty batch), capped by the number of texts
+  and the current rayon thread count. Concurrent batches on one
+  tokenizer reuse states starting at index zero and can wait on their
+  mutexes. `ServingPool` has one worker by default; workers collect
+  compatible requests, including new arrivals, during a window of
+  200 us by default, then call `encode_batch_with`. In a `qwen3_8b`
+  reading on a Ryzen 9 9950X, 8 clients on 8 cores submitted only
+  30.8 KB texts to 4 serving workers and 4 rayon threads sharing 4
+  other cores; the serving and rayon threads together used about 1.2
+  cores on both 0.3.3 and 0.3.2. Combine independent requests into a
+  batch large enough to use several states, with several rayon
+  threads, or use one independently loaded `Tokenizer` per worker
+  thread; cloning a tokenizer shares its engine.
+- For sessions, use one independently loaded `Tokenizer` per worker
+  thread and pin each conversation by its session key, so its session
+  and lookups stay on the tokenizer that holds them.
+
+These state limits describe the fast CPU batch path. The reference
+route calls Hugging Face's encoder without these state mutexes. The
+GPU route locks its own executor per engine handle and processes rows
+in GPU batches; independent device slots can overlap. For one long
+request, `Tokenizer::chunked()` can encode certified chunks using a
+separate pool of checked-out states. Its serial fallbacks still use
+the ordinary route.
 
 In that separate concurrency reading, an extra `qwen3_8b` tokenizer cost
 about 120 MiB of memory and 0.9 s to load. In durable mode, independently
-loaded tokenizers for the same family need separate homes. A pool of
-engine states inside one tokenizer,
-and encoding outside the session store's lock, are registered for a later
-release.
+loaded tokenizers for the same family need separate homes.
+A pool of encoder states inside one tokenizer for single-text and
+session calls, and encoding outside the session store's lock, are
+registered for a later release.
 
 ## Chunk-parallel encode of one long request
 
-A single encode runs on one core. `Tokenizer::chunked()` is the Rust
-face of `toktier.chunked` ([`serving.md`](serving.md) Section 3): it
-cuts a long request at certified stable boundaries, encodes the chunks
-in parallel on the corrected CPU engine's worker pool, and concatenates
-the id rows. The native chunk encoder itself lives in the internal
-`toktier-routing-core` crate; this surface is a wrapper over it, and the
-plan it makes is the one the Python module's native path makes,
-position for position, under the same chunk-count table.
+An ordinary single-text encode on the fast CPU route runs on one core.
+`Tokenizer::chunked()` is the Rust face of `toktier.chunked`
+([`serving.md`](serving.md) Section 3): it cuts a long request at certified
+stable boundaries, encodes the chunks in parallel on the corrected CPU
+engine's worker pool, and concatenates the id rows. The native chunk encoder
+itself lives in the internal `toktier-routing-core` crate; this surface is a
+wrapper over it, and the plan it makes is the one the Python module's native
+path makes, position for position, under the same chunk-count table.
 
 ```rust,no_run
 # use toktier::Runtime;

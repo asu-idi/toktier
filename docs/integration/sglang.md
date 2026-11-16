@@ -320,15 +320,11 @@ other.
 
 ## Scheduled encodes: a process pool behind the wrapper (0.3.0)
 
-Everything above runs the encode on the thread of SGLang's event loop,
-one request after another, so the tokenizer is a serial stage of the
-request path: while one long transcript is being encoded every other
-request waits, and a long request occupies one core however many the
-host has (`--tokenizer-worker-num` overlaps requests across HTTP
-processes but cannot shorten one, and each worker keeps its own session
-store). The certified CPU engine adds a constraint of its own: its main
-engine is serialized inside one process, so parallel encodes need one
-process each.
+Without the scheduler, the wrapper waits for each encode on SGLang's
+event-loop thread, so a long request delays other requests there even
+when its chunks run on several cores. Ordinary single-text calls on
+one fast CPU engine share its state mutex; independently loaded
+engines can run on different threads in the same process.
 
 `toktier.integrations.sglang_sched` gives the wrapper a pool of worker
 processes, each holding one loaded tokenizer (about 320 MB each), and a

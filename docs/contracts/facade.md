@@ -232,7 +232,8 @@ def encode(self, text, *, session=None, lookup=None,
   explicit `session` or `lookup="auto"` raises `UNSUPPORTED_CONFIG` (the
   stored stream is the core stream; we reject rather than silently
   re-encode).
-- `encode_batch` runs the plain routed path row by row; content lookup
+- `encode_batch` uses the plain routed batch path, preserving row
+  order and applying routing and fallback per row; content lookup
   is a single-document affair in 0.x.
 
 ## 3. Store, index, and cache layers

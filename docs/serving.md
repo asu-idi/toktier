@@ -161,25 +161,25 @@ What decides whether it is worth it:
 - **The chunk table.** With `k=None` the chunk count follows a
   staircase measured on three families and four corpus types: one chunk
   below 256 K characters, 4 up to 1 M, 16 up to 4 M, 32 above, capped
-  by one chunk per 64 KiB of payload (the native batch path opens at
-  most one worker per 64 KiB, so more chunks than that only add
-  concatenation work). Below 256 K characters a single encode is
-  already as fast as the batch path, which is why the table says one
-  chunk there.
-- **Cores.** On the Python path the parallelism is the native
-  engine's batch worker pool, which is sized by the Rayon thread count
-  at first use (`RAYON_NUM_THREADS`; the default is the core count of
-  the process's affinity). Its workers are forked lazily on the first
-  batch that needs them, at roughly 20 ms per worker, once per process,
-  so a serving process should send one long batch at start-up rather
-  than pay that inside a request. A process started with
-  `RAYON_NUM_THREADS=1` gets the Python path's chunks encoded one after
-  another: still exact, not faster. The native path runs its chunks on a
-  pool of its own, described below, which `RAYON_NUM_THREADS` does not
-  size. Deployments often export `RAYON_NUM_THREADS=1` beside
-  `TOKENIZERS_PARALLELISM=false` to keep library thread pools quiet; the
-  native path, which `chunked.encode` takes by default on an admitted
-  tokenizer, keeps its parallelism there.
+  by the character count divided by 65,536, rounded up, with a minimum
+  of one. The native batch path sizes its states by UTF-8 bytes instead.
+  Below 256 K characters a single encode is already as fast as the
+  batch path, which is why the table says one chunk there.
+- **Cores.** On the Python path the native fast CPU batch pool selects
+  states for each batch by its total UTF-8 bytes (one per 64 KiB,
+  rounded up), its row count and the current Rayon thread count.
+  A nonempty batch uses at least one state. `RAYON_NUM_THREADS` sets
+  the global Rayon pool's size; a caller's Rayon pool can set another
+  size. States are forked lazily and retained per engine, at roughly
+  20 ms per new state in the reading, so warm each engine with a batch
+  large enough to create the states it will need. On the global pool,
+  `RAYON_NUM_THREADS=1` makes these chunks run one after another.
+  The native path runs its chunks on a pool of its own, described below,
+  which `RAYON_NUM_THREADS` does not size. Deployments often export
+  `RAYON_NUM_THREADS=1` beside `TOKENIZERS_PARALLELISM=false` to keep
+  library thread pools quiet; the native path, which `chunked.encode`
+  takes by default on an admitted tokenizer, keeps its parallelism
+  there.
 - **What it saves.** On the Python path, 1 M-character English prose
   with 16 workers takes 8.6 ms against 26.5 ms serial for the slower of the certified engines
   (3.1x), and 6.9 ms against 9.8 ms for the faster ones (1.4x): the
@@ -319,17 +319,16 @@ another, exact and not faster.
   session memory now follows the sessions it holds (the
   [0.3.3 release notes](releases/v0.3.3.md), Fixed). To release a tokenizer inside a process, call
   `close()` ([`contracts/facade.md`](contracts/facade.md) Section 1).
-- Batch encodes share the worker pool: two threads calling
-  `encode_batch` at once take turns on the same workers rather than
-  doubling them. The native chunk encoder's pool is separate and does
-  not have this limit.
-- Parallel encodes of different requests need different processes,
-  because the certified CPU engine is serialized inside one process. The
-  SGLang adapter can run a pool of tokenizer worker processes for that
+- Fast CPU batch calls on the same tokenizer reuse the same prefix
+  of its state pool and can wait on those states' mutexes. The native
+  chunk encoder checks out states from a separate pool.
+- Independent fast CPU engines can encode different requests in
+  parallel in one process. The SGLang adapter provides a process pool,
+  with a separate tokenizer in each worker
   (`TOKTIER_SGLANG_SCHED_WORKERS`, 0 by default, which means no pool;
   [`integration/sglang.md`](integration/sglang.md)). Each worker loads
   its own tokenizer, about 320 MB, and encodes with one thread. A good
   starting point is one worker per physical core you can reserve for
   tokenization; our own SGLang measurements used four workers on a
-  16-core NUMA node. The pool helps when its workers have cores of
-  their own.
+  16-core NUMA node. The pool helps when its workers have cores of their
+  own.

@@ -814,6 +814,7 @@ class SGLangToktierTokenizer:
         self._cfg = config if config is not None else AdapterConfig()
         self._mode = self._cfg.session_key
         self._lock = threading.Lock()
+        self._lifecycle_lock = threading.Lock()
         self._calls = 0
         self._stats: dict[str, Any] = {
             "calls": 0,
@@ -1747,10 +1748,11 @@ class SGLangToktierTokenizer:
         should not hold up other requests."""
         with self._lock:
             latched = self._tok is None
-            if not latched and not self._closed:
-                # The short-request rule starts here, after the first
-                # encode completed on the accelerated route.
-                self._short_active = True
+            with self._lifecycle_lock:
+                if not latched and not self._closed:
+                    # The short-request rule starts here, after the first
+                    # encode completed on the accelerated route.
+                    self._short_active = True
         if latched:
             return list(
                 self._delegate_call(text, add_special_tokens=add_special_tokens)[
@@ -1949,7 +1951,7 @@ class SGLangToktierTokenizer:
         # From here on a modeled call meets the closed toktier tokenizer,
         # whatever its length (RuntimeError, as before the short-request
         # rule existed): the rule ends and does not start again.
-        with self._lock:
+        with self._lifecycle_lock:
             self._closed = True
             self._short_active = False
         self.flush()

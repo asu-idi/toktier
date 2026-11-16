@@ -794,6 +794,48 @@ def test_modeled_calls_after_close_raise_whatever_their_length(
     assert w.stats()["how"] == {"off": 1, "short": 1}
 
 
+def test_close_from_inside_a_long_request_hook_returns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ``long_request_encoder`` hook runs while the wrapper holds its
+    encode lock; a hook that calls ``close()`` must not wait on that lock.
+    The call returns the hook's ids, the wrapper is closed, and a modeled
+    call after it raises as after any ``close()``."""
+    import threading
+
+    fake = _ClosingToktier()
+    monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
+    box: dict[str, Any] = {}
+
+    def hook(text: str) -> list[int]:
+        box["wrapper"].close()
+        return [1, 2, 3]
+
+    w = wrap_tokenizer(
+        _StubHf(),
+        AdapterConfig(
+            session_key="off",
+            short_chars=0,
+            long_request_encoder=hook,
+            long_request_min_chars=5,
+        ),
+    )
+    box["wrapper"] = w
+    caller = threading.Thread(
+        target=lambda: box.__setitem__(
+            "ids", w.encode("a long request", add_special_tokens=False)
+        ),
+        daemon=True,
+    )
+    caller.start()
+    caller.join(30.0)
+    assert not caller.is_alive(), "close() inside the hook did not return"
+    assert box["ids"] == [1, 2, 3]
+    assert fake.closed
+    with pytest.raises(RuntimeError, match="backend is closed"):
+        w.encode("abc", add_special_tokens=False)
+
+
 _WRAP_RAISES = r"""
 import json, os, sys, threading, time
 from toktier.integrations.sglang import (

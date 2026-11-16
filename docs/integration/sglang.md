@@ -152,10 +152,13 @@ Start the server with that directory on `PYTHONPATH` (`PYTHONPATH=<that
 directory> python -m sglang.launch_server --model-path ...`). When
 `--model-path` names a local directory rather than a model-hub repository
 id, set `TOKTIER_SGLANG_FAMILY` to the toktier family id as well (for
-example `TOKTIER_SGLANG_FAMILY=qwen3_8b`): without it the adapter passes the
-directory's path to `toktier.from_pretrained`, which resolves repository
-ids, and the server stops at start-up with `ArtifactNotFound` (settings
-table below). The wrapper's `stats()["sglang_shape"]` reads `"verified"`
+example `TOKTIER_SGLANG_FAMILY=qwen3_8b`), or `TOKTIER_SGLANG_REPO` to the
+repository the files came from, to have it accelerated, provided the
+identity check finds the files equivalent to that artifact and the family
+has an accelerated route. Without either, toktier finds no artifact for a
+local directory, and the wrapper serves every call with SGLang's tokenizer
+(next section); recognising a local directory by the content of its
+`tokenizer.json` is not in 0.3.3. The wrapper's `stats()["sglang_shape"]` reads `"verified"`
 once the attach has taken place, and a shape that does not match is reported
 as described under the version check below. The patch produces the same
 wrapper through the supported option, at the same place: the attach form
@@ -176,6 +179,67 @@ directory (the store is single-process). And under
 `--enable-dynamic-batch-tokenizer` the encode runs in an executor thread
 that does not carry context variables, so the `contextvar` key degrades to
 content lookup there; the timing log records which path served each call.
+
+## Start-up, acceleration and a failed wrap (0.3.3)
+
+<!-- OPEN(main line): the rider sentences in this block follow P/SENTENCES_FOR_DOC.md with the third review's wording diff (P/scripts/rev3/candidate_sentences.diff) applied; reconcile with the next revision of that file. -->
+
+**A tokenizer toktier cannot resolve.** When nothing names the tokenizer
+for toktier (no `TOKTIER_SGLANG_FAMILY`, no `TOKTIER_SGLANG_REPO`) and
+toktier cannot find an artifact for it -- a local model directory, a
+repository without `tokenizer.json`, a tokenizer with no `name_or_path`
+(for example the Mistral tekken tokenizer), or a hub id whose files are not
+in toktier's cache on an offline host -- the wrap does not raise. With the
+default settings the wrapper serves every call with the supplied tokenizer
+(`identity["status"] == "unresolved"`, the reason beside it, `accelerates`
+false) and logs one warning on the logger `toktier.integrations.sglang`
+that names `TOKTIER_SGLANG_FAMILY`, `TOKTIER_SGLANG_REPO` and `toktier
+artifacts fetch`. A deployment that filters log records by logger name sees
+the warning only if that name passes. The SGLang helper may then log a
+warning of its own before it keeps SGLang's tokenizer.
+
+When `TOKTIER_SGLANG_FAMILY` or `TOKTIER_SGLANG_REPO` is set and does not
+resolve -- a mistyped name, or files not staged on an offline host -- the
+wrap raises `ArtifactNotFound`, naming the setting and its value and the
+remedy. A caller may catch it and fall back: both SGLang helpers do, log
+the message and keep SGLang's own tokenizer, so the server starts without
+acceleration and the log says why. A `TOKTIER_SGLANG_*` value that does not
+parse raises `ValueError`; both SGLang helpers read the settings outside
+their fallback, so the server stops at start-up. Other load errors (an
+artifact cache that fails verification, for one) make the wrap raise; both
+helpers catch them and keep SGLang's tokenizer.
+`TOKTIER_SGLANG_REQUIRE_ARTIFACT=1` restores the wrapper's 0.3.2 behaviour,
+a raise whenever no artifact resolves; what the server does with that raise
+is up to the caller (both helpers keep SGLang's tokenizer).
+
+**Whether anything is accelerated.** The wrapper has a boolean
+`accelerates`: true when an admitted accelerated route is available, false
+in passthrough and for a tokenizer toktier knows only as external (those
+run on the reference engine). Short requests (below) are answered by the
+supplied tokenizer even when it is true. It appears in `repr` (the line
+SGLang logs at start-up), in `stats()` and in the timing log's `init`
+record. `is_fast` keeps the Hugging Face meaning. `accelerates` stays true
+after `close()` and for a tokenizer whose special-token template the
+wrapper delegates. For an admitted wrapper that has not switched to
+passthrough, modeled string calls after `close()` raise
+`RuntimeError('backend is closed')`, short ones included, through
+`__call__`, `encode` and `encode_async`, as in 0.3.2; delegated calls keep
+the supplied tokenizer's behaviour. On 0.3.2 the same fact is
+`wrapper.planned_backend not in (None, "hf")`.
+
+**A wrap that fails leaves nothing running.** The wrapper opens the timing
+log and creates the session store's directory before it loads or starts
+anything, so a path that cannot be created stops the wrap at once (the
+store's directory used to fail on the first request instead). If the wrap
+fails after something has started -- during the pool's start (a worker
+that cannot be started, with others already running), after the pool has
+started, or during eager chunk warming -- the pool's workers, the toktier
+tokenizer, the shadow thread and the log are closed before the error is
+raised. A pool whose start fails with an ordinary error is closed and the
+wrapper serves in process, as before. One exception by design: the native
+chunk threads that chunk warming starts belong to the process, not to a
+wrapper. They form one pool shared by every tokenizer in the process (as in
+0.3.2) and stay after a failed wrap and after `close()`.
 
 ## Long stateless requests: chunk-parallel encode (0.3.0)
 
@@ -292,6 +356,24 @@ runs. Other entry points (`__call__`, the dynamic-batch executor) use the
 pool synchronously. The backend patch adds the same hook: both forms go
 through `toktier.integrations.sglang.tokenize_texts_with_pool`.
 
+<!-- OPEN(main line): the rider sentences in this block follow P/SENTENCES_FOR_DOC.md with the third review's wording diff (P/scripts/rev3/candidate_sentences.diff) applied; reconcile with the next revision of that file. -->
+
+Since 0.3.3 a caller that holds the tokenizer can use the pool without the
+manager object: `await encode_texts_with_pool(tokenizer, texts, key=...,
+add_special_tokens=True)` returns the rows (one id list for a non-empty
+string, a list of id lists for a non-empty list of strings) when
+`tokenizer` is the wrapper with a running pool, and `None` otherwise (an
+empty string or list, a tuple of strings, pairs and other inputs among
+them), so a caller can make the pool one branch of its own encode step and
+keep whatever it does after the encode (an EOS it appends, for instance).
+A list holding an empty string, `[""]`, is a non-empty list and returns one
+row. It reads nothing of a manager. `key` defaults to the bound
+`SESSION_KEY` and serves every text of a list. Short texts in the list are
+answered as described under "Short requests" below.
+`tokenize_texts_with_pool(manager, texts, is_cross_encoder)` stays, for the
+attach form and for SGLang patched with the 0.3.2 hunk; it now calls the
+helper above.
+
 ```
 TOKTIER_SGLANG_SCHED_WORKERS=4        # 0 (default) = no pool
 TOKTIER_SGLANG_SCHED_CORES=0-3        # optional: pin worker i to cores[i]
@@ -321,6 +403,47 @@ serial), so the pool pays for itself on long or concurrent requests, not
 on short sequential ones. The registered patch-shaped native return
 (`docs/releases/v0.3.0.md`) is what removes the per-request stream copy.
 
+<!-- OPEN(main line): the rider sentences in this block follow P/SENTENCES_FOR_DOC.md with the third review's wording diff (P/scripts/rev3/candidate_sentences.diff) applied; reconcile with the next revision of that file. -->
+
+**Workers and their parent.** The workers stop when the wrapper is closed
+and at normal exit; when the serving process is killed they leave as
+described here. Pool workers leave when the process that started them is
+gone, whatever ended it: a normal exit, SIGTERM, SIGKILL or `os._exit`. On
+Linux the kernel sends them SIGKILL when the parent exits (armed when the
+pool is started from the parent's main thread, as SGLang does); on every
+platform an idle worker also checks its parent once a second, between
+tasks. On Linux with that signal armed, a worker in the middle of an encode
+is ended without finishing it. Elsewhere, and for a pool started from
+another thread, a busy worker finishes the task it is on before it notices
+that its parent is gone, and then leaves. With a store directory, what the
+store had not yet written may be lost, as it is when the server itself is
+killed.
+
+**Closing a pool.** The scheduler uses bounded joins also when the pool is
+saturated with long prompts: nothing is dispatched once the pool is
+closed, and the workers' last answers are read off their pipes while they
+stop (in our readings a pool of two workers with twelve 2 MB requests
+queued closed in 0.3 to 0.6 s, and in a reproduction of the 0.3.2 hang 24
+of 24 attempts returned). A worker that does not stop within five seconds
+is terminated, and one that still runs five seconds later is killed. These
+joins do not put a deadline on the wrapper's close, on an in-process
+encode, or on a hook the caller provides. Once the workers are stopped,
+`close()` also releases a transfer that a stopped worker left half done: a
+large answer cut off in the middle, or a large task the worker never read.
+The pool's queues, feeder threads and process handles are then released:
+in our readings, after a close in both of those cases, the process's
+descriptor and thread counts were back at what they were before the pool
+started, nothing was printed, and a process that then exits with
+`os._exit` left multiprocessing's resource tracker no semaphore to report.
+These readings are on CPython 3.12 on Linux; the release relies on CPython
+multiprocessing queue internals for this. If termination fails or a worker
+is still alive after the final timed join, `close()` can return with a
+live worker and feeder; complete cleanup is not guaranteed in that case.
+Closing the scheduler while the wrapper stays open: requests waiting in the
+pool are answered in process, with the same ids. Closing the wrapper closes
+the scheduler and also the toktier tokenizer, so modeled requests that
+arrive after it raise `RuntimeError('backend is closed')`.
+
 ## Settings
 
 The adapter is configured through `AdapterConfig` and, for the pool,
@@ -339,8 +462,10 @@ provisional in 0.3.0.
 
 | Variable | Default | What it sets |
 |---|---|---|
-| `TOKTIER_SGLANG_FAMILY` | unset | the toktier family id to load; unset resolves the wrapped tokenizer's `name_or_path` through `toktier.from_pretrained` |
-| `TOKTIER_SGLANG_REPO` | unset | the repository id to resolve when no family is named, in place of `name_or_path` |
+| `TOKTIER_SGLANG_FAMILY` | unset | the toktier family id to load; unset resolves the wrapped tokenizer's `name_or_path` through `toktier.from_pretrained`; a value that does not resolve makes the wrap raise `ArtifactNotFound` |
+| `TOKTIER_SGLANG_REPO` | unset | the repository id to resolve when no family is named, in place of `name_or_path`; a value that does not resolve makes the wrap raise `ArtifactNotFound` |
+| `TOKTIER_SGLANG_REQUIRE_ARTIFACT` | `0` | `1`, `true` or `yes` (any letter case) makes the wrap raise whenever no artifact resolves, as in 0.3.2; `0`, `false` or `no` (the default) serves a tokenizer toktier cannot resolve, when nothing names it, in passthrough; any other value is refused |
+| `TOKTIER_SGLANG_SHORT_CHARS` | unset (the number of added tokens) | a non-negative integer: strings shorter than this many characters are answered by the supplied tokenizer once one accelerated encode has completed; `0` is off (Short requests, above) |
 | `TOKTIER_SGLANG_SESSION_KEY` | `auto` | `auto` (content lookup), `contextvar` (the request's key), `off` (stateless) or `passthrough` (the wrapped tokenizer answers, the wrapper only times) |
 | `TOKTIER_SGLANG_RID_SEPARATOR` | unset | when set, the part of the request id before it is a key of last resort (attach form only; the backend patch keys on `session_id`, else `cache_salt`) |
 | `TOKTIER_SGLANG_STORE` | unset | a directory for persistent session state |
@@ -427,15 +552,33 @@ comparison matter in practice.
   for those families to the supplied tokenizer under SGLang's
   `transformers` with no difference in the ids.
 - Admission is checked again after construction. Before every
-  accelerated encode the wrapper compares a cheap fingerprint of the
-  supplied object's mutable surface (added tokens, the split setting,
-  normalizer, pre-tokenizer, post-processor, truncation and padding)
-  with the one taken at admission, and a mutating call made through the
-  wrapper marks it stale at once. On any difference the full comparison
-  runs again. An object that is no longer equivalent switches the
-  wrapper to delegation for good (the pool, if any, is closed, and an
-  `identity_drift` record is written); one that still is keeps
-  acceleration and has its shadow reference rebuilt.
+  accelerated encode the wrapper checks that the encode-affecting surface
+  of the supplied tokenizer is still the one it admitted: the backend
+  object itself, the two split flags, truncation and padding, the model's
+  vocabulary size, the normalizer, pre-tokenizer and post-processor, and
+  the added-token table; a mutating call made through the wrapper marks
+  it stale at once. A change of that surface made after the wrap is
+  noticed by the next request that takes the accelerated route, which then
+  re-checks the whole configuration. An object that is no longer
+  equivalent switches the wrapper to delegation for good (the pool, if
+  any, is closed, and an `identity_drift` record is written); one that
+  still is keeps acceleration and has its shadow reference rebuilt. Not
+  signalled: `model_max_length` (plain ids do not depend on it; calls with
+  keywords are delegated), a change that is undone before the next
+  request, and a model replaced in place by one of the same size (no
+  per-request check sees it, as in 0.3.2). A short request (below) skips
+  the check; the next long request after a change notices it. Since 0.3.3
+  the check is roughly twice as fast, with a cost that grows with the
+  number of added tokens (in the review's readings 4.92 against 9.23 us
+  on Qwen3-8B, 44.75 against 100.52 us on Llama-3.1-8B, 253.92 against
+  562.82 us on DeepSeek-V4-Flash).
+- When the wrapper switches to delegation, a completed accelerated result
+  whose acceptance check runs after the switch is replaced by an answer
+  from the supplied tokenizer. Acceptance is per text, including in
+  batches and the pool helper. Results accepted before the switch may
+  still return afterwards; a concurrent batch may contain rows from both
+  sides of the switch. This is an acceptance guarantee, not an atomic
+  snapshot of a whole batch.
 
 When the two are not equivalent, or one side cannot be serialized, the
 wrapper delegates every call to the supplied tokenizer for its whole
@@ -450,6 +593,36 @@ Attribute writes follow attribute reads: an assignment SGLang makes on
 the tokenizer -- `tokenizer.chat_template = ...` in its template manager
 when a chat template is installed -- lands on the wrapped object, where
 the delegated `apply_chat_template` reads it.
+
+### Short requests (0.3.3)
+
+<!-- OPEN(main line): the rider sentences in this block follow P/SENTENCES_FOR_DOC.md with the third review's wording diff (P/scripts/rev3/candidate_sentences.diff) applied; reconcile with the next revision of that file. -->
+<!-- OPEN(main line): whether the short-request rule stays on by default is the user's question at the push-ready stop; this subsection, its settings row and its release-note item are self-contained so that they can be rewritten or removed together. -->
+
+A string shorter than `TOKTIER_SGLANG_SHORT_CHARS` characters is answered
+by the supplied tokenizer, on the calling thread, without the per-request
+check; it is counted as `stats()["how"]["short"]`. By default the
+threshold is the number of added tokens of the tokenizer (26 on Qwen3-8B,
+256 on Llama-3.1-8B, 1,283 on DeepSeek-V4-Flash); `0` turns the rule off.
+The threshold is a heuristic, not a promise that every request takes the
+faster route. On tokenizers with many added tokens it removes most of the
+check's cost from short requests (in the review's readings a 40-character
+request took 17.35 us with the rule on against 45.72 off on Llama-3.1-8B,
+and 22.14 against 203.32 us on DeepSeek-V4-Flash). In the measured
+Qwen3-8B requests of 1 to 25 characters the accelerated route was cheaper,
+so the default cost a little there (at most 5.74 us per request in that
+run); `TOKTIER_SGLANG_SHORT_CHARS=0` is a choice for such workloads.
+
+The rule starts once the wrapper has completed one encode on its
+accelerated route; until then every call takes the route it took in 0.3.2.
+So a caller's first encode, whatever its length (the SGLang helpers'
+start-up probe `encode("toktier")` among them), opens the engine and the
+session store and reports what is wrong with them at start-up. A short
+text does not enter the session store (a later long turn of the
+conversation is served from the last turn that was stored, with the same
+ids), does not go to the pool, and is decided text by text in a batch.
+Pairs and other inputs that are not plain strings are served by the
+supplied tokenizer as before. `accelerates` is not affected.
 
 ## Supported SGLang versions
 

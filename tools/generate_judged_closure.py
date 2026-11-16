@@ -153,7 +153,12 @@ FACADE_ENCODE_SOURCES = (
     "gpu_data.rs",
     "jit.rs",
     "lib.rs",
+    "lock_reading.rs",
     "manifest.rs",
+    "prefix_index.rs",
+    "property_guard.rs",
+    "property_guard_table.rs",
+    "property_guard_tests.rs",
     "runtime.rs",
     "session.rs",
 )

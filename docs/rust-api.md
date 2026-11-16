@@ -408,7 +408,8 @@ lockfile was found):
 
 | What the build read | Standing | What it does |
 |---|---|---|
-| the judged copies, `icu_properties` 2.0.2 with `icu_properties_data` 2.0.1 | judged | nothing changes, and nothing is added to any call |
+| the judged copies, `icu_properties` 2.0.2 with `icu_properties_data` 2.0.1 | judged | nothing is added to any encode call; constructing a tokenizer with a fast CPU engine runs a short check first (below) |
+| the judged copies, but that check finds the fast CPU engine's ids differ from the reference engine's | `untabled: judged property-data reading contradicted by an encode check: ...`, after that construction | the fast CPU route is declined on this `Runtime` under every policy; the plan lists `ReasonCode::PropertyDataContradicted` |
 | a newer copy the release lists | guarded | the fast CPU route stays; a text holding a listed code point goes to the reference engine and reports `Backend::HuggingFace` with `InputGuardRouted` |
 | a copy the release does not list, a copy from another source (a `[patch]`, a path copy), or `ICU4X_DATA_DIR` set at build time | untabled | the fast CPU route is not built; the plan lists `ReasonCode::PropertyDataUntabled` |
 | no governing lockfile (the layouts above) | unread | the fast CPU route is not built; the plan lists `ReasonCode::PropertyDataUnread` |
@@ -425,9 +426,18 @@ refuses the tokenizer with a message that names the property data and
 points at `Runtime::doctor()`, and the `property_data` line starts with
 `untabled:` or `unread:` and names the remedy: set `TOKTIER_CARGO_LOCK` to
 the absolute path of the build's own `Cargo.lock`, use a target directory
-inside the project, align the lockfile with the two
-`cargo update --package <crate>@<version> --precise <judged>` commands it
-prints, or unset `ICU4X_DATA_DIR`. `Policy::Experimental` keeps the fast
+inside the project, align the lockfile with the two `cargo update`
+commands it prints, or unset `ICU4X_DATA_DIR`. Each command names the copy
+it updates, so that Cargo can select it when the lockfile also holds a
+copy of another major version (an `icu_properties` 1.5 brought in by
+another dependency, for example): with a resolved copy known,
+`cargo update --package icu_properties@<resolved version> --precise 2.0.2`
+and `cargo update --package icu_properties_data@<resolved version> --precise 2.0.1`
+(also when that copy is already at the judged version); with none known (an
+unread build), `cargo update --package icu_properties@2 --precise 2.0.2`
+and `cargo update --package icu_properties_data@2 --precise 2.0.1`. The
+bare form `--package icu_properties_data` is refused by Cargo as ambiguous
+when two major versions are present. `Policy::Experimental` keeps the fast
 route on those builds and sends listed code points to the reference engine;
 the list was not made for such data, so the other ids are unchecked there,
 and a route on property data other than the judged one is never labelled
@@ -438,17 +448,73 @@ consumer sees the plan reason and the `doctor()` line at run time instead.
 What each standing costs is measured in the
 [0.3.3 release notes](releases/v0.3.3.md) (Fixed).
 
-The ids are correct whenever the lockfile the build script reads is the
-one that governed the build, and the crate believes the lockfile it reads.
-So `cargo install --path` needs `--locked` (without it Cargo resolves again
-and the lockfile beside the project no longer describes the build), the
-variable must name the consuming build's own lockfile and not another
-checkout's, an outside target directory must not lie under another
-project's tree, and a target directory placed inside a checkout used by
-path reads that checkout's lockfile. A target directory or build cache
-copied into another checkout keeps the first reading until
-`cargo clean -p toktier`.
-<!-- OPEN(main line): this paragraph on the layouts that can still read a lockfile other than the governing one follows the guard as it stands before its second review; confirm or rewrite it after that review (a check of the linked data itself may be added). -->
+**The check at tokenizer construction.** It runs only on a build whose
+property data reads `judged`, and only when a tokenizer is constructed
+with a fast CPU engine (`Runtime::load` and the other constructors, under
+every policy but `Policy::Reference`), before that tokenizer is returned,
+so no request reaches a fast route that has not been confirmed. Four short
+probe texts are encoded on the tokenizer's fast CPU engine and on its
+reference engine, and the id sequences must be equal. The texts hold code
+points that are unassigned in the judged data and assigned in every
+listed later copy (U+11DE1, U+323B0, U+1E6E0 and U+20C1, in number,
+contraction and symbol contexts), so a build that compiled other listed
+property data than its lockfile names gives different ids on at least one
+of them. Builds that read `guarded`, `untabled` or `unread`, tokenizers
+without a fast CPU engine, and `Policy::Reference` run nothing.
+
+If any probe differs, or cannot complete, the fast CPU route is dropped
+for that tokenizer and for every later construction on the same
+`Runtime`, under every policy, `Policy::Experimental` included (a sampled
+mismatch says nothing about whether the listed code points cover this
+data). The plan lists `ReasonCode::PropertyDataContradicted`, and the
+tokenizer runs on the reference engine and returns the reference ids.
+Under `Policy::RequireAccelerated` a family with no other accelerated
+route fails to load with `UncertifiedTokenizer`, and the message ends with
+"the fast CPU route was not built because of this build's property data
+(untabled: judged property-data reading contradicted by an encode check:
+...); Runtime::doctor() reports it as runtime_build.property_data".
+`Runtime::doctor()` does not run the check itself. Before any tokenizer
+has been constructed, `runtime_build.property_data` reports what the build
+script read (`judged`); after a construction on that runtime found a
+contradiction, the same field reads, for example:
+
+```text
+untabled: judged property-data reading contradicted by an encode check: family llama_3_1_8b, probe "1\u{11de1}2345": fast and reference ids differ; the fast CPU route is declined, including under Policy::Experimental; rebuild with the consuming build's actual lockfile (TOKTIER_CARGO_LOCK must be absolute), use --locked with cargo install --path, or align the actual property data with the judged copies
+```
+
+The check never promotes a build. A match keeps the standing the lockfile
+gave and nothing more: a `judged` build stays `judged`, and `unread` or
+`untabled` builds are not checked and are never raised to `judged` or
+`guarded` by it. A match is not evidence that the data is the judged data,
+since the fast engine's own reference fallback can also answer a probe.
+It runs once per tokenizer construction on a judged build, 0.18 to 1.24 ms
+per tokenizer in our readings (measured in the
+[0.3.3 release notes](releases/v0.3.3.md), Fixed), and nothing is added to
+an encode call, a batch, a session or a lookup.
+
+**The ids are correct whenever the lockfile that is read is the one that
+governed the build.** The build script cannot prove that, and some layouts
+read a file that does not describe the build: `cargo install --path`
+without `--locked` (Cargo resolves again and the lockfile beside the
+project no longer describes the build), a `TOKTIER_CARGO_LOCK` that names
+another checkout's lockfile, or a hard link or copy of one, an outside
+target directory placed under another project's tree, a target directory
+inside a checkout used by path (it reads that checkout's lockfile), and a
+lockfile left from an older version of this crate. When such a file reads
+judged but the build compiled a later listed property-data copy, the check
+at tokenizer construction sees the difference: the fast CPU route is
+declined with `PropertyDataContradicted`, the ids are the reference
+engine's, and `Runtime::doctor().runtime_build.property_data` names the
+contradiction and the remedy after the first construction. In our readings
+this held in each of these layouts, built with the copies 2.3.0 and 2.4.0.
+A finite set of probe texts cannot prove exactness on arbitrary data: a
+build whose lockfile was read wrongly and whose data differs from the
+judged data only outside the probe texts is not detected; none is known
+among the released data versions. Use `--locked` with
+`cargo install --path`, name the consuming build's own lockfile by
+absolute path, and keep an outside target directory out of other
+projects' trees. A target directory or build cache copied into another
+checkout keeps the first reading until `cargo clean -p toktier`.
 
 A durable session store written by an affected build (0.3.0 to 0.3.2 on
 newer data) may hold ids from before the guard for texts with such code
@@ -603,7 +669,11 @@ refused (`GpuUncertified`, the closure could not be compared).
 and keeps the fast CPU route, because Cargo then builds under the
 package's own directory and the lockfile it finds there is the one
 `--locked` actually used. Without `--locked`, Cargo resolves again and that
-lockfile no longer describes the build, which the crate cannot see.) This is the
+lockfile no longer describes the build, which the build script cannot see;
+where the property data Cargo then compiled gives other ids on the probe
+texts, the check at tokenizer construction declines the fast CPU route
+with `PropertyDataContradicted`, as described under "Unicode property data
+and the lockfile".) This is the
 `unlocated` rule rather than the tier rule: no comparison was made at all, so
 neither reading can answer, and the advisory has nothing to report.
 
@@ -1240,7 +1310,7 @@ enum is `#[non_exhaustive]`, so a `match` on it needs a catch-all arm.
 | `NetworkDisabled` / `NETWORK_DISABLED` | Acquisition was requested with the `network` feature off, which from 0.2.5 is the default build. The message names the feature and the offline ways to supply the bytes. Explicit offline mode is the row above: nothing was attempted, so the answer is that the cache does not hold it. |
 | `RegistryInvalid` / `REGISTRY_INVALID` | Shipped registry, manifest, or table bytes fail their embedded digest, schema, or cross-reference checks. This is a package-integrity failure, not a caller error. |
 | `UncertifiedRuntime` / `UNCERTIFIED_RUNTIME` | An accelerated route was demanded from a build whose identity is not in the shipped `runtime_builds` register. |
-| `UncertifiedTokenizer` / `UNCERTIFIED_TOKENIZER` | The artifact itself has no certification row for the demanded route, or a repository/revision is outside the shipped equivalence table. |
+| `UncertifiedTokenizer` / `UNCERTIFIED_TOKENIZER` | The artifact itself has no certification row for the demanded route, or a repository/revision is outside the shipped equivalence table. Under `Policy::RequireAccelerated` it is also the error when no accelerated route is built for the family on this runtime; when the fast CPU route was declined for the property data (`PropertyDataUntabled`, `PropertyDataUnread` or `PropertyDataContradicted`), the message says so and points at `Runtime::doctor()`. |
 | `KernelIncompatible` / `KERNEL_INCOMPATIBLE` | The kernel cannot be admitted: uncertified SM, fatbin or class-table digest mismatch, a family the kernel does not cover, a device-side constraint. |
 | `JitCompileFailed` / `JIT_COMPILE_FAILED` | The `jit` feature ran NVCC and the compile, its inputs, or its products failed. |
 | `UncertifiedJit` / `UNCERTIFIED_JIT` | A JIT product outside the judged toolchain set was requested under a policy that does not admit it. Since 0.2.6 the default `Policy::Supported` does admit an unjudged (toolchain, device) pair and labels the product `supported_untested`, so this code is what `Policy::Certified` returns for that case; a product built on an explicit waiver still needs `Policy::Experimental`. |

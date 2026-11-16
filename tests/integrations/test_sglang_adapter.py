@@ -1008,6 +1008,7 @@ def test_real_tokenizer_drift_after_add_tokens_is_delegated(
         w2("toktierprobeunique")["input_ids"] == hf("toktierprobeunique")["input_ids"]
     )
     assert w2.stats()["mode"] == "passthrough" and w2.stats()["delegated"] == 2
+    w.close()
 
 
 def test_a_start_up_probe_opens_the_session_store_whatever_its_length(
@@ -1058,7 +1059,6 @@ def test_a_start_up_probe_opens_the_session_store_whatever_its_length(
         assert w.stats()["how"] == {"auto": 1, "short": 1}
     finally:
         w.close()
-    w.close()
 
 
 # -- identity gate, second review: split_special_tokens, post_processor, drift ----

@@ -50,11 +50,11 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 [`hero_session_vs_reencode.data.json`](docs/figures/hero_session_vs_reencode.data.json)，
 完整的扫描测试结果见 [`docs/benchmarks.md`](docs/benchmarks.md)。
 
-<!-- OPEN(main line): the release date of the News entry (2026.11.DD), and the SGLang sentence, which rests on riders P5 and P6 under review tonight. -->
+<!-- OPEN(main line): replace the News date 2026.11.DD with the release date. -->
 
 ## 最新动态
 
-- **2026.11.DD** 🚀 **toktier 0.3.3** 发布：Rust crate 的 session store 不再为存下的每个文本块保留一条记录，长期运行的 Rust 进程的内存现在随它持有的会话而定，`Tokenizer::lookup` 改由一个只记录现存会话的小索引提供；lockfile 解析到较新 Unicode 属性数据的 Rust 构建不再返回与参考实现不同的 id：新数据分类不同的文本交给参考引擎，crate 读不到 lockfile 的构建（target 目录在项目之外、从 crates.io `cargo install`）在 `TOKTIER_CARGO_LOCK` 指明 lockfile 之前不走快速 CPU 路由，而读到的 lockfile 标明 judged 数据、引擎对四段探测文本的编码却与该数据不符时，构造 tokenizer 时的检查会拒绝快速 CPU 路由；SGLang 适配器的 worker 池现在能在有限时间内关闭，worker 随服务器一同退出。从 0.3.2 升级时，Rust crate 在 0.3.2 下写的持久 session store 不再打开，请删除 `<home>/sessions/<family>.sqlite3` 或换新的 home。详见[发布说明](docs/releases/v0.3.3.md)。
+- **2026.11.DD** 🚀 **toktier 0.3.3** 发布：Rust crate 的 session store 不再保留历史文本块记录，`Tokenizer::lookup` 使用有条目上限的现存会话索引。lockfile 解析到的 Unicode 属性数据与发布时校验的版本不同的 Rust 构建，在 0.3.0 至 0.3.2 上可能对含新近分配码点的文本返回与参考实现不同的 id；现在快速 CPU 路由把含已列出码点的文本交给参考引擎，在默认策略下，构建所用数据未列出或 lockfile 未被读取时不启用该路由。构造 tokenizer 时的探测编码也可否定 lockfile 所报告的已校验数据版本。SGLang 适配器关闭 worker 池时现在对每次等待 worker 退出设置超时，池饱和时也如此，并会检测父进程退出。从 0.3.2 升级时，Rust crate 拒绝打开旧的持久 session store；请删除 `<home>/sessions/<family>.sqlite3` 或换新的 home，需要保留的会话可通过重放文本恢复。详见[发布说明](docs/releases/v0.3.3.md)。
 - **2026.11.12** 🚀 **toktier 0.3.2** 发布：由聊天模板渲染、或含任何控制 token 的提示现在走快速 CPU 引擎与 GPU 路由，`add_special_tokens=True` 也走快速路由；Step 5 Preview、Hy4 preview、Muse Spark 与 Nemotron 3.5 Super VL 的 tokenizer（`step5_preview`、`hy4`、`muse_spark`、`nemotron_super_vl`）现在也走快速 CPU 引擎，MiMo V2.6 与 DeepSeek V4.1 Flash 的 tokenizer 可走分块并行编码；在 NFC 规范化会改变的文本上，会话现在返回与参考实现相同的 id（此前的版本可能不同），Python 包的 session store 也不再为存下的每个文本块保留一条记录。从 0.3.1 升级时，0.3.1 写下的持久 session store 不再打开，请换新目录。详见[发布说明](docs/releases/v0.3.2.md)。
 - **2026.11.08** 🚀 **toktier 0.3.1** 发布：新增六个已认证 tokenizer——`hy4`、`step5_preview`、`muse_spark`、`nemotron_super_vl`、`deepseek_v4_1_flash`、`mimo_v2_6`；预编译 GPU 交付新增 `sm_80` 与 `sm_90` 认证；新发布的、携带已认证 tokenizer 文件的仓库随之被接纳，例如 `stepfun-ai/Step-5-Preview-BF16`、`moonshotai/Kimi-K3.1-Pro`、`MiniMaxAI/MiniMax-M3.1-Flash`。从 0.3.0 升级时，持久 session store 需换新目录。详见[发布说明](docs/releases/v0.3.1.md)。
 - **2026.10.15** 🚀 **toktier 0.3.0** 发布——单个长请求现在可以在 CPU 路由上用到

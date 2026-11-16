@@ -473,10 +473,10 @@ fn remedy_for(copies: &[LockCopy]) -> String {
         .filter(|copy| copy.judged)
         .map(|judged| {
             let package = match copies.iter().find(|copy| copy.name == judged.name) {
-                Some(copy) if copy.version != judged.version => {
+                Some(copy) => {
                     format!("{}@{}", judged.name, copy.version)
                 }
-                _ => judged.name.to_owned(),
+                None => format!("{}@{LINKED_MAJOR}", judged.name),
             };
             format!(
                 "`cargo update --package {package} --precise {}`",
@@ -1192,11 +1192,12 @@ mod tests {
             )),
             "{line}"
         );
-        // The code crate already resolves at the judged version.
+        // Even a copy already at the judged version needs a disambiguator
+        // when another major version is present in the lockfile.
         assert!(
             line.contains(&format!(
-                "`cargo update --package icu_properties --precise {}`",
-                code.version
+                "`cargo update --package icu_properties@{} --precise {}`",
+                code.version, code.version
             )),
             "{line}"
         );
@@ -1306,7 +1307,11 @@ mod tests {
             assert!(line.contains("TOKTIER_CARGO_LOCK"), "{line}");
             assert!(line.contains("absolute path"), "{line}");
             assert!(
-                line.contains("cargo update --package icu_properties_data --precise"),
+                line.contains("cargo update --package icu_properties@2 --precise"),
+                "{line}"
+            );
+            assert!(
+                line.contains("cargo update --package icu_properties_data@2 --precise"),
                 "{line}"
             );
         }

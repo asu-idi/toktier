@@ -416,6 +416,8 @@ pub(crate) enum Standing {
         /// What makes the build one the table speaks for.
         remedy: String,
     },
+    /// An encode check contradicted a judged reading for this runtime.
+    Contradicted { reason: String },
     /// No lockfile that governs this build was read.
     Unread {
         /// How the build script located the lockfile it did read, if any.
@@ -501,6 +503,14 @@ impl fmt::Display for Standing {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Judged => formatter.write_str("judged"),
+            Self::Contradicted { reason } => write!(
+                formatter,
+                "untabled: judged property-data reading contradicted by an encode check: {reason}; \
+                 the fast CPU route is declined, including under Policy::Experimental; \
+                 rebuild with the consuming build's actual lockfile (TOKTIER_CARGO_LOCK must \
+                 be absolute), use --locked with cargo install --path, or align the actual \
+                 property data with the judged copies"
+            ),
             Self::Guarded { resolved } => write!(
                 formatter,
                 "guarded: the property data resolves to {resolved}; texts holding one of the \
@@ -741,6 +751,9 @@ pub(crate) fn handling(standing: &Standing, policy: crate::Policy) -> Handling {
     let experimental = policy == crate::Policy::Experimental;
     match standing {
         Standing::Judged => Handling::NoGuard,
+        Standing::Contradicted { .. } => {
+            Handling::Decline(crate::ReasonCode::PropertyDataContradicted)
+        }
         Standing::Guarded { .. } => Handling::Guard,
         Standing::Untabled { .. } if experimental => Handling::Guard,
         Standing::Unread { .. } if experimental => Handling::Guard,
@@ -1323,5 +1336,103 @@ mod tests {
         assert!(line.starts_with("guarded: "), "{line}");
         assert!(line.contains(&MOVED_CODE_POINTS.to_string()), "{line}");
         assert!(line.contains("icu_properties_data 2.3.0"), "{line}");
+    }
+}
+
+/// A small contradiction check on the already-admitted engine. A match only
+/// retains the lockfile's standing; it never admits unknown data. These
+/// contexts exercise number, letter/contraction and punctuation boundaries.
+/// Each release must run them on every accelerated family with judged and
+/// deliberately mismatched linked data. No check is added to an encode call.
+pub(crate) fn confirm_encodes(
+    family: &str,
+    engine: &toktier_routing_core::FastCpuEngine,
+    reference: &toktier_routing_core::ReferenceEngine,
+) -> Option<Standing> {
+    check_encodes(family, |text| {
+        let fast = engine.encode_ids(text).map_err(|error| error.to_string())?;
+        let expected = reference
+            .encode_ids(text, false)
+            .map_err(|error| error.to_string())?;
+        Ok(fast == expected)
+    })
+}
+
+fn check_encodes(
+    family: &str,
+    mut agrees: impl FnMut(&str) -> Result<bool, String>,
+) -> Option<Standing> {
+    // All four points were unassigned in the judged data and are assigned
+    // in the listed copies from 2.1 onward, including 2.4.0. These are
+    // negative witnesses, not a fingerprint of a complete data release.
+    for text in [
+        "1\u{11de1}2345",
+        "it's\u{323b0}'s \u{323b0}'ll",
+        "9\u{1e6e0}9\u{1e6e0}87654321 x",
+        "abc \u{20c1}def ghi",
+    ] {
+        let reason = match agrees(text) {
+            Ok(true) => continue,
+            Ok(false) => format!("family {family}, probe {text:?}: fast and reference ids differ"),
+            Err(error) => {
+                format!("family {family}, probe {text:?}: check could not complete ({error})")
+            }
+        };
+        return Some(Standing::Contradicted { reason });
+    }
+    None
+}
+
+#[cfg(test)]
+mod encode_confirmation_tests {
+    use super::*;
+    #[test]
+    fn all_four_probe_contexts_must_agree() {
+        let mut texts = Vec::new();
+        assert_eq!(
+            check_encodes("test", |text| {
+                texts.push(text.to_owned());
+                Ok(true)
+            }),
+            None
+        );
+        assert_eq!(texts.len(), 4);
+        assert!(texts.iter().all(|text| holds_moved(text)));
+        for failed in 0..4 {
+            let mut seen = 0;
+            let result = check_encodes("test", |_| {
+                let equal = seen != failed;
+                seen += 1;
+                Ok(equal)
+            });
+            assert_eq!(seen, failed + 1);
+            let standing = result.expect("a mismatch must decline");
+            assert!(standing.to_string().contains("ids differ"));
+            for policy in [
+                crate::Policy::Supported,
+                crate::Policy::Experimental,
+                crate::Policy::RequireAccelerated,
+            ] {
+                assert_eq!(
+                    handling(&standing, policy),
+                    Handling::Decline(crate::ReasonCode::PropertyDataContradicted)
+                );
+            }
+        }
+    }
+    #[test]
+    fn a_probe_error_declines_and_names_the_remedy() {
+        let standing = check_encodes("test", |_| Err("injected fault".into())).unwrap();
+        let line = standing.to_string();
+        for needle in [
+            "untabled:",
+            "judged",
+            "contradicted",
+            "injected fault",
+            "TOKTIER_CARGO_LOCK",
+            "--locked",
+        ] {
+            assert!(line.contains(needle), "{line}");
+        }
     }
 }

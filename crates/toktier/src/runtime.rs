@@ -282,6 +282,7 @@ impl RuntimeBuilder {
         Ok(Runtime {
             inner: Arc::new(RuntimeInner {
                 registry,
+                property_probe: std::sync::OnceLock::new(),
                 artifacts,
                 config: self.config,
             }),
@@ -292,6 +293,9 @@ impl RuntimeBuilder {
 #[derive(Debug)]
 struct RuntimeInner {
     registry: Arc<Registry>,
+    // A failed check is remembered for subsequent construction and diagnostics.
+    // A successful check does not promote any other family or unknown data.
+    property_probe: std::sync::OnceLock<crate::property_guard::Standing>,
     artifacts: ArtifactManager,
     config: RuntimeConfig,
 }
@@ -313,6 +317,8 @@ impl Runtime {
 
     /// Return machine-readable build and non-invasive device facts. This does
     /// not load a tokenizer or CUDA kernel and never widens routing policy.
+    /// An encode confirmation is reported here only after tokenizer
+    /// construction has run it on this runtime.
     pub fn doctor(&self) -> DoctorFacts {
         let standing = self.inner.registry.rust_api_build_standing();
         let runtime_build = RuntimeBuildFacts {
@@ -337,7 +343,12 @@ impl Runtime {
             reference_versions: crate::behavior_version::reference_facts(),
             reference_certification_reason:
                 crate::behavior_version::reference_certification_reason().map(str::to_owned),
-            property_data: crate::property_guard::standing().to_string(),
+            property_data: self
+                .inner
+                .property_probe
+                .get()
+                .unwrap_or_else(|| crate::property_guard::standing())
+                .to_string(),
             property_lock_located_by: crate::property_guard::LOCATED_BY_RECORD.to_owned(),
         };
         let ordinal = match self.inner.config.device {
@@ -494,19 +505,20 @@ impl Runtime {
             .forced_property_standing
             .as_ref()
             .unwrap_or_else(|| crate::property_guard::standing());
-        let property_handling = if policy == Policy::Reference {
+        let mut property_standing = self.inner.property_probe.get().unwrap_or(property_standing);
+        let mut property_handling = if policy == Policy::Reference {
             crate::property_guard::Handling::NoGuard
         } else {
             crate::property_guard::handling(property_standing, policy)
         };
-        let property_declined = match &property_handling {
+        let mut property_declined = match &property_handling {
             crate::property_guard::Handling::Decline(reason) => {
                 reasons.push(reason.clone());
                 true
             }
             _ => false,
         };
-        let fast_cpu_route = if policy == Policy::Reference {
+        let mut fast_cpu_route = if policy == Policy::Reference {
             reasons.push(ReasonCode::ReferenceRequested);
             None
         } else if !fast_cpu_build_allowed || property_declined {
@@ -514,6 +526,25 @@ impl Runtime {
         } else {
             self.build_fast_cpu(&artifact, Arc::clone(&reference), &mut reasons)?
         };
+        // A judged lockfile is only a reading of a file. Confirm it against
+        // this tokenizer's actual engines before any request can use it.
+        if property_standing == &crate::property_guard::Standing::Judged {
+            if let Some(route) = &fast_cpu_route {
+                if let Some(contradiction) =
+                    crate::property_guard::confirm_encodes(&family, &route.engine, &reference)
+                {
+                    let _ = self.inner.property_probe.set(contradiction);
+                }
+                // Also observe a concurrent construction's failed check.
+                if let Some(contradiction) = self.inner.property_probe.get() {
+                    property_standing = contradiction;
+                    property_handling = crate::property_guard::handling(contradiction, policy);
+                    property_declined = true;
+                    reasons.push(ReasonCode::PropertyDataContradicted);
+                    fast_cpu_route = None;
+                }
+            }
+        }
         // What the fast CPU route can be called. The judged recipe on the
         // judged compiler is certified by source; anything else that was
         // admitted is supported, or locally verified when a check this

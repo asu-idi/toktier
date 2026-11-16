@@ -199,6 +199,11 @@ pub enum ReasonCode {
     /// list was not made for this data, so the other ids are unchecked.
     /// Added in 0.3.3.
     PropertyDataUntabled,
+    /// An encode check at tokenizer construction contradicted a judged
+    /// property-data reading, or the check could not complete. The fast
+    /// CPU route is declined, including under Experimental policy. The
+    /// runtime's doctor reports the observed reason after the check.
+    PropertyDataContradicted,
     /// No lockfile that governs this build was read, so the property
     /// data this build resolved is unknown and the fast CPU route is not
     /// built. That is the case for a target directory outside the
@@ -468,7 +473,10 @@ pub struct RuntimeBuildFacts {
     /// [`ReasonCode::PropertyDataUnread`]), and the line names the
     /// remedy: aligning the lockfile, setting `TOKTIER_CARGO_LOCK` to the
     /// absolute path of the lockfile of the consuming build, or unsetting
-    /// `ICU4X_DATA_DIR`. Added in 0.3.3.
+    /// `ICU4X_DATA_DIR`. A check at tokenizer construction can override a
+    /// judged reading with [`ReasonCode::PropertyDataContradicted`]; this
+    /// runtime reports that failure here after the check. `doctor()` itself
+    /// does not run an encode check. Added in 0.3.3.
     #[cfg_attr(feature = "serde", serde(default))]
     pub property_data: String,
     /// How the build script located the lockfile it read: `named`

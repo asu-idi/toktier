@@ -1139,11 +1139,12 @@ class SGLangToktierTokenizer:
         a local directory. A family or repository that the operator named
         (``AdapterConfig.family`` / ``repo_id``, ``TOKTIER_SGLANG_FAMILY``
         / ``TOKTIER_SGLANG_REPO``) and that does not resolve raises
-        ``ArtifactNotFound`` naming the setting, so that a mistyped name
-        or files not staged stop the server instead of going unnoticed.
-        Any other error of the load (a cache that fails verification, for
-        one) raises as well. ``require_artifact`` restores the raise for
-        every case.
+        ``ArtifactNotFound`` naming the setting and the remedy, so that a
+        mistyped name or files not staged do not go unnoticed; a caller
+        may catch it and keep its own tokenizer (both SGLang helpers do,
+        and log the message). Any other error of the load (a cache that
+        fails verification, for one) raises as well. ``require_artifact``
+        restores the raise for every case.
         """
         try:
             return self._load_toktier()

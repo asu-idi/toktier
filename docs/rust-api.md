@@ -528,10 +528,19 @@ creating a previously missing named lockfile.
 
 A durable session store written by an affected build (0.3.0 to 0.3.2 on
 newer data) may hold ids from before the guard for texts with such code
-points: remove the store file, or seed those sessions again. Releases
-before 0.3.3 ran the fast CPU route on whatever property data the build
-resolved ([0.3.3 release notes](releases/v0.3.3.md), Fixed). The complete
-repair, in which the engine carries the judged class table itself and no
+points. 0.3.3 does not open a store that 0.3.2 or an earlier release
+wrote, so it serves none of those ids: remove the store file or give the
+runtime another home, and replay the text of a session to keep it
+([0.3.3 release notes](releases/v0.3.3.md), Upgrading). The same reset
+and replay apply to a store written by a 0.3.3 build affected by an
+incorrect lockfile reading or unchecked data under
+`Policy::Experimental`, as described above. Correcting only the
+consuming lockfile or property-data setup of the same packaged crate
+leaves its source identity unchanged; with the same artifact and fast
+CPU backend, its store key is unchanged too. Releases before 0.3.3 ran
+the fast CPU route on whatever property data the build resolved
+([0.3.3 release notes](releases/v0.3.3.md), Fixed). The complete repair,
+in which the engine carries the judged class table itself and no
 resolved data can change ids, is registered for a later release.
 
 ### What the build flags claim

@@ -6,7 +6,7 @@
     "source_commit": "e365641f3729ef2084c50a6a0b11530a4fe360bb",
     "generated_at": "2026-08-07T10:44:36Z"
   },
-  "root_digest": "sha256:6e89c4103e53ce6eeb11a208e21e60bd9ecee41f9c012863f8ed37e490e98a3c",
+  "root_digest": "sha256:8437df9b22aa39de6eee0f47a96c347cbd64007e27f81679c0723ae58deb9047",
   "oracles": [
     {
       "oracle_id": "tokenizers",
@@ -504,7 +504,7 @@
         "from_artifact_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
         "engine_parity": {
           "path": "readings/fast_cpu_carryover_parity_deepseek_v4_1_flash.json",
-          "sha256": "d7409df45294006d3a4968d22aad51ef77d80b3139c9fffed69024465f4c0697",
+          "sha256": "a0fb8fa1cb6a0938bea024ffa35203a081b6822559dacd04e2a99b553883d438",
           "docs": 8680,
           "mismatches": 0
         },
@@ -1753,7 +1753,7 @@
         "from_artifact_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
         "engine_parity": {
           "path": "readings/fast_cpu_carryover_parity_mimo_v2_6.json",
-          "sha256": "053b4a21c1f5921acfc429cad98dc2e3e962bfa0f4f844ab424baa134ac98e6c",
+          "sha256": "0248e6eddec6f9a2f90cd5dfb3bc8c36a68b66e8003cc12e21ae56ef9464f049",
           "docs": 8680,
           "mismatches": 0
         },

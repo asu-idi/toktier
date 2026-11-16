@@ -14,7 +14,7 @@ tests: with any one part removed, some test here fails.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -62,14 +62,14 @@ class _FaceOf(_FakeToktier):
 
     def __init__(self, hf: Any) -> None:
         super().__init__()
-        face = hf.backend_tokenizer.to_str()
+        face: str = hf.backend_tokenizer.to_str()
 
         class _Backend:
             @staticmethod
             def materialized_tokenizer_json() -> str:
                 return face
 
-        self._backend = _Backend
+        self._backend = cast("type[_FakeToktier._backend]", _Backend)
 
 
 def _wrap(
@@ -77,7 +77,9 @@ def _wrap(
 ) -> SGLangToktierTokenizer:
     fake = _FaceOf(hf)
     monkeypatch.setattr(SGLangToktierTokenizer, "_load_toktier", lambda self: fake)
-    w = wrap_tokenizer(hf, AdapterConfig(session_key=mode, **cfg))
+    w: SGLangToktierTokenizer = wrap_tokenizer(
+        hf, AdapterConfig(session_key=mode, **cfg)
+    )
     assert w.identity["status"] == "equivalent", w.identity
     assert w.encode("ab <a1> c", add_special_tokens=False) == hf.encode(
         "ab <a1> c", add_special_tokens=False

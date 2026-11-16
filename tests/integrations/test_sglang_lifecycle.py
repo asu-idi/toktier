@@ -10,6 +10,7 @@ whatever the wrapper did around it.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -651,7 +652,7 @@ def test_a_result_finished_before_a_latch_is_not_returned_after_it(
                 assert release.wait(30.0)
             return accept(*args, **kwargs)
 
-        w._complete = held  # type: ignore[method-assign]
+        w._complete = held
         box: dict[str, Any] = {}
 
         def request() -> None:
@@ -667,7 +668,7 @@ def test_a_result_finished_before_a_latch_is_not_returned_after_it(
         assert reached.wait(60.0)
         # The supplied tokenizer changes, and now answers differently.
         hf.backend_tokenizer.add_tokens(["<changed_in_flight>"])
-        hf._core = lambda s: [7] * len(s)  # type: ignore[method-assign]
+        hf._core = lambda text: [7] * len(text)  # type: ignore[method-assign]
         assert w.encode("abc", add_special_tokens=False) == [7, 7, 7]
         assert w.stats()["mode"] == "passthrough" and w.toktier is None
         release.set()
@@ -740,7 +741,7 @@ def test_a_latch_or_pool_close_between_route_choice_and_submit_falls_back(
         if trigger == "latch":
             # The supplied tokenizer changes, and now answers differently.
             hf.backend_tokenizer.add_tokens(["<changed_before_submit>"])
-            hf._core = lambda s: [7] * len(s)  # type: ignore[method-assign]
+            hf._core = lambda text: [7] * len(text)  # type: ignore[method-assign]
             assert w.encode("abc", add_special_tokens=False) == [7, 7, 7]
             assert w.stats()["mode"] == "passthrough" and w.toktier is None
             expected = [7] * len(text)
@@ -781,7 +782,7 @@ def test_modeled_calls_after_close_raise_whatever_their_length(
     assert w.encode("abc", add_special_tokens=False) == [97, 98, 99]
     assert w.stats()["how"] == {"off": 1, "short": 1}  # the rule had started
     w.close()
-    faces = {
+    faces: dict[str, Callable[[str], Any]] = {
         "call": lambda t: w(t)["input_ids"],
         "encode": lambda t: w.encode(t),
         "async": lambda t: asyncio.run(w.encode_async(t)),

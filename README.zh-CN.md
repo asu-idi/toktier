@@ -50,8 +50,11 @@ repair 窗口；修正版 Gigatoken 窗口则属于同一图中的另一个测�
 [`hero_session_vs_reencode.data.json`](docs/figures/hero_session_vs_reencode.data.json)，
 完整的扫描测试结果见 [`docs/benchmarks.md`](docs/benchmarks.md)。
 
+<!-- OPEN(main line): the release date of the News entry (2026.11.DD), and the SGLang sentence, which rests on riders P5 and P6 under review tonight. -->
+
 ## 最新动态
 
+- **2026.11.DD** 🚀 **toktier 0.3.3** 发布：Rust crate 的 session store 不再为存下的每个文本块保留一条记录，长期运行的 Rust 进程的内存现在随它持有的会话而定，`Tokenizer::lookup` 改由一个只记录现存会话的小索引提供；lockfile 解析到较新 Unicode 属性数据的 Rust 构建不再返回与参考实现不同的 id：新数据分类不同的文本交给参考引擎，crate 读不到 lockfile 的构建（target 目录在项目之外、`cargo install`）在 `TOKTIER_CARGO_LOCK` 指明 lockfile 之前不走快速 CPU 路由；SGLang 适配器的 worker 池现在能在有限时间内关闭，worker 随服务器一同退出。从 0.3.2 升级时，Rust crate 在 0.3.2 下写的持久 session store 不再打开，请删除 `<home>/sessions/<family>.sqlite3` 或换新的 home。详见[发布说明](docs/releases/v0.3.3.md)。
 - **2026.11.12** 🚀 **toktier 0.3.2** 发布：由聊天模板渲染、或含任何控制 token 的提示现在走快速 CPU 引擎与 GPU 路由，`add_special_tokens=True` 也走快速路由；Step 5 Preview、Hy4 preview、Muse Spark 与 Nemotron 3.5 Super VL 的 tokenizer（`step5_preview`、`hy4`、`muse_spark`、`nemotron_super_vl`）现在也走快速 CPU 引擎，MiMo V2.6 与 DeepSeek V4.1 Flash 的 tokenizer 可走分块并行编码；在 NFC 规范化会改变的文本上，会话现在返回与参考实现相同的 id（此前的版本可能不同），Python 包的 session store 也不再为存下的每个文本块保留一条记录。从 0.3.1 升级时，0.3.1 写下的持久 session store 不再打开，请换新目录。详见[发布说明](docs/releases/v0.3.2.md)。
 - **2026.11.08** 🚀 **toktier 0.3.1** 发布：新增六个已认证 tokenizer——`hy4`、`step5_preview`、`muse_spark`、`nemotron_super_vl`、`deepseek_v4_1_flash`、`mimo_v2_6`；预编译 GPU 交付新增 `sm_80` 与 `sm_90` 认证；新发布的、携带已认证 tokenizer 文件的仓库随之被接纳，例如 `stepfun-ai/Step-5-Preview-BF16`、`moonshotai/Kimi-K3.1-Pro`、`MiniMaxAI/MiniMax-M3.1-Flash`。从 0.3.0 升级时，持久 session store 需换新目录。详见[发布说明](docs/releases/v0.3.1.md)。
 - **2026.10.15** 🚀 **toktier 0.3.0** 发布——单个长请求现在可以在 CPU 路由上用到
@@ -365,7 +368,7 @@ cargo new v41-example && cd v41-example
 
 ```toml
 [dependencies]
-toktier = { version = "0.3.2", features = ["network"] }
+toktier = { version = "0.3.3", features = ["network"] }
 ```
 
 若从 `main` 的克隆构建，请按路径依赖 `crates/toktier`，而不是 `git` 依赖：
@@ -937,7 +940,7 @@ span，涵盖 normalization、pre-tokenization、merge 和 added-token 处理；
 
 ## 文档
 
-- [`docs/releases/v0.3.2.md`](docs/releases/v0.3.2.md) — 本版本发布说明（英文）。
+- [`docs/releases/v0.3.3.md`](docs/releases/v0.3.3.md) — 本版本发布说明（英文）。
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — 分层、路由与 store 格式。
 - [`docs/serving.md`](docs/serving.md) — 各类请求该用哪种 encode 调用、只返回差量的会话追加，以及长请求的分块并行编码。
 - [`docs/integration/sglang.md`](docs/integration/sglang.md) — 把 toktier 用作 SGLang 的 tokenizer 后端。

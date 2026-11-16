@@ -60,8 +60,11 @@ values, workload sizes, and sample counts are in
 [`hero_session_vs_reencode.data.json`](docs/figures/hero_session_vs_reencode.data.json);
 the complete sweeps are in [`docs/benchmarks.md`](docs/benchmarks.md).
 
+<!-- OPEN(main line): the release date of the News entry (2026.11.DD), and the SGLang sentence, which rests on riders P5 and P6 under review tonight. -->
+
 ## News
 
+- **2026.11.DD** 🚀 **toktier 0.3.3** released: the Rust crate's session store no longer keeps a record for every block of text it stores, so the memory of a long-lived Rust process now follows the sessions it holds, and `Tokenizer::lookup` is served by a small index of the live sessions. A Rust build whose lockfile resolves newer Unicode property data no longer returns ids that differ from the reference: texts the newer data classifies differently go to the reference engine, and a build whose lockfile the crate cannot read (a target directory outside the project, `cargo install`) gets no fast CPU route until `TOKTIER_CARGO_LOCK` names it. The SGLang adapter's worker pool now closes in bounded time, and its workers leave with the server. Upgrading from 0.3.2: a durable session store the Rust crate wrote under 0.3.2 is not opened by 0.3.3, so remove `<home>/sessions/<family>.sqlite3` or use a new home. See the [v0.3.3 release notes](docs/releases/v0.3.3.md).
 - **2026.11.12** 🚀 **toktier 0.3.2** released: prompts rendered from a chat template, or holding any control token, now run on the fast CPU engine and the GPU route, and `add_special_tokens=True` is served on the fast route too. The Step 5 Preview, Hy4 preview, Muse Spark and Nemotron 3.5 Super VL tokenizers (`step5_preview`, `hy4`, `muse_spark`, `nemotron_super_vl`) now run on the fast CPU engine as well, and the MiMo V2.6 and DeepSeek V4.1 Flash tokenizers on the chunk-parallel encoder. Sessions over text that NFC normalization changes now return the reference ids where earlier releases could differ, and the Python package's session store no longer keeps a record for every block of text it stores. Upgrading from 0.3.1: a persistent session store written by 0.3.1 is not opened by 0.3.2, so point `store=` at a new directory. See the [v0.3.2 release notes](docs/releases/v0.3.2.md).
 - **2026.11.08** 🚀 **toktier 0.3.1** released: six more certified tokenizer artifacts (`hy4`, `step5_preview`, `muse_spark`, `nemotron_super_vl`, `deepseek_v4_1_flash`, `mimo_v2_6`), and the prebuilt GPU delivery is now certified on `sm_80` and `sm_90` as well. Newly published repositories that ship a certified tokenizer's files are admitted with it, among them `stepfun-ai/Step-5-Preview-BF16`, `moonshotai/Kimi-K3.1-Pro` and `MiniMaxAI/MiniMax-M3.1-Flash`. Upgrading from 0.3.0: a persistent session store written by 0.3.0 is not opened by 0.3.1, so point `store=` at a new directory. See the [v0.3.1 release notes](docs/releases/v0.3.1.md).
 - **2026.10.15** 🚀 **toktier 0.3.0** released — one long request can now use
@@ -444,7 +447,7 @@ cargo new v41-example && cd v41-example
 
 ```toml
 [dependencies]
-toktier = { version = "0.3.2", features = ["network"] }
+toktier = { version = "0.3.3", features = ["network"] }
 ```
 
 If you build from a clone of `main` instead, depend on `crates/toktier` by
@@ -1105,7 +1108,7 @@ layers together.
 
 ## Documentation
 
-- [`docs/releases/v0.3.2.md`](docs/releases/v0.3.2.md) — release notes for this version.
+- [`docs/releases/v0.3.3.md`](docs/releases/v0.3.3.md) — release notes for this version.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — layers, routing, and store format.
 - [`docs/serving.md`](docs/serving.md) — which encode call for which request shape, patch-only appends, and chunk-parallel encode for long requests.
 - [`docs/integration/sglang.md`](docs/integration/sglang.md) — using toktier as an SGLang tokenizer backend.

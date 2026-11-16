@@ -1630,12 +1630,17 @@ class SGLangToktierTokenizer:
         t0 = time.perf_counter()
         key = self._resolve_key(key)
         kind = self._pool_kind(text, key)
-        if kind is not None:
-            assert self._sched is not None
+        sched = self._sched
+        if kind is not None and sched is not None:
             limit = self._cfg.scheduler.worker_timeout_s if self._cfg.scheduler else 0
-            result = self._sched.encode_sync(
-                text, key, kind=kind, timeout=(2 * limit) if limit > 0 else None
-            )
+            try:
+                result = sched.encode_sync(
+                    text, key, kind=kind, timeout=(2 * limit) if limit > 0 else None
+                )
+            except RuntimeError:
+                if sched.active:
+                    raise
+                result = SchedResult(None, "closed", kind, 1, 0, 0.0, 0.0, 0.0, ())
             if result.error is None and result.ids is not None:
                 return self._complete(
                     text,
@@ -1689,10 +1694,15 @@ class SGLangToktierTokenizer:
         t0 = time.perf_counter()
         key = self._resolve_key(key)
         kind = self._pool_kind(text, key)
-        if kind is None:
+        sched = self._sched
+        if kind is None or sched is None:
             return self._encode_one(text, add_special_tokens, key=key)
-        assert self._sched is not None
-        result = await self._sched.encode_async(text, key, kind=kind)
+        try:
+            result = await sched.encode_async(text, key, kind=kind)
+        except RuntimeError:
+            if sched.active:
+                raise
+            result = SchedResult(None, "closed", kind, 1, 0, 0.0, 0.0, 0.0, ())
         if result.error is None and result.ids is not None:
             return self._complete(
                 text,

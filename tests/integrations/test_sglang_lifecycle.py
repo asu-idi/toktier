@@ -678,6 +678,85 @@ def test_a_result_finished_before_a_latch_is_not_returned_after_it(
         w.close()
 
 
+@pytest.mark.parametrize("face", ["sync", "async"])
+@pytest.mark.parametrize("trigger", ["latch", "scheduler_close"])
+@pytest.mark.parametrize("boundary", ["route", "submit"])
+def test_a_latch_or_pool_close_between_route_choice_and_submit_falls_back(
+    boundary: str, trigger: str, face: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A request that has chosen the pool, and is held either right after
+    the choice or right before its submission, meets a latch (or a close of
+    the scheduler alone) before it reaches the pool. It is then answered
+    like any request the pool cannot serve: by the supplied tokenizer as
+    it now stands after a latch, in process after a scheduler close."""
+    import asyncio
+    import threading
+
+    monkeypatch.setattr(
+        SGLangToktierTokenizer, "_load_toktier", lambda self: _FakeToktier()
+    )
+    hf = _StubHf()
+    w = wrap_tokenizer(
+        hf,
+        AdapterConfig(
+            session_key="off",
+            short_chars=0,
+            scheduler=_stub_pool_config(chunk_min_chars=1 << 30),
+        ),
+    )
+    try:
+        assert w.scheduler is not None
+        text = "a request between route choice and submit"
+        reached, release = threading.Event(), threading.Event()
+        obj: Any = w if boundary == "route" else w._sched
+        name = "_pool_kind" if boundary == "route" else "submit"
+        original = getattr(obj, name)
+
+        def held(*args: Any, **kwargs: Any) -> Any:
+            if boundary == "route":
+                out = original(*args, **kwargs)
+            if threading.current_thread().name == "inflight":
+                reached.set()
+                assert release.wait(30.0)
+            return out if boundary == "route" else original(*args, **kwargs)
+
+        setattr(obj, name, held)
+        box: dict[str, Any] = {}
+
+        def request() -> None:
+            try:
+                if face == "async":
+                    box["ids"] = asyncio.run(
+                        w.encode_async(text, add_special_tokens=False)
+                    )
+                else:
+                    box["ids"] = w.encode(text, add_special_tokens=False)
+            except BaseException as ex:  # recorded for the assertion below
+                box["error"] = repr(ex)
+
+        inflight = threading.Thread(target=request, name="inflight", daemon=True)
+        inflight.start()
+        assert reached.wait(60.0)
+        if trigger == "latch":
+            # The supplied tokenizer changes, and now answers differently.
+            hf.backend_tokenizer.add_tokens(["<changed_before_submit>"])
+            hf._core = lambda s: [7] * len(s)  # type: ignore[method-assign]
+            assert w.encode("abc", add_special_tokens=False) == [7, 7, 7]
+            assert w.stats()["mode"] == "passthrough" and w.toktier is None
+            expected = [7] * len(text)
+        else:
+            assert w._sched is not None
+            w._sched.close()
+            assert w.toktier is not None
+            expected = [ord(c) for c in text]
+        release.set()
+        inflight.join(30.0)
+        assert not inflight.is_alive()
+        assert box == {"ids": expected}, box
+    finally:
+        w.close()
+
+
 class _ClosingToktier(_FakeToktier):
     """Refuses every encode once closed, as ``toktier.Tokenizer`` does."""
 

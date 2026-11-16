@@ -1039,7 +1039,7 @@ nothing is counted for them.
 
 A further 39 repositories were examined and fall outside the certified set by
 design: the `google/gemma-4-*` line and `FacebookAI/xlm-roberta-*` are the
-documented structural exclusions below, and the `openai-community/gpt2` line is
+documented exclusions below, and the `openai-community/gpt2` line is
 a benchmark reference rather than a certified family.
 
 The accounting closes on the snapshot total: 470 repositories examined = 16
@@ -1491,12 +1491,13 @@ listed under [`nemotron_super_vl`](#nemotron_super_vl-4-repositories) above.
 
 | Subject | Reason |
 |---|---|
-| `google/gemma-4-*` | The pipeline provides no pre-tokenization boundaries, so the boundary condition the accelerated path relies on has nothing to attach to. Listed for completeness; the reference path handles these normally through Hugging Face. |
+| `google/gemma-4-*` | Not admitted in this release, and not a certified artifact. The pipeline provides no pre-tokenization boundaries, but the vocabulary provides boundaries of its own: a cut just before a space whose left neighbour is neither a space nor a literal U+2581, except between `>` and `</`, changes no ids (the rule stated on the public RFC, sgl-project/sglang#44374). For the tokenizer file `google/gemma-4-31B` ships, on the full certification corpus (3,800,016,491 documents), the engine core equals the reference on every document, and cuts under that rule changed no ids in any tested document; the other Gemma 4 sizes ship other merge lists and were compared on a sample only. Gemma 4 is not admitted for session repair or chunking in this release; its admission is registered for a later release. The reference path handles these normally through Hugging Face. |
 | `FacebookAI/xlm-roberta-*` | Unigram model, outside the BPE/WordPiece scope of the current certification. |
 
-These are structural exclusions rather than gaps awaiting a campaign, and they
-are stated here so that the boundary of the claim is visible without reading the
-registry.
+The `FacebookAI/xlm-roberta-*` line is a structural exclusion rather than a gap
+awaiting a campaign; the `google/gemma-4-*` line is an exclusion of this release
+whose admission is registered. Both are stated here so that the boundary of the
+claim is visible without reading the registry.
 
 ## How coverage is extended
 

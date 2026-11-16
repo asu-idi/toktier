@@ -182,8 +182,6 @@ content lookup there; the timing log records which path served each call.
 
 ## Start-up, acceleration and a failed wrap (0.3.3)
 
-<!-- OPEN(main line): the rider sentences in this block follow P/SENTENCES_FOR_DOC.md with the third review's wording diff (P/scripts/rev3/candidate_sentences.diff) applied; reconcile with the next revision of that file. -->
-
 **A tokenizer toktier cannot resolve.** When nothing names the tokenizer
 for toktier (no `TOKTIER_SGLANG_FAMILY`, no `TOKTIER_SGLANG_REPO`) and
 toktier cannot find an artifact for it -- a local model directory, a
@@ -356,8 +354,6 @@ runs. Other entry points (`__call__`, the dynamic-batch executor) use the
 pool synchronously. The backend patch adds the same hook: both forms go
 through `toktier.integrations.sglang.tokenize_texts_with_pool`.
 
-<!-- OPEN(main line): the rider sentences in this block follow P/SENTENCES_FOR_DOC.md with the third review's wording diff (P/scripts/rev3/candidate_sentences.diff) applied; reconcile with the next revision of that file. -->
-
 Since 0.3.3 a caller that holds the tokenizer can use the pool without the
 manager object: `await encode_texts_with_pool(tokenizer, texts, key=...,
 add_special_tokens=True)` returns the rows (one id list for a non-empty
@@ -403,8 +399,6 @@ serial), so the pool pays for itself on long or concurrent requests, not
 on short sequential ones. The registered patch-shaped native return
 (`docs/releases/v0.3.0.md`) is what removes the per-request stream copy.
 
-<!-- OPEN(main line): the rider sentences in this block follow P/SENTENCES_FOR_DOC.md with the third review's wording diff (P/scripts/rev3/candidate_sentences.diff) applied; reconcile with the next revision of that file. -->
-
 **Workers and their parent.** The workers stop when the wrapper is closed
 and at normal exit; when the serving process is killed they leave as
 described here. Pool workers leave when the process that started them is
@@ -440,9 +434,12 @@ multiprocessing queue internals for this. If termination fails or a worker
 is still alive after the final timed join, `close()` can return with a
 live worker and feeder; complete cleanup is not guaranteed in that case.
 Closing the scheduler while the wrapper stays open: requests waiting in the
-pool are answered in process, with the same ids. Closing the wrapper closes
-the scheduler and also the toktier tokenizer, so modeled requests that
-arrive after it raise `RuntimeError('backend is closed')`.
+pool, and requests that had chosen the pool but not yet reached it, are
+answered in process, with the same ids. Closing the wrapper closes the
+scheduler and also the toktier tokenizer, so on an admitted wrapper that
+has not switched to passthrough, modeled requests that arrive after it
+raise `RuntimeError('backend is closed')`; delegated calls keep the
+supplied tokenizer's behaviour.
 
 ## Settings
 
@@ -569,7 +566,7 @@ comparison matter in practice.
   per-request check sees it, as in 0.3.2). A short request (below) skips
   the check; the next long request after a change notices it. Since 0.3.3
   the check is roughly twice as fast, with a cost that grows with the
-  number of added tokens (in the review's readings 4.92 against 9.23 us
+  number of added tokens (in our readings 4.92 against 9.23 us
   on Qwen3-8B, 44.75 against 100.52 us on Llama-3.1-8B, 253.92 against
   562.82 us on DeepSeek-V4-Flash).
 - When the wrapper switches to delegation, a completed accelerated result
@@ -596,17 +593,18 @@ the delegated `apply_chat_template` reads it.
 
 ### Short requests (0.3.3)
 
-<!-- OPEN(main line): the rider sentences in this block follow P/SENTENCES_FOR_DOC.md with the third review's wording diff (P/scripts/rev3/candidate_sentences.diff) applied; reconcile with the next revision of that file. -->
-<!-- OPEN(main line): whether the short-request rule stays on by default is the user's question at the push-ready stop; this subsection, its settings row and its release-note item are self-contained so that they can be rewritten or removed together. -->
-
-A string shorter than `TOKTIER_SGLANG_SHORT_CHARS` characters is answered
-by the supplied tokenizer, on the calling thread, without the per-request
-check; it is counted as `stats()["how"]["short"]`. By default the
+The rule is on by default. A string shorter than
+`TOKTIER_SGLANG_SHORT_CHARS` characters is answered by the supplied
+tokenizer, on the calling thread, without the per-request check; it is
+counted as `stats()["how"]["short"]`. With the variable unset the
 threshold is the number of added tokens of the tokenizer (26 on Qwen3-8B,
-256 on Llama-3.1-8B, 1,283 on DeepSeek-V4-Flash); `0` turns the rule off.
+256 on Llama-3.1-8B, 1,283 on DeepSeek-V4-Flash), and `stats()` reports
+the threshold in force as `short_chars`. `TOKTIER_SGLANG_SHORT_CHARS=0`
+(or `AdapterConfig(short_chars=0)`) turns the rule off, and every call
+then takes the route it took in 0.3.2.
 The threshold is a heuristic, not a promise that every request takes the
 faster route. On tokenizers with many added tokens it removes most of the
-check's cost from short requests (in the review's readings a 40-character
+check's cost from short requests (in our readings a 40-character
 request took 17.35 us with the rule on against 45.72 off on Llama-3.1-8B,
 and 22.14 against 203.32 us on DeepSeek-V4-Flash). In the measured
 Qwen3-8B requests of 1 to 25 characters the accelerated route was cheaper,

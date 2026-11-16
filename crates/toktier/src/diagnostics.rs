@@ -203,6 +203,7 @@ pub enum ReasonCode {
     /// property-data reading, or the check could not complete. The fast
     /// CPU route is declined, including under Experimental policy. The
     /// runtime's doctor reports the observed reason after the check.
+    /// Added in 0.3.3.
     PropertyDataContradicted,
     /// No lockfile that governs this build was read, so the property
     /// data this build resolved is unknown and the fast CPU route is not

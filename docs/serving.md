@@ -311,14 +311,13 @@ another, exact and not faster.
   that holds its session.
 - A long-lived worker holds memory that grows with what it has
   encoded: the corrected CPU engine caches every word it has encoded,
-  on stateless calls too (the 0.3.2 release notes, Known issues, give
+  on stateless calls too (the 0.3.3 release notes, Known issues, give
   the sizes). Recycling the worker on a schedule or a memory threshold
-  releases it in a Python process. In the Rust crate the session store
-  also keeps a record for each 4,096-character block of every text a
-  session stores; a durable store reads its records back at start, so
-  removing its file is what clears them. (Through 0.3.1 the Python
-  package kept those records as well, and `lookup="off"` on single-shot
-  requests avoided them.) To release a tokenizer inside a process, call
+  releases it in a Python process. Session stores no longer keep a
+  record for each 4,096-character block of every text a session stores:
+  the Python package stopped in 0.3.2 and the Rust crate in 0.3.3, whose
+  session memory now follows the sessions it holds (the
+  [0.3.3 release notes](releases/v0.3.3.md), Fixed). To release a tokenizer inside a process, call
   `close()` ([`contracts/facade.md`](contracts/facade.md) Section 1).
 - Batch encodes share the worker pool: two threads calling
   `encode_batch` at once take turns on the same workers rather than

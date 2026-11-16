@@ -37,7 +37,16 @@ whether its digest is one of the shipped canonical artifacts before calling
 `load_local(family, directory)` on it; the lookup reads the shipped manifest
 and touches no file, and `None` means the file is outside the shipped
 families -- a sibling admitted as equivalent rather than byte-identical has
-another digest and is reached through `load_repository` instead.
+another digest and is reached through `load_repository` instead. Since
+0.3.3 the directory or file given to `load_local` may be, or lead through,
+a symbolic link, as a model-hub snapshot directory is: the link is followed
+once at load, the bytes verified then are the ones served, and errors (and
+`LocalArtifact::tokenizer_json`) name the path as given. The default cache
+entry is still required to be a regular file. Like every load, `load_local`
+executes the `tokenizer.json` alone (next paragraph): a Rust host whose own
+reference tokenizer merges `tokenizer_config.json` should keep
+`qwen3_5_08b` on that tokenizer, or send the prompts that hold one of its
+seven config-only literals to it.
 
 One scoping fact belongs here. This crate executes the artifact file itself
 on every route -- it has no `transformers`, so it cannot materialize the
@@ -56,7 +65,14 @@ function by construction. For the same reason the loader-face comparison
 added in 0.3.0 (`R_LOADER_FACE_MISMATCH`, `docs/contracts/routing.md`
 Section 5.1) is made by the Python facade only: this crate materializes no
 loader face, so it has none to compare, and its plan carries no such
-check.
+check. The plain consequence for a Rust host: the seven literals
+(`<|audio_start|>`, `<|audio_end|>`, `<tts_pad>`, `<tts_text_bos>`,
+`<tts_text_eod>`, `<tts_text_bos_single>`, `<|audio_pad|>`) are ordinary
+text to this crate and one id each to a loader that merges
+`tokenizer_config.json`, so a host whose own reference merges that file
+should keep `qwen3_5_08b` on its own tokenizer, or send the prompts that
+hold one of the literals to it. An option that serves the loader face is
+registered for a later release.
 
 The default cache entry is
 `<cache>/<family>-<revision-prefix>/tokenizer.json`. `ArtifactManager` can
@@ -345,19 +361,26 @@ unpacked, not on the builds that follow, so it does not stand behind the
 unpacked copies of either record.
 
 The governing lockfile is the first `Cargo.lock` above `OUT_DIR` -- the
-consumer's own workspace root in the usual layout -- and above the manifest
-directory when this crate is built from its own workspace. Unusual layouts
-can name it with `TOKTIER_CARGO_LOCK`; the named file still has to match.
-A shared `CARGO_TARGET_DIR` outside the project tree is the common such
-layout, and a benign one: `OUT_DIR` then has no lockfile above it, so the
-answer is `unlocated` even though the workspace resolved the judged
-graph. Point `TOKTIER_CARGO_LOCK` at that workspace's own `Cargo.lock`
-and the comparison runs as usual. The same setting matters for a path
-dependency built with a `CARGO_TARGET_DIR` outside the consumer's tree:
-the lookup can then find this crate's own `Cargo.lock` and read
-`verified` although the consumer compiled another version of a package
-(an `icu_properties` release, for one), so set `TOKTIER_CARGO_LOCK` to the
-consumer's lockfile for the reading that describes the build. That
+consumer's own workspace root in the usual layout, a build with the default
+target directory inside the project -- or the file `TOKTIER_CARGO_LOCK`
+names; the named file still has to match. Since 0.3.3 the variable must be
+the absolute path of the `Cargo.lock` of the build that consumes the crate.
+An empty or relative value (Cargo runs a build script in the crate's own
+directory, so a relative path would name a file there), a path inside this
+crate's own directory (its packaged `Cargo.lock` and
+`data/build/judged_dependencies.lock` among them), a missing file, and a
+lockfile that holds no `toktier` package are not read, and the build prints
+a warning that says which. A lockfile found only above this crate's
+manifest directory -- what a path dependency, or this crate's own
+workspace, finds when the target directory lies outside the tree -- is not
+taken either, since it may be this checkout's lockfile and not the
+consumer's: such a build reads `unlocated` for both closure answers and
+`unread` for the property data (next section). A shared
+`CARGO_TARGET_DIR` outside the project tree is the common such layout:
+`OUT_DIR` then has no lockfile above it, so the closure answer is
+`unlocated` even though the workspace resolved the judged graph, and the
+fast CPU route is not built. Point `TOKTIER_CARGO_LOCK` at that workspace's
+own `Cargo.lock` by its absolute path and both readings run as usual. That
 variable is the way to name the lockfile in these layouts, and no automatic
 lookup is planned: Cargo gives a dependency's build script no fact that
 names the consuming workspace or says whether `--locked` governs the build,
@@ -368,6 +391,72 @@ Content hashes and origins come from the judged `Cargo.lock`, which travels
 with the crate as well, so the two shipped records cannot hold different
 opinions about one package; a compiled closure naming something that lockfile
 does not hold is refused rather than answered.
+
+### Unicode property data and the lockfile
+
+The corrected CPU engine takes its character classes from the
+`icu_properties_data` copy the build compiles, while the reference engine,
+which defines the ids, classifies by Unicode 16.0. Since 0.3.3 the build
+script reads which copies of `icu_properties` and `icu_properties_data` the
+governing lockfile names (only copies of major version 2, the one the
+engine links, count), and the crate carries, for every published copy it
+lists, the set of code points whose class differs from the judged data's
+(17,811 code points in this release, the union over the listed copies).
+What a build does follows from what it read, reported as
+`runtime_build.property_data` (with `property_lock_located_by`, how the
+lockfile was found):
+
+| What the build read | Standing | What it does |
+|---|---|---|
+| the judged copies, `icu_properties` 2.0.2 with `icu_properties_data` 2.0.1 | judged | nothing changes, and nothing is added to any call |
+| a newer copy the release lists | guarded | the fast CPU route stays; a text holding a listed code point goes to the reference engine and reports `Backend::HuggingFace` with `InputGuardRouted` |
+| a copy the release does not list, a copy from another source (a `[patch]`, a path copy), or `ICU4X_DATA_DIR` set at build time | untabled | the fast CPU route is not built; the plan lists `ReasonCode::PropertyDataUntabled` |
+| no governing lockfile (the layouts above) | unread | the fast CPU route is not built; the plan lists `ReasonCode::PropertyDataUnread` |
+
+On a guarded build every place a text reaches the engine is covered: plain
+and batch encodes, chunked documents (a document holding a listed code
+point is encoded serially, `ChunkRouteNotFastCpu`), lookup remainders and
+session calls. A session whose unsealed text holds a listed code point
+keeps its last seal and re-encodes that text on the reference engine at
+every append, which grows with the session; `InputGuardRouted` is also the
+reason of the engine's own input guard, so `property_data` is what tells a
+guarded build. On untabled and unread builds `Policy::RequireAccelerated`
+refuses the tokenizer with a message that names the property data and
+points at `Runtime::doctor()`, and the `property_data` line starts with
+`untabled:` or `unread:` and names the remedy: set `TOKTIER_CARGO_LOCK` to
+the absolute path of the build's own `Cargo.lock`, use a target directory
+inside the project, align the lockfile with the two
+`cargo update --package <crate>@<version> --precise <judged>` commands it
+prints, or unset `ICU4X_DATA_DIR`. `Policy::Experimental` keeps the fast
+route on those builds and sends listed code points to the reference engine;
+the list was not made for such data, so the other ids are unchecked there,
+and a route on property data other than the judged one is never labelled
+`CertifiedSource`. A path dependency and this workspace's own builds print
+a `warning: toktier: ...` line naming the reason; Cargo shows build-script
+warnings neither for `git` nor for registry dependencies, so a crates.io
+consumer sees the plan reason and the `doctor()` line at run time instead.
+What each standing costs is measured in the
+[0.3.3 release notes](releases/v0.3.3.md) (Fixed).
+
+The ids are correct whenever the lockfile the build script reads is the
+one that governed the build, and the crate believes the lockfile it reads.
+So `cargo install --path` needs `--locked` (without it Cargo resolves again
+and the lockfile beside the project no longer describes the build), the
+variable must name the consuming build's own lockfile and not another
+checkout's, an outside target directory must not lie under another
+project's tree, and a target directory placed inside a checkout used by
+path reads that checkout's lockfile. A target directory or build cache
+copied into another checkout keeps the first reading until
+`cargo clean -p toktier`.
+<!-- OPEN(main line): this paragraph on the layouts that can still read a lockfile other than the governing one follows the guard as it stands before its second review; confirm or rewrite it after that review (a check of the linked data itself may be added). -->
+
+A durable session store written by an affected build (0.3.0 to 0.3.2 on
+newer data) may hold ids from before the guard for texts with such code
+points: remove the store file, or seed those sessions again. Releases
+before 0.3.3 ran the fast CPU route on whatever property data the build
+resolved ([0.3.3 release notes](releases/v0.3.3.md), Fixed). The complete
+repair, in which the engine carries the judged class table itself and no
+resolved data can change ids, is registered for a later release.
 
 ### What the build flags claim
 
@@ -410,7 +499,11 @@ reads `verified`, the fast CPU engine runs, `certified` is `false`,
 `reference_certification_reason` reads `uncertified_reference`, and the
 route is labelled `supported_untested` until the lockfile is aligned, a
 later release certifies the newer version, or `verify-local --engine cpu`
-compares the two engines here. The GPU route is not admitted on such a
+compares the two engines here. Since 0.3.3, when the unit that moved is
+`icu_properties` or `icu_properties_data`, the property-data standing
+above decides the fast CPU route as well: a copy the release lists keeps
+it, with every text that holds a listed code point sent to the reference
+engine, and a copy the release does not list builds no fast CPU route. The GPU route is not admitted on such a
 build except under `Policy::Experimental` (`GpuUncertified` among the plan
 reasons otherwise), and the refusal message of an explicitly named CUDA
 device names the cause, a reference library outside its certified
@@ -424,6 +517,8 @@ it does not compile.
 What still earns no certificate at all:
 
 - an `unlocated` build -- no governing lockfile could be named (see below);
+  since 0.3.3 such a build also reads its property data as `unread` and
+  builds no fast CPU route;
 - a build whose compiler or flags are not a judged recipe: another rustc,
   `RUSTFLAGS`, a development profile, or a feature list no judged recipe
   carries, `network` and a CPU-only build without `prebuilt-gpu` among them.
@@ -450,11 +545,12 @@ What still earns no certificate at all:
   under `Policy::Supported` and `Policy::Certified` alike the plan is the
   reference route with `RuntimeBuildUncertified`. That reading needs the
   consumer's lockfile to be the governing one. With a `CARGO_TARGET_DIR`
-  outside the consumer's tree the lookup can instead find the `Cargo.lock`
-  in Cargo's checkout of this repository and read `verified`, and even
-  `certified`, for a `git` dependency; set `TOKTIER_CARGO_LOCK` to the
-  consumer's lockfile for the reading that describes the build, as for a
-  path dependency above. Depend on the published crate to be certified.
+  outside the consumer's tree the only `Cargo.lock` in sight is the one in
+  Cargo's checkout of this repository, above this crate's manifest, which
+  is not taken (see above), so the build reads `unlocated` and `unread`;
+  set `TOKTIER_CARGO_LOCK` to the absolute path of the consumer's lockfile
+  for the reading that describes the build, as for a path dependency.
+  Depend on the published crate to be certified.
 
 A build refused on its core is not a broken one. `Policy::Certified` routes it to the
 frozen Hugging Face reference engine, which is the same implementation the
@@ -499,11 +595,15 @@ the first one:
 it in a temporary directory, so no lockfile stands above `OUT_DIR`, and a
 registry build deliberately does not read the copy sitting beside its own
 manifest -- comparing a packaged file against itself would answer nothing.
-The installed `toktier-rust` binary is fully usable: its sources are the
-judged ones, so it runs the fast CPU engine, and its GPU route is refused
-(`GpuUncertified`, the closure could not be compared). (`cargo install --locked --path <unpacked crate>` does report
-`verified`, because Cargo then builds under the package's own directory and
-the lockfile it finds there is the one `--locked` actually used.) This is the
+The installed `toktier-rust` binary is usable and exact, but since 0.3.3
+it reads its property data as `unread` too, so it builds no fast CPU route
+and serves every family on the reference engine, and its GPU route is
+refused (`GpuUncertified`, the closure could not be compared).
+(`cargo install --locked --path <unpacked crate>` does report `verified`
+and keeps the fast CPU route, because Cargo then builds under the
+package's own directory and the lockfile it finds there is the one
+`--locked` actually used. Without `--locked`, Cargo resolves again and that
+lockfile no longer describes the build, which the crate cannot see.) This is the
 `unlocated` rule rather than the tier rule: no comparison was made at all, so
 neither reading can answer, and the advisory has nothing to report.
 
@@ -821,9 +921,9 @@ data.
 
 A durable store (`home()` or `persistent_sessions(true)`; one file per
 family and home, `<home>/sessions/<family>.sqlite3`) holds at most 1,023
-named sessions, counting the sessions stored now. One more slot is kept for
-`Tokenizer::lookup`, so a lookup hit never removes a stored session. When
-the store is full, `seed()` of a new name, `fork()`, and `overwrite()` of a
+named sessions, counting the sessions stored now. A `Tokenizer::lookup`
+creates no session and needs no slot, so it never removes a stored
+session. When the store is full, `seed()` of a new name, `fork()`, and `overwrite()` of a
 name with nothing stored return `ErrorCode::InvalidArgument` ("the durable
 session store holds 1023 named sessions, its capacity; delete a session
 before creating another") before they change anything; the number in the
@@ -834,34 +934,67 @@ usable: `append()`, `encode_transcript()`, `snapshot()`, `close()`,
 reopening a stored name and `overwrite()` of a stored name keep working,
 and after a `delete()` the next new session succeeds, with no restart.
 Nothing is removed from the file to make room. A store file written by
-another release or build is refused by its key, as before. In memory mode
-(no home) there is no bound on creating sessions: past 1,024 sessions the
-least recently used one is dropped, and a `Tokenizer::lookup` hit on a full
-memory-mode store drops one as well. A name whose session was dropped is a
-new name once it is opened again (`revision()` is `None`) and can be
-seeded; until it is opened, `fork()` into that name is refused as already
-existing (`SessionRevisionConflict`). A `Session` value still held when
+another release or build is refused by its key, as before, so a file
+0.3.2 wrote is not opened by 0.3.3 and the reverse. In memory mode (no
+home) there is no bound on creating sessions: past 1,024 sessions the
+least recently used one is dropped; a `Tokenizer::lookup` drops none. A
+name whose session was dropped is forgotten with it, so it is a new name
+when it is opened again (`revision()` is `None`) and can be seeded, and
+`fork()` into it succeeds. A `Session` value still held when
 its state was dropped fails `append()` with `InvalidArgument`, and
 `overwrite()` gives it a new state. Before 0.3.2 a durable store at 1,024
 named sessions answered one more with `StoreCorrupt` and sealed itself
 until restart ([0.3.2 release notes](releases/v0.3.2.md), Fixed).
 
-Memory of a long-lived runtime. The session store keeps one record per
-completed 4,096-character block of every text a session stores (`seed`,
-`append`, `overwrite`, `encode_transcript`, and a `Tokenizer::lookup` hit
-whose remainder completes a block), which `Tokenizer::lookup` reads, and
-nothing removes one: `close()`, `delete()` and eviction at the session
-capacity leave the records. Measured through this crate's sessions, for
-ASCII text that is about 65 KB per distinct 24,000-character text and about
-0.56 MB per distinct text of 65,536 characters or more; a lookup miss and an
-exact repeat store nothing, and that `encode_transcript` stores records is
-read from the code. `Tokenizer::encode`, `encode_batch` and the chunked
-encoder store no records. Dropping every `Tokenizer` clone and session
-releases the records to the allocator; in durable mode they are also written
-to the SQLite file, deleted sessions' records included, and read back at
-start, so only removing the file clears them, together with its sessions.
-The Python package stopped writing these records in 0.3.2; the crate keeps
-them ([0.3.2 release notes](releases/v0.3.2.md), Known issues).
+Memory of a long-lived runtime. The session layer's memory follows the
+sessions it holds: deleting a session, or its replacement by
+`overwrite()`, releases what it stored, and so does a session dropped at
+the capacity in memory mode. `Tokenizer::lookup` reads an index of the
+stored sessions with one entry per completed 4,096-character block of
+their texts, shared by the sessions that have the block; an entry holds no
+text and no token ids, takes a few hundred bytes by the crate's own
+estimate, and is released when the last session with that block is.
+`RuntimeBuilder::lookup_index_blocks(n)` caps the entries per tokenizer
+(default 262,144, about 36 to 86 MB by `index_bytes` in our readings; `0`
+keeps no index and makes `lookup` return `None`). At the cap, a session
+whose next block would need a new entry stops adding blocks for the rest
+of its life (an `overwrite()` gives it a new start; a fork of it stays out
+too), blocks whose entry exists are still counted, lookups keep working on
+what is indexed, and nothing is evicted to make room. `store_stats()`
+reports `node_count` (the entries; it falls when sessions are deleted),
+`index_bytes` (an estimate of the index's size), `lookup_reused_ids` (ids
+lookups took from stored sessions instead of encoding them) and
+`index_blocks_declined` (blocks not indexed at the cap); `checksum_rejects`
+also counts listed sessions a lookup set aside because they no longer
+agreed with the store, and should read 0. `Tokenizer::encode`,
+`encode_batch` and the chunked encoder store nothing. Before 0.3.3 the
+crate kept a record with a copy of the text for every block ever stored
+([0.3.3 release notes](releases/v0.3.3.md), Fixed).
+
+Content lookup. `lookup(text)` is a hit when a session stored now has the
+text's first 4,096-character block. A hit returns the exact ids of `text`,
+those `encode` returns: where a session that has the shared blocks offers
+a seal point certified before the shared block was completed, its
+ids up to that point are reused and only the rest of `text` is encoded;
+otherwise the whole text is encoded. Ids are therefore reused only from a
+session that grew by appends past the shared blocks, and only on the
+corrected CPU route (the reference route issues no seal points); text
+stored in one call, a system prompt sent with the first turn for one,
+offers nothing to reuse, and `lookup_reused_ids` beside `lookup_hits`
+tells the two apart. The index lists up to four sessions per block, the
+most recent ones, so when those are deleted while older sessions with the
+block live on, hits on the block stop reusing ids and stay exact. A miss
+returns `None` without tokenizing. Text whose sessions were all deleted,
+overwritten or dropped is a miss, unless its first block is shared with a
+live session. A lookup never creates, changes or drops a session; in
+memory mode, a hit that reuses a session's ids counts as a use of that
+session in the least-recently-used order.
+
+A durable store's file holds the sessions and their transcripts, and no
+block records; the lookup index is rebuilt from the transcripts at start.
+A lookup after a restart finds every stored session and returns exact
+ids; it starts reusing a session's ids again once that session completes
+its next 4,096-character block.
 
 ## Bounded concurrent serving
 
@@ -889,6 +1022,27 @@ Cancellation before execution skips work; cancellation after execution begins
 does not claim that a CUDA launch or committed SQLite transaction was rolled
 back. Timings report queue, engine, durable-store, and result-view
 materialization separately.
+
+## Concurrency
+
+One `Tokenizer` serves one single-text encode or session call at a time:
+the engine's state and the session store each sit behind one lock, so
+threads that share one tokenizer (or clones of it) queue, and the wait is
+uneven. In one reading on `qwen3_8b` with 100,000-character texts and four
+threads on one tokenizer, the slowest of 240 encodes took 61.5 ms and the
+slowest of 160 session seeds 178 ms, against 9.2 and 16.9 ms with one
+tokenizer per thread. What to use instead:
+
+- For requests without sessions, `encode_batch` or `ServingPool`
+  (above): a batch is encoded on parallel engine states.
+- For sessions, one `Tokenizer` per worker thread, with each conversation
+  pinned to one of them by its session key, so its session and its lookups
+  stay on the tokenizer that holds them.
+
+An extra tokenizer costs about 120 MiB of memory and 0.9 s to load on
+`qwen3_8b`. In durable mode each tokenizer needs a home of its own. A pool of engine states inside one tokenizer,
+and encoding outside the session store's lock, are registered for a later
+release.
 
 ## Chunk-parallel encode of one long request
 

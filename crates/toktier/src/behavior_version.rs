@@ -461,7 +461,15 @@ mod tests {
             .iter()
             .any(|reading| reading.package == "tokenizers"));
         for reading in &readings {
-            assert_eq!(reading.resolved.as_deref(), Some(reading.judged.as_str()));
+            assert_eq!(
+                reading.resolved.as_deref(),
+                Some(reading.judged.as_str()),
+                "{} does not resolve at its judged version here; a build of this workspace \
+                 with a target directory outside the tree locates no governing lockfile \
+                 unless TOKTIER_CARGO_LOCK is set to the absolute path of the workspace's \
+                 own Cargo.lock",
+                reading.package
+            );
             assert!(reading.certified_versions.contains(&reading.judged));
             assert!(reading.certified, "{} is not certified", reading.package);
         }

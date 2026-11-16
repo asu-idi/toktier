@@ -105,7 +105,12 @@ fn doctor_is_typed_and_python_free() {
     // A build inside this workspace resolves the judged graph, so both
     // closure readings must pass here whatever the profile decides about
     // certification, and there is nothing to advise about.
-    assert_eq!(facts.runtime_build.dependency_closure, "verified");
+    assert_eq!(
+        facts.runtime_build.dependency_closure, "verified",
+        "a build of this workspace with a target directory outside the tree locates no \
+         governing lockfile unless TOKTIER_CARGO_LOCK is set to the absolute path of the \
+         workspace's own Cargo.lock"
+    );
     assert_eq!(toktier::DEPENDENCY_CLOSURE, "verified");
     assert_eq!(facts.runtime_build.core_closure, "verified");
     assert_eq!(facts.runtime_build.dependency_advisory, None);
